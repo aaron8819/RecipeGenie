@@ -1,0 +1,42 @@
+{
+  "categories": [
+    "chicken",
+    "turkey",
+    "steak",
+    "beef",
+    "lamb",
+    "vegetarian"
+  ],
+  "default_selection": {
+    "beef": 0,
+    "chicken": 2,
+    "lamb": 0,
+    "steak": 1,
+    "turkey": 1,
+    "vegetarian": 0
+  },
+  "weekStartDay": 1,
+  "excluded_keywords": [
+    "oil",
+    "salt",
+    "pepper",
+    "rice",
+    "cumin",
+    "paprika",
+    "oregano",
+    "thyme",
+    "basil",
+    "cinnamon",
+    "cayenne",
+    "chili",
+    "garlic powder",
+    "onion powder",
+    "butter",
+    "mustard",
+    "dried herbs",
+    "garlic",
+    "honey",
+    "vinegar"
+  ],
+  "historyExclusionDays": 7
+}

@@ -1,0 +1,22 @@
+{
+  "2026-01-05": {
+    "recipes": [
+      "classic-ribeye-steak",
+      "rotisserie-chicken-sandwich",
+      "turkey-tacos",
+      "perri-perri-chicken-"
+    ],
+    "scale": 1,
+    "generated_at": "2026-01-11T11:34:19.572416"
+  },
+  "2026-01-12": {
+    "recipes": [
+      "chicken-veggie-sheet-pan-chipotle",
+      "sheet-pan-cashew-chicken",
+      "mediterranean-turkey-meatballs",
+      "chuck-roast-tacos"
+    ],
+    "scale": 1,
+    "generated_at": "2026-01-11T11:36:37.812442"
+  }
+}

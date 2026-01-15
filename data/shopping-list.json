@@ -1,0 +1,71 @@
+{
+  "items": [
+    {
+      "amount": null,
+      "categoryKey": "bakery",
+      "categoryOrder": 3,
+      "item": "tortilla chips",
+      "sources": [
+        {
+          "recipeName": "Manual"
+        }
+      ],
+      "unit": ""
+    },
+    {
+      "amount": null,
+      "categoryKey": "pantry",
+      "categoryOrder": 4,
+      "item": "olive oil",
+      "sources": [
+        {
+          "recipeName": "Manual"
+        }
+      ],
+      "unit": ""
+    },
+    {
+      "amount": null,
+      "categoryKey": "pantry",
+      "categoryOrder": 4,
+      "item": "rice",
+      "sources": [
+        {
+          "recipeName": "Manual"
+        }
+      ],
+      "unit": ""
+    },
+    {
+      "amount": null,
+      "categoryKey": "misc",
+      "categoryOrder": 5,
+      "item": "cereal",
+      "sources": [
+        {
+          "recipeName": "Manual"
+        }
+      ],
+      "unit": ""
+    },
+    {
+      "amount": null,
+      "categoryKey": "misc",
+      "categoryOrder": 5,
+      "item": "hu chocolate bar",
+      "sources": [
+        {
+          "recipeName": "Manual"
+        }
+      ],
+      "unit": ""
+    }
+  ],
+  "already_have": [],
+  "excluded": [],
+  "source_recipes": [],
+  "scale": 1,
+  "total_servings": 0,
+  "customOrder": true,
+  "generated_at": "2026-01-10T10:07:40.667057"
+}

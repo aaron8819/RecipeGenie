@@ -1,0 +1,4692 @@
+[
+  {
+    "id": "honey-garlic-chicken",
+    "name": "Honey Garlic Chicken",
+    "category": "chicken",
+    "servings": 4,
+    "tags": [
+      "test"
+    ],
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "honey",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "garlic",
+        "amount": 6,
+        "unit": "cloves"
+      },
+      {
+        "item": "olive oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "rice vinegar",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "green onions",
+        "amount": 3,
+        "unit": "stalks"
+      }
+    ],
+    "instructions": [
+      "Mince garlic and mix with honey, soy sauce, and rice vinegar.",
+      "Heat olive oil in a large skillet over medium-high heat.",
+      "Season chicken thighs with salt and pepper.",
+      "Sear chicken for 5 minutes per side until golden.",
+      "Pour honey garlic sauce over chicken.",
+      "Reduce heat and simmer for 10-15 minutes until sauce thickens.",
+      "Garnish with sesame seeds and green onions."
+    ]
+  },
+  {
+    "id": "turkey-meatballs-marinara",
+    "name": "Turkey Meatballs with Marinara",
+    "category": "turkey",
+    "servings": 4,
+    "tags": [
+      "test"
+    ],
+    "ingredients": [
+      {
+        "item": "ground turkey",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "italian breadcrumbs",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "marinara sauce",
+        "amount": 3,
+        "unit": "cups"
+      },
+      {
+        "item": "fresh basil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "olive oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "salt",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "black pepper",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Preheat oven to 400Â°F.",
+      "Mix ground turkey, breadcrumbs, parmesan, egg, garlic, salt, and pepper.",
+      "Form into 1.5-inch meatballs.",
+      "Place on oiled baking sheet.",
+      "Bake for 20 minutes until cooked through.",
+      "Heat marinara sauce in a large pan.",
+      "Add meatballs and simmer for 10 minutes.",
+      "Garnish with fresh basil and serve."
+    ]
+  },
+  {
+    "name": "Classic Ribeye Steak",
+    "category": "steak",
+    "servings": 2,
+    "ingredients": [
+      {
+        "item": "ribeye steak",
+        "amount": 2,
+        "unit": "lbs"
+      }
+    ],
+    "instructions": [
+      "Remove steak from fridge 30 minutes before cooking.",
+      "Season generously with salt and pepper.",
+      "Heat cast iron skillet over high heat until smoking.",
+      "Add olive oil and sear steak 3-4 minutes per side for medium-rare.",
+      "Add butter, garlic, rosemary, and thyme to pan.",
+      "Baste steak with melted butter for 1 minute.",
+      "Rest for 5 minutes before slicing."
+    ],
+    "favorite": true,
+    "tags": [
+      "test"
+    ],
+    "id": "classic-ribeye-steak"
+  },
+  {
+    "name": "Grilled Marinated Flank Steak",
+    "category": "steak",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "flank steak",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "olive oil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "lime juice",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "honey",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "cilantro",
+        "amount": 0.25,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [
+      "Mix soy sauce, olive oil, lime juice, garlic, honey, cumin, and red pepper flakes.",
+      "Marinate flank steak for at least 2 hours, preferably overnight.",
+      "Preheat grill to high heat.",
+      "Remove steak from marinade and pat dry.",
+      "Grill 4-5 minutes per side for medium-rare.",
+      "Rest for 10 minutes.",
+      "Slice against the grain and garnish with cilantro."
+    ],
+    "favorite": false,
+    "id": "grilled-flank-steak"
+  },
+  {
+    "id": "sesame-chicken",
+    "name": "Sesame Chicken",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "eggs",
+        "amount": 2,
+        "unit": "large"
+      },
+      {
+        "item": "tempura mix",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "oil",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "ketchup",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "honey",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "rice vinegar",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "rice",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "green onions",
+        "amount": 2,
+        "unit": "stalks"
+      }
+    ],
+    "instructions": [
+      "Cut chicken into bite-sized pieces. Whisk eggs with salt, dip chicken, then coat in tempura mix.",
+      "Fry chicken in oil until golden and cooked through. Drain on paper towels.",
+      "Mix ketchup, soy sauce, brown sugar, honey, rice vinegar, garlic, sesame oil, and cornstarch.",
+      "Cook sauce in a pan until thickened.",
+      "Toss fried chicken in sauce, top with sesame seeds and green onions.",
+      "Serve over rice."
+    ]
+  },
+  {
+    "id": "general-tsos-chicken",
+    "name": "General Tso's Chicken",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "flour",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "water",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "ketchup",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "jasmine rice",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "green onions",
+        "amount": 2,
+        "unit": "stalks"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Cut chicken into pieces. Mix flour, cornstarch, egg, and salt for batter.",
+      "Coat chicken and fry until golden and crispy.",
+      "Mix water, soy sauce, ketchup, sesame oil, brown sugar, and cornstarch for sauce.",
+      "Cook sauce until thickened, toss with fried chicken.",
+      "Serve over jasmine rice with green onions and sesame seeds."
+    ]
+  },
+  {
+    "id": "baked-crispy-chicken-schnitzel",
+    "name": "Baked Crispy Chicken Schnitzel",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "thin chicken cutlets",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "eggs",
+        "amount": 2,
+        "unit": "large"
+      },
+      {
+        "item": "sea salt",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "black pepper",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "paprika",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "dijon mustard",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "honey",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "lemon juice",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "olive oil",
+        "amount": 8,
+        "unit": "tbsp"
+      },
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "breadcrumbs",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "maldon salt",
+        "amount": 1,
+        "unit": "pinch"
+      }
+    ],
+    "instructions": [
+      "Preheat oven to 420Â°F.",
+      "Whisk eggs with salt, pepper, paprika, cumin, Dijon, honey, lemon juice, garlic, and 2 tbsp olive oil.",
+      "Coat chicken in egg mixture, then in combined breadcrumbs and sesame seeds.",
+      "Place on parchment-lined pan drizzled with 3 tbsp olive oil.",
+      "Drizzle remaining olive oil on top. Bake 15 mins, flip, bake 10 more mins.",
+      "Broil at 450Â°F for 7-8 mins until golden. Top with flaky salt."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "chicken-veggie-sheet-pan-chipotle",
+    "name": "Chicken & Veggie Sheet Pan with Chipotle Sauce",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "mayonnaise",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 4,
+        "unit": "tbsp"
+      },
+      {
+        "item": "honey",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "lime",
+        "amount": 1.5,
+        "unit": "whole"
+      },
+      {
+        "item": "garlic",
+        "amount": 7,
+        "unit": "cloves"
+      },
+      {
+        "item": "paprika",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "chili powder",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "oregano",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "onion powder",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "red onion",
+        "amount": 0.5,
+        "unit": "whole"
+      },
+      {
+        "item": "bell peppers",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "head of garlic",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "sour cream",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "chipotle peppers",
+        "amount": 2,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Marinate sliced chicken in mayo, oil, honey, lime juice, garlic, and all seasonings.",
+      "Roast whole garlic head (drizzled with oil) wrapped in foil at 425Â°F for 45-60 mins.",
+      "Toss sliced veggies with oil and seasonings on sheet pan, add chicken.",
+      "Bake 20-25 mins until chicken is cooked and veggies are tender.",
+      "Blend roasted garlic, sour cream, mayo, chipotles, honey, and lime for sauce.",
+      "Serve chicken and veggies with chipotle sauce."
+    ]
+  },
+  {
+    "id": "thai-lettuce-wraps",
+    "name": "Thai Lettuce Wraps",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground chicken",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "oil",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "onion",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "thai chilies",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "red bell pepper",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "fish sauce",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "oyster sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "lime",
+        "amount": 0.5,
+        "unit": "whole"
+      },
+      {
+        "item": "fresh basil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "butter lettuce",
+        "amount": 1,
+        "unit": "head"
+      },
+      {
+        "item": "peanuts",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "green onions",
+        "amount": 2,
+        "unit": "stalks"
+      }
+    ],
+    "instructions": [
+      "SautÃ© onion, garlic, and chilies in oil until fragrant.",
+      "Add ground chicken, break apart, cook until no longer pink.",
+      "Add bell pepper. Mix fish sauce, soy sauce, oyster sauce, and brown sugar, pour over chicken.",
+      "Cook 2-3 mins until sauce reduces. Stir in lime juice and basil.",
+      "Serve in lettuce cups topped with peanuts and green onions."
+    ]
+  },
+  {
+    "id": "rotisserie-chicken-sandwich",
+    "name": "Rotisserie Chicken Sandwich",
+    "category": "chicken",
+    "servings": 2,
+    "ingredients": [
+      {
+        "item": "baguette",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "rotisserie chicken",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "arugula",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "roma tomatoes",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "feta cheese",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "red wine vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "olive oil",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "dijon mustard",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 0.125,
+        "unit": "tsp"
+      },
+      {
+        "item": "honey",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "lemon juice",
+        "amount": 0.5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "dried herbs",
+        "amount": 0.125,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Whisk vinegar, olive oil, Dijon, garlic powder, honey, lemon juice, and herbs for vinaigrette.",
+      "Slice baguette and toast lightly.",
+      "Layer arugula, sliced tomatoes, shredded chicken, and feta.",
+      "Drizzle with vinaigrette and serve."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "thai-basil-fried-rice",
+    "name": "Thai Basil Fried Rice",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "cooked jasmine rice",
+        "amount": 4,
+        "unit": "cups"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "eggs",
+        "amount": 2,
+        "unit": "large"
+      },
+      {
+        "item": "onion",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "poblano pepper",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "chicken breast",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "oyster sauce",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "fish sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sugar",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "thai basil",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "lime",
+        "amount": 1,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Mix soy sauce, oyster sauce, fish sauce, and sugar for sauce.",
+      "Scramble eggs in hot wok, remove and set aside.",
+      "SautÃ© butterflied chicken until cooked, remove.",
+      "Stir-fry onion, garlic, and peppers for 1 min.",
+      "Add rice and sauce, stir-fry 2-3 mins on high heat.",
+      "Add back eggs and chicken. Toss in Thai basil until wilted. Serve with lime."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "chicken-tikka-masala",
+    "name": "Chicken Tikka Masala",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "plain yogurt",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "garam masala",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "turmeric",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "chili powder",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "inch"
+      },
+      {
+        "item": "lemon juice",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "vegetable oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "tikka masala sauce",
+        "amount": 12.5,
+        "unit": "oz"
+      },
+      {
+        "item": "heavy cream",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "cilantro",
+        "amount": 2,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Mix yogurt with garam masala, turmeric, cumin, chili powder, garlic, ginger, lemon juice, and salt.",
+      "Marinate chicken pieces for 1-6 hours.",
+      "Bake at 400Â°F for 15-20 mins or grill until slightly charred.",
+      "In a skillet, heat oil, add chicken, pour in tikka masala sauce.",
+      "Simmer 10-15 mins. Stir in cream if desired. Garnish with cilantro."
+    ]
+  },
+  {
+    "name": "Lemon Pepper Chicken",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "olive oil",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "lemon pepper seasoning",
+        "amount": 1.5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "lemon juice",
+        "amount": 1.5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "honey",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 1.5,
+        "unit": "cloves"
+      },
+      {
+        "item": "salt",
+        "amount": 0.25,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Mix olive oil, lemon pepper, lemon juice, honey, garlic, and salt.",
+      "Coat chicken and marinate 30 mins or more.",
+      "Grill or bake at 400Â°F until cooked through (about 20 mins).",
+      "Garnish with fresh cilantro."
+    ],
+    "id": "lemon-pepper-chicken",
+    "favorite": true
+  },
+  {
+    "id": "pulled-chicken-sliders",
+    "name": "Pulled Chicken Sliders",
+    "category": "chicken",
+    "servings": 6,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "bbq sauce",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "apple cider vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "smoked paprika",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "slider buns",
+        "amount": 12,
+        "unit": "whole"
+      },
+      {
+        "item": "dijon mustard",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "shredded cabbage",
+        "amount": 4,
+        "unit": "cups"
+      },
+      {
+        "item": "carrots",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "mayonnaise",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "sugar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "pickles",
+        "amount": 0.5,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [
+      "Season chicken with salt, pepper, garlic powder, paprika.",
+      "Slow cook on low 6-8 hrs (or high 3-4 hrs) with broth, BBQ sauce, vinegar, and brown sugar.",
+      "Shred chicken with two forks, mix with sauce.",
+      "Make slaw: mix mayo, vinegar, sugar, salt, pepper; toss with cabbage and carrots.",
+      "Assemble sliders with chicken, slaw, pickles, and Dijon."
+    ]
+  },
+  {
+    "id": "pad-see-ew",
+    "name": "Pad See Ew",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "fresh rice noodles",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "chicken thighs",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "eggs",
+        "amount": 2,
+        "unit": "large"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "chinese broccoli",
+        "amount": 5,
+        "unit": "pieces"
+      },
+      {
+        "item": "oil",
+        "amount": 4,
+        "unit": "tbsp"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "oyster sauce",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "fish sauce",
+        "amount": 1.5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sugar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "white pepper",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Marinate sliced chicken in 1.5 tbsp soy sauce for 30 mins.",
+      "Cook chicken to 80%, remove from pan.",
+      "Add garlic and eggs, let set slightly then break up.",
+      "Add broccoli and rice noodles, cook 3 mins.",
+      "Pour combined sauce (oyster, soy, fish sauce, sugar, pepper) over noodles.",
+      "Cook on high 2-3 mins, add back chicken. Serve with chili vinegar."
+    ]
+  },
+  {
+    "name": "Korean Glass Noodles Stir Fry",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "korean glass noodles",
+        "amount": 0.5,
+        "unit": "package"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "ground chicken",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red bell pepper",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "green onions",
+        "amount": 3,
+        "unit": "stalks"
+      },
+      {
+        "item": "garlic",
+        "amount": 1,
+        "unit": "clove"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "tamari",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Cook glass noodles per package. Whisk sauce ingredients (tamari, broth, cornstarch).",
+      "Brown ground chicken in oil for 7 mins.",
+      "Add ginger, bell pepper, and white parts of green onions until soft.",
+      "Add garlic, cook 30 seconds. Pour sauce over mixture.",
+      "Spread on sheet pan, bake at 425Â°F for 15 mins, toss, bake 10-15 more mins.",
+      "Serve over rice with green onions and sesame seeds."
+    ],
+    "id": "korean-glass-noodles-stir-fry"
+  },
+  {
+    "id": "ground-chicken-ramen-noodles",
+    "name": "Ground Chicken Ramen Noodles",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "avocado oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "ground chicken",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "bell pepper",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "onion",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "broccoli",
+        "amount": 1,
+        "unit": "small crown"
+      },
+      {
+        "item": "ramen noodles",
+        "amount": 2,
+        "unit": "bricks"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "tamari",
+        "amount": 0.25,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [
+      "Brown ground chicken in avocado oil.",
+      "Add bell pepper, onion, and broccoli. Stir-fry until slightly tender.",
+      "Cook ramen noodles per package, drain.",
+      "Mix garlic, ginger, chicken broth, and tamari for sauce.",
+      "Pour sauce over chicken and veggies, add noodles, toss to combine."
+    ]
+  },
+  {
+    "id": "sheet-pan-cashew-chicken",
+    "name": "Sheet Pan Cashew Chicken",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "red bell pepper",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "zucchini",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "broccoli",
+        "amount": 1,
+        "unit": "small crown"
+      },
+      {
+        "item": "snap peas",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "roasted cashews",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 0.75,
+        "unit": "cup"
+      },
+      {
+        "item": "tamari",
+        "amount": 0.33,
+        "unit": "cup"
+      },
+      {
+        "item": "honey",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "apple cider vinegar",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "fish sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "arrowroot starch",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "rice",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Whisk all sauce ingredients until starch is dissolved.",
+      "Toss chicken, veggies, and cashews in sauce. Marinate while oven preheats to 425Â°F.",
+      "Spread on sheet pan in single layer.",
+      "Bake 15 mins, toss, bake 10-15 more mins.",
+      "Serve over rice."
+    ]
+  },
+  {
+    "id": "crispy-parm-chicken-lemon-orzo",
+    "name": "Crispy Parm Chicken with Lemon Orzo",
+    "category": "chicken",
+    "servings": 2,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "flour",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 0.75,
+        "unit": "cup"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "olive oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "orzo pasta",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "butter",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "shallot",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "lemon",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "heavy cream",
+        "amount": 0.25,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [
+      "Butterfly chicken. Dredge in flour, dip in egg, coat in panko/parmesan/garlic powder mix.",
+      "Pan-fry in olive oil 4 mins per side until golden.",
+      "For orzo: sautÃ© shallot and garlic in butter and oil.",
+      "Add orzo, broth, lemon zest and juice, pepper. Simmer until tender.",
+      "Stir in parmesan and cream. Serve chicken over orzo."
+    ]
+  },
+  {
+    "id": "chicken-shawarma",
+    "name": "Chicken Shawarma",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "olive oil",
+        "amount": 1.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "greek yogurt",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "tomato paste",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "lemon juice",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "thyme",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "paprika",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cinnamon",
+        "amount": 0.125,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "sumac",
+        "amount": 0.75,
+        "unit": "tsp"
+      },
+      {
+        "item": "coriander",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "pita bread",
+        "amount": 4,
+        "unit": "whole"
+      },
+      {
+        "item": "onion",
+        "amount": 1,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Mix olive oil, yogurt, tomato paste, lemon juice, garlic, and all spices.",
+      "Slice chicken into strips, coat in marinade.",
+      "Bake at 400Â°F for 15 mins.",
+      "Serve in pita with onions and garlic yogurt sauce."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "pulled-chicken-sandwich-slaw",
+    "name": "Pulled Chicken Sandwich with Slaw",
+    "category": "chicken",
+    "servings": 6,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "onion",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "bbq sauce",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "mayonnaise",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "honey",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "apple cider vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "green cabbage",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "purple cabbage",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "carrot",
+        "amount": 0.5,
+        "unit": "large"
+      },
+      {
+        "item": "cilantro",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "buns",
+        "amount": 6,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Pour BBQ sauce and diced onion in slow cooker, add chicken, coat well.",
+      "Cook on high 3-4 hrs or low 6-8 hrs. Shred chicken, return to sauce.",
+      "Make slaw: mix mayo, honey, vinegar, salt, pepper. Toss with cabbages, carrot, cilantro.",
+      "Serve pulled chicken on buns topped with slaw."
+    ]
+  },
+  {
+    "id": "turkey-burger",
+    "name": "Turkey Burger",
+    "category": "turkey",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground turkey",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "breadcrumbs",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "mayonnaise",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 1,
+        "unit": "clove"
+      },
+      {
+        "item": "scallions",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "feta cheese",
+        "amount": 0.33,
+        "unit": "cup"
+      },
+      {
+        "item": "oregano",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "paprika",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "burger buns",
+        "amount": 4,
+        "unit": "whole"
+      },
+      {
+        "item": "tomato",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "avocado",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "red onion",
+        "amount": 0.5,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Mix ground turkey with breadcrumbs, egg, mayo, garlic, scallions, parsley, feta, and seasonings.",
+      "Form into 4 patties.",
+      "Grill or pan-fry until cooked through (165Â°F internal).",
+      "Serve on buns with tomato, avocado, and red onion."
+    ]
+  },
+  {
+    "id": "beef-and-broccoli",
+    "name": "Beef and Broccoli",
+    "category": "steak",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "beef sirloin",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "broccoli florets",
+        "amount": 3,
+        "unit": "cups"
+      },
+      {
+        "item": "olive oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 6,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "oyster sauce",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "rice vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "rice",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Slice beef thin against the grain. Toss with 2 tbsp soy sauce and 1 tbsp cornstarch. Marinate 10 mins.",
+      "Blanch broccoli 2 mins, transfer to ice water.",
+      "Mix remaining soy sauce, brown sugar, oyster sauce, vinegar, garlic, ginger for sauce.",
+      "Sear beef in hot oil 1-2 mins per side, set aside.",
+      "Stir-fry broccoli 2 mins, return beef, pour in sauce.",
+      "Add cornstarch slurry (1 tbsp cornstarch + 2 tbsp water) to thicken. Serve over rice."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "garlic-ginger-steak-stir-fry",
+    "name": "Garlic Ginger Steak Stir-Fry",
+    "category": "steak",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "flank steak",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "oyster sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "hoisin sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "rice vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red bell pepper",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "green bell pepper",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "onion",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "inch"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "beef broth",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "green onions",
+        "amount": 2,
+        "unit": "stalks"
+      }
+    ],
+    "instructions": [
+      "Slice steak thin against grain. Marinate in soy, oyster, hoisin, vinegar, cornstarch for 15-20 mins.",
+      "Stir-fry steak in batches in hot oil 2-3 mins until browned. Set aside.",
+      "Stir-fry onions, peppers, garlic, and ginger 2-3 mins until tender-crisp.",
+      "Return steak, add broth, stir until sauce thickens.",
+      "Drizzle with sesame oil, garnish with sesame seeds and green onions. Serve over rice or noodles."
+    ]
+  },
+  {
+    "id": "chuck-roast-tacos",
+    "name": "Chuck Roast Tacos",
+    "category": "steak",
+    "servings": 8,
+    "ingredients": [
+      {
+        "item": "beef chuck roast",
+        "amount": 4,
+        "unit": "lbs"
+      },
+      {
+        "item": "salt",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "black pepper",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "avocados",
+        "amount": 3,
+        "unit": "large"
+      },
+      {
+        "item": "limes",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "orange juice",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red onion",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cilantro",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "tortillas",
+        "amount": 16,
+        "unit": "whole"
+      },
+      {
+        "item": "white onion",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "salsa",
+        "amount": 1,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [
+      "Preheat oven to 325Â°F. Season roast generously with salt and pepper.",
+      "Place in Dutch oven, cover, and bake 3-4 hrs until fork-tender.",
+      "Shred meat, toss in rendered fat. Return to oven uncovered at 425Â°F for 20-25 mins until edges crisp.",
+      "Make guacamole: mash avocados with lime juice, orange juice, salt, pepper, red onion, cilantro.",
+      "Serve in warm tortillas with guacamole, white onion, cilantro, and salsa."
+    ]
+  },
+  {
+    "id": "thai-skirt-steak-herb-salad",
+    "name": "Thai Skirt Steak and Herb Salad",
+    "category": "steak",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "skirt steak",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "coconut sugar",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "tamari",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "fish sauce",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "limes",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "butter lettuce",
+        "amount": 5,
+        "unit": "oz"
+      },
+      {
+        "item": "fresh mint",
+        "amount": 1.5,
+        "unit": "cups"
+      },
+      {
+        "item": "fresh cilantro",
+        "amount": 1.5,
+        "unit": "cups"
+      },
+      {
+        "item": "green onions",
+        "amount": 2,
+        "unit": "stalks"
+      },
+      {
+        "item": "roasted peanuts",
+        "amount": 0.33,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [
+      "Combine coconut sugar, broth, tamari, oil, fish sauce, lime zest/juice, ginger, red pepper flakes.",
+      "Reserve 1/4 for dressing. Marinate steak in remaining mixture 4 hrs or overnight.",
+      "Sear steak in hot skillet 4 mins per side for medium-rare. Rest 10 mins, slice against grain.",
+      "Toss lettuce, mint, cilantro, green onions, and peanuts.",
+      "Top salad with sliced steak, drizzle with reserved dressing."
+    ]
+  },
+  {
+    "name": "Doner Kebab Sandwich",
+    "category": "beef",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground beef",
+        "amount": 1,
+        "unit": "lbs"
+      },
+      {
+        "item": "onion",
+        "amount": 0.5,
+        "unit": "whole"
+      },
+      {
+        "item": "yogurt",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "paprika",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "chili powder",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "black pepper",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "roma tomatoes",
+        "amount": 3,
+        "unit": "whole"
+      },
+      {
+        "item": "jalapeÃ±os",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "tahini",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "lemon juice",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "oil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "pita bread",
+        "amount": 4,
+        "unit": "large"
+      },
+      {
+        "item": "cucumber",
+        "amount": 1,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Mix ground beef with grated onion, 1/4 cup yogurt, garlic, paprika, chili powder, pepper, salt. Shape into log.",
+      "Bake at 400Â°F for 15 mins. Unroll and broil 3 more mins.",
+      "Make tahini sauce: blend tahini, lemon juice, garlic, 1/4 cup yogurt, water, salt."
+    ],
+    "id": "viral-doner-kebab-sandwich",
+    "favorite": true
+  },
+  {
+    "id": "garlic-pepper-beef",
+    "name": "Garlic Pepper Beef",
+    "category": "beef",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground beef",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "black pepper",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "water",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "jasmine rice",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "eggs",
+        "amount": 4,
+        "unit": "whole"
+      },
+      {
+        "item": "green onions",
+        "amount": 2,
+        "unit": "stalks"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Brown ground beef with freshly cracked pepper and red pepper flakes.",
+      "Mix soy sauce, brown sugar, garlic, water, and cornstarch for sauce.",
+      "Pour sauce over beef, cook until thickened.",
+      "Serve over rice with a fried egg, green onions, and sesame seeds."
+    ]
+  },
+  {
+    "id": "honey-sriracha-meatballs-noodles",
+    "name": "Honey Sriracha Glass Noodles & Meatballs",
+    "category": "beef",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground beef",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "onion",
+        "amount": 0.5,
+        "unit": "small"
+      },
+      {
+        "item": "red bell pepper",
+        "amount": 0.5,
+        "unit": "small"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 0.5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sriracha",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "quick oats",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "tamari",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "rice vinegar",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "coconut sugar",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "honey",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "beef broth",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "zucchini",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "snap peas",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "glass noodles",
+        "amount": 10.5,
+        "unit": "oz"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cilantro",
+        "amount": 2,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Mix beef, egg, diced onion, bell pepper, garlic, ginger, 0.5 tbsp sriracha, red pepper flakes, salt, pepper, oats. Form 8 meatballs, chill 20-30 mins.",
+      "Whisk sauce: remaining sriracha, tamari, vinegar, coconut sugar, honey. Reserve 1/3 for basting, add broth to rest.",
+      "Bake meatballs at 425Â°F for 15 mins, baste halfway, bake 2-3 more mins.",
+      "Cook glass noodles, toss with sesame oil. Stir-fry zucchini and snap peas, add sauce, simmer.",
+      "Toss noodles in sauce, nestle in meatballs. Garnish with sesame seeds and cilantro."
+    ]
+  },
+  {
+    "id": "one-pot-mongolian-beef-noodles",
+    "name": "One Pot Mongolian Beef Noodles",
+    "category": "beef",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground beef",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "garlic",
+        "amount": 6,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 1,
+        "unit": "inch"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "ramen noodles",
+        "amount": 2,
+        "unit": "bricks"
+      },
+      {
+        "item": "beef broth",
+        "amount": 3,
+        "unit": "cups"
+      },
+      {
+        "item": "tamari",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "coconut sugar",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "apple cider vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "fish sauce",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "arrowroot starch",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "green onions",
+        "amount": 3,
+        "unit": "stalks"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Brown ground beef, drain all but 2 tbsp fat. Cook until crispy brown bits form.",
+      "Add garlic, ginger, red pepper flakes. Cook 1 min until fragrant.",
+      "Mix 1 cup broth, tamari, coconut sugar, vinegar, fish sauce. Pour half over beef.",
+      "Add remaining 2 cups broth, drop in ramen bricks. Simmer, flip noodles after 2-3 mins.",
+      "Whisk arrowroot into remaining sauce, pour over noodles. Stir until thickened.",
+      "Top with green onions and sesame seeds."
+    ]
+  },
+  {
+    "id": "spinach-parmesan-orzo",
+    "name": "Spinach and Parmesan Orzo",
+    "category": "vegetarian",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "orzo pasta",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "olive oil",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "fresh spinach",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 1.25,
+        "unit": "cups"
+      },
+      {
+        "item": "milk",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "nutmeg",
+        "amount": 1,
+        "unit": "pinch"
+      }
+    ],
+    "instructions": [
+      "Toast orzo in olive oil with garlic for 1-2 mins.",
+      "Add broth, simmer covered until liquid absorbed (12-15 mins).",
+      "Stir in spinach until wilted.",
+      "Add milk, cook 1-2 mins until creamy.",
+      "Stir in parmesan, season with salt, pepper, and nutmeg."
+    ]
+  },
+  {
+    "id": "mac-and-cheese",
+    "name": "4-Ingredient Mac & Cheese",
+    "category": "vegetarian",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken broth",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "elbow noodles",
+        "amount": 8,
+        "unit": "oz"
+      },
+      {
+        "item": "evaporated milk",
+        "amount": 8,
+        "unit": "oz"
+      },
+      {
+        "item": "cheddar cheese",
+        "amount": 8,
+        "unit": "oz"
+      }
+    ],
+    "instructions": [
+      "Bring broth to boil in large pan, add noodles.",
+      "Cook 3 mins less than package directions, stirring to release starches.",
+      "Lower heat, stir in evaporated milk. Simmer until 1/3 milk remains.",
+      "Remove from heat, stir in grated cheese until smooth. Serve immediately."
+    ]
+  },
+  {
+    "id": "mashed-potatoes",
+    "name": "Mashed Potatoes",
+    "category": "vegetarian",
+    "servings": 6,
+    "ingredients": [
+      {
+        "item": "potatoes",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "butter",
+        "amount": 4,
+        "unit": "tbsp"
+      },
+      {
+        "item": "whole milk",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "salt",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "black pepper",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Peel and cube potatoes. Boil in salted water until tender (15-20 mins).",
+      "Drain and let steam dry for 1-2 mins.",
+      "Mash with butter until smooth.",
+      "Gradually add milk, mashing until desired consistency.",
+      "Season with salt and pepper."
+    ]
+  },
+  {
+    "id": "pasta-mushroom-spinach-parm",
+    "name": "Pasta with Mushroom, Spinach & Parmesan",
+    "category": "vegetarian",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "farfalle pasta",
+        "amount": 12,
+        "unit": "oz"
+      },
+      {
+        "item": "olive oil",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "mushrooms",
+        "amount": 14,
+        "unit": "oz"
+      },
+      {
+        "item": "fresh spinach",
+        "amount": 6,
+        "unit": "cups"
+      },
+      {
+        "item": "chicken broth",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "italian seasoning",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 1,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Cook pasta al dente, drain and set aside.",
+      "SautÃ© mushrooms in olive oil 3 mins. Add garlic, cook 1-2 mins.",
+      "Deglaze with broth, remove mushrooms to a plate.",
+      "Wilt spinach in same skillet, season with salt and pepper.",
+      "Combine pasta, spinach, mushrooms, parmesan, Italian seasoning, red pepper flakes."
+    ]
+  },
+  {
+    "id": "lemon-ricotta-pasta-broccoli",
+    "name": "Lemon Ricotta Pasta with Broccoli",
+    "category": "vegetarian",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "rigatoni pasta",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "broccoli florets",
+        "amount": 5,
+        "unit": "cups"
+      },
+      {
+        "item": "ricotta cheese",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "lemon",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "chili flakes",
+        "amount": 0.75,
+        "unit": "tsp"
+      },
+      {
+        "item": "salt",
+        "amount": 0.75,
+        "unit": "tsp"
+      },
+      {
+        "item": "black pepper",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Cook pasta until 3 mins shy of al dente, add broccoli, cook until pasta is done.",
+      "Reserve 1 cup pasta water, drain.",
+      "Toss pasta and broccoli with ricotta, parmesan, lemon zest and juice, chili flakes, salt, pepper.",
+      "Add pasta water as needed for creamy consistency."
+    ]
+  },
+  {
+    "id": "hibachi-chicken-bowl",
+    "name": "Hibachi Chicken Bowl",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "oyster sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "yellow onion",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "zucchini",
+        "amount": 2,
+        "unit": "medium"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "butter",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "jasmine rice",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Mix chicken with oyster sauce, sesame oil, cornstarch, salt, pepper. Marinate 15 mins.",
+      "Sear chicken in 1 tbsp oil over medium-high heat 4-5 mins until golden, then cook 2-3 more mins. Remove.",
+      "Add remaining oil, sautÃ© onions 2-3 mins, then add zucchini, garlic, soy sauce, sesame seeds. Cook 3-4 mins.",
+      "Return chicken, add butter, stir until melted. Serve over jasmine rice with sesame seeds."
+    ]
+  },
+  {
+    "id": "hot-honey-chicken-slow-cooker",
+    "name": "Hot Honey Chicken (Slow Cooker)",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 2.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "crushed red pepper flakes",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "smoked paprika",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "coconut sugar",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "honey",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "apple cider vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "sweet potato",
+        "amount": 2,
+        "unit": "large"
+      },
+      {
+        "item": "mayonnaise",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "dill pickle juice",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "coleslaw mix",
+        "amount": 6,
+        "unit": "cups"
+      },
+      {
+        "item": "dill pickles",
+        "amount": 1.5,
+        "unit": "cups"
+      },
+      {
+        "item": "red onion",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "white rice",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Mix spices (pepper flakes, paprika, garlic powder, sugar, salt). Coat chicken, place in slow cooker.",
+      "Pour honey, vinegar, and oil over chicken. Cook on low 3-4 hrs until 165Â°F.",
+      "Shred chicken, reserve 1/2 cup sauce, return chicken to cooker.",
+      "Roast cubed sweet potatoes at 425Â°F with oil, salt, pepper for 35-40 mins.",
+      "Make slaw: whisk mayo, pickle juice, garlic powder, salt, pepper. Toss with coleslaw, pickles, onion.",
+      "Serve chicken over rice with sweet potatoes, slaw, and reserved hot honey sauce."
+    ]
+  },
+  {
+    "id": "teriyaki-chicken-broccoli-bowls",
+    "name": "Teriyaki Chicken and Broccoli Rice Bowls",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "water",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "brown sugar",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "jasmine rice",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "white vinegar",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "broccoli florets",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Mix sauce ingredients (garlic, ginger, water, soy sauce, brown sugar). Reserve 1 cup, marinate chicken in rest for 30 mins.",
+      "Cook rice: 1 cup rice + 1.25 cups water, simmer covered 12-15 mins.",
+      "Sear chicken in oil 5-6 mins per side until charred and 160Â°F. Rest and slice.",
+      "Heat reserved sauce, whisk in cornstarch slurry (1 tbsp + 1 tbsp water), cook until thick. Stir in vinegar.",
+      "Microwave broccoli with 2 tbsp water for 2-4 mins. Serve chicken over rice with broccoli and teriyaki sauce."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "thai-chicken-burger-peanut-slaw",
+    "name": "Thai Chicken Burger with Spicy Peanut Slaw",
+    "category": "chicken",
+    "servings": 3,
+    "ingredients": [
+      {
+        "item": "ground chicken",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "scallions",
+        "amount": 3,
+        "unit": "stalks"
+      },
+      {
+        "item": "fresh basil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "thai chili",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "fish sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "lime",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "coriander",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "sugar",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "peanut butter",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "white vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "sriracha",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "red cabbage",
+        "amount": 2.5,
+        "unit": "cups"
+      },
+      {
+        "item": "shredded carrots",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "kaiser rolls",
+        "amount": 3,
+        "unit": "whole"
+      },
+      {
+        "item": "cucumber",
+        "amount": 0.5,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Make slaw: whisk peanut butter, lime juice, sugar, vinegar, soy sauce, sriracha, water. Toss with cabbage and carrots.",
+      "Mix chicken with garlic, scallions, basil, chili, fish sauce, lime juice, coriander, sugar, salt, pepper. Form 3 patties.",
+      "Pan-fry patties 2-3 mins per side until golden, bake at 350Â°F for 10-12 mins until 165Â°F.",
+      "Toast buns under broiler. Serve burgers with cucumber, peanut slaw, and basil."
+    ]
+  },
+  {
+    "id": "chipotle-chicken-rice-bowls",
+    "name": "Chipotle Chicken Rice Bowls",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "lime",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "fresh cilantro",
+        "amount": 5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "chili powder",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "paprika",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "olive oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "long grain rice",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "butter",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "feta cheese",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "cucumber",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "tomato",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "red onion",
+        "amount": 0.25,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Marinate chicken in lime juice, 2 tbsp cilantro, all spices, oil, and salt for 20+ mins.",
+      "Make cilantro lime rice: cook rice, stir in 3 tbsp cilantro, lime juice, butter.",
+      "Sear chicken 5-6 mins per side until 165Â°F. Rest 5 mins, cube.",
+      "Serve chicken over rice with feta, cucumber, tomato, onion, and yogurt sauce."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "chicken-kofta-tzatziki-lemon-rice",
+    "name": "Chicken Kofta with Tzatziki and Lemon Dill Rice",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground chicken",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "yellow onion",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "fresh mint",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "coriander",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "cinnamon",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "cayenne pepper",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "cucumber",
+        "amount": 0.5,
+        "unit": "large"
+      },
+      {
+        "item": "greek yogurt",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "lemon",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "chicken stock",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "long grain rice",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "fresh dill",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "butter",
+        "amount": 2,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Make tzatziki: mix grated cucumber, yogurt, garlic, lemon juice, olive oil, salt.",
+      "Make rice: boil stock with salt and garlic, add rice, simmer 20 mins. Stir in lemon zest, dill, butter.",
+      "Mix chicken with onion, parsley, mint, garlic, egg, spices, salt, pepper.",
+      "Pan-fry 1 tbsp portions in oil for 2-3 mins per side until 165Â°F.",
+      "Serve kofta with lemon dill rice, tzatziki, and sliced veggies."
+    ]
+  },
+  {
+    "id": "chicken-parm",
+    "name": "Chicken Parmesan",
+    "category": "chicken",
+    "servings": 2,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "flour",
+        "amount": 0.33,
+        "unit": "cup"
+      },
+      {
+        "item": "eggs",
+        "amount": 2,
+        "unit": "large"
+      },
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.33,
+        "unit": "cup"
+      },
+      {
+        "item": "italian breadcrumbs",
+        "amount": 0.33,
+        "unit": "cup"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "marinara sauce",
+        "amount": 24,
+        "unit": "oz"
+      },
+      {
+        "item": "mozzarella cheese",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 2,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Preheat oven to 425Â°F. Pound chicken to 1/3\" thick, season with salt and pepper.",
+      "Set up dredging: flour, beaten eggs, combined breadcrumbs and 1/4 cup parmesan.",
+      "Coat chicken in flour, egg, then breadcrumb mixture. Place on greased baking sheet.",
+      "On separate pan, spread marinara and make two mozzarella piles. Sprinkle with parmesan.",
+      "Spray chicken with oil, bake 12-15 mins until 165Â°F. Bake cheese 8-10 mins until golden.",
+      "Top chicken with melted cheese and sauce. Garnish with parsley and parmesan."
+    ]
+  },
+  {
+    "name": "Chicken Stir Fry",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "stir fry sauce",
+        "amount": null,
+        "unit": ""
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "onion",
+        "amount": null,
+        "unit": ""
+      },
+      {
+        "item": "rice",
+        "amount": null,
+        "unit": ""
+      },
+      {
+        "item": "mushrooms",
+        "amount": null,
+        "unit": ""
+      },
+      {
+        "item": "red pepper",
+        "amount": null,
+        "unit": ""
+      }
+    ],
+    "instructions": [],
+    "id": "chicken-and-broccoli-stir-fry",
+    "favorite": true
+  },
+  {
+    "id": "moroccan-spiced-meatballs",
+    "name": "Moroccan Spiced Meatballs with Lemon Garlic Yogurt",
+    "category": "beef",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.33,
+        "unit": "cup"
+      },
+      {
+        "item": "milk",
+        "amount": 0.33,
+        "unit": "cup"
+      },
+      {
+        "item": "lean ground beef",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "cumin",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "coriander",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "turmeric",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "ginger",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "cinnamon",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "cayenne pepper",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "english cucumber",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "tomatoes",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "red onion",
+        "amount": 0.25,
+        "unit": "whole"
+      },
+      {
+        "item": "lemon",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "olive oil",
+        "amount": 4,
+        "unit": "tbsp"
+      },
+      {
+        "item": "greek yogurt",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "couscous",
+        "amount": 1,
+        "unit": "cup"
+      }
+    ],
+    "instructions": [
+      "Soak panko in milk 5 mins. Mix with beef, garlic, parsley, egg, all spices, salt. Set aside.",
+      "Make salad: toss diced cucumber, tomatoes, onion, parsley, lemon juice, 2 tbsp olive oil, salt, pepper.",
+      "Make yogurt sauce: mix yogurt, lemon juice, garlic, parsley, 2 tbsp olive oil, salt.",
+      "Make couscous: boil 1 cup water with salt and 1 tbsp oil, add couscous, cover 5 mins, fluff.",
+      "Form meatballs (1 heaping tbsp each), pan-fry in oil 2-3 mins per side until 160Â°F.",
+      "Serve meatballs with couscous, chopped salad, and lemon garlic yogurt."
+    ]
+  },
+  {
+    "id": "moms-spaghetti-meatballs",
+    "name": "Mom's Spaghetti and Meatballs",
+    "category": "beef",
+    "servings": 6,
+    "ingredients": [
+      {
+        "item": "panko breadcrumbs",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "milk",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "lean ground beef",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "italian sausage",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "eggs",
+        "amount": 2,
+        "unit": "large"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "white wine",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "olive oil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "yellow onion",
+        "amount": 1,
+        "unit": "medium"
+      },
+      {
+        "item": "san marzano tomatoes",
+        "amount": 56,
+        "unit": "oz"
+      },
+      {
+        "item": "italian seasoning",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "red wine",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "spaghetti",
+        "amount": 1,
+        "unit": "lb"
+      }
+    ],
+    "instructions": [
+      "Soak panko in milk 10 mins. Mix with beef, sausage, parsley, eggs, garlic, white wine, parmesan, salt, pepper.",
+      "Form 2.5\" meatballs, bake at 425Â°F for 18-20 mins until 165Â°F.",
+      "For sauce: sautÃ© onion and garlic in olive oil until translucent. Add crushed tomatoes, Italian seasoning, red wine. Simmer 25-30 mins.",
+      "Add meatballs and pan drippings to sauce, simmer.",
+      "Boil spaghetti al dente. Toss with sauce and serve with meatballs, parmesan, and parsley."
+    ]
+  },
+  {
+    "id": "beef-pepper-steak",
+    "name": "Beef Pepper Steak",
+    "category": "steak",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "flank steak",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "cornstarch",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "ginger",
+        "amount": 4,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "water",
+        "amount": 0.75,
+        "unit": "cup"
+      },
+      {
+        "item": "oyster sauce",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "black bean garlic sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "white vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "avocado oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "yellow onion",
+        "amount": 1,
+        "unit": "medium"
+      },
+      {
+        "item": "green bell peppers",
+        "amount": 3,
+        "unit": "medium"
+      },
+      {
+        "item": "roma tomatoes",
+        "amount": 4,
+        "unit": "medium"
+      },
+      {
+        "item": "scallions",
+        "amount": 2,
+        "unit": "stalks"
+      },
+      {
+        "item": "white rice",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Slice steak thin against grain. Marinate in cornstarch, sesame oil, 1 tbsp soy sauce, salt, pepper, water, 1 clove garlic, 1 tsp ginger for 15 mins.",
+      "Mix sauce: water, oyster sauce, black bean garlic sauce, 1 tbsp soy sauce, vinegar, 1 tbsp cornstarch, pepper, sugar.",
+      "Stir-fry onions with half the garlic and ginger 2-3 mins. Add peppers 3-4 mins until blistered. Remove.",
+      "Sear steak 2-3 mins, stir-fry until medium-rare. Add remaining garlic, ginger, tomatoes 1-2 mins.",
+      "Return veggies, add sauce, bring to boil until thickened. Stir in scallions. Serve over rice."
+    ]
+  },
+  {
+    "id": "lamb-meatballs-gyros",
+    "name": "Lamb Meatballs Gyros",
+    "category": "lamb",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "cucumber",
+        "amount": 0.5,
+        "unit": "large"
+      },
+      {
+        "item": "greek yogurt",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "lemon",
+        "amount": 1.5,
+        "unit": "whole"
+      },
+      {
+        "item": "olive oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "milk",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "ground lamb",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "yellow onion",
+        "amount": 0.5,
+        "unit": "medium"
+      },
+      {
+        "item": "fresh mint",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "oregano",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "coriander",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "pita bread",
+        "amount": 4,
+        "unit": "whole"
+      },
+      {
+        "item": "tomato",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "red onion",
+        "amount": 0.25,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Make tzatziki: mix grated cucumber, yogurt, garlic, lemon juice, olive oil, salt.",
+      "Soak panko in milk 10 mins. Mix with lamb, onion, garlic, mint, egg, lemon zest, oregano, cumin, coriander, salt, pepper.",
+      "Form into 2 tbsp meatballs, flatten slightly. Pan-fry in oil 2-3 mins per side until 165Â°F.",
+      "Toast pitas lightly with oil on both sides.",
+      "Spread tzatziki on pita, add 3-4 meatballs, sliced veggies, more tzatziki. Enjoy!"
+    ]
+  },
+  {
+    "id": "greek-meatballs-tzatziki",
+    "name": "Greek Meatballs with Tzatziki and Lemon Dill Rice",
+    "category": "lamb",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "milk",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "ground lamb",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "yellow onion",
+        "amount": 0.5,
+        "unit": "medium"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "fresh mint",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "lemon",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "oregano",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "coriander",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "chicken stock",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "long grain rice",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "fresh dill",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "butter",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cucumber",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "greek yogurt",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Soak panko in milk 10 mins. Mix with lamb, onion, garlic, mint, egg, lemon zest, oregano, cumin, coriander, salt, pepper.",
+      "Roll into 1\" balls, spray with oil. Bake at 425Â°F for 15-20 mins until browned and 160Â°F.",
+      "Make rice: boil chicken stock with salt and garlic, add rice, simmer 20 mins. Stir in lemon zest, dill, butter.",
+      "Make tzatziki: mix grated cucumber, yogurt, garlic, lemon juice, olive oil, salt.",
+      "Serve meatballs over lemon dill rice with tzatziki and sliced cucumbers."
+    ]
+  },
+  {
+    "id": "baked-crispy-yukon-potatoes",
+    "name": "Baked Crispy Yukon Gold Potatoes",
+    "category": "vegetarian",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "yukon gold potatoes",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "olive oil",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "rosemary",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "baking soda",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 2,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Preheat oven to 450Â°F. Boil water with baking soda, parboil potato pieces 7-8 mins.",
+      "Drain potatoes, shake in colander to rough up surfaces.",
+      "Toss with olive oil, garlic powder, salt, and rosemary.",
+      "Spread on baking sheet, bake 20 mins until golden and crispy, flipping halfway.",
+      "Sprinkle with fresh parsley and serve."
+    ]
+  },
+  {
+    "id": "garlic-fried-rice-egg",
+    "name": "Garlic Fried Rice with Egg",
+    "category": "vegetarian",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "avocado oil",
+        "amount": 5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 12,
+        "unit": "cloves"
+      },
+      {
+        "item": "cooked jasmine rice",
+        "amount": 4,
+        "unit": "cups"
+      },
+      {
+        "item": "butter",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "scallions",
+        "amount": 2,
+        "unit": "stalks"
+      },
+      {
+        "item": "eggs",
+        "amount": 2,
+        "unit": "large"
+      }
+    ],
+    "instructions": [
+      "Fry minced garlic in 3 tbsp oil over medium-low heat until golden brown. Turn off heat, mix in rice.",
+      "Turn heat to medium, add butter, soy sauce, salt. Stir-fry 2-3 mins until heated through. Mix in scallions.",
+      "In separate pan, fry 2 eggs sunny side up in 2 tsp oil with a sprinkle of salt.",
+      "Serve eggs on top of rice."
+    ]
+  },
+  {
+    "id": "maxis-mac-and-cheese",
+    "name": "Maxi's Mac & Cheese",
+    "category": "vegetarian",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "medium shell pasta",
+        "amount": 14,
+        "unit": "oz"
+      },
+      {
+        "item": "black pepper",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "butter",
+        "amount": 4,
+        "unit": "tbsp"
+      },
+      {
+        "item": "flour",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "milk",
+        "amount": 4,
+        "unit": "cups"
+      },
+      {
+        "item": "pecorino romano cheese",
+        "amount": 1.5,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Boil pasta until very al dente (1-2 mins less than package), drain.",
+      "Toast pepper in pot until fragrant (1-2 mins), add butter.",
+      "Whisk in flour, cook 1 min. Gradually add milk 1/2 cup at a time, whisking until incorporated.",
+      "Whisk until sauce bubbles and thickens (2-3 mins). Stir in pecorino romano.",
+      "Add pasta, cook 2-3 mins until desired tenderness. Top with pepper and more cheese."
+    ]
+  },
+  {
+    "id": "easy-asian-chuck-roast",
+    "name": "Easy Asian Style Chuck Roast",
+    "category": "beef",
+    "servings": 6,
+    "ingredients": [
+      {
+        "item": "chuck roast",
+        "amount": 3.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "honey",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "sesame oil",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 5,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 2,
+        "unit": "pieces"
+      },
+      {
+        "item": "green onions",
+        "amount": 4,
+        "unit": "stalks"
+      },
+      {
+        "item": "arrowroot starch",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "sesame seeds",
+        "amount": 1,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Dice chuck into 2\" cubes. Mix with soy sauce, honey, sesame oil, smashed garlic, ginger, and green onions in slow cooker.",
+      "Cook on low 3-4 hours until meat falls apart easily.",
+      "Remove beef chunks and shred. Remove ginger, garlic, and onions from liquid.",
+      "Stir arrowroot mixed with cold water into braising liquid to thicken.",
+      "Add shredded meat back, mix well. Serve with green onions and sesame seeds."
+    ]
+  },
+  {
+    "id": "buttermilk-chicken-tenders",
+    "name": "Tallow Fried Buttermilk Chicken Tenders",
+    "category": "chicken",
+    "servings": 6,
+    "ingredients": [
+      {
+        "item": "chicken tenders",
+        "amount": 3,
+        "unit": "lbs"
+      },
+      {
+        "item": "buttermilk",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "flour",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "salt",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "black pepper",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "cayenne pepper",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "paprika",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "tallow",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Marinate chicken in buttermilk for at least 2 hours or overnight.",
+      "Mix flour with salt, pepper, cayenne, garlic powder, and paprika.",
+      "Heat tallow to 375Â°F in a cast iron or stainless steel pan.",
+      "Dredge tenders in flour, dip in buttermilk, then flour again for crispy coating.",
+      "Fry in batches until golden crispy. Drain on wire rack, season with salt immediately."
+    ]
+  },
+  {
+    "id": "mexican-street-tacos-chicken",
+    "name": "Mexican Street Tacos (Chicken)",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "orange juice",
+        "amount": 4,
+        "unit": "tbsp"
+      },
+      {
+        "item": "apple cider vinegar",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "lime",
+        "amount": 1.5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic",
+        "amount": 3,
+        "unit": "cloves"
+      },
+      {
+        "item": "chipotle chili powder",
+        "amount": 1.5,
+        "unit": "tbsp"
+      },
+      {
+        "item": "mexican oregano",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "paprika",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "cinnamon",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "cotija cheese",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "corn tortillas",
+        "amount": 12,
+        "unit": "whole"
+      }
+    ],
+    "instructions": [
+      "Mix marinade: orange juice, vinegar, lime juice, garlic, chipotle powder, oregano, paprika, cinnamon, salt, pepper.",
+      "Marinate chicken thighs at least 1 hour or overnight.",
+      "Grill over medium-high heat 4-5 mins per side until 165Â°F.",
+      "Rest a few minutes, then chop into small pieces.",
+      "Serve in tortillas with cotija cheese, roasted corn, pico, and guacamole."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "chicken-curry",
+    "name": "Chicken Curry",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken thighs",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "coconut oil",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "coconut milk",
+        "amount": 14,
+        "unit": "oz"
+      },
+      {
+        "item": "red curry paste",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red bell pepper",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "onion",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "ginger",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "fresh cilantro",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "lime",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Season chicken with salt, pepper. Brown both sides in coconut oil over medium-high heat. Remove (doesn't need to be fully cooked).",
+      "SautÃ© peppers and onions 3-4 mins. Add garlic and ginger, cook 1 min until fragrant.",
+      "Add curry paste, cook 4-5 mins until dark and caramelized.",
+      "Slowly stir in coconut milk, simmer 5-10 mins. Add red pepper flakes if desired.",
+      "Slice chicken into bite-size pieces, add back with juices. Simmer 15 mins until cooked through.",
+      "Top with fresh cilantro and lime juice."
+    ]
+  },
+  {
+    "id": "pot-roast",
+    "name": "Pot Roast",
+    "category": "beef",
+    "servings": 6,
+    "ingredients": [
+      {
+        "item": "chuck roast",
+        "amount": 3.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "yellow onions",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "carrots",
+        "amount": 6,
+        "unit": "whole"
+      },
+      {
+        "item": "garlic",
+        "amount": 5,
+        "unit": "cloves"
+      },
+      {
+        "item": "tomato paste",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red wine",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "beef broth",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "thyme",
+        "amount": 3,
+        "unit": "sprigs"
+      },
+      {
+        "item": "bay leaves",
+        "amount": 3,
+        "unit": "whole"
+      },
+      {
+        "item": "butter",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 2,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Season roast with salt and pepper. Sear on all sides in oil in Dutch oven over medium-high heat. Remove.",
+      "Add onions and carrots, cook until colored and softened, about 5 mins.",
+      "Add garlic 1 min, then tomato paste 2-3 mins, stirring constantly.",
+      "Add wine, broth, thyme, bay leaves, pinch of salt. Bring to simmer.",
+      "Cover and roast at 350Â°F for 2.5 hours.",
+      "Rest roast 20 mins. Skim fat from liquid, remove herbs, stir in cold butter. Serve with mashed potatoes and parsley."
+    ]
+  },
+  {
+    "id": "lasagna",
+    "name": "Lasagna",
+    "category": "beef",
+    "servings": 8,
+    "ingredients": [
+      {
+        "item": "lean ground beef",
+        "amount": 2,
+        "unit": "lbs"
+      },
+      {
+        "item": "tomato sauce",
+        "amount": 32,
+        "unit": "oz"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "lasagna noodles",
+        "amount": 12,
+        "unit": "sheets"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "fresh basil",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "parmesan cheese",
+        "amount": 1,
+        "unit": "cup"
+      },
+      {
+        "item": "mozzarella cheese",
+        "amount": 16,
+        "unit": "oz"
+      },
+      {
+        "item": "ricotta cheese",
+        "amount": 15,
+        "unit": "oz"
+      }
+    ],
+    "instructions": [
+      "Brown ground meat, drain fat. Add tomato sauce, simmer 10-15 mins. Season to taste.",
+      "Mix egg, ricotta, chopped parsley, salt, pepper until emulsified.",
+      "Cook noodles until al dente (slightly underdone).",
+      "Layer in baking dish: thin meat sauce, noodles, 1/3 ricotta, parmesan, meat sauce. Repeat twice.",
+      "Top with remaining noodles, meat sauce, mozzarella, and parmesan.",
+      "Cover with foil, bake at 350Â°F for 45 mins. Remove foil, bake 15 more mins.",
+      "Cool 15-20 mins before cutting. Top with fresh basil."
+    ]
+  },
+  {
+    "id": "cava-bowls-honey-harissa-chicken",
+    "name": "Cava Bowls with Honey Harissa Chicken",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken breast",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "harissa",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "honey",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "smoked paprika",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "olive oil",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "rice",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "cucumber",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "tomatoes",
+        "amount": 2,
+        "unit": "whole"
+      },
+      {
+        "item": "hummus",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "feta cheese",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "red onion",
+        "amount": 1,
+        "unit": "small"
+      },
+      {
+        "item": "white vinegar",
+        "amount": 2,
+        "unit": "cups"
+      },
+      {
+        "item": "spinach",
+        "amount": 2,
+        "unit": "cups"
+      }
+    ],
+    "instructions": [
+      "Mix chicken with harissa, honey, paprika, cumin, salt, pepper, olive oil.",
+      "Slice and bake at 400Â°F for 20 mins until cooked through.",
+      "For pickled onions: heat vinegar, water, sugar, salt until dissolved. Pour over sliced onions, cool.",
+      "Build bowls with rice, spinach, cucumber, tomatoes, hummus, feta, pickled onions, and chicken.",
+      "Drizzle with yogurt dill sauce."
+    ],
+    "favorite": true
+  },
+  {
+    "id": "moroccan-kefta-skewers",
+    "name": "Moroccan Meat Skewers (Kefta)",
+    "category": "lamb",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground lamb",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "harissa",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "fresh parsley",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "fresh cilantro",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "onion",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "cumin",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "smoked paprika",
+        "amount": 2,
+        "unit": "tsp"
+      },
+      {
+        "item": "turmeric",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "ginger powder",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Mix ground lamb with harissa, parsley, cilantro, grated onion, cumin, paprika, salt, pepper, turmeric, ginger.",
+      "Mold mixture onto skewers.",
+      "Grill 3-4 mins per side until 160Â°F internal temp. Or bake at 400Â°F for 17 mins.",
+      "Serve with rice, tzatziki, and fresh veggies."
+    ]
+  },
+  {
+    "id": "sweet-spicy-chicken-meatballs",
+    "name": "Sweet & Spicy Chicken Meatballs",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground chicken",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.75,
+        "unit": "cup"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "garlic",
+        "amount": 2,
+        "unit": "cloves"
+      },
+      {
+        "item": "paprika",
+        "amount": 0.25,
+        "unit": "tsp"
+      },
+      {
+        "item": "onion powder",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "hot sauce",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "honey",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "apple cider vinegar",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "red pepper flakes",
+        "amount": 0.25,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Make sauce: combine hot sauce, honey, vinegar, pinch of salt, red pepper flakes. Boil then simmer 10 mins to thicken.",
+      "Mix chicken with panko, egg, garlic, paprika, onion powder, salt, pepper. Don't overmix.",
+      "Roll into 1-2\" meatballs, place on parchment-lined baking sheet.",
+      "Bake at 475Â°F for 12-15 mins until 165Â°F, flipping halfway.",
+      "Brush meatballs with sauce, return to oven to finish. Drizzle more sauce and serve."
+    ]
+  },
+  {
+    "id": "steak-onions-rosemary-potatoes",
+    "name": "Steak & Onions with Crispy Rosemary Potatoes",
+    "category": "steak",
+    "servings": 2,
+    "ingredients": [
+      {
+        "item": "thin steak",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "potatoes",
+        "amount": 1.5,
+        "unit": "lbs"
+      },
+      {
+        "item": "olive oil",
+        "amount": 3,
+        "unit": "tbsp"
+      },
+      {
+        "item": "garlic powder",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "rosemary",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "yellow onion",
+        "amount": 1,
+        "unit": "whole"
+      },
+      {
+        "item": "ghee",
+        "amount": 2,
+        "unit": "tbsp"
+      }
+    ],
+    "instructions": [
+      "Salt steak and let sit at room temperature 1 hour.",
+      "Cut potatoes into 1\" chunks. Toss with olive oil, salt, pepper, garlic powder, rosemary.",
+      "Bake at 450Â°F for 30 mins, flipping halfway.",
+      "Pat steak dry. Sear in hot pan with ghee, a few mins per side. Use thermometer for desired temp.",
+      "Let pan cool slightly, add sliced onions with a pinch of salt. Cook 10 mins until softened.",
+      "Rest steak while onions cook. Serve steak topped with onions and potatoes on the side."
+    ]
+  },
+  {
+    "id": "mediterranean-turkey-meatballs",
+    "name": "Mediterranean Meatballs",
+    "category": "turkey",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "ground turkey",
+        "amount": 1,
+        "unit": "lb"
+      },
+      {
+        "item": "feta cheese",
+        "amount": 4,
+        "unit": "oz"
+      },
+      {
+        "item": "spinach",
+        "amount": 0.5,
+        "unit": "cup"
+      },
+      {
+        "item": "red onion",
+        "amount": 0.5,
+        "unit": "small"
+      },
+      {
+        "item": "garlic",
+        "amount": 4,
+        "unit": "cloves"
+      },
+      {
+        "item": "fresh mint",
+        "amount": 1,
+        "unit": "tsp"
+      },
+      {
+        "item": "sun dried tomatoes",
+        "amount": 2,
+        "unit": "tbsp"
+      },
+      {
+        "item": "panko breadcrumbs",
+        "amount": 0.25,
+        "unit": "cup"
+      },
+      {
+        "item": "egg",
+        "amount": 1,
+        "unit": "large"
+      },
+      {
+        "item": "mayonnaise",
+        "amount": 1,
+        "unit": "tbsp"
+      },
+      {
+        "item": "cumin",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "oregano",
+        "amount": 0.5,
+        "unit": "tsp"
+      },
+      {
+        "item": "paprika",
+        "amount": 0.5,
+        "unit": "tsp"
+      }
+    ],
+    "instructions": [
+      "Mix ground turkey with crumbled feta, chopped spinach, red onion, garlic, mint, sun dried tomatoes.",
+      "Add panko, egg, mayo, cumin, oregano, paprika, salt, pepper. Mix gently.",
+      "Form into meatballs and place on baking sheet.",
+      "Roast at 425Â°F for 20 mins (17 mins convection), flipping halfway.",
+      "Serve with tzatziki, rice, or in pita."
+    ],
+    "favorite": true
+  },
+  {
+    "name": "Turkey Tacos",
+    "category": "turkey",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "Ground Turkey",
+        "amount": 1,
+        "unit": "Package"
+      },
+      {
+        "item": "Rotel",
+        "amount": 1,
+        "unit": "Can"
+      },
+      {
+        "item": "Onion",
+        "amount": 1,
+        "unit": "Whole"
+      },
+      {
+        "item": "Corn Tortillas",
+        "amount": 1,
+        "unit": ""
+      },
+      {
+        "item": "Shredded cheese",
+        "amount": 1,
+        "unit": ""
+      }
+    ],
+    "instructions": [],
+    "id": "turkey-tacos",
+    "favorite": true
+  },
+  {
+    "name": "Perri Perri Chicken ",
+    "category": "chicken",
+    "servings": 4,
+    "ingredients": [
+      {
+        "item": "chicken",
+        "amount": null,
+        "unit": ""
+      },
+      {
+        "item": "perri perri spice blend",
+        "amount": null,
+        "unit": ""
+      },
+      {
+        "item": "olive oil",
+        "amount": 4,
+        "unit": "TBSP"
+      },
+      {
+        "item": "lemon juice",
+        "amount": 4,
+        "unit": "TBSP"
+      },
+      {
+        "item": "garlic",
+        "amount": null,
+        "unit": ""
+      },
+      {
+        "item": "honey",
+        "amount": 1,
+        "unit": "TBSP"
+      },
+      {
+        "item": "dijon mustard",
+        "amount": 1,
+        "unit": "TBSP"
+      },
+      {
+        "item": "soy sauce",
+        "amount": 1,
+        "unit": "TBSP"
+      }
+    ],
+    "instructions": [
+      "Mix as marinade. Add salt and pepper as needed. Honey, dijon, soy sauce is optional. Serve with rice and vegetable."
+    ],
+    "id": "perri-perri-chicken-",
+    "favorite": true
+  }
+]
