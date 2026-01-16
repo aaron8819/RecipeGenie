@@ -13,6 +13,7 @@ interface RecipeCardProps {
   onAddToPlan?: (recipe: Recipe) => void
   onClick?: (recipe: Recipe) => void
   lastMade?: string | null
+  timesMade?: number
 }
 
 export function RecipeCard({
@@ -22,6 +23,7 @@ export function RecipeCard({
   onAddToPlan,
   onClick,
   lastMade,
+  timesMade = 0,
 }: RecipeCardProps) {
   return (
     <Card
@@ -64,10 +66,13 @@ export function RecipeCard({
           <span className="text-xs">{recipe.servings} servings</span>
         </div>
 
-        {lastMade && (
+        {timesMade > 0 && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
             <Clock className="h-3 w-3" />
-            <span>Last made: {new Date(lastMade).toLocaleDateString()}</span>
+            <span>
+              Made {timesMade} time{timesMade !== 1 ? "s" : ""}
+              {lastMade && ` · Last: ${new Date(lastMade).toLocaleDateString()}`}
+            </span>
           </div>
         )}
 

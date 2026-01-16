@@ -144,15 +144,21 @@ export function sortShoppingList(items: ShoppingItem[]): ShoppingItem[] {
 
 /**
  * Add category info to an item if missing
+ * @param item - The shopping item to add category info to
+ * @param userOverrides - Optional user category overrides (item name -> category key)
  */
-export function ensureCategoryInfo(item: ShoppingItem): ShoppingItem {
+export function ensureCategoryInfo(
+  item: ShoppingItem,
+  userOverrides?: Record<string, string> | null
+): ShoppingItem {
   if (item.categoryKey && item.categoryOrder !== undefined) {
     return item
   }
 
   const [catKey, catOrder] = categorizeIngredient(
     item.item,
-    item.shoppingCategory
+    item.shoppingCategory,
+    userOverrides
   )
 
   return {

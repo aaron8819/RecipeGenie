@@ -38,6 +38,7 @@ export function useWeeklyPlan(weekDate: string) {
         return {
           week_date: weekDate,
           recipe_ids: [] as string[],
+          made_recipe_ids: [] as string[],
           scale: 1.0,
           generated_at: "",
         } as WeeklyPlan
@@ -45,6 +46,7 @@ export function useWeeklyPlan(weekDate: string) {
 
       return data as WeeklyPlan
     },
+    enabled: !!weekDate, // Don't run query until weekDate is set
   })
 }
 
@@ -112,6 +114,7 @@ export function useUserConfig() {
           excluded_keywords: [],
           history_exclusion_days: 10,
           week_start_day: 1,
+          category_overrides: {},
         } as UserConfig
       }
       return data as UserConfig
@@ -398,29 +401,109 @@ export function useRemoveRecipeFromPlan() {
 }
 
 /**
- * Hook to add recipe to history (mark as made)
+ * Hook to toggle recipe "made" status for a specific week
+ * - If not made for this week: adds to history + marks as made for the week
+ * - If already made for this week (undo): removes most recent history entry + unmarks
  */
 export function useMarkRecipeMade() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (recipeId: string) => {
+    mutationFn: async ({
+      recipeId,
+      weekDate,
+      isMadeForWeek,
+    }: {
+      recipeId: string
+      weekDate: string
+      isMadeForWeek: boolean
+    }) => {
       const supabase = getSupabase()
 
-      const { data, error } = await supabase
-        .from("recipe_history")
-        .insert({
-          recipe_id: recipeId,
-          date_made: new Date().toISOString(),
-        })
-        .select()
-        .single()
+      if (isMadeForWeek) {
+        // UNDO: Remove the most recent history entry and unmark for this week
+        
+        // Find the most recent history entry for this recipe
+        const { data: recentHistory, error: historyError } = await supabase
+          .from("recipe_history")
+          .select("id")
+          .eq("recipe_id", recipeId)
+          .order("date_made", { ascending: false })
+          .limit(1)
+          .single()
 
-      if (error) throw error
-      return data
+        if (historyError && historyError.code !== "PGRST116") throw historyError
+
+        // Delete the most recent entry if it exists
+        if (recentHistory) {
+          const { error: deleteError } = await supabase
+            .from("recipe_history")
+            .delete()
+            .eq("id", recentHistory.id)
+
+          if (deleteError) throw deleteError
+        }
+
+        // Remove from made_recipe_ids for this week
+        const { data: plan, error: planError } = await supabase
+          .from("weekly_plans")
+          .select("made_recipe_ids")
+          .eq("week_date", weekDate)
+          .single()
+
+        if (planError) throw planError
+
+        const currentMadeIds = (plan.made_recipe_ids as string[]) || []
+        const newMadeIds = currentMadeIds.filter((id) => id !== recipeId)
+
+        const { error: updateError } = await supabase
+          .from("weekly_plans")
+          .update({ made_recipe_ids: newMadeIds })
+          .eq("week_date", weekDate)
+
+        if (updateError) throw updateError
+
+        return { action: "unmarked", recipeId, weekDate }
+      } else {
+        // MARK AS MADE: Add to history + mark for this week
+        
+        // Add to recipe_history
+        const { error: insertError } = await supabase
+          .from("recipe_history")
+          .insert({
+            recipe_id: recipeId,
+            date_made: new Date().toISOString(),
+          })
+
+        if (insertError) throw insertError
+
+        // Add to made_recipe_ids for this week
+        const { data: plan, error: planError } = await supabase
+          .from("weekly_plans")
+          .select("made_recipe_ids")
+          .eq("week_date", weekDate)
+          .single()
+
+        if (planError) throw planError
+
+        const currentMadeIds = (plan.made_recipe_ids as string[]) || []
+        const newMadeIds = [...currentMadeIds, recipeId]
+
+        const { error: updateError } = await supabase
+          .from("weekly_plans")
+          .update({ made_recipe_ids: newMadeIds })
+          .eq("week_date", weekDate)
+
+        if (updateError) throw updateError
+
+        return { action: "marked", recipeId, weekDate }
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
+      queryClient.invalidateQueries({
+        queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate],
+      })
     },
   })
 }

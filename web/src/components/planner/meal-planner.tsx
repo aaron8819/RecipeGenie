@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   RefreshCw,
   Shuffle,
   Check,
@@ -14,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
+import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import {
   useWeeklyPlan,
   useWeeklyPlanRecipes,
@@ -27,6 +29,7 @@ import {
   navigateWeek,
 } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
+import { useCategories } from "@/hooks/use-recipes"
 import type { Recipe, RecipeHistory } from "@/types/database"
 
 /**
@@ -45,17 +48,30 @@ function getLastMadeMap(history: RecipeHistory[] | undefined): Map<string, strin
   return lastMadeMap
 }
 
+const MEALS_SECTION_COLLAPSED_KEY = "recipe-genie-meals-section-collapsed"
+
 export function MealPlanner() {
   const [currentWeekDate, setCurrentWeekDate] = useState<string>("")
   const [selection, setSelection] = useState<Record<string, number>>({})
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [markingRecipeId, setMarkingRecipeId] = useState<string | null>(null)
   const [addingToCartRecipeId, setAddingToCartRecipeId] = useState<string | null>(null)
+  const [mealsSectionCollapsed, setMealsSectionCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    return localStorage.getItem(MEALS_SECTION_COLLAPSED_KEY) === "true"
+  })
+
+  // Persist collapsed state to localStorage
+  useEffect(() => {
+    localStorage.setItem(MEALS_SECTION_COLLAPSED_KEY, String(mealsSectionCollapsed))
+  }, [mealsSectionCollapsed])
 
   const { data: config } = useUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecipeHistory()
+  const { data: allCategories } = useCategories()
 
   const generatePlan = useGenerateMealPlan()
   const swapRecipe = useSwapRecipe()
@@ -107,10 +123,11 @@ export function MealPlanner() {
     })
   }
 
-  const handleMarkMade = async (recipeId: string) => {
+  const handleMarkMade = async (recipeId: string, isMadeForWeek: boolean) => {
+    if (!currentWeekDate) return
     setMarkingRecipeId(recipeId)
     try {
-      await markMade.mutateAsync(recipeId)
+      await markMade.mutateAsync({ recipeId, weekDate: currentWeekDate, isMadeForWeek })
     } finally {
       setMarkingRecipeId(null)
     }
@@ -175,10 +192,27 @@ export function MealPlanner() {
 
       {/* Category Selection */}
       <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">How many meals this week?</CardTitle>
+        <CardHeader
+          className="pb-2 cursor-pointer select-none hover:bg-accent/50 transition-colors rounded-t-lg"
+          onClick={() => setMealsSectionCollapsed((prev) => !prev)}
+        >
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">How many meals this week?</CardTitle>
+            <div className="flex items-center gap-2">
+              {mealsSectionCollapsed && totalMeals > 0 && (
+                <span className="text-sm text-muted-foreground">
+                  {totalMeals} meals selected
+                </span>
+              )}
+              <ChevronDown
+                className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
+                  mealsSectionCollapsed ? "-rotate-90" : ""
+                }`}
+              />
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        {!mealsSectionCollapsed && <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {categories.map((category: string) => {
               const count = selection[category] || 0
@@ -243,7 +277,7 @@ export function MealPlanner() {
               Generate Meal Plan
             </Button>
           </div>
-        </CardContent>
+        </CardContent>}
       </Card>
 
       {/* Meal Plan Display */}
@@ -274,9 +308,10 @@ export function MealPlanner() {
             No meal plan for this week. Generate one above!
           </p>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {recipes.map((recipe, index) => {
               const lastMade = lastMadeMap.get(recipe.id)
+              const isMadeForWeek = weeklyPlan?.made_recipe_ids?.includes(recipe.id) || false
               const isMarkingThis = markingRecipeId === recipe.id
 
               const isAddingToCart = addingToCartRecipeId === recipe.id
@@ -284,7 +319,7 @@ export function MealPlanner() {
               return (
                 <Card
                   key={recipe.id}
-                  className="animate-fade-in cursor-pointer hover:shadow-md transition-shadow"
+                  className="animate-fade-in cursor-pointer hover:shadow-md transition-shadow max-w-xs"
                   style={{ animationDelay: `${index * 50}ms` }}
                   onClick={() => setViewingRecipe(recipe)}
                 >
@@ -312,7 +347,7 @@ export function MealPlanner() {
                       <Button
                         variant="outline"
                         size="default"
-                        className="flex-1 h-10"
+                        className="h-10 px-3"
                         onClick={(e) => {
                           e.stopPropagation()
                           handleSwapRecipe(recipe)
@@ -323,26 +358,26 @@ export function MealPlanner() {
                         Swap
                       </Button>
                       <Button
-                        variant={lastMade ? "default" : "outline"}
+                        variant={isMadeForWeek ? "default" : "outline"}
                         size="default"
                         className={
-                          lastMade
-                            ? "flex-1 h-10 bg-sage-600 hover:bg-sage-700 text-white"
-                            : "flex-1 h-10 text-sage-700 border-sage-300 hover:bg-sage-50"
+                          isMadeForWeek
+                            ? "h-10 px-3 bg-sage-600 hover:bg-sage-700 text-white"
+                            : "h-10 px-3 text-sage-700 border-sage-300 hover:bg-sage-50"
                         }
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleMarkMade(recipe.id)
+                          handleMarkMade(recipe.id, isMadeForWeek)
                         }}
                         disabled={isMarkingThis}
                       >
                         <Check className="h-4 w-4 mr-1.5" />
-                        {isMarkingThis ? "Saving..." : lastMade ? "Made Again" : "Made It"}
+                        {isMarkingThis ? "..." : isMadeForWeek ? "Made" : "Made It"}
                       </Button>
                       <Button
                         variant="outline"
                         size="default"
-                        className="h-10 px-3 text-sage-700 border-sage-300 hover:bg-sage-50"
+                        className="h-10 w-10 p-0 text-sage-700 border-sage-300 hover:bg-sage-50"
                         onClick={(e) => {
                           e.stopPropagation()
                           handleAddRecipeToCart(recipe.id)
@@ -355,7 +390,7 @@ export function MealPlanner() {
                       <Button
                         variant="outline"
                         size="default"
-                        className="h-10 px-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        className="h-10 w-10 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                         onClick={(e) => {
                           e.stopPropagation()
                           handleRemoveFromPlan(recipe.id)
@@ -379,6 +414,18 @@ export function MealPlanner() {
         open={!!viewingRecipe}
         onOpenChange={(open) => !open && setViewingRecipe(null)}
         recipe={viewingRecipe}
+        onEdit={(r) => {
+          setViewingRecipe(null)
+          setEditingRecipe(r)
+        }}
+      />
+
+      {/* Edit Recipe Dialog */}
+      <RecipeDialog
+        open={!!editingRecipe}
+        onOpenChange={(open) => !open && setEditingRecipe(null)}
+        recipe={editingRecipe || undefined}
+        categories={allCategories || []}
       />
     </div>
   )

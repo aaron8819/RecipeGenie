@@ -17,20 +17,54 @@ import {
 import { useRecipeHistory } from "@/hooks/use-planner"
 import type { Recipe, RecipeHistory } from "@/types/database"
 
+interface RecipeStats {
+  lastMade: string | null
+  timesMade: number
+}
+
 /**
- * Get the most recent "made" date for each recipe from history
+ * Get stats (last made date + times made count) for each recipe from history
  */
-function getLastMadeMap(history: RecipeHistory[] | undefined): Map<string, string> {
-  const lastMadeMap = new Map<string, string>()
-  if (!history) return lastMadeMap
+function getRecipeStatsMap(history: RecipeHistory[] | undefined): Map<string, RecipeStats> {
+  const statsMap = new Map<string, RecipeStats>()
+  if (!history) return statsMap
 
   // History is already sorted by date_made DESC, so first occurrence is most recent
   for (const entry of history) {
-    if (!lastMadeMap.has(entry.recipe_id)) {
-      lastMadeMap.set(entry.recipe_id, entry.date_made)
+    const existing = statsMap.get(entry.recipe_id)
+    if (existing) {
+      existing.timesMade += 1
+    } else {
+      statsMap.set(entry.recipe_id, {
+        lastMade: entry.date_made,
+        timesMade: 1,
+      })
     }
   }
-  return lastMadeMap
+  return statsMap
+}
+
+/**
+ * Sort recipes by times made (descending), then alphabetically for never-made recipes
+ */
+function sortRecipesByTimesMade(
+  recipes: Recipe[],
+  statsMap: Map<string, RecipeStats>
+): Recipe[] {
+  return [...recipes].sort((a, b) => {
+    const statsA = statsMap.get(a.id)
+    const statsB = statsMap.get(b.id)
+    const timesMadeA = statsA?.timesMade ?? 0
+    const timesMadeB = statsB?.timesMade ?? 0
+
+    // First sort by times made (descending)
+    if (timesMadeA !== timesMadeB) {
+      return timesMadeB - timesMadeA
+    }
+
+    // For recipes with same count (including 0), sort alphabetically
+    return a.name.localeCompare(b.name)
+  })
 }
 import {
   Select,
@@ -60,8 +94,11 @@ export function RecipeList() {
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
 
-  // Build a map of recipe_id -> last made date
-  const lastMadeMap = getLastMadeMap(history)
+  // Build a map of recipe_id -> stats (last made + times made)
+  const statsMap = getRecipeStatsMap(history)
+  
+  // Sort recipes by times made (descending), then alphabetically
+  const sortedRecipes = recipes ? sortRecipesByTimesMade(recipes, statsMap) : []
 
   const handleDelete = async (recipe: Recipe) => {
     if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
@@ -146,24 +183,28 @@ export function RecipeList() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {recipes?.map((recipe, index) => (
-            <div
-              key={recipe.id}
-              style={{ animationDelay: `${index * 50}ms` }}
-              className="animate-fade-in"
-            >
-              <RecipeCard
-                recipe={recipe}
-                onDelete={handleDelete}
-                onToggleFavorite={(r) =>
-                  toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
-                }
-                onAddToPlan={setAddToPlanRecipe}
-                onClick={setViewingRecipe}
-                lastMade={lastMadeMap.get(recipe.id) || null}
-              />
-            </div>
-          ))}
+          {sortedRecipes.map((recipe, index) => {
+            const stats = statsMap.get(recipe.id)
+            return (
+              <div
+                key={recipe.id}
+                style={{ animationDelay: `${index * 50}ms` }}
+                className="animate-fade-in"
+              >
+                <RecipeCard
+                  recipe={recipe}
+                  onDelete={handleDelete}
+                  onToggleFavorite={(r) =>
+                    toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
+                  }
+                  onAddToPlan={setAddToPlanRecipe}
+                  onClick={setViewingRecipe}
+                  lastMade={stats?.lastMade ?? null}
+                  timesMade={stats?.timesMade ?? 0}
+                />
+              </div>
+            )
+          })}
         </div>
       )}
 

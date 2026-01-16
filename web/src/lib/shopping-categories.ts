@@ -208,19 +208,30 @@ function escapeRegex(str: string): string {
  *
  * @param itemName - The ingredient name to categorize
  * @param overrideCategory - Optional manual category override from recipe
+ * @param userOverrides - Optional user category overrides (item name -> category key)
  * @returns Tuple of [categoryKey, categoryOrder] for sorting
  */
 export function categorizeIngredient(
   itemName: string,
-  overrideCategory?: string | null
+  overrideCategory?: string | null,
+  userOverrides?: Record<string, string> | null
 ): [string, number] {
-  // If there's a manual override, use it
+  const itemLower = itemName.toLowerCase().trim()
+
+  // First check user overrides (highest priority)
+  if (userOverrides && itemLower in userOverrides) {
+    const userCatKey = userOverrides[itemLower]
+    if (userCatKey in SHOPPING_CATEGORIES) {
+      const cat = SHOPPING_CATEGORIES[userCatKey]
+      return [userCatKey, cat.order]
+    }
+  }
+
+  // If there's a manual override from recipe, use it
   if (overrideCategory && overrideCategory in SHOPPING_CATEGORIES) {
     const cat = SHOPPING_CATEGORIES[overrideCategory]
     return [overrideCategory, cat.order]
   }
-
-  const itemLower = itemName.toLowerCase().trim()
 
   // Build a list of all keyword matches with their category info
   // Sort by keyword length (longest first) to prioritize specific matches

@@ -69,6 +69,7 @@ export interface Database {
           excluded_keywords: string[]
           history_exclusion_days: number
           week_start_day: number
+          category_overrides: Record<string, string>
         }
         Insert: {
           id?: number
@@ -77,6 +78,7 @@ export interface Database {
           excluded_keywords?: string[]
           history_exclusion_days?: number
           week_start_day?: number
+          category_overrides?: Record<string, string>
         }
         Update: {
           id?: number
@@ -85,6 +87,7 @@ export interface Database {
           excluded_keywords?: string[]
           history_exclusion_days?: number
           week_start_day?: number
+          category_overrides?: Record<string, string>
         }
       }
       recipe_history: {
@@ -108,18 +111,21 @@ export interface Database {
         Row: {
           week_date: string
           recipe_ids: string[]
+          made_recipe_ids: string[]
           scale: number
           generated_at: string
         }
         Insert: {
           week_date: string
           recipe_ids?: string[]
+          made_recipe_ids?: string[]
           scale?: number
           generated_at?: string
         }
         Update: {
           week_date?: string
           recipe_ids?: string[]
+          made_recipe_ids?: string[]
           scale?: number
           generated_at?: string
         }
@@ -188,6 +194,8 @@ export interface ShoppingItem {
   categoryOrder: number
   sources?: { recipeName: string }[]
   shoppingCategory?: string
+  // Additional amounts when units can't be converted (e.g., "1/3 cup + 4 oz")
+  additionalAmounts?: { amount: number; unit: string }[]
 }
 
 export type Recipe = Database["public"]["Tables"]["recipes"]["Row"]
