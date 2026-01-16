@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { useToggleFavorite } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
-import { cn } from "@/lib/utils"
+import { cn, toFraction } from "@/lib/utils"
 
 interface RecipeDetailDialogProps {
   open: boolean
@@ -46,8 +46,8 @@ export function RecipeDetailDialog({
                 className={cn(
                   "h-5 w-5",
                   recipe.favorite
-                    ? "fill-red-500 text-red-500"
-                    : "text-muted-foreground"
+                    ? "fill-terracotta-500 text-terracotta-500"
+                    : "text-muted-foreground hover:text-terracotta-400"
                 )}
               />
             </Button>
@@ -85,7 +85,7 @@ export function RecipeDetailDialog({
                   <span>
                     {ingredient.amount && (
                       <span className="font-medium">
-                        {ingredient.amount} {ingredient.unit}{" "}
+                        {toFraction(ingredient.amount)} {ingredient.unit}{" "}
                       </span>
                     )}
                     {ingredient.item}

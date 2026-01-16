@@ -23,7 +23,7 @@ export function generateMealPlan(
   allRecipes: Recipe[],
   history: RecipeHistory[],
   selection: Record<string, number>,
-  historyExclusionDays: number = 7
+  historyExclusionDays: number = 10
 ): MealPlanResult {
   // Find recipes made within the exclusion window to exclude
   const cutoffDate = new Date()

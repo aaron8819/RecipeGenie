@@ -83,18 +83,19 @@ export function PantryList() {
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {pantryItems?.map((item) => (
+              {pantryItems?.map((item, index) => (
                 <div
                   key={item.item}
-                  className="flex items-center gap-1 px-3 py-1 bg-secondary rounded-full text-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-sage-200"
+                  style={{ animationDelay: `${index * 30}ms` }}
                 >
                   <span>{item.item}</span>
                   <button
                     onClick={() => removePantryItem.mutate(item.item)}
-                    className="hover:text-destructive"
+                    className="hover:text-destructive transition-colors"
                     disabled={removePantryItem.isPending}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
@@ -134,18 +135,19 @@ export function PantryList() {
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {excludedKeywords?.map((keyword: string) => (
+              {excludedKeywords?.map((keyword: string, index: number) => (
                 <div
                   key={keyword}
-                  className="flex items-center gap-1 px-3 py-1 bg-destructive/10 text-destructive rounded-full text-sm"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-terracotta-200"
+                  style={{ animationDelay: `${index * 30}ms` }}
                 >
                   <span>{keyword}</span>
                   <button
                     onClick={() => removeKeyword.mutate(keyword)}
-                    className="hover:text-destructive/70"
+                    className="hover:text-terracotta-900 transition-colors"
                     disabled={removeKeyword.isPending}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}

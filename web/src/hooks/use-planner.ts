@@ -110,7 +110,7 @@ export function useUserConfig() {
           categories: ["chicken", "turkey", "steak", "beef", "lamb", "vegetarian"],
           default_selection: { chicken: 2, turkey: 1, steak: 1 },
           excluded_keywords: [],
-          history_exclusion_days: 7,
+          history_exclusion_days: 10,
           week_start_day: 1,
         } as UserConfig
       }
@@ -290,6 +290,108 @@ export function useSaveWeeklyPlan() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate],
+      })
+    },
+  })
+}
+
+/**
+ * Hook to add a recipe to an existing (or new) weekly plan
+ */
+export function useAddRecipeToPlan() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      weekDate,
+      recipeId,
+    }: {
+      weekDate: string
+      recipeId: string
+    }) => {
+      const supabase = getSupabase()
+
+      // Fetch existing plan for the week (if any)
+      const { data: existingPlan } = await supabase
+        .from("weekly_plans")
+        .select("recipe_ids")
+        .eq("week_date", weekDate)
+        .maybeSingle()
+
+      // Get current recipe_ids or start with empty array
+      const currentIds = (existingPlan?.recipe_ids as string[]) || []
+
+      // Check if recipe is already in the plan
+      if (currentIds.includes(recipeId)) {
+        throw new Error("Recipe is already in this week's meal plan")
+      }
+
+      // Append the new recipe
+      const newRecipeIds = [...currentIds, recipeId]
+
+      // Upsert the plan
+      const { error } = await supabase.from("weekly_plans").upsert({
+        week_date: weekDate,
+        recipe_ids: newRecipeIds,
+        scale: 1.0,
+        generated_at: new Date().toISOString(),
+      })
+
+      if (error) throw error
+      return { weekDate, recipeId }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate],
+      })
+    },
+  })
+}
+
+/**
+ * Hook to remove a recipe from the weekly plan
+ */
+export function useRemoveRecipeFromPlan() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      weekDate,
+      recipeId,
+    }: {
+      weekDate: string
+      recipeId: string
+    }) => {
+      const supabase = getSupabase()
+
+      // Fetch existing plan for the week
+      const { data: existingPlan, error: fetchError } = await supabase
+        .from("weekly_plans")
+        .select("recipe_ids")
+        .eq("week_date", weekDate)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      // Remove the recipe from the list
+      const currentIds = (existingPlan?.recipe_ids as string[]) || []
+      const newRecipeIds = currentIds.filter((id) => id !== recipeId)
+
+      // Update the plan
+      const { error } = await supabase
+        .from("weekly_plans")
+        .update({ recipe_ids: newRecipeIds })
+        .eq("week_date", weekDate)
+
+      if (error) throw error
+      return { weekDate, recipeId }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate],
+      })
+      queryClient.invalidateQueries({
+        queryKey: RECIPES_KEY,
       })
     },
   })

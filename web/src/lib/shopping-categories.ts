@@ -63,21 +63,66 @@ export const SHOPPING_CATEGORIES: Record<string, ShoppingCategory> = {
       "rolls", "dinner rolls", "hamburger buns", "hot dog buns",
       "tortilla", "tortillas", "wrap", "wraps", "pita", "naan", "flatbread",
       "croissant", "croissants", "bagel", "bagels", "english muffin", "english muffins",
-      "breadcrumbs", "panko", "croutons",
+      "muffin", "muffins", "scone", "scones", "danish", "pastry", "pastries",
+    ]
+  },
+  protein: {
+    order: 4,
+    name: "Protein",
+    keywords: [
+      // Poultry
+      "chicken", "chicken breast", "chicken thigh", "chicken thighs", "chicken wings",
+      "chicken drumsticks", "whole chicken", "ground chicken",
+      "turkey", "ground turkey", "turkey breast",
+      "duck", "cornish hen",
+      // Beef
+      "beef", "ground beef", "steak", "sirloin", "ribeye", "filet mignon", "flank steak",
+      "skirt steak", "chuck roast", "brisket", "short ribs", "beef ribs",
+      // Pork
+      "pork", "pork chop", "pork chops", "pork loin", "pork tenderloin",
+      "ground pork", "pork shoulder", "pork belly", "ribs", "spare ribs",
+      // Lamb & other
+      "lamb", "lamb chop", "lamb chops", "ground lamb", "lamb shank", "leg of lamb",
+      "veal", "venison", "bison", "goat",
+      // Seafood
+      "fish", "salmon", "tuna", "cod", "tilapia", "halibut", "mahi mahi", "sea bass",
+      "trout", "snapper", "swordfish", "catfish", "sardines", "anchovies",
+      "shrimp", "prawns", "lobster", "crab", "crab meat", "scallops",
+      "mussels", "clams", "oysters", "calamari", "squid", "octopus",
+    ]
+  },
+  dairy: {
+    order: 5,
+    name: "Dairy",
+    keywords: [
+      // Milk & cream
+      "milk", "whole milk", "skim milk", "2% milk", "half and half", "heavy cream",
+      "whipping cream", "sour cream", "buttermilk",
+      // Eggs
+      "egg", "eggs",
+      // Butter & spreads
+      "butter", "unsalted butter", "salted butter", "margarine",
+      // Yogurt
+      "yogurt", "greek yogurt", "plain yogurt", "vanilla yogurt",
+      // Other dairy
+      "kefir", "creme fraiche",
     ]
   },
   pantry: {
-    order: 4,
+    order: 6,
     name: "Pantry",
     keywords: [
       // Canned goods
       "canned", "can of", "diced tomatoes", "crushed tomatoes", "tomato paste", "tomato sauce",
+      "sun dried tomatoes", "sun-dried tomatoes", "sundried tomatoes",
       "beans", "black beans", "kidney beans", "chickpeas", "lentils",
-      "corn", "peas", "green beans",
       // Pasta & grains
       "pasta", "spaghetti", "penne", "rigatoni", "fettuccine", "linguine", "macaroni",
       "rice", "brown rice", "white rice", "jasmine rice", "basmati", "arborio",
       "quinoa", "couscous", "orzo", "farro", "barley", "oats", "oatmeal",
+      // Breading & chips
+      "breadcrumbs", "panko", "croutons",
+      "tortilla chips", "chips", "crackers",
       // Sauces & condiments
       "sauce", "marinara", "alfredo", "pesto", "salsa",
       "ketchup", "mustard", "mayonnaise", "mayo", "relish",
@@ -105,7 +150,7 @@ export const SHOPPING_CATEGORIES: Record<string, ShoppingCategory> = {
     ]
   },
   misc: {
-    order: 5,
+    order: 7,
     name: "Miscellaneous",
     keywords: [] // Fallback category - no keywords needed
   }
@@ -121,6 +166,8 @@ function escapeRegex(str: string): string {
 /**
  * Determine the shopping category for an ingredient.
  * Uses word boundary matching to avoid partial matches.
+ * Prioritizes longer keyword matches to handle cases like "sun dried tomatoes"
+ * matching pantry instead of "tomatoes" matching produce.
  * Ported from app.py:149-180
  *
  * @param itemName - The ingredient name to categorize
@@ -139,17 +186,27 @@ export function categorizeIngredient(
 
   const itemLower = itemName.toLowerCase().trim()
 
-  // Check each category's keywords
+  // Build a list of all keyword matches with their category info
+  // Sort by keyword length (longest first) to prioritize specific matches
+  const allKeywords: Array<{ keyword: string; catKey: string; order: number }> = []
+  
   for (const [catKey, catData] of Object.entries(SHOPPING_CATEGORIES)) {
     if (catKey === "misc") continue // Skip misc, it's the fallback
-
+    
     for (const keyword of catData.keywords) {
-      // Use word boundary matching to avoid partial matches
-      // e.g., "rice" shouldn't match "rice vinegar" for produce
-      const pattern = new RegExp(`\\b${escapeRegex(keyword.toLowerCase())}\\b`)
-      if (pattern.test(itemLower)) {
-        return [catKey, catData.order]
-      }
+      allKeywords.push({ keyword, catKey, order: catData.order })
+    }
+  }
+  
+  // Sort by keyword length descending so longer/more specific matches are checked first
+  // e.g., "sun dried tomatoes" is checked before "tomatoes"
+  allKeywords.sort((a, b) => b.keyword.length - a.keyword.length)
+  
+  for (const { keyword, catKey, order } of allKeywords) {
+    // Use word boundary matching to avoid partial matches
+    const pattern = new RegExp(`\\b${escapeRegex(keyword.toLowerCase())}\\b`)
+    if (pattern.test(itemLower)) {
+      return [catKey, order]
     }
   }
 
