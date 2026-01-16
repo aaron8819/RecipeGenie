@@ -149,10 +149,41 @@ export const SHOPPING_CATEGORIES: Record<string, ShoppingCategory> = {
       "coconut milk", "evaporated milk", "condensed milk",
     ]
   },
-  misc: {
+  frozen: {
     order: 7,
+    name: "Frozen",
+    keywords: [
+      "frozen", "ice cream", "frozen pizza", "frozen vegetables", "frozen fruit",
+      "frozen berries", "frozen peas", "frozen corn", "frozen spinach",
+      "frozen yogurt", "popsicle", "popsicles", "ice pops",
+      "frozen waffles", "frozen pancakes", "frozen fries", "french fries",
+      "tater tots", "frozen fish", "fish sticks", "frozen shrimp",
+      "frozen chicken", "frozen dinner", "tv dinner",
+    ]
+  },
+  misc: {
+    order: 8,
     name: "Miscellaneous",
-    keywords: [] // Fallback category - no keywords needed
+    keywords: [
+      // Non-food items only
+      // Kitchen supplies
+      "tinfoil", "tin foil", "aluminum foil", "foil", "plastic wrap", "saran wrap",
+      "cling wrap", "parchment paper", "wax paper", "paper towels", "paper towel",
+      "napkins", "napkin", "paper plates", "plastic plates", "plastic cups",
+      "plastic utensils", "disposable", "ziplock", "zip lock", "storage bags",
+      "freezer bags", "sandwich bags", "trash bags", "garbage bags",
+      // Cleaning supplies
+      "dish soap", "dishwasher detergent", "dishwasher pods", "sponge", "sponges",
+      "scrub brush", "cleaning", "cleaner", "bleach", "disinfectant",
+      "laundry detergent", "fabric softener", "dryer sheets",
+      // Personal care
+      "toilet paper", "tissues", "tissue", "toothpaste", "toothbrush",
+      "shampoo", "conditioner", "soap", "hand soap", "body wash",
+      // Pet supplies
+      "dog food", "cat food", "pet food", "cat litter", "dog treats", "cat treats",
+      // Other non-food
+      "batteries", "light bulb", "light bulbs", "candles", "matches", "lighter",
+    ]
   }
 }
 
@@ -168,6 +199,11 @@ function escapeRegex(str: string): string {
  * Uses word boundary matching to avoid partial matches.
  * Prioritizes longer keyword matches to handle cases like "sun dried tomatoes"
  * matching pantry instead of "tomatoes" matching produce.
+ * 
+ * Default behavior:
+ * - Unknown food items → Pantry (catch-all for food)
+ * - Non-food items → Miscellaneous (must match explicit keywords)
+ * 
  * Ported from app.py:149-180
  *
  * @param itemName - The ingredient name to categorize
@@ -210,8 +246,9 @@ export function categorizeIngredient(
     }
   }
 
-  // Default to miscellaneous
-  return ["misc", SHOPPING_CATEGORIES.misc.order]
+  // Default to pantry for unknown food items
+  // (misc is reserved for non-food items which have explicit keywords)
+  return ["pantry", SHOPPING_CATEGORIES.pantry.order]
 }
 
 /**

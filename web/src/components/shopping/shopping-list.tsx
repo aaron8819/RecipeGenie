@@ -11,6 +11,7 @@ import {
   useRemoveShoppingItem,
   useClearShoppingList,
   useCheckOffItem,
+  useMoveToShoppingList,
 } from "@/hooks/use-shopping"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import type { ShoppingItem } from "@/types/database"
@@ -25,16 +26,33 @@ export function ShoppingListView() {
   const removeItem = useRemoveShoppingItem()
   const clearList = useClearShoppingList()
   const checkOffItem = useCheckOffItem()
+  const moveToList = useMoveToShoppingList()
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newItem.trim()) return
 
+    // Split by comma and filter empty strings
+    const items = newItem
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+
+    if (items.length === 0) return
+
     try {
-      await addItem.mutateAsync({ itemName: newItem })
+      // Add each item
+      for (const item of items) {
+        try {
+          await addItem.mutateAsync({ itemName: item })
+        } catch (error) {
+          // Skip duplicates or errors for individual items
+          console.warn(`Skipped item "${item}":`, error)
+        }
+      }
       setNewItem("")
     } catch (error) {
-      console.error("Failed to add item:", error)
+      console.error("Failed to add items:", error)
     }
   }
 
@@ -103,7 +121,7 @@ export function ShoppingListView() {
         <CardContent className="pt-6">
           <form onSubmit={handleAddItem} className="flex gap-2">
             <Input
-              placeholder="Add item to list..."
+              placeholder="Add items (comma separated)..."
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
               className="flex-1"
@@ -195,15 +213,19 @@ export function ShoppingListView() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-3">
+                <p className="text-xs text-muted-foreground mb-2">Click to add back to list</p>
                 <div className="flex flex-wrap gap-2">
                   {shoppingList.already_have.map((item, index) => (
-                    <span
+                    <button
                       key={item.item}
-                      className="px-2.5 py-1 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in"
+                      type="button"
+                      onClick={() => moveToList.mutate(item)}
+                      disabled={moveToList.isPending}
+                      className="px-2.5 py-1 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in hover:bg-sage-200 transition-colors cursor-pointer"
                       style={{ animationDelay: `${index * 20}ms` }}
                     >
                       {item.item}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </CardContent>

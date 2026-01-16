@@ -490,3 +490,72 @@ export function useClearShoppingList() {
     },
   })
 }
+
+/**
+ * Hook to move an item from "already have" back to the shopping list
+ */
+export function useMoveToShoppingList() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (item: ShoppingItem) => {
+      const supabase = getSupabase()
+
+      // Get current shopping list
+      const { data: currentList, error: fetchError } = await supabase
+        .from("shopping_list")
+        .select("items, already_have, custom_order")
+        .eq("id", 1)
+        .single()
+
+      if (fetchError) throw fetchError
+
+      const currentItems = (currentList?.items as ShoppingItem[]) || []
+      const alreadyHave = (currentList?.already_have as ShoppingItem[]) || []
+      const customOrder = currentList?.custom_order || false
+
+      const normalizedItem = item.item.toLowerCase().trim()
+
+      // Remove from already_have
+      const updatedAlreadyHave = alreadyHave.filter(
+        (i) => i.item.toLowerCase() !== normalizedItem
+      )
+
+      // Add to items if not already there
+      const alreadyInItems = currentItems.some(
+        (i) => i.item.toLowerCase() === normalizedItem
+      )
+
+      let updatedItems = currentItems
+      if (!alreadyInItems) {
+        updatedItems = [...currentItems, item]
+
+        // Sort if not custom ordered
+        if (!customOrder) {
+          updatedItems.sort((a, b) => {
+            if (a.categoryOrder !== b.categoryOrder) {
+              return a.categoryOrder - b.categoryOrder
+            }
+            return a.item.localeCompare(b.item)
+          })
+        }
+      }
+
+      // Save
+      const { error: saveError } = await supabase
+        .from("shopping_list")
+        .update({
+          items: updatedItems,
+          already_have: updatedAlreadyHave,
+        })
+        .eq("id", 1)
+
+      if (saveError) throw saveError
+
+      return item
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+    },
+  })
+}

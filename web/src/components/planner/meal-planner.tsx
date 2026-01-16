@@ -13,14 +13,6 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import {
   useWeeklyPlan,
@@ -149,6 +141,11 @@ export function MealPlanner() {
   }
 
   const categories = config?.categories || []
+  const totalMeals = Object.values(selection).reduce((sum, n) => sum + n, 0)
+
+  // Check if displayed week is the current week
+  const currentWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
+  const isCurrentWeek = currentWeekDate === currentWeekStart
 
   return (
     <div className="space-y-6">
@@ -159,9 +156,16 @@ export function MealPlanner() {
           <span className="hidden sm:inline">Prev</span>
         </Button>
 
-        <h2 className="text-lg font-semibold text-center">
-          Week of {formatWeekLabel(currentWeekDate)}
-        </h2>
+        <div className="text-center">
+          <h2 className="text-lg font-semibold">
+            Week of {formatWeekLabel(currentWeekDate)}
+          </h2>
+          {isCurrentWeek && (
+            <span className="text-xs font-medium text-sage-600 bg-sage-100 px-2 py-0.5 rounded-full">
+              Current Week
+            </span>
+          )}
+        </div>
 
         <Button variant="outline" size="lg" onClick={handleNextWeek} className="px-3 sm:px-4">
           <span className="hidden sm:inline">Next</span>
@@ -171,42 +175,66 @@ export function MealPlanner() {
 
       {/* Category Selection */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Recipe Selection</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">How many meals this week?</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-            {categories.map((category: string) => (
-              <div key={category} className="space-y-1">
-                <Label htmlFor={`select-${category}`} className="capitalize text-sm">
-                  {category}
-                </Label>
-                <Select
-                  value={String(selection[category] || 0)}
-                  onValueChange={(v) =>
-                    setSelection((prev) => ({ ...prev, [category]: parseInt(v) }))
-                  }
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {categories.map((category: string) => {
+              const count = selection[category] || 0
+              return (
+                <div
+                  key={category}
+                  className="flex flex-col items-center p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
                 >
-                  <SelectTrigger id={`select-${category}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[0, 1, 2, 3, 4, 5].map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        {n}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ))}
+                  <span className="capitalize text-sm font-medium text-muted-foreground mb-2">
+                    {category}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={() =>
+                        setSelection((prev) => ({
+                          ...prev,
+                          [category]: Math.max(0, (prev[category] || 0) - 1),
+                        }))
+                      }
+                      disabled={count === 0}
+                    >
+                      <span className="text-lg font-medium">−</span>
+                    </Button>
+                    <span className="w-6 text-center text-lg font-semibold tabular-nums">
+                      {count}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={() =>
+                        setSelection((prev) => ({
+                          ...prev,
+                          [category]: Math.min(5, (prev[category] || 0) + 1),
+                        }))
+                      }
+                      disabled={count === 5}
+                    >
+                      <span className="text-lg font-medium">+</span>
+                    </Button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
-          <div className="flex gap-3 mt-4">
+          <div className="flex items-center justify-between mt-4 pt-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Total: <span className="font-semibold text-foreground">{totalMeals} meals</span>
+            </span>
             <Button
               onClick={handleGeneratePlan}
-              disabled={generatePlan.isPending}
-              className="flex-1 h-12"
+              disabled={generatePlan.isPending || totalMeals === 0}
               size="lg"
             >
               <RefreshCw
@@ -214,27 +242,30 @@ export function MealPlanner() {
               />
               Generate Meal Plan
             </Button>
-            <Button
-              onClick={handleGenerateShoppingList}
-              disabled={addToShoppingList.isPending || !recipes || recipes.length === 0}
-              variant="outline"
-              className="flex-1 h-12"
-              size="lg"
-            >
-              <ShoppingCart
-                className={`h-5 w-5 mr-2 ${addToShoppingList.isPending ? "animate-pulse" : ""}`}
-              />
-              Generate Shopping List
-            </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* Meal Plan Display */}
       <div className="space-y-4">
-        <h3 className="font-semibold">
-          This Week&apos;s Meals ({recipes?.length || 0} recipes)
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold">
+            This Week&apos;s Meals ({recipes?.length || 0} recipes)
+          </h3>
+          {recipes && recipes.length > 0 && (
+            <Button
+              onClick={handleGenerateShoppingList}
+              disabled={addToShoppingList.isPending}
+              variant="outline"
+              size="default"
+            >
+              <ShoppingCart
+                className={`h-4 w-4 mr-2 ${addToShoppingList.isPending ? "animate-pulse" : ""}`}
+              />
+              Add to Shopping List
+            </Button>
+          )}
+        </div>
 
         {planLoading ? (
           <p className="text-muted-foreground text-center py-8">Loading...</p>
