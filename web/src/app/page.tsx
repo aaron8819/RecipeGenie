@@ -8,7 +8,7 @@ import { MealPlanner } from "@/components/planner"
 import { ShoppingListView } from "@/components/shopping"
 import { AuthForm } from "@/components/auth/auth-form"
 import { Header, BottomNav } from "@/components/layout"
-import { useAuth } from "@/hooks/use-auth"
+import { useAuthContext } from "@/lib/auth-context"
 
 const VALID_TABS = ["recipes", "planner", "pantry", "shopping"] as const
 const STORAGE_KEY = "recipe-genie-active-tab"
@@ -26,7 +26,16 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, activeTab)
   }, [activeTab])
-  const { user, loading, signOut, isAuthenticated } = useAuth()
+
+  const { 
+    user, 
+    loading, 
+    signOut, 
+    isAuthenticated, 
+    isGuest, 
+    enterGuestMode,
+    exitGuestMode 
+  } = useAuthContext()
 
   // Show loading state while checking auth
   if (loading) {
@@ -37,19 +46,32 @@ export default function Home() {
     )
   }
 
-  // Show auth form if not authenticated
-  if (!isAuthenticated) {
+  // Show auth form if not authenticated and not in guest mode
+  if (!isAuthenticated && !isGuest) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center p-4">
-        <AuthForm />
+        <AuthForm onGuestMode={enterGuestMode} />
       </main>
     )
   }
 
-  // Show main app if authenticated
+  // Handle sign out - also handles guest mode exit
+  const handleSignOut = async () => {
+    if (isGuest) {
+      exitGuestMode()
+    } else {
+      await signOut()
+    }
+  }
+
+  // Show main app if authenticated or in guest mode
   return (
     <main className="min-h-screen bg-background pb-20">
-      <Header userEmail={user?.email} onSignOut={signOut} />
+      <Header 
+        userEmail={isGuest ? "Guest" : user?.email} 
+        onSignOut={handleSignOut}
+        isGuest={isGuest}
+      />
 
       <div className="container mx-auto px-4 py-4">
         {activeTab === "recipes" && <RecipeList />}

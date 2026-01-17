@@ -6,9 +6,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/hooks/use-auth"
-import { Loader2, ChefHat } from "lucide-react"
+import { Loader2, ChefHat, UserCircle } from "lucide-react"
 
-export function AuthForm() {
+interface AuthFormProps {
+  onGuestMode?: () => void
+}
+
+export function AuthForm({ onGuestMode }: AuthFormProps) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -34,6 +38,12 @@ export function AuthForm() {
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGuestMode = () => {
+    if (onGuestMode) {
+      onGuestMode()
     }
   }
 
@@ -108,6 +118,22 @@ export function AuthForm() {
               ? "Already have an account? Sign in"
               : "Don't have an account? Sign up"}
           </button>
+        </div>
+
+        {/* Guest Mode Button */}
+        <div className="mt-6 pt-6 border-t border-border">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-11"
+            onClick={handleGuestMode}
+          >
+            <UserCircle className="mr-2 h-4 w-4" />
+            Try as Guest
+          </Button>
+          <p className="text-xs text-muted-foreground text-center mt-3">
+            Explore the app without signing up. Your data will be saved locally in this browser.
+          </p>
         </div>
       </CardContent>
     </Card>

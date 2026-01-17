@@ -132,7 +132,7 @@
   },
   {
     "name": "Classic Ribeye Steak",
-    "category": "steak",
+    "category": "beef",
     "servings": 2,
     "ingredients": [
       {
@@ -158,7 +158,7 @@
   },
   {
     "name": "Grilled Marinated Flank Steak",
-    "category": "steak",
+    "category": "beef",
     "servings": 4,
     "ingredients": [
       {
@@ -1693,7 +1693,7 @@
   {
     "id": "beef-and-broccoli",
     "name": "Beef and Broccoli",
-    "category": "steak",
+    "category": "beef",
     "servings": 4,
     "ingredients": [
       {
@@ -1765,7 +1765,7 @@
   {
     "id": "garlic-ginger-steak-stir-fry",
     "name": "Garlic Ginger Steak Stir-Fry",
-    "category": "steak",
+    "category": "beef",
     "servings": 4,
     "ingredients": [
       {
@@ -1860,7 +1860,7 @@
   {
     "id": "chuck-roast-tacos",
     "name": "Chuck Roast Tacos",
-    "category": "steak",
+    "category": "beef",
     "servings": 8,
     "ingredients": [
       {
@@ -1930,7 +1930,7 @@
   {
     "id": "thai-skirt-steak-herb-salad",
     "name": "Thai Skirt Steak and Herb Salad",
-    "category": "steak",
+    "category": "beef",
     "servings": 4,
     "ingredients": [
       {
@@ -3434,7 +3434,7 @@
   {
     "id": "beef-pepper-steak",
     "name": "Beef Pepper Steak",
-    "category": "steak",
+    "category": "beef",
     "servings": 4,
     "ingredients": [
       {
@@ -4473,7 +4473,7 @@
   {
     "id": "steak-onions-rosemary-potatoes",
     "name": "Steak & Onions with Crispy Rosemary Potatoes",
-    "category": "steak",
+    "category": "beef",
     "servings": 2,
     "ingredients": [
       {

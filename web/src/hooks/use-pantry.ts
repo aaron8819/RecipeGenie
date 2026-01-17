@@ -3,6 +3,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createBrowserClient } from "@supabase/ssr"
 import type { PantryItem } from "@/types/database"
+import { useAuthContext } from "@/lib/auth-context"
+import { getDefaultConfig } from "@/lib/guest-storage"
 
 const PANTRY_KEY = ["pantry"]
 const CONFIG_KEY = ["user_config"]
@@ -18,9 +20,13 @@ function getSupabase() {
  * Hook to fetch all pantry items
  */
 export function usePantryItems() {
+  const { isGuest } = useAuthContext()
+
   return useQuery({
-    queryKey: PANTRY_KEY,
+    queryKey: [...PANTRY_KEY, isGuest],
     queryFn: async () => {
+      if (isGuest) return [] as PantryItem[]
+
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("pantry_items")
@@ -30,6 +36,8 @@ export function usePantryItems() {
       if (error) throw error
       return data as PantryItem[]
     },
+    initialData: isGuest ? [] : undefined,
+    enabled: !isGuest,
   })
 }
 
@@ -38,12 +46,18 @@ export function usePantryItems() {
  */
 export function useAddPantryItem() {
   const queryClient = useQueryClient()
+  const { isGuest } = useAuthContext()
 
   return useMutation({
     mutationFn: async (itemName: string) => {
-      const supabase = getSupabase()
       const normalizedItem = itemName.toLowerCase().trim()
+      const now = new Date().toISOString()
 
+      if (isGuest) {
+        return { user_id: "guest", item: normalizedItem, created_at: now } as PantryItem
+      }
+
+      const supabase = getSupabase()
       const { data, error } = await supabase
         .from("pantry_items")
         .insert({ item: normalizedItem })
@@ -53,8 +67,15 @@ export function useAddPantryItem() {
       if (error) throw error
       return data as PantryItem
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
+    onSuccess: (newItem) => {
+      queryClient.setQueriesData<PantryItem[]>(
+        { queryKey: PANTRY_KEY },
+        (old) => {
+          if (!old) return [newItem]
+          if (old.some((p) => p.item === newItem.item)) return old
+          return [...old, newItem].sort((a, b) => a.item.localeCompare(b.item))
+        }
+      )
     },
   })
 }
@@ -64,20 +85,28 @@ export function useAddPantryItem() {
  */
 export function useRemovePantryItem() {
   const queryClient = useQueryClient()
+  const { isGuest } = useAuthContext()
 
   return useMutation({
     mutationFn: async (itemName: string) => {
+      const normalizedItem = itemName.toLowerCase().trim()
+
+      if (isGuest) return normalizedItem
+
       const supabase = getSupabase()
       const { error } = await supabase
         .from("pantry_items")
         .delete()
-        .eq("item", itemName.toLowerCase().trim())
+        .eq("item", normalizedItem)
 
       if (error) throw error
-      return itemName
+      return normalizedItem
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
+    onSuccess: (removedItem) => {
+      queryClient.setQueriesData<PantryItem[]>(
+        { queryKey: PANTRY_KEY },
+        (old) => old?.filter((p) => p.item !== removedItem)
+      )
     },
   })
 }
@@ -86,14 +115,17 @@ export function useRemovePantryItem() {
  * Hook to fetch excluded keywords
  */
 export function useExcludedKeywords() {
+  const { isGuest } = useAuthContext()
+
   return useQuery({
-    queryKey: [...CONFIG_KEY, "excluded_keywords"],
+    queryKey: [...CONFIG_KEY, "excluded_keywords", isGuest],
     queryFn: async () => {
+      if (isGuest) return [] as string[]
+
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("user_config")
         .select("excluded_keywords")
-        .eq("id", 1)
         .single()
 
       if (error) {
@@ -102,6 +134,8 @@ export function useExcludedKeywords() {
       }
       return (data?.excluded_keywords as string[]) || []
     },
+    initialData: isGuest ? [] : undefined,
+    enabled: !isGuest,
   })
 }
 
@@ -110,21 +144,27 @@ export function useExcludedKeywords() {
  */
 export function useAddExcludedKeyword() {
   const queryClient = useQueryClient()
+  const { isGuest } = useAuthContext()
 
   return useMutation({
     mutationFn: async (keyword: string) => {
-      const supabase = getSupabase()
       const normalizedKeyword = keyword.toLowerCase().trim()
 
-      // First get current keywords
+      if (isGuest) {
+        const current = queryClient.getQueryData<string[]>([...CONFIG_KEY, "excluded_keywords", true]) || []
+        if (current.includes(normalizedKeyword)) {
+          throw new Error("Keyword already exists")
+        }
+        return normalizedKeyword
+      }
+
+      const supabase = getSupabase()
       const { data: config } = await supabase
         .from("user_config")
         .select("excluded_keywords")
-        .eq("id", 1)
         .single()
 
       const currentKeywords = (config?.excluded_keywords as string[]) || []
-
       if (currentKeywords.includes(normalizedKeyword)) {
         throw new Error("Keyword already exists")
       }
@@ -137,8 +177,11 @@ export function useAddExcludedKeyword() {
       if (error) throw error
       return normalizedKeyword
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CONFIG_KEY })
+    onSuccess: (newKeyword) => {
+      queryClient.setQueriesData<string[]>(
+        { queryKey: [...CONFIG_KEY, "excluded_keywords"] },
+        (old) => (old ? [...old, newKeyword] : [newKeyword])
+      )
     },
   })
 }
@@ -148,23 +191,22 @@ export function useAddExcludedKeyword() {
  */
 export function useRemoveExcludedKeyword() {
   const queryClient = useQueryClient()
+  const { isGuest } = useAuthContext()
 
   return useMutation({
     mutationFn: async (keyword: string) => {
-      const supabase = getSupabase()
       const normalizedKeyword = keyword.toLowerCase().trim()
 
-      // First get current keywords
+      if (isGuest) return normalizedKeyword
+
+      const supabase = getSupabase()
       const { data: config } = await supabase
         .from("user_config")
         .select("excluded_keywords")
-        .eq("id", 1)
         .single()
 
       const currentKeywords = (config?.excluded_keywords as string[]) || []
-      const updatedKeywords = currentKeywords.filter(
-        (k: string) => k !== normalizedKeyword
-      )
+      const updatedKeywords = currentKeywords.filter((k) => k !== normalizedKeyword)
 
       const { error } = await supabase
         .from("user_config")
@@ -172,10 +214,13 @@ export function useRemoveExcludedKeyword() {
         .eq("id", 1)
 
       if (error) throw error
-      return keyword
+      return normalizedKeyword
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CONFIG_KEY })
+    onSuccess: (removedKeyword) => {
+      queryClient.setQueriesData<string[]>(
+        { queryKey: [...CONFIG_KEY, "excluded_keywords"] },
+        (old) => old?.filter((k) => k !== removedKeyword)
+      )
     },
   })
 }

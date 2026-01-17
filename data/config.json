@@ -2,16 +2,14 @@
   "categories": [
     "chicken",
     "turkey",
-    "steak",
     "beef",
     "lamb",
     "vegetarian"
   ],
   "default_selection": {
-    "beef": 0,
+    "beef": 1,
     "chicken": 2,
     "lamb": 0,
-    "steak": 1,
     "turkey": 1,
     "vegetarian": 0
   },

@@ -12,6 +12,7 @@ export interface Database {
       recipes: {
         Row: {
           id: string
+          user_id: string
           name: string
           category: string
           servings: number
@@ -24,6 +25,7 @@ export interface Database {
         }
         Insert: {
           id?: string  // Optional - generated from name if not provided
+          user_id?: string // Optional - will be set by RLS/trigger
           name: string
           category: string
           servings?: number
@@ -36,6 +38,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          user_id?: string
           name?: string
           category?: string
           servings?: number
@@ -49,21 +52,24 @@ export interface Database {
       }
       pantry_items: {
         Row: {
+          user_id: string
           item: string
           created_at: string
         }
         Insert: {
+          user_id?: string // Optional - will be set by RLS/trigger
           item: string
           created_at?: string
         }
         Update: {
+          user_id?: string
           item?: string
           created_at?: string
         }
       }
       user_config: {
         Row: {
-          id: number
+          user_id: string
           categories: string[]
           default_selection: Record<string, number>
           excluded_keywords: string[]
@@ -72,7 +78,7 @@ export interface Database {
           category_overrides: Record<string, string>
         }
         Insert: {
-          id?: number
+          user_id?: string // Optional - will be set by RLS/trigger
           categories?: string[]
           default_selection?: Record<string, number>
           excluded_keywords?: string[]
@@ -81,7 +87,7 @@ export interface Database {
           category_overrides?: Record<string, string>
         }
         Update: {
-          id?: number
+          user_id?: string
           categories?: string[]
           default_selection?: Record<string, number>
           excluded_keywords?: string[]
@@ -93,22 +99,26 @@ export interface Database {
       recipe_history: {
         Row: {
           id: number
+          user_id: string
           recipe_id: string
           date_made: string
         }
         Insert: {
           id?: number
+          user_id?: string // Optional - will be set by RLS/trigger
           recipe_id: string
           date_made?: string
         }
         Update: {
           id?: number
+          user_id?: string
           recipe_id?: string
           date_made?: string
         }
       }
       weekly_plans: {
         Row: {
+          user_id: string
           week_date: string
           recipe_ids: string[]
           made_recipe_ids: string[]
@@ -116,6 +126,7 @@ export interface Database {
           generated_at: string
         }
         Insert: {
+          user_id?: string // Optional - will be set by RLS/trigger
           week_date: string
           recipe_ids?: string[]
           made_recipe_ids?: string[]
@@ -123,6 +134,7 @@ export interface Database {
           generated_at?: string
         }
         Update: {
+          user_id?: string
           week_date?: string
           recipe_ids?: string[]
           made_recipe_ids?: string[]
@@ -132,7 +144,7 @@ export interface Database {
       }
       shopping_list: {
         Row: {
-          id: number
+          user_id: string
           items: ShoppingItem[]
           already_have: ShoppingItem[]
           excluded: ShoppingItem[]
@@ -143,7 +155,7 @@ export interface Database {
           generated_at: string
         }
         Insert: {
-          id?: number
+          user_id?: string // Optional - will be set by RLS/trigger
           items?: ShoppingItem[]
           already_have?: ShoppingItem[]
           excluded?: ShoppingItem[]
@@ -154,7 +166,7 @@ export interface Database {
           generated_at?: string
         }
         Update: {
-          id?: number
+          user_id?: string
           items?: ShoppingItem[]
           already_have?: ShoppingItem[]
           excluded?: ShoppingItem[]
