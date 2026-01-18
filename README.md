@@ -37,6 +37,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
    - `supabase/migrations/003_add_made_recipe_ids.sql`
    - `supabase/migrations/004_merge_steak_into_beef.sql`
    - `supabase/migrations/005_multi_user_support.sql`
+   - `supabase/migrations/006_fix_signup_trigger.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 
 ### 2. Configure Environment
@@ -104,12 +105,13 @@ In Supabase Dashboard > Authentication > URL Configuration:
 
 1. Click "My Recipes" tab
 2. Click "Add Recipe" button
-3. Fill in the recipe details:
-   - Name
-   - Category (chicken, turkey, steak, etc.)
-   - Servings
-   - Ingredients (item, amount, unit)
-   - Instructions
+3. Choose entry method:
+   - **Manual Entry**: Fill in recipe details manually (name, category, servings, ingredients, instructions)
+   - **Import from Text**: Paste a recipe in plain text format and let the parser extract the details automatically
+     - Supports structured formats with "Ingredients:" and "Instructions:" headers
+     - Handles Unicode fractions (½, ⅓, ¼, etc.)
+     - Automatically extracts servings from recipe name
+     - Parses ingredient amounts, units, and item names
 4. Click "Save Recipe"
 
 ### Generating a Meal Plan

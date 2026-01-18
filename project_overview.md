@@ -87,14 +87,14 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | Directory | Files | Responsibility |
 |-----------|-------|----------------|
 | `app/` | `layout.tsx`, `page.tsx` | Next.js App Router entry points, providers setup |
-| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx` | Recipe CRUD UI |
+| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx` | Recipe CRUD UI with text import parser |
 | `components/planner/` | `meal-planner.tsx` | Week navigation, plan generation, history |
 | `components/pantry/` | `pantry-list.tsx` | Pantry items, excluded keywords |
 | `components/shopping/` | `shopping-list.tsx` | Shopping list display, scaling, drag-and-drop reordering |
 | `components/ui/` | Various | Radix UI primitives (button, dialog, tabs, etc.) |
 | `hooks/` | `use-recipes.ts`, `use-planner.ts`, etc. | TanStack Query hooks for Supabase |
 | `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization |
-| `lib/` | `meal-planner.ts`, `shopping-list.ts` | Business logic (plan generation, list aggregation) |
+| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation, recipe text parsing) |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
 
 ### Middleware (`src/middleware.ts`)
@@ -242,6 +242,7 @@ For UI changes:
 | Understand meal plan generation | `src/lib/meal-planner.ts` |
 | Understand shopping list logic | `src/lib/shopping-list.ts` |
 | Modify recipe form | `src/components/recipes/recipe-dialog.tsx` |
+| Understand recipe parsing | `src/lib/recipe-parser.ts` |
 | Change tab navigation | `src/app/page.tsx` |
 | Add Supabase query | Create hook in `src/hooks/` |
 | Debug query state | React Query DevTools in browser |
@@ -249,4 +250,4 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-16*
+*Last updated: 2026-01-16 (v2.1.1)*

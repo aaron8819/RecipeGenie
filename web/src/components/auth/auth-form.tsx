@@ -34,8 +34,11 @@ export function AuthForm({ onGuestMode }: AuthFormProps) {
       } else {
         await signIn(email, password)
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred")
+    } catch (err: any) {
+      // Extract more detailed error message
+      const errorMessage = err?.message || err?.error?.message || "An error occurred"
+      console.error("Auth error:", err)
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }

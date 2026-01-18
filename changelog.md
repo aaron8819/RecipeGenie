@@ -4,6 +4,43 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.1.1] - 2026-01-16
+
+**Summary:** Improved signup trigger error handling, recipe parser enhancements, and robustness improvements
+
+### Added
+
+- **Recipe Text Parser**: 
+  - Import recipes from plain text with automatic parsing
+  - Supports multiple formats: structured sections, free-form text, or mixed formats
+  - Automatically extracts recipe name, servings, ingredients, and instructions
+  - Handles Unicode fractions (½, ⅓, ¼, etc.) and converts to decimals
+  - Parses ingredient amounts with ranges (e.g., "½–1 cup")
+  - Supports parenthetical units (e.g., "1 (28 oz) can crushed tomatoes")
+  - Recognizes common section headers: "Ingredients", "Instructions", "Directions", "Method", "Steps"
+  - Extracts servings from recipe name (e.g., "Makes 4 servings")
+  - "Import from Text" tab in recipe dialog for easy pasting
+
+### Fixed
+
+- **Signup Trigger Error Handling**: 
+  - Enhanced `handle_new_user()` trigger function with proper error handling
+  - Added explicit `search_path` setting to prevent schema search path issues
+  - Default recipe creation failures no longer block user signup
+  - Errors are logged as warnings instead of failing the transaction
+  - Improved `insert_default_recipes_for_user()` function with better error isolation
+
+### Technical Notes
+
+- Migration `006_fix_signup_trigger.sql` updates the signup trigger to be more resilient
+- User creation will succeed even if default recipe insertion fails
+- Errors are logged via `RAISE WARNING` for debugging without blocking signup
+- Both functions now use `SECURITY DEFINER` with explicit `SET search_path = public`
+- Recipe parser (`recipe-parser.ts`) handles Unicode normalization, fraction parsing, and flexible unit extraction
+- Parser supports 20+ common unit abbreviations and variations
+
+---
+
 ## [2.1.0] - 2026-01-16
 
 **Summary:** Guest mode, shopping list enhancements, and category overrides

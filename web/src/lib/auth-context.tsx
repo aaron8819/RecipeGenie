@@ -112,11 +112,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearGuestCache()
       setIsGuest(false)
     }
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     })
-    if (error) throw error
+    if (error) {
+      // Provide more user-friendly error messages
+      let errorMessage = error.message
+      if (error.message.includes('Database error')) {
+        errorMessage = 'Database error saving new user. Please try again or contact support.'
+      } else if (error.message.includes('User already registered')) {
+        errorMessage = 'An account with this email already exists. Please sign in instead.'
+      } else if (error.message.includes('Password')) {
+        errorMessage = 'Password must be at least 6 characters long.'
+      }
+      throw new Error(errorMessage)
+    }
+    return data
   }, [isGuest, clearGuestCache])
 
   const signOut = useCallback(async () => {

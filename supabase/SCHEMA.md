@@ -226,13 +226,15 @@ Also creates default `user_config` and empty `shopping_list` for the user.
 
 ### handle_new_user()
 
-Trigger function that calls `insert_default_recipes_for_user()` when a new user is created in `auth.users`.
+Trigger function that calls `insert_default_recipes_for_user()` when a new user is created in `auth.users`. Includes error handling to ensure user creation succeeds even if default recipe insertion fails.
 
 **Returns:** `TRIGGER`
 
 **Language:** `plpgsql SECURITY DEFINER`
 
-**Security:** Runs with elevated privileges.
+**Security:** Runs with elevated privileges with explicit `SET search_path = public`.
+
+**Error Handling:** Wraps recipe insertion in a BEGIN/EXCEPTION block to log errors as warnings without failing the user creation transaction.
 
 ## Triggers
 
@@ -289,6 +291,7 @@ The schema has evolved through the following migrations:
 3. **003_add_made_recipe_ids.sql** - Added `made_recipe_ids` to `weekly_plans` to track which recipes were marked as "made" per week
 4. **004_merge_steak_into_beef.sql** - Merged 'steak' category into 'beef' category
 5. **005_multi_user_support.sql** - Added full multi-user support with `user_id` columns, updated RLS policies, and default recipes trigger
+6. **006_fix_signup_trigger.sql** - Improved signup trigger error handling with explicit search_path and graceful error handling
 
 ## Query Examples
 
