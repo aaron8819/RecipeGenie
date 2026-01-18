@@ -112,9 +112,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearGuestCache()
       setIsGuest(false)
     }
+    
+    // Get the current origin for the redirect URL
+    const redirectUrl = typeof window !== 'undefined' 
+      ? `${window.location.origin}/auth/callback`
+      : '/auth/callback'
+    
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: redirectUrl,
+      },
     })
     if (error) {
       // Provide more user-friendly error messages

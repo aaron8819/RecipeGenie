@@ -96,8 +96,13 @@ Ensure your code is in a GitHub repository.
 ### 3. Configure Auth Redirect URLs
 
 In Supabase Dashboard > Authentication > URL Configuration:
-- Add your Vercel URL to **Site URL**
-- Add `https://your-app.vercel.app/**` to **Redirect URLs**
+- Add your Vercel URL to **Site URL** (e.g., `https://your-app.vercel.app`)
+- Add `https://your-app.vercel.app/auth/callback` to **Redirect URLs**
+
+**For local development**, also add:
+- `http://localhost:3000/auth/callback` to **Redirect URLs**
+
+The app includes an auth callback route at `/auth/callback` that handles email confirmation links.
 
 ## Usage
 
