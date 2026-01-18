@@ -104,6 +104,14 @@ In Supabase Dashboard > Authentication > URL Configuration:
 
 The app includes an auth callback route at `/auth/callback` that handles email confirmation links.
 
+**Troubleshooting Email Confirmation:**
+- If you see "Email link is invalid or has expired" errors, the confirmation link may have been:
+  - Expired (links expire after 1 hour by default)
+  - Pre-fetched by email clients or security scanners (which invalidates the link)
+  - Already used
+- To fix: Request a new confirmation email or check Supabase Auth logs for details
+- Ensure the redirect URL is exactly `https://your-app.vercel.app/auth/callback` (no trailing slash)
+
 ## Usage
 
 ### Adding Recipes
