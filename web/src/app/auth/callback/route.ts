@@ -20,18 +20,37 @@ export async function GET(request: Request) {
 
   if (code) {
     const supabase = await createClient()
-    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
     
-    if (!exchangeError) {
+    // Exchange the code for a session
+    // For email confirmation, Supabase handles PKCE automatically if the code verifier
+    // is in cookies. If not found, it will return an error which we'll handle.
+    const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    
+    if (!exchangeError && data.session) {
+      // Successfully confirmed and created session
       // Redirect to the app after successful confirmation
       return NextResponse.redirect(new URL(next, requestUrl.origin))
     } else {
-      // If exchange failed, redirect with error
-      const redirectUrl = new URL("/", requestUrl.origin)
-      redirectUrl.searchParams.set("error", "access_denied")
-      redirectUrl.searchParams.set("error_code", exchangeError.status?.toString() || "unknown")
-      redirectUrl.searchParams.set("error_description", exchangeError.message || "Failed to confirm email")
-      return NextResponse.redirect(redirectUrl)
+      // If exchange failed, check if it's a PKCE error
+      const isPKCEError = exchangeError?.message?.includes("PKCE") || 
+                          exchangeError?.message?.includes("code verifier")
+      
+      if (isPKCEError) {
+        // PKCE error - redirect to home with a helpful message
+        // The user can try signing in directly since their email might already be confirmed
+        const redirectUrl = new URL("/", requestUrl.origin)
+        redirectUrl.searchParams.set("error", "pkce_error")
+        redirectUrl.searchParams.set("error_code", "pkce_code_verifier_not_found")
+        redirectUrl.searchParams.set("error_description", "The confirmation link was opened in a different browser or session. Please try signing in directly - your email may already be confirmed.")
+        return NextResponse.redirect(redirectUrl)
+      } else {
+        // Other error - redirect with error details
+        const redirectUrl = new URL("/", requestUrl.origin)
+        redirectUrl.searchParams.set("error", "access_denied")
+        redirectUrl.searchParams.set("error_code", exchangeError?.status?.toString() || "unknown")
+        redirectUrl.searchParams.set("error_description", exchangeError?.message || "Failed to confirm email")
+        return NextResponse.redirect(redirectUrl)
+      }
     }
   }
 

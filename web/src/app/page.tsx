@@ -9,6 +9,14 @@ import { ShoppingListView } from "@/components/shopping"
 import { AuthForm } from "@/components/auth/auth-form"
 import { Header, BottomNav } from "@/components/layout"
 import { useAuthContext } from "@/lib/auth-context"
+import { createBrowserClient } from "@supabase/ssr"
+
+function getSupabase() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
 const VALID_TABS = ["recipes", "planner", "pantry", "shopping"] as const
 const STORAGE_KEY = "recipe-genie-active-tab"
@@ -28,13 +36,37 @@ export default function Home() {
     localStorage.setItem(STORAGE_KEY, activeTab)
   }, [activeTab])
 
-  // Check for auth errors in URL (from email confirmation links)
+  // Check for auth code or errors in URL (from email confirmation links)
   useEffect(() => {
     if (typeof window === "undefined") return
 
     const url = new URL(window.location.href)
     
-    // Check query params
+    // Check for confirmation code (client-side fallback if server-side failed)
+    const code = url.searchParams.get("code")
+    if (code && !isAuthenticated) {
+      // Try to exchange the code on the client side as a fallback
+      // This handles cases where PKCE code verifier wasn't found on server
+      const supabase = getSupabase()
+      supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+        if (error) {
+          // If client-side also fails, show error
+          const isPKCEError = error.message?.includes("PKCE") || 
+                              error.message?.includes("code verifier")
+          if (isPKCEError) {
+            setAuthError("The confirmation link was opened in a different browser or session. Please try signing in directly - your email may already be confirmed.")
+          } else {
+            setAuthError(error.message || "Failed to confirm email. Please try signing in directly.")
+          }
+        }
+        // Clean up URL
+        url.searchParams.delete("code")
+        window.history.replaceState({}, "", url.toString())
+      })
+      return
+    }
+    
+    // Check query params for errors
     const error = url.searchParams.get("error")
     const errorCode = url.searchParams.get("error_code")
     const errorDescription = url.searchParams.get("error_description")
@@ -56,10 +88,14 @@ export default function Home() {
       
       if (finalErrorCode === "otp_expired") {
         errorMessage = "The confirmation link has expired. Please request a new confirmation email."
+      } else if (finalErrorCode === "pkce_code_verifier_not_found") {
+        errorMessage = "The confirmation link was opened in a different browser or session. Please try signing in directly - your email may already be confirmed."
       } else if (finalErrorDescription) {
         errorMessage = decodeURIComponent(finalErrorDescription.replace(/\+/g, " "))
       } else if (finalError === "access_denied") {
         errorMessage = "Access denied. The confirmation link may be invalid or expired."
+      } else if (finalError === "pkce_error") {
+        errorMessage = "The confirmation link was opened in a different browser or session. Please try signing in directly - your email may already be confirmed."
       }
 
       setAuthError(errorMessage)
@@ -71,7 +107,7 @@ export default function Home() {
       url.hash = ""
       window.history.replaceState({}, "", url.toString())
     }
-  }, [])
+  }, [isAuthenticated])
 
   const { 
     user, 
