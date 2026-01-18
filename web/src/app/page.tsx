@@ -31,6 +31,17 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState(getInitialTab)
   const [authError, setAuthError] = useState<string | null>(null)
 
+  // Get auth context first so we can use isAuthenticated in useEffect
+  const { 
+    user, 
+    loading, 
+    signOut, 
+    isAuthenticated, 
+    isGuest, 
+    enterGuestMode,
+    exitGuestMode 
+  } = useAuthContext()
+
   // Persist active tab to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, activeTab)
@@ -108,16 +119,6 @@ export default function Home() {
       window.history.replaceState({}, "", url.toString())
     }
   }, [isAuthenticated])
-
-  const { 
-    user, 
-    loading, 
-    signOut, 
-    isAuthenticated, 
-    isGuest, 
-    enterGuestMode,
-    exitGuestMode 
-  } = useAuthContext()
 
   // Show loading state while checking auth
   if (loading) {
