@@ -6,9 +6,10 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 - **Recipe Management**: Store and organize your recipes by protein category
 - **Meal Planning**: Randomly generate weekly meal plans based on your preferences
-- **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes
+- **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering
 - **Pantry Tracking**: Mark items you have on hand to get only what you need to buy
 - **Multi-User Support**: Each user has their own private data via Supabase Auth
+- **Guest Mode**: Try the app without signing up (data stored in browser session)
 - **Cloud Deployment**: Host on Vercel for access from anywhere
 
 ## Tech Stack
@@ -30,7 +31,12 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 1. Go to [supabase.com](https://supabase.com) and create a new project
 2. Once created, go to **SQL Editor** in the dashboard
-3. Copy the contents of `supabase/migrations/001_initial_schema.sql` and run it
+3. Run all migration files in order:
+   - `supabase/migrations/001_initial_schema.sql`
+   - `supabase/migrations/002_add_category_overrides.sql`
+   - `supabase/migrations/003_add_made_recipe_ids.sql`
+   - `supabase/migrations/004_merge_steak_into_beef.sql`
+   - `supabase/migrations/005_multi_user_support.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 
 ### 2. Configure Environment
@@ -127,6 +133,14 @@ After generating a meal plan, the shopping list shows:
 - **Items to Buy**: Ingredients needed that aren't in your pantry
 - **Already Have**: Ingredients from your pantry used in selected recipes
 - **Excluded**: Items matching your excluded keywords (staples)
+
+**Shopping List Features:**
+- Drag and drop to reorder items manually
+- Add items manually to your list
+- Check off items as you shop (moves to "Already Have")
+- Add meal plan ingredients to existing lists (merges quantities)
+- Category-based organization with custom category overrides
+- Copy shopping list to clipboard
 
 ## Project Structure
 

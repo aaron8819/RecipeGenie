@@ -386,3 +386,46 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - SWR - similar capabilities but TanStack Query has richer feature set
 - Redux Toolkit Query - overkill for this application's needs
 - Manual fetch + useState - rejected due to complexity managing cache/sync
+
+---
+
+## ADR-013: Guest Mode for Onboarding
+
+**Status:** Accepted (2026-01-16)
+
+**Context:** Requiring users to sign up before trying the app creates friction and reduces conversion. Users want to explore the app's features before committing to creating an account.
+
+**Decision:** Implement a guest mode that allows users to use the app without authentication, with data stored only in the browser session.
+
+**Rationale:**
+- Reduces signup friction - users can try before committing
+- Demonstrates app value before requiring account creation
+- Uses React Query cache for seamless data management
+- Pre-populated with default recipes to show functionality
+- Clear messaging that data is session-only (lost on refresh)
+
+**Implementation:**
+- Guest mode flag stored in `sessionStorage` (not `localStorage` to emphasize temporary nature)
+- All data hooks support both authenticated and guest modes
+- Default recipes, config, and shopping list provided via `guest-storage.ts`
+- Guest data stored in React Query cache with `true` flag in query keys
+- Seamless transition: users can sign up/sign in from guest mode
+
+**Tradeoffs:**
+- (+) Lowers barrier to entry
+- (+) Better user experience for exploration
+- (+) No backend changes required (uses existing hook patterns)
+- (-) Data is lost on page refresh (intentional, but may frustrate some users)
+- (-) No persistence across devices
+- (-) Additional complexity in hooks to support both modes
+
+**Risks:**
+- Users may not understand data is temporary
+- **Mitigation**: Clear UI messaging ("Your data will be saved locally in this browser")
+- Users may lose work if they forget to sign up
+- **Mitigation**: Prompt to sign up when they try to persist data
+
+**Future Considerations:**
+- Could add localStorage persistence for guest mode (with clear warnings)
+- Could prompt users to sign up after X actions in guest mode
+- Could migrate guest data to authenticated account on signup

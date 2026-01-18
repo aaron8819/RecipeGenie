@@ -61,7 +61,7 @@ export function useShoppingList() {
  */
 export function useGenerateShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
@@ -114,6 +114,7 @@ export function useGenerateShoppingList() {
       )
 
       const shoppingListData = {
+        user_id: user?.id,
         items: result.items,
         already_have: result.alreadyHave,
         excluded: result.excluded,
@@ -124,7 +125,27 @@ export function useGenerateShoppingList() {
         generated_at: new Date().toISOString(),
       }
 
-      const { error: saveError } = await supabase.from("shopping_list").upsert(shoppingListData)
+      // Check if list exists first
+      const { data: existingList } = await supabase
+        .from("shopping_list")
+        .select("user_id")
+        .maybeSingle()
+
+      let saveError
+      if (existingList) {
+        // Row exists, use update (RLS will filter by user_id, but PostgREST requires a WHERE clause)
+        const { error } = await supabase
+          .from("shopping_list")
+          .update(shoppingListData)
+          .eq("user_id", user?.id)
+        saveError = error
+      } else {
+        // Row doesn't exist, use insert
+        const { error } = await supabase
+          .from("shopping_list")
+          .insert(shoppingListData)
+        saveError = error
+      }
       if (saveError) throw saveError
 
       return shoppingListData as ShoppingList
@@ -140,7 +161,7 @@ export function useGenerateShoppingList() {
  */
 export function useSaveShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (shoppingList: Partial<ShoppingList>) => {
@@ -153,7 +174,7 @@ export function useSaveShoppingList() {
       const { error } = await supabase
         .from("shopping_list")
         .update({ ...shoppingList, generated_at: new Date().toISOString() })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (error) throw error
       return shoppingList
@@ -169,7 +190,7 @@ export function useSaveShoppingList() {
  */
 export function useAddShoppingItem() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ itemName, amount, unit }: { itemName: string; amount?: number; unit?: string }) => {
@@ -223,7 +244,7 @@ export function useAddShoppingItem() {
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({ items: updatedItems })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return newItem
@@ -239,7 +260,7 @@ export function useAddShoppingItem() {
  */
 export function useRemoveShoppingItem() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (itemName: string) => {
@@ -266,7 +287,7 @@ export function useRemoveShoppingItem() {
             (i) => i.item.toLowerCase() !== itemName.toLowerCase()
           ),
         })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return itemName
@@ -282,7 +303,7 @@ export function useRemoveShoppingItem() {
  */
 export function useRemoveRecipeItems() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (recipeName: string) => {
@@ -318,7 +339,7 @@ export function useRemoveRecipeItems() {
           items: filterItems((currentList?.items as ShoppingItem[]) || []),
           already_have: filterItems((currentList?.already_have as ShoppingItem[]) || []),
         })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return { recipeName, removedCount: 0 }
@@ -334,7 +355,7 @@ export function useRemoveRecipeItems() {
  */
 export function useAddToShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
@@ -342,6 +363,7 @@ export function useAddToShoppingList() {
       let pantryItems: PantryItem[]
       let excludedKeywords: string[]
       let currentList: ShoppingList
+      let listExists = false
 
       if (isGuest) {
         const allRecipes = getDefaultRecipes()
@@ -365,6 +387,7 @@ export function useAddToShoppingList() {
         pantryItems = pantryRes.data as PantryItem[]
         excludedKeywords = (configRes.data?.excluded_keywords as string[]) || []
         currentList = listRes.data as ShoppingList || getDefaultShoppingList() as ShoppingList
+        listExists = !!listRes.data
       }
 
       const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale)
@@ -433,9 +456,22 @@ export function useAddToShoppingList() {
         setGuestList(queryClient, shoppingListData)
       } else {
         const supabase = getSupabase()
-        const { error: saveError } = await supabase
-          .from("shopping_list")
-          .upsert({ ...shoppingListData, generated_at: new Date().toISOString() })
+        const saveData = { ...shoppingListData, user_id: user?.id, generated_at: new Date().toISOString() }
+        let saveError
+        if (listExists) {
+          // Row exists, use update (RLS will filter by user_id, but PostgREST requires a WHERE clause)
+          const { error } = await supabase
+            .from("shopping_list")
+            .update(saveData)
+            .eq("user_id", user?.id)
+          saveError = error
+        } else {
+          // Row doesn't exist, use insert
+          const { error } = await supabase
+            .from("shopping_list")
+            .insert(saveData)
+          saveError = error
+        }
         if (saveError) throw saveError
       }
 
@@ -452,7 +488,7 @@ export function useAddToShoppingList() {
  */
 export function useCheckOffItem() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (item: ShoppingItem) => {
@@ -486,7 +522,7 @@ export function useCheckOffItem() {
           items: currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem),
           already_have: alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem) ? alreadyHave : [...alreadyHave, item],
         })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return item
@@ -502,7 +538,7 @@ export function useCheckOffItem() {
  */
 export function useClearShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async () => {
@@ -525,7 +561,7 @@ export function useClearShoppingList() {
       const { error } = await supabase
         .from("shopping_list")
         .update({ ...emptyList, generated_at: new Date().toISOString() })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (error) throw error
     },
@@ -540,7 +576,7 @@ export function useClearShoppingList() {
  */
 export function useMoveToShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (item: ShoppingItem) => {
@@ -587,7 +623,7 @@ export function useMoveToShoppingList() {
           items: updatedItems,
           already_have: alreadyHave.filter((i) => i.item.toLowerCase() !== normalizedItem),
         })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return item
@@ -603,7 +639,7 @@ export function useMoveToShoppingList() {
  */
 export function useMoveExcludedToShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (item: ShoppingItem) => {
@@ -650,7 +686,7 @@ export function useMoveExcludedToShoppingList() {
           items: updatedItems,
           excluded: excluded.filter((i) => i.item.toLowerCase() !== normalizedItem),
         })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return item
@@ -666,7 +702,7 @@ export function useMoveExcludedToShoppingList() {
  */
 export function useReorderShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (newItems: ShoppingItem[]) => {
@@ -679,7 +715,7 @@ export function useReorderShoppingList() {
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({ items: newItems, custom_order: true })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return newItems
@@ -695,7 +731,7 @@ export function useReorderShoppingList() {
  */
 export function useSaveCategoryOverride() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ itemName, categoryKey }: { itemName: string; categoryKey: string }) => {
@@ -722,7 +758,7 @@ export function useSaveCategoryOverride() {
             [normalizedItem]: categoryKey,
           },
         })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return { itemName: normalizedItem, categoryKey }
@@ -738,7 +774,7 @@ export function useSaveCategoryOverride() {
  */
 export function useUpdateItemCategory() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ itemName, newCategoryKey, items }: {
@@ -762,7 +798,7 @@ export function useUpdateItemCategory() {
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({ items: updatedItems, custom_order: true })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (saveError) throw saveError
       return updatedItems

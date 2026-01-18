@@ -4,6 +4,50 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.1.0] - 2026-01-16
+
+**Summary:** Guest mode, shopping list enhancements, and category overrides
+
+### Added
+
+- **Guest Mode**: Users can try the app without signing up
+  - Data stored in React Query cache (session-only, lost on page refresh)
+  - Pre-populated with 8 default recipes
+  - "Try as Guest" button on auth form
+  - Seamless transition to authenticated account
+- **Shopping List Custom Ordering**: 
+  - Drag-and-drop reordering of shopping list items
+  - `custom_order` flag preserves manual ordering
+  - Automatic sorting disabled when custom order is set
+- **Category Overrides**: 
+  - Users can override automatic category assignment for shopping items
+  - Stored in `user_config.category_overrides` JSONB field
+  - Persists custom categorization preferences
+- **Add to Shopping List**: 
+  - Add meal plan ingredients to existing shopping lists
+  - Merges quantities for duplicate items
+  - Preserves manual items and custom ordering
+- **Shopping List Enhancements**:
+  - Move items between "To Buy", "Already Have", and "Excluded" sections
+  - Remove all items from a specific recipe
+  - Recipe source tags with color coding
+  - Copy shopping list to clipboard
+
+### Changed
+
+- Shopping list items now support `custom_order` field
+- Category assignment uses overrides when available
+- Shopping list generation preserves existing items when adding recipes
+
+### Technical Notes
+
+- Guest mode uses `sessionStorage` for persistence flag
+- All hooks support both authenticated and guest modes
+- Default recipes created automatically for new users via database trigger
+- Shopping list reordering uses `@dnd-kit` library
+
+---
+
 ## [2.0.0] - 2026-01-15
 
 **Summary:** Complete rewrite to Next.js + Supabase for cloud deployment and multi-user support.

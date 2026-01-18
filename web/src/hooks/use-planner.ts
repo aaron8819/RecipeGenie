@@ -32,7 +32,7 @@ function setGuestPlan(queryClient: ReturnType<typeof useQueryClient>, weekDate: 
  * Hook to fetch weekly plan for a specific week
  */
 export function useWeeklyPlan(weekDate: string) {
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
   const queryClient = useQueryClient()
 
   return useQuery({
@@ -55,6 +55,7 @@ export function useWeeklyPlan(weekDate: string) {
       const { data, error } = await supabase
         .from("weekly_plans")
         .select("*")
+        .eq("user_id", user?.id)
         .eq("week_date", weekDate)
         .maybeSingle()
 
@@ -69,7 +70,7 @@ export function useWeeklyPlan(weekDate: string) {
  * Hook to fetch all recipes for a weekly plan
  */
 export function useWeeklyPlanRecipes(recipeIds: string[]) {
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useQuery({
     queryKey: [...RECIPES_KEY, "weekly", recipeIds, isGuest],
@@ -85,6 +86,7 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
       const { data, error } = await supabase
         .from("recipes")
         .select("*")
+        .eq("user_id", user?.id)
         .in("id", recipeIds)
 
       if (error) throw error
@@ -98,7 +100,7 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
  * Hook to fetch recipe history
  */
 export function useRecipeHistory() {
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
   const queryClient = useQueryClient()
 
   return useQuery({
@@ -112,6 +114,7 @@ export function useRecipeHistory() {
       const { data, error } = await supabase
         .from("recipe_history")
         .select("*")
+        .eq("user_id", user?.id)
         .order("date_made", { ascending: false })
 
       if (error) throw error
@@ -161,7 +164,7 @@ export function useUserConfig() {
  */
 export function useGenerateMealPlan() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ weekDate, selection }: { weekDate: string; selection: Record<string, number> }) => {
@@ -186,10 +189,16 @@ export function useGenerateMealPlan() {
 
       const supabase = getSupabase()
 
-      const { data: recipes, error: recipesError } = await supabase.from("recipes").select("*")
+      const { data: recipes, error: recipesError } = await supabase
+        .from("recipes")
+        .select("*")
+        .eq("user_id", user?.id)
       if (recipesError) throw recipesError
 
-      const { data: history, error: historyError } = await supabase.from("recipe_history").select("*")
+      const { data: history, error: historyError } = await supabase
+        .from("recipe_history")
+        .select("*")
+        .eq("user_id", user?.id)
       if (historyError) throw historyError
 
       const { data: config } = await supabase
@@ -205,6 +214,7 @@ export function useGenerateMealPlan() {
       )
 
       const { error: saveError } = await supabase.from("weekly_plans").upsert({
+        user_id: user?.id,
         week_date: weekDate,
         recipe_ids: result.recipes.map((r) => r.id),
         scale: 1.0,
@@ -225,7 +235,7 @@ export function useGenerateMealPlan() {
  */
 export function useSwapRecipe() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ weekDate, oldRecipeId, category, excludeIds }: {
@@ -245,7 +255,10 @@ export function useSwapRecipe() {
       }
 
       const supabase = getSupabase()
-      const { data: recipes, error: recipesError } = await supabase.from("recipes").select("*")
+      const { data: recipes, error: recipesError } = await supabase
+        .from("recipes")
+        .select("*")
+        .eq("user_id", user?.id)
       if (recipesError) throw recipesError
 
       const newRecipe = getSwapRecipe(recipes as Recipe[], category, excludeIds)
@@ -254,6 +267,7 @@ export function useSwapRecipe() {
       const { data: plan, error: planError } = await supabase
         .from("weekly_plans")
         .select("recipe_ids")
+        .eq("user_id", user?.id)
         .eq("week_date", weekDate)
         .single()
 
@@ -264,6 +278,7 @@ export function useSwapRecipe() {
       const { error: saveError } = await supabase
         .from("weekly_plans")
         .update({ recipe_ids: newRecipeIds })
+        .eq("user_id", user?.id)
         .eq("week_date", weekDate)
 
       if (saveError) throw saveError
@@ -281,7 +296,7 @@ export function useSwapRecipe() {
  */
 export function useSaveWeeklyPlan() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ weekDate, recipeIds, scale }: { weekDate: string; recipeIds: string[]; scale?: number }) => {
@@ -301,6 +316,7 @@ export function useSaveWeeklyPlan() {
 
       const supabase = getSupabase()
       const { error } = await supabase.from("weekly_plans").upsert({
+        user_id: user?.id,
         week_date: weekDate,
         recipe_ids: recipeIds,
         scale: scale || 1.0,
@@ -321,7 +337,7 @@ export function useSaveWeeklyPlan() {
  */
 export function useAddRecipeToPlan() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ weekDate, recipeId }: { weekDate: string; recipeId: string }) => {
@@ -347,6 +363,7 @@ export function useAddRecipeToPlan() {
       const { data: existingPlan } = await supabase
         .from("weekly_plans")
         .select("recipe_ids")
+        .eq("user_id", user?.id)
         .eq("week_date", weekDate)
         .maybeSingle()
 
@@ -356,6 +373,7 @@ export function useAddRecipeToPlan() {
       }
 
       const { error } = await supabase.from("weekly_plans").upsert({
+        user_id: user?.id,
         week_date: weekDate,
         recipe_ids: [...currentIds, recipeId],
         scale: 1.0,
@@ -376,7 +394,7 @@ export function useAddRecipeToPlan() {
  */
 export function useRemoveRecipeFromPlan() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ weekDate, recipeId }: { weekDate: string; recipeId: string }) => {
@@ -394,6 +412,7 @@ export function useRemoveRecipeFromPlan() {
       const { data: existingPlan, error: fetchError } = await supabase
         .from("weekly_plans")
         .select("recipe_ids")
+        .eq("user_id", user?.id)
         .eq("week_date", weekDate)
         .single()
 
@@ -402,6 +421,7 @@ export function useRemoveRecipeFromPlan() {
       const { error } = await supabase
         .from("weekly_plans")
         .update({ recipe_ids: (existingPlan.recipe_ids as string[]).filter((id) => id !== recipeId) })
+        .eq("user_id", user?.id)
         .eq("week_date", weekDate)
 
       if (error) throw error
@@ -419,7 +439,7 @@ export function useRemoveRecipeFromPlan() {
  */
 export function useMarkRecipeMade() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ recipeId, weekDate, isMadeForWeek }: {
@@ -459,6 +479,7 @@ export function useMarkRecipeMade() {
         const { data: recentHistory, error: historyError } = await supabase
           .from("recipe_history")
           .select("id")
+          .eq("user_id", user?.id)
           .eq("recipe_id", recipeId)
           .order("date_made", { ascending: false })
           .limit(1)
@@ -470,6 +491,7 @@ export function useMarkRecipeMade() {
           const { error: deleteError } = await supabase
             .from("recipe_history")
             .delete()
+            .eq("user_id", user?.id)
             .eq("id", recentHistory.id)
           if (deleteError) throw deleteError
         }
@@ -477,6 +499,7 @@ export function useMarkRecipeMade() {
         const { data: plan, error: planError } = await supabase
           .from("weekly_plans")
           .select("made_recipe_ids")
+          .eq("user_id", user?.id)
           .eq("week_date", weekDate)
           .single()
 
@@ -485,6 +508,7 @@ export function useMarkRecipeMade() {
         const { error: updateError } = await supabase
           .from("weekly_plans")
           .update({ made_recipe_ids: ((plan.made_recipe_ids as string[]) || []).filter((id) => id !== recipeId) })
+          .eq("user_id", user?.id)
           .eq("week_date", weekDate)
 
         if (updateError) throw updateError
@@ -492,13 +516,14 @@ export function useMarkRecipeMade() {
       } else {
         const { error: insertError } = await supabase
           .from("recipe_history")
-          .insert({ recipe_id: recipeId, date_made: new Date().toISOString() })
+          .insert({ user_id: user?.id, recipe_id: recipeId, date_made: new Date().toISOString() })
 
         if (insertError) throw insertError
 
         const { data: plan, error: planError } = await supabase
           .from("weekly_plans")
           .select("made_recipe_ids")
+          .eq("user_id", user?.id)
           .eq("week_date", weekDate)
           .single()
 
@@ -507,6 +532,7 @@ export function useMarkRecipeMade() {
         const { error: updateError } = await supabase
           .from("weekly_plans")
           .update({ made_recipe_ids: [...((plan.made_recipe_ids as string[]) || []), recipeId] })
+          .eq("user_id", user?.id)
           .eq("week_date", weekDate)
 
         if (updateError) throw updateError

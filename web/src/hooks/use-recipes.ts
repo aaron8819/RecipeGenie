@@ -77,7 +77,7 @@ export function useRecipes(options?: {
  * Hook to fetch a single recipe by ID
  */
 export function useRecipe(id: string | null) {
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useQuery({
     queryKey: [...RECIPES_KEY, id, isGuest],
@@ -94,6 +94,7 @@ export function useRecipe(id: string | null) {
         .from("recipes")
         .select("*")
         .eq("id", id)
+        .eq("user_id", user?.id)
         .single()
 
       if (error) throw error
@@ -108,7 +109,7 @@ export function useRecipe(id: string | null) {
  */
 export function useCreateRecipe() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (recipe: RecipeInsert) => {
@@ -135,7 +136,7 @@ export function useCreateRecipe() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        .insert({ ...recipe, id })
+        .insert({ ...recipe, id, user_id: user?.id })
         .select()
         .single()
 
@@ -157,7 +158,7 @@ export function useCreateRecipe() {
  */
 export function useUpdateRecipe() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: RecipeUpdate }) => {
@@ -174,6 +175,7 @@ export function useUpdateRecipe() {
         .from("recipes")
         .update(updates)
         .eq("id", id)
+        .eq("user_id", user?.id)
         .select()
         .single()
 
@@ -194,7 +196,7 @@ export function useUpdateRecipe() {
  */
 export function useDeleteRecipe() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -203,7 +205,7 @@ export function useDeleteRecipe() {
       }
 
       const supabase = getSupabase()
-      const { error } = await supabase.from("recipes").delete().eq("id", id)
+      const { error } = await supabase.from("recipes").delete().eq("id", id).eq("user_id", user?.id)
       if (error) throw error
       return id
     },
@@ -221,7 +223,7 @@ export function useDeleteRecipe() {
  */
 export function useToggleFavorite() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ id, favorite }: { id: string; favorite: boolean }) => {
@@ -237,6 +239,7 @@ export function useToggleFavorite() {
         .from("recipes")
         .update({ favorite: !favorite })
         .eq("id", id)
+        .eq("user_id", user?.id)
         .select()
         .single()
 
@@ -253,7 +256,7 @@ export function useToggleFavorite() {
 }
 
 // Preferred display order for recipe categories
-const CATEGORY_ORDER = ["chicken", "beef", "turkey", "lamb", "vegetarian"]
+const CATEGORY_ORDER = ["chicken", "beef", "lamb", "turkey", "vegetarian"]
 
 function sortCategories(categories: string[]): string[] {
   return [...categories].sort((a, b) => {
@@ -287,7 +290,7 @@ export function useCategories() {
 
       if (error) {
         console.warn("Config not found, using defaults:", error.message)
-        return sortCategories(["chicken", "beef", "turkey", "lamb", "vegetarian"])
+        return sortCategories(["chicken", "beef", "lamb", "turkey", "vegetarian"])
       }
       return sortCategories((data?.categories as string[]) || ["chicken", "turkey", "beef"])
     },

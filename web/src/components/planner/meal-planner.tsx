@@ -157,7 +157,7 @@ export function MealPlanner() {
     return `${date.toLocaleDateString("en-US", options)} - ${endDate.toLocaleDateString("en-US", options)}`
   }
 
-  const categories = config?.categories || []
+  const categories = allCategories || config?.categories || []
   const totalMeals = Object.values(selection).reduce((sum, n) => sum + n, 0)
 
   // Check if displayed week is the current week

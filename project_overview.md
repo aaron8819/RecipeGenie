@@ -21,6 +21,9 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - Shopping lists can be scaled (0.5x to 3x) for batch cooking
 - Weekly plans persist per week-start date, enabling future planning
 - Multi-user support: each authenticated user has private data via Row Level Security
+- Guest mode: users can try the app without signing up (data stored in browser session only)
+- Shopping lists support drag-and-drop reordering and manual item addition
+- Category overrides allow custom categorization of shopping list items
 
 ---
 
@@ -87,7 +90,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx` | Recipe CRUD UI |
 | `components/planner/` | `meal-planner.tsx` | Week navigation, plan generation, history |
 | `components/pantry/` | `pantry-list.tsx` | Pantry items, excluded keywords |
-| `components/shopping/` | `shopping-list.tsx` | Shopping list display, scaling |
+| `components/shopping/` | `shopping-list.tsx` | Shopping list display, scaling, drag-and-drop reordering |
 | `components/ui/` | Various | Radix UI primitives (button, dialog, tabs, etc.) |
 | `hooks/` | `use-recipes.ts`, `use-planner.ts`, etc. | TanStack Query hooks for Supabase |
 | `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization |
@@ -115,7 +118,7 @@ One-time import of legacy `data/*.json` files into Supabase. Uses service role k
 | `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day` | User preferences |
 | `recipe_history` | `id, user_id, recipe_id (FK), date_made` | When recipes were cooked |
 | `weekly_plans` | `user_id, week_date (PK), recipe_ids[], scale, generated_at` | Saved plans keyed by week start |
-| `shopping_list` | `user_id (PK), items[], already_have[], excluded[], source_recipes[], scale, total_servings, generated_at` | Current shopping list state |
+| `shopping_list` | `user_id (PK), items[], already_have[], excluded[], source_recipes[], scale, total_servings, custom_order, generated_at` | Current shopping list state |
 
 ### Client-Side State (TanStack Query)
 
@@ -136,8 +139,10 @@ const deleteRecipe = useDeleteRecipe();
 
 ### Browser Storage
 
-- `localStorage`: None required (all state in Supabase)
+- `localStorage`: None required for authenticated users (all state in Supabase)
+- `sessionStorage`: Guest mode flag (`recipe-genie-guest-mode`)
 - `cookies`: Supabase auth session tokens (managed by `@supabase/ssr`)
+- **Guest Mode**: Data stored in React Query cache only (lost on page refresh)
 
 ---
 
@@ -244,4 +249,4 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-15*
+*Last updated: 2026-01-16*

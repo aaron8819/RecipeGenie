@@ -46,7 +46,7 @@ export function usePantryItems() {
  */
 export function useAddPantryItem() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (itemName: string) => {
@@ -60,7 +60,7 @@ export function useAddPantryItem() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("pantry_items")
-        .insert({ item: normalizedItem })
+        .insert({ user_id: user?.id, item: normalizedItem })
         .select()
         .single()
 
@@ -85,7 +85,7 @@ export function useAddPantryItem() {
  */
 export function useRemovePantryItem() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (itemName: string) => {
@@ -97,6 +97,7 @@ export function useRemovePantryItem() {
       const { error } = await supabase
         .from("pantry_items")
         .delete()
+        .eq("user_id", user?.id)
         .eq("item", normalizedItem)
 
       if (error) throw error
@@ -144,7 +145,7 @@ export function useExcludedKeywords() {
  */
 export function useAddExcludedKeyword() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (keyword: string) => {
@@ -172,7 +173,7 @@ export function useAddExcludedKeyword() {
       const { error } = await supabase
         .from("user_config")
         .update({ excluded_keywords: [...currentKeywords, normalizedKeyword] })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (error) throw error
       return normalizedKeyword
@@ -191,7 +192,7 @@ export function useAddExcludedKeyword() {
  */
 export function useRemoveExcludedKeyword() {
   const queryClient = useQueryClient()
-  const { isGuest } = useAuthContext()
+  const { isGuest, user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (keyword: string) => {
@@ -211,7 +212,7 @@ export function useRemoveExcludedKeyword() {
       const { error } = await supabase
         .from("user_config")
         .update({ excluded_keywords: updatedKeywords })
-        .eq("id", 1)
+        .eq("user_id", user?.id)
 
       if (error) throw error
       return normalizedKeyword
