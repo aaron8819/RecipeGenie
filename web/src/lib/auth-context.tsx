@@ -128,7 +128,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw new Error(errorMessage)
     }
-    return data
   }, [isGuest, clearGuestCache])
 
   const signOut = useCallback(async () => {
