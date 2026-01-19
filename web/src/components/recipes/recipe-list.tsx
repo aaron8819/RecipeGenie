@@ -11,6 +11,7 @@ import { AddToPlanDialog } from "./add-to-plan-dialog"
 import {
   useRecipes,
   useCategories,
+  useAllTags,
   useToggleFavorite,
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
@@ -73,11 +74,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { MultiSelect } from "@/components/ui/multi-select"
 import { cn } from "@/lib/utils"
 
 export function RecipeList() {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
@@ -88,8 +91,10 @@ export function RecipeList() {
     category,
     search: search || null,
     favoritesOnly,
+    tags: selectedTags.length > 0 ? selectedTags : undefined,
   })
   const { data: categories } = useCategories()
+  const { data: allTags = [] } = useAllTags()
   const { data: history } = useRecipeHistory()
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
@@ -138,6 +143,16 @@ export function RecipeList() {
           </SelectContent>
         </Select>
 
+        {allTags.length > 0 && (
+          <MultiSelect
+            options={allTags}
+            value={selectedTags}
+            onChange={setSelectedTags}
+            placeholder="Filter by tags..."
+            className="w-full sm:w-[180px]"
+          />
+        )}
+
         <Button
           variant={favoritesOnly ? "default" : "outline"}
           onClick={() => setFavoritesOnly(!favoritesOnly)}
@@ -170,11 +185,11 @@ export function RecipeList() {
             <Search className="h-8 w-8 text-muted-foreground" />
           </div>
           <p className="text-muted-foreground">
-            {search || category || favoritesOnly
+            {search || category || selectedTags.length > 0 || favoritesOnly
               ? "No recipes match your filters."
               : "No recipes yet. Add your first recipe!"}
           </p>
-          {!search && !category && !favoritesOnly && (
+          {!search && !category && selectedTags.length === 0 && !favoritesOnly && (
             <Button onClick={() => setIsAddDialogOpen(true)} className="mt-4">
               <Plus className="h-4 w-4 mr-2" />
               Add Recipe

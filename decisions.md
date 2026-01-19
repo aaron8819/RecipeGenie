@@ -429,3 +429,49 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - Could add localStorage persistence for guest mode (with clear warnings)
 - Could prompt users to sign up after X actions in guest mode
 - Could migrate guest data to authenticated account on signup
+
+---
+
+## ADR-014: Recipe Text Parser for Import
+
+**Status:** Accepted (2026-01-16)
+
+**Context:** Users want to quickly add recipes without manually entering each ingredient and instruction. Copy-pasting recipe text from websites, cookbooks, or notes is a common workflow, but manually parsing and entering the data is tedious.
+
+**Decision:** Implement a client-side recipe text parser that automatically extracts recipe name, servings, ingredients, and instructions from plain text input.
+
+**Rationale:**
+- Reduces friction when adding recipes from external sources
+- Supports multiple input formats (structured sections, free-form text, mixed)
+- Handles common recipe text patterns (Unicode fractions, ranges, parenthetical units)
+- No backend changes required - parsing happens entirely in the browser
+- Users can still manually edit parsed results before saving
+
+**Implementation:**
+- Parser located in `src/lib/recipe-parser.ts`
+- "Import from Text" tab in recipe dialog (`src/components/recipes/recipe-dialog.tsx`)
+- Supports Unicode fractions (½, ⅓, ¼, etc.) converted to decimals
+- Handles ingredient ranges (e.g., "½–1 cup")
+- Extracts parenthetical unit information (e.g., "1 (28 oz) can crushed tomatoes")
+- Recognizes common section headers: "Ingredients", "Instructions", "Directions", "Method", "Steps"
+- Extracts servings from recipe name (e.g., "Makes 4 servings")
+- Parses 20+ common unit abbreviations and variations
+
+**Tradeoffs:**
+- (+) Significantly faster recipe entry for users with text sources
+- (+) No backend complexity - pure client-side parsing
+- (+) Handles common formats automatically
+- (-) May not parse perfectly for all recipe formats (users can still edit)
+- (-) Requires maintenance as new recipe formats are encountered
+- (-) Parsing logic adds ~400 lines of code
+
+**Risks:**
+- Parser may misinterpret some recipe formats
+- **Mitigation**: Users can review and edit parsed results before saving
+- Complex ingredient lines may not parse correctly
+- **Mitigation**: Parser handles common cases; manual editing available for edge cases
+
+**Future Considerations:**
+- Could add support for more recipe formats (markdown, structured JSON)
+- Could learn from user corrections to improve parsing accuracy
+- Could support batch import of multiple recipes from a single text block

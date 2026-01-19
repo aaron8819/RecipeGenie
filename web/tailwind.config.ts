@@ -6,6 +6,27 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/lib/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  safelist: [
+    // Category tag colors
+    "bg-red-100", "text-red-700",
+    "bg-yellow-100", "text-yellow-800",
+    "bg-orange-100", "text-orange-700",
+    "bg-blue-100", "text-blue-700",
+    // Custom tag colors
+    "bg-purple-100", "text-purple-700",
+    "bg-pink-100", "text-pink-700",
+    "bg-indigo-100", "text-indigo-700",
+    "bg-teal-100", "text-teal-700",
+    "bg-cyan-100", "text-cyan-700",
+    "bg-emerald-100", "text-emerald-700",
+    "bg-amber-100", "text-amber-700",
+    "bg-violet-100", "text-violet-700",
+    "bg-rose-100", "text-rose-700",
+    "bg-sky-100", "text-sky-700",
+    "bg-lime-100", "text-lime-700",
+    "bg-fuchsia-100", "text-fuchsia-700",
   ],
   theme: {
     extend: {
@@ -88,11 +109,17 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(10px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "flip": {
+          "0%": { transform: "rotateY(0)" },
+          "50%": { transform: "rotateY(90deg)" },
+          "100%": { transform: "rotateY(0)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.2s ease-out",
         "scale-in": "scale-in 0.15s ease-out",
         "slide-up": "slide-up 0.3s ease-out",
+        "flip": "flip 0.6s ease-in-out",
       },
     },
   },

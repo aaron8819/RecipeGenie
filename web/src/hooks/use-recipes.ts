@@ -22,6 +22,7 @@ export function useRecipes(options?: {
   category?: string | null
   search?: string | null
   favoritesOnly?: boolean
+  tags?: string[]
 }) {
   const { isGuest } = useAuthContext()
 
@@ -53,7 +54,19 @@ export function useRecipes(options?: {
 
       const { data, error } = await query
       if (error) throw error
-      return data as Recipe[]
+      
+      // Filter by tags client-side for OR logic (recipes with ANY of the selected tags)
+      // Supabase contains() uses AND logic, so we filter for OR manually
+      let filteredData = (data as Recipe[]) || []
+      if (options?.tags && options.tags.length > 0) {
+        filteredData = filteredData.filter((recipe) => {
+          if (!recipe.tags || recipe.tags.length === 0) return false
+          // Check if recipe has at least one of the selected tags
+          return options.tags!.some((tag) => recipe.tags!.includes(tag))
+        })
+      }
+      
+      return filteredData
     },
     initialData: isGuest ? () => {
       let recipes = getDefaultRecipes()
@@ -66,6 +79,13 @@ export function useRecipes(options?: {
       }
       if (options?.favoritesOnly) {
         recipes = recipes.filter((r) => r.favorite)
+      }
+      if (options?.tags && options.tags.length > 0) {
+        recipes = recipes.filter((recipe) => {
+          if (!recipe.tags || recipe.tags.length === 0) return false
+          // Check if recipe has at least one of the selected tags
+          return options.tags!.some((tag) => recipe.tags!.includes(tag))
+        })
       }
       return recipes.sort((a, b) => a.name.localeCompare(b.name))
     } : undefined,
@@ -295,5 +315,46 @@ export function useCategories() {
       return sortCategories((data?.categories as string[]) || ["chicken", "turkey", "beef"])
     },
     staleTime: Infinity,
+  })
+}
+
+/**
+ * Hook to fetch all unique tags from all recipes
+ */
+export function useAllTags() {
+  const { isGuest, user } = useAuthContext()
+
+  return useQuery({
+    queryKey: ["recipes", "all-tags", isGuest],
+    queryFn: async () => {
+      if (isGuest) {
+        const recipes = getDefaultRecipes()
+        const allTags = new Set<string>()
+        recipes.forEach((recipe) => {
+          if (recipe.tags) {
+            recipe.tags.forEach((tag) => allTags.add(tag))
+          }
+        })
+        return Array.from(allTags).sort()
+      }
+
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("recipes")
+        .select("tags")
+        .eq("user_id", user?.id)
+
+      if (error) throw error
+
+      const allTags = new Set<string>()
+      ;(data || []).forEach((recipe: { tags: string[] | null }) => {
+        if (recipe.tags && Array.isArray(recipe.tags)) {
+          recipe.tags.forEach((tag) => allTags.add(tag))
+        }
+      })
+
+      return Array.from(allTags).sort()
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
   })
 }

@@ -5,6 +5,8 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 ## Features
 
 - **Recipe Management**: Store and organize your recipes by protein category
+  - Manual entry or import from plain text with automatic parsing
+  - Supports Unicode fractions, ranges, and various recipe formats
 - **Meal Planning**: Randomly generate weekly meal plans based on your preferences
 - **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering
 - **Pantry Tracking**: Mark items you have on hand to get only what you need to buy
@@ -122,9 +124,11 @@ The app includes an auth callback route at `/auth/callback` that handles email c
    - **Manual Entry**: Fill in recipe details manually (name, category, servings, ingredients, instructions)
    - **Import from Text**: Paste a recipe in plain text format and let the parser extract the details automatically
      - Supports structured formats with "Ingredients:" and "Instructions:" headers
-     - Handles Unicode fractions (½, ⅓, ¼, etc.)
-     - Automatically extracts servings from recipe name
+     - Handles Unicode fractions (½, ⅓, ¼, etc.) and converts to decimals
+     - Automatically extracts servings from recipe name (e.g., "Makes 4 servings")
      - Parses ingredient amounts, units, and item names
+     - Supports ranges (e.g., "½–1 cup") and parenthetical units (e.g., "1 (28 oz) can")
+     - Recognizes common section headers: "Ingredients", "Instructions", "Directions", "Method", "Steps"
 4. Click "Save Recipe"
 
 ### Generating a Meal Plan

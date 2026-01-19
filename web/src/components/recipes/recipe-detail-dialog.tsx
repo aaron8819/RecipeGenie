@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { useToggleFavorite } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
+import { getTagClassName } from "@/lib/tag-colors"
 
 interface RecipeDetailDialogProps {
   open: boolean
@@ -35,44 +36,49 @@ export function RecipeDetailDialog({
         <DialogHeader>
           <div className="flex items-start justify-between pr-8">
             <DialogTitle className="text-xl">{recipe.name}</DialogTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() =>
-                toggleFavorite.mutate({ id: recipe.id, favorite: recipe.favorite })
-              }
-            >
-              <Heart
-                className={cn(
-                  "h-5 w-5",
-                  recipe.favorite
-                    ? "fill-terracotta-500 text-terracotta-500"
-                    : "text-muted-foreground hover:text-terracotta-400"
-                )}
-              />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() =>
+                  toggleFavorite.mutate({ id: recipe.id, favorite: recipe.favorite })
+                }
+              >
+                <Heart
+                  className={cn(
+                    "h-5 w-5",
+                    recipe.favorite
+                      ? "fill-terracotta-500 text-terracotta-500"
+                      : "text-muted-foreground hover:text-terracotta-400"
+                  )}
+                />
+              </Button>
+              {onEdit && (
+                <Button variant="outline" size="sm" onClick={() => onEdit(recipe)}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Recipe
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 pt-2 pb-4">
           {/* Meta info */}
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span className="capitalize px-2 py-1 bg-secondary rounded-md">
+          <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
+            <span className={cn("capitalize", getTagClassName(recipe.category, true))}>
               {recipe.category}
             </span>
-            <span>{recipe.servings} servings</span>
             {recipe.tags && recipe.tags.length > 0 && (
-              <div className="flex gap-1">
+              <>
                 {recipe.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs"
-                  >
+                  <span key={tag} className={getTagClassName(tag, false)}>
                     {tag}
                   </span>
                 ))}
-              </div>
+              </>
             )}
+            <span className="text-xs">{recipe.servings} servings</span>
           </div>
 
           {/* Ingredients */}
@@ -109,13 +115,6 @@ export function RecipeDetailDialog({
               ))}
             </ol>
           </div>
-        </div>
-
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => onEdit?.(recipe)}>
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit Recipe
-          </Button>
         </div>
       </DialogContent>
     </Dialog>

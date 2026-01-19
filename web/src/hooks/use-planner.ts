@@ -77,20 +77,26 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
     queryFn: async () => {
       if (recipeIds.length === 0) return []
 
+      let recipes: Recipe[] = []
+
       if (isGuest) {
         const allRecipes = getDefaultRecipes()
-        return allRecipes.filter((r) => recipeIds.includes(r.id))
+        recipes = allRecipes.filter((r) => recipeIds.includes(r.id))
+      } else {
+        const supabase = getSupabase()
+        const { data, error } = await supabase
+          .from("recipes")
+          .select("*")
+          .eq("user_id", user?.id)
+          .in("id", recipeIds)
+
+        if (error) throw error
+        recipes = data as Recipe[]
       }
 
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipes")
-        .select("*")
-        .eq("user_id", user?.id)
-        .in("id", recipeIds)
-
-      if (error) throw error
-      return data as Recipe[]
+      // Preserve order according to recipeIds array
+      const recipeMap = new Map(recipes.map((r) => [r.id, r]))
+      return recipeIds.map((id) => recipeMap.get(id)).filter((r): r is Recipe => r !== undefined)
     },
     enabled: recipeIds.length > 0,
   })
@@ -213,15 +219,40 @@ export function useGenerateMealPlan() {
         config?.history_exclusion_days || 7
       )
 
-      const { error: saveError } = await supabase.from("weekly_plans").upsert({
-        user_id: user?.id,
-        week_date: weekDate,
-        recipe_ids: result.recipes.map((r) => r.id),
-        scale: 1.0,
-        generated_at: new Date().toISOString(),
-      })
+      // Check if plan already exists
+      const { data: existingPlan } = await supabase
+        .from("weekly_plans")
+        .select("*")
+        .eq("user_id", user?.id)
+        .eq("week_date", weekDate)
+        .maybeSingle()
 
-      if (saveError) throw saveError
+      // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
+      if (existingPlan) {
+        // Update existing plan - preserve made_recipe_ids but reset recipe_ids
+        const { error: saveError } = await supabase
+          .from("weekly_plans")
+          .update({
+            recipe_ids: result.recipes.map((r) => r.id),
+            made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
+            scale: 1.0,
+            generated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user?.id)
+          .eq("week_date", weekDate)
+        if (saveError) throw saveError
+      } else {
+        // Insert new plan
+        const { error: saveError } = await supabase.from("weekly_plans").insert({
+          user_id: user?.id,
+          week_date: weekDate,
+          recipe_ids: result.recipes.map((r) => r.id),
+          scale: 1.0,
+          generated_at: new Date().toISOString(),
+        })
+        if (saveError) throw saveError
+      }
+
       return { ...result, weekDate }
     },
     onSuccess: (_, variables) => {
@@ -315,15 +346,41 @@ export function useSaveWeeklyPlan() {
       }
 
       const supabase = getSupabase()
-      const { error } = await supabase.from("weekly_plans").upsert({
-        user_id: user?.id,
-        week_date: weekDate,
-        recipe_ids: recipeIds,
-        scale: scale || 1.0,
-        generated_at: new Date().toISOString(),
-      })
+      
+      // Check if plan already exists
+      const { data: existingPlan } = await supabase
+        .from("weekly_plans")
+        .select("*")
+        .eq("user_id", user?.id)
+        .eq("week_date", weekDate)
+        .maybeSingle()
 
-      if (error) throw error
+      // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
+      if (existingPlan) {
+        // Update existing plan
+        const { error } = await supabase
+          .from("weekly_plans")
+          .update({
+            recipe_ids: recipeIds,
+            scale: scale || 1.0,
+            made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
+            generated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user?.id)
+          .eq("week_date", weekDate)
+        if (error) throw error
+      } else {
+        // Insert new plan
+        const { error } = await supabase.from("weekly_plans").insert({
+          user_id: user?.id,
+          week_date: weekDate,
+          recipe_ids: recipeIds,
+          scale: scale || 1.0,
+          generated_at: new Date().toISOString(),
+        })
+        if (error) throw error
+      }
+
       return { weekDate, recipeIds }
     },
     onSuccess: (_, variables) => {
@@ -362,7 +419,7 @@ export function useAddRecipeToPlan() {
       const supabase = getSupabase()
       const { data: existingPlan } = await supabase
         .from("weekly_plans")
-        .select("recipe_ids")
+        .select("*")
         .eq("user_id", user?.id)
         .eq("week_date", weekDate)
         .maybeSingle()
@@ -372,15 +429,32 @@ export function useAddRecipeToPlan() {
         throw new Error("Recipe is already in this week's meal plan")
       }
 
-      const { error } = await supabase.from("weekly_plans").upsert({
-        user_id: user?.id,
-        week_date: weekDate,
-        recipe_ids: [...currentIds, recipeId],
-        scale: 1.0,
-        generated_at: new Date().toISOString(),
-      })
+      // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
+      if (existingPlan) {
+        // Update existing plan
+        const { error } = await supabase
+          .from("weekly_plans")
+          .update({
+            recipe_ids: [...currentIds, recipeId],
+            scale: (existingPlan as WeeklyPlan).scale || 1.0,
+            made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
+            generated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user?.id)
+          .eq("week_date", weekDate)
+        if (error) throw error
+      } else {
+        // Insert new plan
+        const { error } = await supabase.from("weekly_plans").insert({
+          user_id: user?.id,
+          week_date: weekDate,
+          recipe_ids: [...currentIds, recipeId],
+          scale: 1.0,
+          generated_at: new Date().toISOString(),
+        })
+        if (error) throw error
+      }
 
-      if (error) throw error
       return { weekDate, recipeId }
     },
     onSuccess: (_, variables) => {

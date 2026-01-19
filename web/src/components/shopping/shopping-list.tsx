@@ -65,7 +65,13 @@ function getColorIndex(str: string): number {
 }
 
 // Source tag component (for item rows)
-function SourceTag({ recipeName }: { recipeName: string }) {
+function SourceTag({ 
+  recipeName, 
+  colorIndex 
+}: { 
+  recipeName: string
+  colorIndex?: number 
+}) {
   const isManual = recipeName === "Manual"
   
   if (isManual) {
@@ -76,8 +82,8 @@ function SourceTag({ recipeName }: { recipeName: string }) {
     )
   }
   
-  const colorIndex = getColorIndex(recipeName)
-  const colors = RECIPE_COLORS[colorIndex]
+  const index = colorIndex !== undefined ? colorIndex : getColorIndex(recipeName)
+  const colors = RECIPE_COLORS[index % RECIPE_COLORS.length]
   
   // Truncate long recipe names
   const displayName = recipeName.length > 20 ? recipeName.slice(0, 18) + "…" : recipeName
@@ -96,14 +102,16 @@ function SourceTag({ recipeName }: { recipeName: string }) {
 function RecipeTag({ 
   recipeName, 
   onRemove, 
-  isRemoving 
+  isRemoving,
+  colorIndex
 }: { 
   recipeName: string
   onRemove: () => void
   isRemoving: boolean
+  colorIndex?: number
 }) {
-  const colorIndex = getColorIndex(recipeName)
-  const colors = RECIPE_COLORS[colorIndex]
+  const index = colorIndex !== undefined ? colorIndex : getColorIndex(recipeName)
+  const colors = RECIPE_COLORS[index % RECIPE_COLORS.length]
   
   // Truncate long recipe names
   const displayName = recipeName.length > 25 ? recipeName.slice(0, 23) + "…" : recipeName
@@ -134,12 +142,14 @@ function SortableShoppingItem({
   onRemove,
   isCheckingOff,
   isRemoving,
+  recipeColorMap,
 }: {
   item: ShoppingItem
   onCheckOff: () => void
   onRemove: () => void
   isCheckingOff: boolean
   isRemoving: boolean
+  recipeColorMap: Map<string, number>
 }) {
   const {
     attributes,
@@ -224,7 +234,11 @@ function SortableShoppingItem({
           {uniqueSources.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {uniqueSources.map((source, idx) => (
-                <SourceTag key={`${source.recipeName}-${idx}`} recipeName={source.recipeName} />
+                <SourceTag 
+                  key={`${source.recipeName}-${idx}`} 
+                  recipeName={source.recipeName}
+                  colorIndex={recipeColorMap.get(source.recipeName)}
+                />
               ))}
             </div>
           )}
@@ -244,7 +258,13 @@ function SortableShoppingItem({
 }
 
 // Drag overlay item (shown while dragging)
-function DragOverlayItem({ item }: { item: ShoppingItem }) {
+function DragOverlayItem({ 
+  item, 
+  recipeColorMap 
+}: { 
+  item: ShoppingItem
+  recipeColorMap: Map<string, number>
+}) {
   const formatAmount = (item: ShoppingItem) => {
     const parts: string[] = []
     
@@ -291,7 +311,11 @@ function DragOverlayItem({ item }: { item: ShoppingItem }) {
         {uniqueSources.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {uniqueSources.map((source, idx) => (
-              <SourceTag key={`${source.recipeName}-${idx}`} recipeName={source.recipeName} />
+              <SourceTag 
+                key={`${source.recipeName}-${idx}`} 
+                recipeName={source.recipeName}
+                colorIndex={recipeColorMap.get(source.recipeName)}
+              />
             ))}
           </div>
         )}
@@ -366,6 +390,15 @@ export function ShoppingListView() {
     }
     return Array.from(recipeSet).sort()
   }, [shoppingList?.items, shoppingList?.already_have])
+
+  // Create a color mapping that assigns unique colors sequentially to recipes
+  const recipeColorMap = useMemo(() => {
+    const map = new Map<string, number>()
+    uniqueRecipes.forEach((recipeName, index) => {
+      map.set(recipeName, index)
+    })
+    return map
+  }, [uniqueRecipes])
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -536,19 +569,47 @@ export function ShoppingListView() {
         </CardContent>
       </Card>
 
-      {/* Recipe Sources */}
-      {uniqueRecipes.length > 0 && (
+      {/* Recipe Sources and Action Buttons */}
+      {(uniqueRecipes.length > 0 || (shoppingList?.items?.length ?? 0) > 0) && (
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">Recipes in list:</p>
-          <div className="flex flex-wrap gap-2">
-            {uniqueRecipes.map((recipeName) => (
-              <RecipeTag
-                key={recipeName}
-                recipeName={recipeName}
-                onRemove={() => removeRecipeItems.mutate(recipeName)}
-                isRemoving={removeRecipeItems.isPending}
-              />
-            ))}
+          <div className="flex items-start justify-between gap-4">
+            {uniqueRecipes.length > 0 ? (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-muted-foreground mb-2">Recipes in list:</p>
+                <div className="flex flex-wrap gap-2">
+                  {uniqueRecipes.map((recipeName) => (
+                    <RecipeTag
+                      key={recipeName}
+                      recipeName={recipeName}
+                      onRemove={() => removeRecipeItems.mutate(recipeName)}
+                      isRemoving={removeRecipeItems.isPending}
+                      colorIndex={recipeColorMap.get(recipeName)}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )}
+            {shoppingList?.items?.length > 0 && (
+              <div className="flex gap-2 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  onClick={handleCopyList}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleClearList}
+                  disabled={clearList.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Clear
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -598,6 +659,7 @@ export function ShoppingListView() {
                               onRemove={() => removeItem.mutate(item.item)}
                               isCheckingOff={checkOffItem.isPending}
                               isRemoving={removeItem.isPending}
+                              recipeColorMap={recipeColorMap}
                             />
                           ))}
                         </ul>
@@ -608,7 +670,7 @@ export function ShoppingListView() {
             </SortableContext>
 
             <DragOverlay>
-              {activeItem ? <DragOverlayItem item={activeItem} /> : null}
+              {activeItem ? <DragOverlayItem item={activeItem} recipeColorMap={recipeColorMap} /> : null}
             </DragOverlay>
           </DndContext>
 
@@ -672,26 +734,6 @@ export function ShoppingListView() {
             </Card>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={handleCopyList}
-              className="flex-1"
-            >
-              <Copy className="h-4 w-4 mr-2" />
-              Copy
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleClearList}
-              disabled={clearList.isPending}
-              className="flex-1"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear
-            </Button>
-          </div>
         </div>
       )}
     </div>

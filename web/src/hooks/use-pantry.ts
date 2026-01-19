@@ -163,19 +163,36 @@ export function useAddExcludedKeyword() {
       const { data: config } = await supabase
         .from("user_config")
         .select("excluded_keywords")
-        .single()
+        .eq("user_id", user?.id)
+        .maybeSingle()
 
       const currentKeywords = (config?.excluded_keywords as string[]) || []
       if (currentKeywords.includes(normalizedKeyword)) {
         throw new Error("Keyword already exists")
       }
 
-      const { error } = await supabase
-        .from("user_config")
-        .update({ excluded_keywords: [...currentKeywords, normalizedKeyword] })
-        .eq("user_id", user?.id)
-
-      if (error) throw error
+      if (config) {
+        // Update existing config
+        const { error } = await supabase
+          .from("user_config")
+          .update({ excluded_keywords: [...currentKeywords, normalizedKeyword] })
+          .eq("user_id", user?.id)
+        if (error) throw error
+      } else {
+        // Insert new config (shouldn't happen normally, but handle it)
+        const { error } = await supabase
+          .from("user_config")
+          .insert({
+            user_id: user?.id,
+            excluded_keywords: [normalizedKeyword],
+            categories: ["chicken", "turkey", "steak", "beef", "lamb", "vegetarian"],
+            default_selection: { chicken: 2, turkey: 1, steak: 1 },
+            category_overrides: {},
+            history_exclusion_days: 10,
+            week_start_day: 1,
+          })
+        if (error) throw error
+      }
       return normalizedKeyword
     },
     onSuccess: (newKeyword) => {
@@ -204,9 +221,15 @@ export function useRemoveExcludedKeyword() {
       const { data: config } = await supabase
         .from("user_config")
         .select("excluded_keywords")
-        .single()
+        .eq("user_id", user?.id)
+        .maybeSingle()
 
-      const currentKeywords = (config?.excluded_keywords as string[]) || []
+      if (!config) {
+        // Config doesn't exist, nothing to remove
+        return normalizedKeyword
+      }
+
+      const currentKeywords = (config.excluded_keywords as string[]) || []
       const updatedKeywords = currentKeywords.filter((k) => k !== normalizedKeyword)
 
       const { error } = await supabase

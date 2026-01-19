@@ -171,12 +171,29 @@ export function useSaveShoppingList() {
       }
 
       const supabase = getSupabase()
-      const { error } = await supabase
+      
+      // Check if list exists
+      const { data: existingList } = await supabase
         .from("shopping_list")
-        .update({ ...shoppingList, generated_at: new Date().toISOString() })
+        .select("user_id")
         .eq("user_id", user?.id)
+        .maybeSingle()
 
-      if (error) throw error
+      if (existingList) {
+        // Update existing list
+        const { error } = await supabase
+          .from("shopping_list")
+          .update({ ...shoppingList, generated_at: new Date().toISOString() })
+          .eq("user_id", user?.id)
+        if (error) throw error
+      } else {
+        // Insert new list
+        const { error } = await supabase
+          .from("shopping_list")
+          .insert({ ...shoppingList, user_id: user?.id, generated_at: new Date().toISOString() })
+        if (error) throw error
+      }
+
       return shoppingList
     },
     onSuccess: () => {
@@ -746,21 +763,38 @@ export function useSaveCategoryOverride() {
       const { data: config, error: fetchError } = await supabase
         .from("user_config")
         .select("category_overrides")
-        .single()
-
-      if (fetchError && fetchError.code !== "PGRST116") throw fetchError
-
-      const { error: saveError } = await supabase
-        .from("user_config")
-        .update({
-          category_overrides: {
-            ...((config?.category_overrides as Record<string, string>) || {}),
-            [normalizedItem]: categoryKey,
-          },
-        })
         .eq("user_id", user?.id)
+        .maybeSingle()
 
-      if (saveError) throw saveError
+      if (fetchError) throw fetchError
+
+      const updatedOverrides = {
+        ...((config?.category_overrides as Record<string, string>) || {}),
+        [normalizedItem]: categoryKey,
+      }
+
+      if (config) {
+        // Update existing config
+        const { error: saveError } = await supabase
+          .from("user_config")
+          .update({ category_overrides: updatedOverrides })
+          .eq("user_id", user?.id)
+        if (saveError) throw saveError
+      } else {
+        // Insert new config (shouldn't happen normally, but handle it)
+        const { error: saveError } = await supabase
+          .from("user_config")
+          .insert({
+            user_id: user?.id,
+            category_overrides: updatedOverrides,
+            categories: ["chicken", "turkey", "steak", "beef", "lamb", "vegetarian"],
+            default_selection: { chicken: 2, turkey: 1, steak: 1 },
+            excluded_keywords: [],
+            history_exclusion_days: 10,
+            week_start_day: 1,
+          })
+        if (saveError) throw saveError
+      }
       return { itemName: normalizedItem, categoryKey }
     },
     onSuccess: () => {

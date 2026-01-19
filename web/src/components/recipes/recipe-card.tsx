@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import type { Recipe } from "@/types/database"
 import { cn } from "@/lib/utils"
+import { getTagClassName } from "@/lib/tag-colors"
 
 interface RecipeCardProps {
   recipe: Recipe
@@ -59,10 +60,19 @@ export function RecipeCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground mb-3">
-          <span className="capitalize px-2.5 py-1 bg-sage-100 text-sage-700 rounded-full text-xs font-medium">
+        <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground mb-3">
+          <span className={cn("capitalize", getTagClassName(recipe.category, true))}>
             {recipe.category}
           </span>
+          {recipe.tags && recipe.tags.length > 0 && (
+            <>
+              {recipe.tags.map((tag) => (
+                <span key={tag} className={getTagClassName(tag, false)}>
+                  {tag}
+                </span>
+              ))}
+            </>
+          )}
           <span className="text-xs">{recipe.servings} servings</span>
         </div>
 

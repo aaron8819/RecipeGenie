@@ -26,8 +26,9 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs"
-import { useCreateRecipe, useUpdateRecipe } from "@/hooks/use-recipes"
+import { useCreateRecipe, useUpdateRecipe, useAllTags } from "@/hooks/use-recipes"
 import { parseRecipeText } from "@/lib/recipe-parser"
+import { TagInput } from "@/components/ui/tag-input"
 import type { Recipe, Ingredient } from "@/types/database"
 
 interface RecipeDialogProps {
@@ -51,6 +52,7 @@ export function RecipeDialog({
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
   const [servings, setServings] = useState(4)
+  const [tags, setTags] = useState<string[]>([])
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [instructions, setInstructions] = useState("")
   
@@ -58,12 +60,15 @@ export function RecipeDialog({
   const [importText, setImportText] = useState("")
   const [parseError, setParseError] = useState<string | null>(null)
 
+  const { data: allTags = [] } = useAllTags()
+
   // Reset form when dialog opens/closes or recipe changes
   useEffect(() => {
     if (open && recipe) {
       setName(recipe.name)
       setCategory(recipe.category)
       setServings(recipe.servings)
+      setTags(recipe.tags || [])
       setIngredients(recipe.ingredients || [])
       setInstructions((recipe.instructions || []).join("\n"))
       setMode("manual")
@@ -73,6 +78,7 @@ export function RecipeDialog({
       setName("")
       setCategory(categories[0] || "")
       setServings(4)
+      setTags([])
       setIngredients([{ item: "", amount: null, unit: "" }])
       setInstructions("")
       setMode("manual")
@@ -147,6 +153,7 @@ export function RecipeDialog({
       name: name.trim(),
       category,
       servings,
+      tags,
       ingredients: validIngredients,
       instructions: instructionLines,
     }
@@ -249,6 +256,9 @@ Instructions:
                 setCategory={setCategory}
                 servings={servings}
                 setServings={setServings}
+                tags={tags}
+                setTags={setTags}
+                allTags={allTags}
                 ingredients={ingredients}
                 instructions={instructions}
                 setInstructions={setInstructions}
@@ -269,6 +279,9 @@ Instructions:
             setCategory={setCategory}
             servings={servings}
             setServings={setServings}
+            tags={tags}
+            setTags={setTags}
+            allTags={allTags}
             ingredients={ingredients}
             instructions={instructions}
             setInstructions={setInstructions}
@@ -303,6 +316,9 @@ interface RecipeFormContentProps {
   setCategory: (category: string) => void
   servings: number
   setServings: (servings: number) => void
+  tags: string[]
+  setTags: (tags: string[]) => void
+  allTags: string[]
   ingredients: Ingredient[]
   instructions: string
   setInstructions: (instructions: string) => void
@@ -323,6 +339,9 @@ function RecipeFormContent({
   setCategory,
   servings,
   setServings,
+  tags,
+  setTags,
+  allTags,
   ingredients,
   instructions,
   setInstructions,
@@ -371,6 +390,17 @@ function RecipeFormContent({
             onChange={(e) => setServings(parseInt(e.target.value) || 4)}
           />
         </div>
+      </div>
+
+      {/* Tags */}
+      <div className="space-y-2">
+        <Label htmlFor="tags">Tags</Label>
+        <TagInput
+          value={tags}
+          onChange={setTags}
+          suggestions={allTags}
+          placeholder="Add tags..."
+        />
       </div>
 
       {/* Ingredients */}

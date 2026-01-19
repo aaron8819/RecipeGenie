@@ -251,3 +251,22 @@ For UI changes:
 ---
 
 *Last updated: 2026-01-16 (v2.1.1)*
+
+## Recent Updates (v2.1.1)
+
+### Recipe Text Parser
+- **Import from Text**: Users can now paste recipe text directly into the recipe dialog
+- Supports multiple formats: structured sections, free-form text, or mixed formats
+- Automatically extracts recipe name, servings, ingredients, and instructions
+- Handles Unicode fractions (½, ⅓, ¼, etc.) and converts to decimals
+- Parses ingredient amounts with ranges (e.g., "½–1 cup")
+- Supports parenthetical units (e.g., "1 (28 oz) can crushed tomatoes")
+- Recognizes common section headers: "Ingredients", "Instructions", "Directions", "Method", "Steps"
+- Extracts servings from recipe name (e.g., "Makes 4 servings")
+
+### Signup Trigger Improvements
+- Enhanced error handling in `handle_new_user()` trigger function
+- Explicit `search_path` setting to prevent schema search path issues
+- Default recipe creation failures no longer block user signup
+- Errors are logged as warnings instead of failing the transaction
+- Improved `insert_default_recipes_for_user()` function with better error isolation
