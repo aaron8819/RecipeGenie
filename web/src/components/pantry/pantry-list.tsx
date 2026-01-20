@@ -66,8 +66,8 @@ export function PantryList() {
   const displayKeywords = excludedKeywords || []
   
   // Only show loading on initial load with no cached data
-  const showPantryLoading = pantryLoading && !pantryItems?.length
-  const showKeywordsLoading = keywordsLoading && !excludedKeywords?.length
+  const showPantryLoading = pantryLoading && displayPantryItems.length === 0
+  const showKeywordsLoading = keywordsLoading && displayKeywords.length === 0
 
   // Filter out pending deletions from display
   const displayedPantryItems = displayPantryItems.filter(item => item.item !== pendingPantryDeletion)
