@@ -91,6 +91,8 @@ Stores user-specific configuration and preferences.
 | `history_exclusion_days` | INTEGER | DEFAULT 7 | Number of days to exclude recently made recipes |
 | `week_start_day` | INTEGER | DEFAULT 1 | Day of week that starts the meal plan (1 = Monday) |
 | `category_overrides` | JSONB | DEFAULT '{}' | User-defined category overrides for shopping list items (maps item names to category keys) |
+| `custom_categories` | JSONB | DEFAULT '[]' | User-defined shopping categories: `[{ "id": "uuid", "name": "Category Name", "order": number }]` |
+| `category_order` | JSONB | DEFAULT NULL | Custom order for all categories (array of category keys), null uses default order |
 
 **Example category_overrides JSONB:**
 ```json
@@ -98,6 +100,27 @@ Stores user-specific configuration and preferences.
   "sun dried tomatoes": "pantry",
   "olive oil": "pantry"
 }
+```
+
+**Example custom_categories JSONB:**
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Asian Market",
+    "order": 9
+  },
+  {
+    "id": "660e8400-e29b-41d4-a716-446655440001",
+    "name": "Specialty Store",
+    "order": 10
+  }
+]
+```
+
+**Example category_order JSONB:**
+```json
+["produce", "dairy", "protein", "custom_550e8400-e29b-41d4-a716-446655440000", "pantry", "frozen"]
 ```
 
 ### recipe_history
@@ -292,6 +315,7 @@ The schema has evolved through the following migrations:
 4. **004_merge_steak_into_beef.sql** - Merged 'steak' category into 'beef' category
 5. **005_multi_user_support.sql** - Added full multi-user support with `user_id` columns, updated RLS policies, and default recipes trigger
 6. **006_fix_signup_trigger.sql** - Improved signup trigger error handling with explicit search_path and graceful error handling
+7. **007_custom_categories.sql** - Added `custom_categories` and `category_order` to `user_config` for user-defined shopping categories and custom category ordering
 
 ## Query Examples
 

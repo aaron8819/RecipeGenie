@@ -300,6 +300,8 @@ export function getDefaultConfig() {
     history_exclusion_days: 7,
     week_start_day: 1,
     category_overrides: {} as Record<string, string>,
+    custom_categories: [] as { id: string; name: string; order: number }[],
+    category_order: null as string[] | null,
   }
 }
 

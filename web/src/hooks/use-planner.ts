@@ -158,9 +158,45 @@ export function useUserConfig() {
           history_exclusion_days: 10,
           week_start_day: 1,
           category_overrides: {},
+          custom_categories: [],
+          category_order: null,
         } as UserConfig
       }
       return data as UserConfig
+    },
+  })
+}
+
+/**
+ * Hook to update user config
+ */
+export function useUpdateUserConfig() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async (updates: Partial<UserConfig>) => {
+      if (isGuest) {
+        // For guest mode, just update local storage
+        const current = getDefaultConfig()
+        const updated = { ...current, ...updates }
+        localStorage.setItem("guest-config", JSON.stringify(updated))
+        return updated as unknown as UserConfig
+      }
+
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("user_config")
+        .update(updates)
+        .eq("user_id", user?.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as UserConfig
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([...CONFIG_KEY, isGuest], data)
     },
   })
 }

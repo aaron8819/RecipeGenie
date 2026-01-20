@@ -11,10 +11,11 @@ import { Loader2, ChefHat, UserCircle } from "lucide-react"
 interface AuthFormProps {
   onGuestMode?: () => void
   initialError?: string | null
+  initialMode?: 'signin' | 'signup'
 }
 
-export function AuthForm({ onGuestMode, initialError }: AuthFormProps) {
-  const [isSignUp, setIsSignUp] = useState(false)
+export function AuthForm({ onGuestMode, initialError, initialMode = 'signin' }: AuthFormProps) {
+  const [isSignUp, setIsSignUp] = useState(initialMode === 'signup')
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(initialError || null)

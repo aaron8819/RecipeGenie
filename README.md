@@ -40,6 +40,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
    - `supabase/migrations/004_merge_steak_into_beef.sql`
    - `supabase/migrations/005_multi_user_support.sql`
    - `supabase/migrations/006_fix_signup_trigger.sql`
+   - `supabase/migrations/007_custom_categories.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 
 ### 2. Configure Environment
@@ -159,6 +160,9 @@ After generating a meal plan, the shopping list shows:
 - Check off items as you shop (moves to "Already Have")
 - Add meal plan ingredients to existing lists (merges quantities)
 - Category-based organization with custom category overrides
+- **Custom shopping categories**: Create your own categories (e.g., "Asian Market", "Specialty Store")
+- **Category ordering**: Drag-and-drop reordering to match your store layout
+- **Shopping settings modal**: Manage categories, ordering, and overrides in one place
 - Copy shopping list to clipboard
 
 ## Project Structure

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus, Trash2, FileText, PenTool } from "lucide-react"
+import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs"
 import { useCreateRecipe, useUpdateRecipe, useAllTags } from "@/hooks/use-recipes"
-import { parseRecipeText } from "@/lib/recipe-parser"
+import { parseRecipeText, type ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
 import type { Recipe, Ingredient } from "@/types/database"
 
@@ -59,6 +59,8 @@ export function RecipeDialog({
   // Import state
   const [importText, setImportText] = useState("")
   const [parseError, setParseError] = useState<string | null>(null)
+  const [importStep, setImportStep] = useState<'input' | 'preview'>('input')
+  const [parsedPreview, setParsedPreview] = useState<ParsedRecipe | null>(null)
 
   const { data: allTags = [] } = useAllTags()
 
@@ -74,6 +76,8 @@ export function RecipeDialog({
       setMode("manual")
       setImportText("")
       setParseError(null)
+      setImportStep('input')
+      setParsedPreview(null)
     } else if (open && !recipe) {
       setName("")
       setCategory(categories[0] || "")
@@ -84,6 +88,8 @@ export function RecipeDialog({
       setMode("manual")
       setImportText("")
       setParseError(null)
+      setImportStep('input')
+      setParsedPreview(null)
     }
   }, [open, recipe, categories])
 
@@ -113,23 +119,9 @@ export function RecipeDialog({
 
     try {
       const parsed = parseRecipeText(importText)
-      
-      if (parsed.name) {
-        setName(parsed.name)
-      }
-      if (parsed.servings) {
-        setServings(parsed.servings)
-      }
-      if (parsed.ingredients.length > 0) {
-        setIngredients(parsed.ingredients)
-      }
-      if (parsed.instructions.length > 0) {
-        setInstructions(parsed.instructions.join("\n"))
-      }
-      
+      setParsedPreview(parsed)
       setParseError(null)
-      // Switch to manual mode to show the parsed results
-      setMode("manual")
+      setImportStep('preview')
     } catch (error) {
       setParseError(
         error instanceof Error
@@ -137,6 +129,33 @@ export function RecipeDialog({
           : "Failed to parse recipe. Please check the format and try again."
       )
     }
+  }
+
+  const handleApplyPreview = () => {
+    if (!parsedPreview) return
+
+    if (parsedPreview.name) {
+      setName(parsedPreview.name)
+    }
+    if (parsedPreview.servings) {
+      setServings(parsedPreview.servings)
+    }
+    if (parsedPreview.ingredients.length > 0) {
+      setIngredients(parsedPreview.ingredients)
+    }
+    if (parsedPreview.instructions.length > 0) {
+      setInstructions(parsedPreview.instructions.join("\n"))
+    }
+
+    // Switch to manual mode to allow editing
+    setMode("manual")
+    setImportStep('input')
+    setParsedPreview(null)
+  }
+
+  const handleBackToInput = () => {
+    setImportStep('input')
+    setParsedPreview(null)
   }
 
   const handleSubmit = async () => {
@@ -196,16 +215,18 @@ export function RecipeDialog({
             </TabsList>
 
             <TabsContent value="import" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="import-text">Paste Recipe Text</Label>
-                <Textarea
-                  id="import-text"
-                  value={importText}
-                  onChange={(e) => {
-                    setImportText(e.target.value)
-                    setParseError(null)
-                  }}
-                  placeholder={`Example:
+              {importStep === 'input' ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="import-text">Paste Recipe Text</Label>
+                    <Textarea
+                      id="import-text"
+                      value={importText}
+                      onChange={(e) => {
+                        setImportText(e.target.value)
+                        setParseError(null)
+                      }}
+                      placeholder={`Example:
 Chocolate Chip Cookies
 Makes 24 cookies
 
@@ -226,26 +247,111 @@ Instructions:
 6. Stir in chocolate chips
 7. Drop rounded tablespoons onto baking sheet
 8. Bake for 9-11 minutes`}
-                  rows={12}
-                  className="font-mono text-sm"
-                />
-                {parseError && (
-                  <p className="text-sm text-destructive">{parseError}</p>
-                )}
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>Tips for best results:</p>
-                  <ul className="list-disc list-inside space-y-0.5 ml-2">
-                    <li>Include a recipe name at the top</li>
-                    <li>Use "Ingredients:" header before the ingredient list</li>
-                    <li>Use "Instructions:" or "Directions:" before steps</li>
-                    <li>One ingredient per line</li>
-                    <li>One instruction step per line</li>
-                  </ul>
+                      rows={12}
+                      className="font-mono text-sm"
+                    />
+                    {parseError && (
+                      <p className="text-sm text-destructive">{parseError}</p>
+                    )}
+                    <div className="text-xs text-muted-foreground space-y-1">
+                      <p>Tips for best results:</p>
+                      <ul className="list-disc list-inside space-y-0.5 ml-2">
+                        <li>Include a recipe name at the top</li>
+                        <li>Use &quot;Ingredients:&quot; header before the ingredient list</li>
+                        <li>Use &quot;Instructions:&quot; or &quot;Directions:&quot; before steps</li>
+                        <li>One ingredient per line</li>
+                        <li>One instruction step per line</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <Button onClick={handleParseImport} className="w-full">
+                    Parse & Preview Recipe
+                  </Button>
+                </>
+              ) : (
+                /* Preview State */
+                <div className="space-y-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleBackToInput}
+                    className="mb-2"
+                  >
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to Edit
+                  </Button>
+
+                  {/* Warnings */}
+                  {parsedPreview?.warnings && parsedPreview.warnings.length > 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-amber-800 text-sm font-medium mb-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Parsing Notes
+                      </div>
+                      <ul className="text-sm text-amber-700 space-y-1">
+                        {parsedPreview.warnings.map((warning, i) => (
+                          <li key={i}>• {warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Preview Card */}
+                  <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Name</div>
+                      <div className="font-medium">{parsedPreview?.name || "—"}</div>
+                    </div>
+
+                    {parsedPreview?.servings && (
+                      <div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Servings</div>
+                        <div>{parsedPreview.servings}</div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                        Ingredients ({parsedPreview?.ingredients?.length || 0})
+                      </div>
+                      {parsedPreview?.ingredients && parsedPreview.ingredients.length > 0 ? (
+                        <ul className="text-sm space-y-1 max-h-32 overflow-y-auto">
+                          {parsedPreview.ingredients.map((ing, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-muted-foreground">
+                                {ing.amount ? `${ing.amount} ${ing.unit || ""}`.trim() : "—"}
+                              </span>
+                              <span>{ing.item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-sm text-muted-foreground italic">No ingredients found</div>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+                        Instructions ({parsedPreview?.instructions?.length || 0} steps)
+                      </div>
+                      {parsedPreview?.instructions && parsedPreview.instructions.length > 0 ? (
+                        <ol className="text-sm space-y-1 max-h-32 overflow-y-auto list-decimal list-inside">
+                          {parsedPreview.instructions.map((step, i) => (
+                            <li key={i}>{step}</li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <div className="text-sm text-muted-foreground italic">No instructions found</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button onClick={handleApplyPreview} className="w-full">
+                    <Check className="h-4 w-4 mr-2" />
+                    Apply & Edit Recipe
+                  </Button>
                 </div>
-              </div>
-              <Button onClick={handleParseImport} className="w-full">
-                Parse & Import Recipe
-              </Button>
+              )}
             </TabsContent>
 
             <TabsContent value="manual" className="mt-4">

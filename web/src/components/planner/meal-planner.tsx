@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   ChevronLeft,
   ChevronRight,
@@ -12,11 +12,14 @@ import {
   ShoppingCart,
   Trash2,
   Heart,
+  Loader2,
+  Plus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
+import { AddRecipeToPlanModal } from "./add-recipe-to-plan-modal"
 import {
   useWeeklyPlan,
   useWeeklyPlanRecipes,
@@ -25,12 +28,16 @@ import {
   useSwapRecipe,
   useMarkRecipeMade,
   useRemoveRecipeFromPlan,
+  useAddRecipeToPlan,
   useRecipeHistory,
   getWeekStartDate,
   navigateWeek,
 } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
-import { useCategories, useToggleFavorite } from "@/hooks/use-recipes"
+import { useUndoToast } from "@/hooks/use-undo-toast"
+import { useCategories, useToggleFavorite, useRecipes } from "@/hooks/use-recipes"
+import { EmptyState } from "@/components/ui/empty-state"
+import { CalendarDays, BookOpen } from "lucide-react"
 import { getTagClassName } from "@/lib/tag-colors"
 import { cn } from "@/lib/utils"
 import type { Recipe, RecipeHistory } from "@/types/database"
@@ -87,6 +94,8 @@ export function MealPlanner() {
     if (typeof window === "undefined") return false
     return localStorage.getItem(MEALS_SECTION_COLLAPSED_KEY) === "true"
   })
+  const [pendingRemovalRecipeId, setPendingRemovalRecipeId] = useState<string | null>(null)
+  const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
 
   // Persist collapsed state to localStorage
   useEffect(() => {
@@ -98,13 +107,17 @@ export function MealPlanner() {
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecipeHistory()
   const { data: allCategories } = useCategories()
+  const { data: allRecipes } = useRecipes({})
+  const hasAnyRecipes = (allRecipes?.length ?? 0) > 0
 
   const generatePlan = useGenerateMealPlan()
   const swapRecipe = useSwapRecipe()
   const markMade = useMarkRecipeMade()
   const removeFromPlan = useRemoveRecipeFromPlan()
+  const addRecipeToPlan = useAddRecipeToPlan()
   const addToShoppingList = useAddToShoppingList()
   const toggleFavorite = useToggleFavorite()
+  const undoToast = useUndoToast()
 
   // Build a map of recipe_id -> last made date
   const lastMadeMap = getLastMadeMap(history)
@@ -166,10 +179,20 @@ export function MealPlanner() {
     }
   }
 
-  const handleRemoveFromPlan = async (recipeId: string) => {
+  const handleRemoveFromPlan = useCallback((recipe: Recipe) => {
     if (!currentWeekDate) return
-    await removeFromPlan.mutateAsync({ weekDate: currentWeekDate, recipeId })
-  }
+    setPendingRemovalRecipeId(recipe.id)
+    undoToast.show({
+      message: `"${recipe.name}" removed from plan`,
+      onUndo: () => {
+        setPendingRemovalRecipeId(null)
+      },
+      onExpire: () => {
+        removeFromPlan.mutate({ weekDate: currentWeekDate, recipeId: recipe.id })
+        setPendingRemovalRecipeId(null)
+      },
+    })
+  }, [currentWeekDate, undoToast, removeFromPlan])
 
   const handleAddRecipeToCart = async (recipeId: string) => {
     setAddingToCartRecipeId(recipeId)
@@ -192,6 +215,9 @@ export function MealPlanner() {
 
   const categories = allCategories || config?.categories || []
   const totalMeals = Object.values(selection).reduce((sum, n) => sum + n, 0)
+
+  // Filter out pending removal recipes
+  const displayedRecipes = recipes?.filter(r => r.id !== pendingRemovalRecipeId)
 
   // Check if displayed week is the current week
   const currentWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
@@ -299,16 +325,33 @@ export function MealPlanner() {
             <span className="text-sm text-muted-foreground">
               Total: <span className="font-semibold text-foreground">{totalMeals} meals</span>
             </span>
-            <Button
-              onClick={handleGeneratePlan}
-              disabled={generatePlan.isPending || totalMeals === 0}
-              size="lg"
-            >
-              <RefreshCw
-                className={`h-5 w-5 mr-2 ${generatePlan.isPending ? "animate-spin" : ""}`}
-              />
-              Generate Meal Plan
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsAddRecipeModalOpen(true)}
+                disabled={!hasAnyRecipes}
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Add Recipe
+              </Button>
+              <Button
+                onClick={handleGeneratePlan}
+                disabled={generatePlan.isPending || totalMeals === 0}
+                size="lg"
+              >
+                {generatePlan.isPending ? (
+                  <>
+                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-5 w-5 mr-2" />
+                    Generate Meal Plan
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>}
       </Card>
@@ -317,32 +360,49 @@ export function MealPlanner() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold">
-            This Week&apos;s Meals ({recipes?.length || 0} recipes)
+            This Week&apos;s Meals ({displayedRecipes?.length || 0} recipes)
           </h3>
-          {recipes && recipes.length > 0 && (
+          {displayedRecipes && displayedRecipes.length > 0 && (
             <Button
               onClick={handleGenerateShoppingList}
               disabled={addToShoppingList.isPending}
               variant="outline"
               size="default"
             >
-              <ShoppingCart
-                className={`h-4 w-4 mr-2 ${addToShoppingList.isPending ? "animate-pulse" : ""}`}
-              />
-              Add to Shopping List
+              {addToShoppingList.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Add to Shopping List
+                </>
+              )}
             </Button>
           )}
         </div>
 
         {planLoading ? (
           <p className="text-muted-foreground text-center py-8">Loading...</p>
-        ) : !recipes || recipes.length === 0 ? (
-          <p className="text-muted-foreground text-center py-8">
-            No meal plan for this week. Generate one above!
-          </p>
+        ) : !displayedRecipes || displayedRecipes.length === 0 ? (
+          !hasAnyRecipes ? (
+            <EmptyState
+              icon={BookOpen}
+              title="Add recipes first"
+              description="You need recipes before you can plan your meals. Start by adding some recipes to your collection."
+            />
+          ) : (
+            <EmptyState
+              icon={CalendarDays}
+              title="Plan your week"
+              description="Select how many meals you want for each category, then generate a meal plan."
+            />
+          )
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {recipes.map((recipe, index) => {
+            {displayedRecipes.map((recipe, index) => {
               const lastMade = lastMadeMap.get(recipe.id)
               const isManuallyMarked = weeklyPlan?.made_recipe_ids?.includes(recipe.id) || false
               const isMadeInWeek = lastMade ? isDateInWeekRange(lastMade, currentWeekDate) : false
@@ -418,10 +478,19 @@ export function MealPlanner() {
                           e.stopPropagation()
                           handleSwapRecipe(recipe)
                         }}
-                        disabled={swapRecipe.isPending}
+                        disabled={isSwapping || swapRecipe.isPending}
                       >
-                        <Shuffle className="h-4 w-4 mr-1.5" />
-                        Swap
+                        {isSwapping ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                            Swapping...
+                          </>
+                        ) : (
+                          <>
+                            <Shuffle className="h-4 w-4 mr-1.5" />
+                            Swap
+                          </>
+                        )}
                       </Button>
                       <Button
                         variant={isMadeForWeek ? "default" : "outline"}
@@ -451,7 +520,11 @@ export function MealPlanner() {
                         disabled={isAddingToCart}
                         title="Add to shopping list"
                       >
-                        <ShoppingCart className={`h-4 w-4 ${isAddingToCart ? "animate-pulse" : ""}`} />
+                        {isAddingToCart ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <ShoppingCart className="h-4 w-4" />
+                        )}
                       </Button>
                       <Button
                         variant="outline"
@@ -459,9 +532,8 @@ export function MealPlanner() {
                         className="h-10 w-10 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleRemoveFromPlan(recipe.id)
+                          handleRemoveFromPlan(recipe)
                         }}
-                        disabled={removeFromPlan.isPending}
                         title="Remove from plan"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -492,6 +564,13 @@ export function MealPlanner() {
         onOpenChange={(open) => !open && setEditingRecipe(null)}
         recipe={editingRecipe || undefined}
         categories={allCategories || []}
+      />
+
+      {/* Add Recipe to Plan Modal */}
+      <AddRecipeToPlanModal
+        open={isAddRecipeModalOpen}
+        onOpenChange={setIsAddRecipeModalOpen}
+        weekDate={currentWeekDate}
       />
     </div>
   )

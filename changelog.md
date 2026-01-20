@@ -4,6 +4,52 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.2.0] - 2026-01-16
+
+**Summary:** Custom shopping categories, category ordering, and enhanced shopping list settings
+
+### Added
+
+- **Custom Shopping Categories**: 
+  - Create user-defined shopping categories (e.g., "Asian Market", "Specialty Store")
+  - Up to 10 custom categories per user
+  - Edit and delete custom categories with undo support
+  - Custom categories appear alongside default categories in shopping lists
+  - Items can be assigned to custom categories via drag-and-drop
+
+- **Category Ordering**: 
+  - Drag-and-drop reordering of all shopping categories (default + custom)
+  - Reorder categories to match your store layout for efficient shopping
+  - Reset to default order with one click
+  - Custom order persists across shopping list generations
+
+- **Shopping Settings Modal**: 
+  - New settings dialog accessible from shopping list view
+  - Three-tab interface:
+    - **Order Tab**: Drag-and-drop category reordering with visual feedback
+    - **Custom Tab**: Create, edit, and delete custom categories
+    - **Overrides Tab**: View and manage all category overrides (item → category mappings)
+  - Inline editing for custom category names
+  - Undo support for category deletions
+
+### Changed
+
+- Shopping list categories now respect custom ordering when `category_order` is set
+- Category overrides management moved to dedicated settings modal
+- Custom categories are visually distinguished with "Custom" badge in shopping list
+
+### Technical Notes
+
+- Migration `007_custom_categories.sql` adds `custom_categories` and `category_order` columns to `user_config` table
+- `custom_categories` stored as JSONB array: `[{ "id": "uuid", "name": "Category Name", "order": number }]`
+- `category_order` stored as JSONB array of category keys: `["produce", "dairy", "custom_abc123", ...]`
+- Custom category keys prefixed with `custom_` to avoid collisions with default categories
+- Shopping list UI uses `getAllShoppingCategories()` to merge default and custom categories
+- Settings modal uses `@dnd-kit` for drag-and-drop reordering
+- Category deletion moves affected items to "misc" category automatically
+
+---
+
 ## [2.1.1] - 2026-01-16
 
 **Summary:** Improved signup trigger error handling, recipe parser enhancements, and robustness improvements

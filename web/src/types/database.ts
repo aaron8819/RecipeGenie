@@ -76,6 +76,8 @@ export interface Database {
           history_exclusion_days: number
           week_start_day: number
           category_overrides: Record<string, string>
+          custom_categories: CustomShoppingCategory[]
+          category_order: string[] | null
         }
         Insert: {
           user_id?: string // Optional - will be set by RLS/trigger
@@ -85,6 +87,8 @@ export interface Database {
           history_exclusion_days?: number
           week_start_day?: number
           category_overrides?: Record<string, string>
+          custom_categories?: CustomShoppingCategory[]
+          category_order?: string[] | null
         }
         Update: {
           user_id?: string
@@ -94,6 +98,8 @@ export interface Database {
           history_exclusion_days?: number
           week_start_day?: number
           category_overrides?: Record<string, string>
+          custom_categories?: CustomShoppingCategory[]
+          category_order?: string[] | null
         }
       }
       recipe_history: {
@@ -191,6 +197,12 @@ export interface Database {
 }
 
 // Application types
+export interface CustomShoppingCategory {
+  id: string
+  name: string
+  order: number
+}
+
 export interface Ingredient {
   item: string
   amount: number | null

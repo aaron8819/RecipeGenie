@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createBrowserClient } from "@supabase/ssr"
-import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/database"
+import type { ShoppingList, ShoppingItem, Recipe, PantryItem, UserConfig } from "@/types/database"
 import { generateShoppingList, ensureCategoryInfo } from "@/lib/shopping-list"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
@@ -839,6 +839,79 @@ export function useUpdateItemCategory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+    },
+  })
+}
+
+/**
+ * Hook to fetch user config for shopping settings
+ */
+export function useShoppingConfig() {
+  const { isGuest } = useAuthContext()
+  const queryClient = useQueryClient()
+
+  return useQuery({
+    queryKey: [...CONFIG_KEY, isGuest],
+    queryFn: async () => {
+      if (isGuest) {
+        return getDefaultConfig() as UserConfig
+      }
+
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("user_config")
+        .select("*")
+        .maybeSingle()
+
+      if (error) throw error
+      return data as UserConfig | null
+    },
+  })
+}
+
+/**
+ * Hook to update user config for shopping settings
+ */
+export function useUpdateShoppingConfig() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async (updates: Partial<UserConfig>) => {
+      if (isGuest) {
+        // Guest mode doesn't persist config changes
+        return updates
+      }
+
+      const supabase = getSupabase()
+
+      // Check if config exists
+      const { data: existingConfig } = await supabase
+        .from("user_config")
+        .select("user_id")
+        .eq("user_id", user?.id)
+        .maybeSingle()
+
+      if (existingConfig) {
+        const { error } = await supabase
+          .from("user_config")
+          .update(updates)
+          .eq("user_id", user?.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from("user_config")
+          .insert({
+            user_id: user?.id,
+            ...updates,
+          })
+        if (error) throw error
+      }
+
+      return updates
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CONFIG_KEY })
     },
   })
 }

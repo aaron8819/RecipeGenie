@@ -1,6 +1,6 @@
 "use client"
 
-import { Heart, Trash2, Clock, CalendarPlus } from "lucide-react"
+import { Heart, Trash2, Clock, CalendarPlus, Loader2 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import type { Recipe } from "@/types/database"
@@ -15,6 +15,7 @@ interface RecipeCardProps {
   onClick?: (recipe: Recipe) => void
   lastMade?: string | null
   timesMade?: number
+  isAddingToPlan?: boolean
 }
 
 export function RecipeCard({
@@ -25,6 +26,7 @@ export function RecipeCard({
   onClick,
   lastMade,
   timesMade = 0,
+  isAddingToPlan = false,
 }: RecipeCardProps) {
   return (
     <Card
@@ -95,9 +97,14 @@ export function RecipeCard({
               e.stopPropagation()
               onAddToPlan?.(recipe)
             }}
+            disabled={isAddingToPlan}
             title="Add to Meal Plan"
           >
-            <CalendarPlus className="h-3.5 w-3.5" />
+            {isAddingToPlan ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CalendarPlus className="h-3.5 w-3.5" />
+            )}
           </Button>
           <Button
             variant="outline"

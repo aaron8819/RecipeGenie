@@ -7,7 +7,8 @@ import { PantryList } from "@/components/pantry"
 import { MealPlanner } from "@/components/planner"
 import { ShoppingListView } from "@/components/shopping"
 import { AuthForm } from "@/components/auth/auth-form"
-import { Header, BottomNav } from "@/components/layout"
+import { Header, BottomNav, FirstRunOnboarding } from "@/components/layout"
+import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
 import { createBrowserClient } from "@supabase/ssr"
 
@@ -30,17 +31,21 @@ function getInitialTab(): string {
 export default function Home() {
   const [activeTab, setActiveTab] = useState(getInitialTab)
   const [authError, setAuthError] = useState<string | null>(null)
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
 
   // Get auth context first so we can use isAuthenticated in useEffect
-  const { 
-    user, 
-    loading, 
-    signOut, 
-    isAuthenticated, 
-    isGuest, 
+  const {
+    user,
+    loading,
+    signOut,
+    isAuthenticated,
+    isGuest,
     enterGuestMode,
-    exitGuestMode 
+    exitGuestMode
   } = useAuthContext()
+
+  // First-run onboarding (only for authenticated users, not guests)
+  const { showOnboarding, completeOnboarding } = useFirstRunOnboarding()
 
   // Persist active tab to localStorage
   useEffect(() => {
@@ -133,9 +138,15 @@ export default function Home() {
   if (!isAuthenticated && !isGuest) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center p-4">
-        <AuthForm onGuestMode={enterGuestMode} initialError={authError} />
+        <AuthForm onGuestMode={enterGuestMode} initialError={authError} initialMode={authMode} />
       </main>
     )
+  }
+
+  // Handle guest wanting to sign up
+  const handleSignUpClick = () => {
+    setAuthMode('signup')
+    exitGuestMode()
   }
 
   // Handle sign out - also handles guest mode exit
@@ -150,10 +161,11 @@ export default function Home() {
   // Show main app if authenticated or in guest mode
   return (
     <main className="min-h-screen bg-background pb-20">
-      <Header 
-        userEmail={isGuest ? "Guest" : user?.email} 
+      <Header
+        userEmail={isGuest ? "Guest" : user?.email}
         onSignOut={handleSignOut}
         isGuest={isGuest}
+        onSignUpClick={handleSignUpClick}
       />
 
       <div className="container mx-auto px-4 py-4">
@@ -164,6 +176,14 @@ export default function Home() {
       </div>
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* First-run onboarding for authenticated users only */}
+      {isAuthenticated && !isGuest && (
+        <FirstRunOnboarding
+          open={showOnboarding}
+          onComplete={completeOnboarding}
+        />
+      )}
     </main>
   )
 }

@@ -4,6 +4,8 @@
  * Ported from app.py:47-146
  */
 
+import type { CustomShoppingCategory } from "@/types/database"
+
 export interface ShoppingCategory {
   order: number
   name: string
@@ -308,4 +310,104 @@ export function getShoppingCategories(): Array<{
       order: data.order,
     }))
     .sort((a, b) => a.order - b.order)
+}
+
+/**
+ * Get all shopping categories including custom ones, with optional custom ordering
+ */
+export function getAllShoppingCategories(
+  customCategories?: CustomShoppingCategory[] | null,
+  categoryOrder?: string[] | null
+): Array<{
+  key: string
+  name: string
+  order: number
+  isCustom: boolean
+}> {
+  // Get default categories
+  const defaultCategories = Object.entries(SHOPPING_CATEGORIES).map(([key, data]) => ({
+    key,
+    name: data.name,
+    order: data.order,
+    isCustom: false,
+  }))
+
+  // Add custom categories (with keys prefixed to avoid collisions)
+  const customCats = (customCategories || []).map((cat) => ({
+    key: `custom_${cat.id}`,
+    name: cat.name,
+    order: cat.order,
+    isCustom: true,
+  }))
+
+  const allCategories = [...defaultCategories, ...customCats]
+
+  // Apply custom ordering if provided
+  if (categoryOrder && categoryOrder.length > 0) {
+    // Create a map for quick lookup of order by key
+    const orderMap = new Map(categoryOrder.map((key, index) => [key, index]))
+
+    // Sort by custom order, categories not in the order list go to the end
+    allCategories.sort((a, b) => {
+      const orderA = orderMap.has(a.key) ? orderMap.get(a.key)! : 999 + a.order
+      const orderB = orderMap.has(b.key) ? orderMap.get(b.key)! : 999 + b.order
+      return orderA - orderB
+    })
+  } else {
+    // Default sorting by order property
+    allCategories.sort((a, b) => a.order - b.order)
+  }
+
+  return allCategories
+}
+
+/**
+ * Get category info by key (supports custom categories)
+ */
+export function getCategoryByKey(
+  key: string,
+  customCategories?: CustomShoppingCategory[] | null
+): { name: string; order: number; isCustom: boolean } | null {
+  // Check if it's a built-in category
+  if (key in SHOPPING_CATEGORIES) {
+    return {
+      name: SHOPPING_CATEGORIES[key].name,
+      order: SHOPPING_CATEGORIES[key].order,
+      isCustom: false,
+    }
+  }
+
+  // Check if it's a custom category (prefixed with custom_)
+  if (key.startsWith("custom_") && customCategories) {
+    const customId = key.replace("custom_", "")
+    const customCat = customCategories.find((c) => c.id === customId)
+    if (customCat) {
+      return {
+        name: customCat.name,
+        order: customCat.order,
+        isCustom: true,
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Generate a unique ID for custom categories
+ */
+export function generateCategoryId(): string {
+  return crypto.randomUUID()
+}
+
+/**
+ * Get the next available order number for a new custom category
+ */
+export function getNextCategoryOrder(customCategories?: CustomShoppingCategory[] | null): number {
+  const defaultMax = Math.max(...Object.values(SHOPPING_CATEGORIES).map((c) => c.order))
+  if (!customCategories || customCategories.length === 0) {
+    return defaultMax + 1
+  }
+  const customMax = Math.max(...customCategories.map((c) => c.order))
+  return Math.max(defaultMax, customMax) + 1
 }

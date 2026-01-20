@@ -24,6 +24,8 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - Guest mode: users can try the app without signing up (data stored in browser session only)
 - Shopping lists support drag-and-drop reordering and manual item addition
 - Category overrides allow custom categorization of shopping list items
+- Custom shopping categories: users can create their own categories (e.g., "Asian Market", "Specialty Store")
+- Category ordering: drag-and-drop reordering of categories to match store layout
 
 ---
 
@@ -115,7 +117,7 @@ One-time import of legacy `data/*.json` files into Supabase. Uses service role k
 |-------|--------|---------|
 | `recipes` | `id, user_id, name, category, servings, ingredients (JSONB), instructions, favorite, created_at, updated_at` | Recipe collection |
 | `pantry_items` | `user_id, item (PK), created_at` | Items user has on hand |
-| `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day` | User preferences |
+| `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, category_overrides, custom_categories[], category_order[]` | User preferences |
 | `recipe_history` | `id, user_id, recipe_id (FK), date_made` | When recipes were cooked |
 | `weekly_plans` | `user_id, week_date (PK), recipe_ids[], scale, generated_at` | Saved plans keyed by week start |
 | `shopping_list` | `user_id (PK), items[], already_have[], excluded[], source_recipes[], scale, total_servings, custom_order, generated_at` | Current shopping list state |
@@ -250,9 +252,19 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-16 (v2.1.1)*
+*Last updated: 2026-01-16 (v2.2.0)*
 
-## Recent Updates (v2.1.1)
+## Recent Updates (v2.2.0)
+
+### Custom Shopping Categories & Category Ordering
+- **Custom Categories**: Create user-defined shopping categories (e.g., "Asian Market", "Specialty Store")
+- **Category Ordering**: Drag-and-drop reordering of categories to match your store layout
+- **Shopping Settings Modal**: New three-tab settings dialog for managing categories, ordering, and overrides
+- Custom categories appear alongside default categories in shopping lists
+- Up to 10 custom categories per user
+- Inline editing and undo support for category management
+
+## Previous Updates (v2.1.1)
 
 ### Recipe Text Parser
 - **Import from Text**: Users can now paste recipe text directly into the recipe dialog

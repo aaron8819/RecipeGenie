@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { Plus, X, Package, Ban } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/empty-state"
 import {
   usePantryItems,
   useAddPantryItem,
@@ -13,10 +14,13 @@ import {
   useAddExcludedKeyword,
   useRemoveExcludedKeyword,
 } from "@/hooks/use-pantry"
+import { useUndoToast } from "@/hooks/use-undo-toast"
 
 export function PantryList() {
   const [newItem, setNewItem] = useState("")
   const [newKeyword, setNewKeyword] = useState("")
+  const [pendingPantryDeletion, setPendingPantryDeletion] = useState<string | null>(null)
+  const [pendingKeywordDeletion, setPendingKeywordDeletion] = useState<string | null>(null)
 
   const { data: pantryItems, isLoading: pantryLoading } = usePantryItems()
   const { data: excludedKeywords, isLoading: keywordsLoading } = useExcludedKeywords()
@@ -25,6 +29,41 @@ export function PantryList() {
   const removePantryItem = useRemovePantryItem()
   const addKeyword = useAddExcludedKeyword()
   const removeKeyword = useRemoveExcludedKeyword()
+  const undoToast = useUndoToast()
+
+  // Handle pantry item deletion with undo
+  const handleRemovePantryItem = useCallback((item: string) => {
+    setPendingPantryDeletion(item)
+    undoToast.show({
+      message: `"${item}" removed from pantry`,
+      onUndo: () => {
+        setPendingPantryDeletion(null)
+      },
+      onExpire: () => {
+        removePantryItem.mutate(item)
+        setPendingPantryDeletion(null)
+      },
+    })
+  }, [undoToast, removePantryItem])
+
+  // Handle keyword deletion with undo
+  const handleRemoveKeyword = useCallback((keyword: string) => {
+    setPendingKeywordDeletion(keyword)
+    undoToast.show({
+      message: `"${keyword}" removed from excluded keywords`,
+      onUndo: () => {
+        setPendingKeywordDeletion(null)
+      },
+      onExpire: () => {
+        removeKeyword.mutate(keyword)
+        setPendingKeywordDeletion(null)
+      },
+    })
+  }, [undoToast, removeKeyword])
+
+  // Filter out pending deletions from display
+  const displayedPantryItems = pantryItems?.filter(item => item.item !== pendingPantryDeletion)
+  const displayedKeywords = excludedKeywords?.filter((kw: string) => kw !== pendingKeywordDeletion)
 
   const handleAddPantryItem = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -77,13 +116,13 @@ export function PantryList() {
 
           {pantryLoading ? (
             <p className="text-muted-foreground text-center py-4">Loading...</p>
-          ) : pantryItems?.length === 0 ? (
+          ) : displayedPantryItems?.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No pantry items yet
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {pantryItems?.map((item, index) => (
+              {displayedPantryItems?.map((item, index) => (
                 <div
                   key={item.item}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-sage-200"
@@ -91,9 +130,8 @@ export function PantryList() {
                 >
                   <span>{item.item}</span>
                   <button
-                    onClick={() => removePantryItem.mutate(item.item)}
+                    onClick={() => handleRemovePantryItem(item.item)}
                     className="hover:text-destructive transition-colors"
-                    disabled={removePantryItem.isPending}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -129,13 +167,13 @@ export function PantryList() {
 
           {keywordsLoading ? (
             <p className="text-muted-foreground text-center py-4">Loading...</p>
-          ) : excludedKeywords?.length === 0 ? (
+          ) : displayedKeywords?.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No excluded keywords
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {excludedKeywords?.map((keyword: string, index: number) => (
+              {displayedKeywords?.map((keyword: string, index: number) => (
                 <div
                   key={keyword}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-terracotta-200"
@@ -143,9 +181,8 @@ export function PantryList() {
                 >
                   <span>{keyword}</span>
                   <button
-                    onClick={() => removeKeyword.mutate(keyword)}
+                    onClick={() => handleRemoveKeyword(keyword)}
                     className="hover:text-terracotta-900 transition-colors"
-                    disabled={removeKeyword.isPending}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

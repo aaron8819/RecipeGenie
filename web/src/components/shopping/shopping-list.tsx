@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { Plus, Trash2, Package, Ban, Check, Copy, GripVertical, X } from "lucide-react"
+import { useState, useMemo, useCallback } from "react"
+import { Plus, Trash2, Package, Ban, Check, Copy, GripVertical, X, Settings } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -13,6 +13,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
+  useDndMonitor,
 } from "@dnd-kit/core"
 import {
   SortableContext,
@@ -36,10 +37,16 @@ import {
   useReorderShoppingList,
   useSaveCategoryOverride,
   useUpdateItemCategory,
+  useShoppingConfig,
+  useUpdateShoppingConfig,
 } from "@/hooks/use-shopping"
-import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
+import { SHOPPING_CATEGORIES, getAllShoppingCategories, getCategoryByKey } from "@/lib/shopping-categories"
+import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { ShoppingItem } from "@/types/database"
 import { toFraction } from "@/lib/utils"
+import { useUndoToast } from "@/hooks/use-undo-toast"
+import { EmptyState } from "@/components/ui/empty-state"
+import { ShoppingCart } from "lucide-react"
 
 // Color palette for recipe source tags (excluding grey which is reserved for Manual)
 const RECIPE_COLORS = [
@@ -327,8 +334,15 @@ function DragOverlayItem({
 export function ShoppingListView() {
   const [newItem, setNewItem] = useState("")
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
+  const [pendingItemDeletion, setPendingItemDeletion] = useState<string | null>(null)
+  const [pendingRecipeDeletion, setPendingRecipeDeletion] = useState<string | null>(null)
+  const [pendingClearList, setPendingClearList] = useState(false)
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
 
   const { data: shoppingList, isLoading } = useShoppingList()
+  const { data: config } = useShoppingConfig()
+  const updateConfig = useUpdateShoppingConfig()
 
   const addItem = useAddShoppingItem()
   const removeItem = useRemoveShoppingItem()
@@ -340,6 +354,52 @@ export function ShoppingListView() {
   const reorderList = useReorderShoppingList()
   const saveCategoryOverride = useSaveCategoryOverride()
   const updateItemCategory = useUpdateItemCategory()
+  const undoToast = useUndoToast()
+
+  // Handle item removal with undo
+  const handleRemoveItem = useCallback((itemName: string) => {
+    setPendingItemDeletion(itemName)
+    undoToast.show({
+      message: `"${itemName}" removed from list`,
+      onUndo: () => {
+        setPendingItemDeletion(null)
+      },
+      onExpire: () => {
+        removeItem.mutate(itemName)
+        setPendingItemDeletion(null)
+      },
+    })
+  }, [undoToast, removeItem])
+
+  // Handle recipe items removal with undo
+  const handleRemoveRecipeItems = useCallback((recipeName: string) => {
+    setPendingRecipeDeletion(recipeName)
+    undoToast.show({
+      message: `Items from "${recipeName}" removed`,
+      onUndo: () => {
+        setPendingRecipeDeletion(null)
+      },
+      onExpire: () => {
+        removeRecipeItems.mutate(recipeName)
+        setPendingRecipeDeletion(null)
+      },
+    })
+  }, [undoToast, removeRecipeItems])
+
+  // Handle clear list with undo
+  const handleClearListWithUndo = useCallback(() => {
+    setPendingClearList(true)
+    undoToast.show({
+      message: "Shopping list cleared",
+      onUndo: () => {
+        setPendingClearList(false)
+      },
+      onExpire: () => {
+        clearList.mutate()
+        setPendingClearList(false)
+      },
+    })
+  }, [undoToast, clearList])
 
   // Set up drag sensors
   const sensors = useSensors(
@@ -353,10 +413,32 @@ export function ShoppingListView() {
     })
   )
 
+  // Filter items for pending deletions
+  const filteredItems = useMemo(() => {
+    if (pendingClearList) return []
+    let items = shoppingList?.items || []
+
+    // Filter out single pending item deletion
+    if (pendingItemDeletion) {
+      items = items.filter(item => item.item !== pendingItemDeletion)
+    }
+
+    // Filter out items from pending recipe deletion
+    if (pendingRecipeDeletion) {
+      items = items.filter(item => {
+        if (!item.sources) return true
+        // Remove if all sources are from the pending recipe
+        const nonPendingSources = item.sources.filter(s => s.recipeName !== pendingRecipeDeletion)
+        return nonPendingSources.length > 0 || item.sources.length === 0
+      })
+    }
+
+    return items
+  }, [shoppingList?.items, pendingItemDeletion, pendingRecipeDeletion, pendingClearList])
+
   // Group items by category
   const groupedItems = useMemo(() => {
-    const items = shoppingList?.items || []
-    return items.reduce(
+    return filteredItems.reduce(
       (acc, item) => {
         const category = item.categoryKey || "misc"
         if (!acc[category]) acc[category] = []
@@ -365,31 +447,40 @@ export function ShoppingListView() {
       },
       {} as Record<string, ShoppingItem[]>
     )
-  }, [shoppingList?.items])
+  }, [filteredItems])
+
+  // Get ordered categories (with custom categories and custom ordering)
+  const orderedCategories = useMemo(() => {
+    return getAllShoppingCategories(
+      config?.custom_categories || null,
+      config?.category_order || null
+    )
+  }, [config?.custom_categories, config?.category_order])
 
   // Create a flat list of all item IDs for the sortable context
   const allItemIds = useMemo(() => {
-    return (shoppingList?.items || []).map((item) => item.item)
-  }, [shoppingList?.items])
+    return filteredItems.map((item) => item.item)
+  }, [filteredItems])
 
-  // Get unique recipe names from all items (excluding "Manual")
+  // Get unique recipe names from all items (excluding "Manual" and pending deletions)
   const uniqueRecipes = useMemo(() => {
+    if (pendingClearList) return []
     const items = shoppingList?.items || []
     const alreadyHave = shoppingList?.already_have || []
     const allItems = [...items, ...alreadyHave]
-    
+
     const recipeSet = new Set<string>()
     for (const item of allItems) {
       if (item.sources) {
         for (const source of item.sources) {
-          if (source.recipeName !== "Manual") {
+          if (source.recipeName !== "Manual" && source.recipeName !== pendingRecipeDeletion) {
             recipeSet.add(source.recipeName)
           }
         }
       }
     }
     return Array.from(recipeSet).sort()
-  }, [shoppingList?.items, shoppingList?.already_have])
+  }, [shoppingList?.items, shoppingList?.already_have, pendingRecipeDeletion, pendingClearList])
 
   // Create a color mapping that assigns unique colors sequentially to recipes
   const recipeColorMap = useMemo(() => {
@@ -428,23 +519,16 @@ export function ShoppingListView() {
     }
   }
 
-  const handleClearList = async () => {
-    if (confirm("Clear the entire shopping list?")) {
-      await clearList.mutateAsync()
-    }
-  }
 
   const handleCopyList = async () => {
     if (!shoppingList?.items?.length) return
 
     // Format the list as plain text grouped by category
     const lines: string[] = []
-    
-    Object.entries(SHOPPING_CATEGORIES)
-      .sort(([, a], [, b]) => a.order - b.order)
-      .forEach(([categoryKey, categoryData]) => {
+
+    orderedCategories.forEach((categoryData) => {
         const items = (shoppingList.items || []).filter(
-          (item) => (item.categoryKey || "misc") === categoryKey
+          (item) => (item.categoryKey || "misc") === categoryData.key
         )
         if (items.length === 0) return
 
@@ -459,7 +543,7 @@ export function ShoppingListView() {
       })
 
     const text = lines.join("\n").trim()
-    
+
     try {
       await navigator.clipboard.writeText(text)
     } catch (error) {
@@ -475,9 +559,22 @@ export function ShoppingListView() {
     }
   }
 
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event
+    if (!over || !shoppingList?.items) {
+      setDragOverCategory(null)
+      return
+    }
+    const overItem = shoppingList.items.find((i) => i.item === over.id)
+    if (overItem) {
+      setDragOverCategory(overItem.categoryKey || null)
+    }
+  }
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
     setActiveItem(null)
+    setDragOverCategory(null)
 
     if (!over || active.id === over.id || !shoppingList?.items) return
 
@@ -487,31 +584,34 @@ export function ShoppingListView() {
 
     if (activeIndex === -1 || overIndex === -1) return
 
-    const activeItem = items[activeIndex]
+    const draggedItem = items[activeIndex]
     const overItem = items[overIndex]
 
     // Create new array with reordered items
     const newItems = [...items]
     newItems.splice(activeIndex, 1)
-    newItems.splice(overIndex, 0, activeItem)
+    newItems.splice(overIndex, 0, draggedItem)
 
     // Check if the item is being moved to a different category
-    const oldCategory = activeItem.categoryKey
+    const oldCategory = draggedItem.categoryKey
     const newCategory = overItem.categoryKey
 
     if (oldCategory !== newCategory) {
+      // Get category info (supports custom categories)
+      const categoryInfo = getCategoryByKey(newCategory, config?.custom_categories || null)
+
       // Update the dragged item's category to match the drop target's category
       const updatedItem = {
-        ...activeItem,
+        ...draggedItem,
         categoryKey: newCategory,
-        categoryOrder: SHOPPING_CATEGORIES[newCategory]?.order || 8,
+        categoryOrder: categoryInfo?.order || 8,
       }
       newItems[overIndex] = updatedItem
 
       // Save category override for future shopping lists
       try {
         await saveCategoryOverride.mutateAsync({
-          itemName: activeItem.item,
+          itemName: draggedItem.item,
           categoryKey: newCategory,
         })
       } catch (error) {
@@ -570,7 +670,7 @@ export function ShoppingListView() {
       </Card>
 
       {/* Recipe Sources and Action Buttons */}
-      {(uniqueRecipes.length > 0 || (shoppingList?.items?.length ?? 0) > 0) && (
+      {(uniqueRecipes.length > 0 || filteredItems.length > 0) && (
         <div className="space-y-2">
           <div className="flex items-start justify-between gap-4">
             {uniqueRecipes.length > 0 ? (
@@ -581,8 +681,8 @@ export function ShoppingListView() {
                     <RecipeTag
                       key={recipeName}
                       recipeName={recipeName}
-                      onRemove={() => removeRecipeItems.mutate(recipeName)}
-                      isRemoving={removeRecipeItems.isPending}
+                      onRemove={() => handleRemoveRecipeItems(recipeName)}
+                      isRemoving={false}
                       colorIndex={recipeColorMap.get(recipeName)}
                     />
                   ))}
@@ -591,8 +691,15 @@ export function ShoppingListView() {
             ) : (
               <div className="flex-1" />
             )}
-            {(shoppingList?.items?.length ?? 0) > 0 && (
+            {filteredItems.length > 0 && (
               <div className="flex gap-2 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSettings(true)}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Organize
+                </Button>
                 <Button
                   variant="outline"
                   onClick={handleCopyList}
@@ -602,8 +709,7 @@ export function ShoppingListView() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={handleClearList}
-                  disabled={clearList.isPending}
+                  onClick={handleClearListWithUndo}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Clear
@@ -617,16 +723,19 @@ export function ShoppingListView() {
       {/* Shopping List */}
       {isLoading ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
-      ) : !shoppingList?.items?.length ? (
-        <p className="text-center text-muted-foreground py-8">
-          Shopping list is empty. Add items above to get started!
-        </p>
+      ) : filteredItems.length === 0 ? (
+        <EmptyState
+          icon={ShoppingCart}
+          title="No shopping list yet"
+          description="Add items manually above, or generate a meal plan and add it to your shopping list."
+        />
       ) : (
         <div className="space-y-4">
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
@@ -634,18 +743,29 @@ export function ShoppingListView() {
               strategy={verticalListSortingStrategy}
             >
               {/* Main shopping items grouped by category */}
-              {Object.entries(SHOPPING_CATEGORIES)
-                .sort(([, a], [, b]) => a.order - b.order)
-                .map(([categoryKey, categoryData]) => {
-                  const items = groupedItems[categoryKey]
+              {orderedCategories.map((categoryData) => {
+                  const items = groupedItems[categoryData.key]
                   if (!items || items.length === 0) return null
 
+                  // Check if this category is a valid drop target
+                  const isDragTarget = activeItem &&
+                    dragOverCategory === categoryData.key &&
+                    activeItem.categoryKey !== categoryData.key
+
                   return (
-                    <Card key={categoryKey} className="animate-fade-in">
+                    <Card
+                      key={categoryData.key}
+                      className={`animate-fade-in transition-all duration-200 ${
+                        isDragTarget ? 'border-2 border-dashed border-primary bg-primary/5' : ''
+                      }`}
+                    >
                       <CardHeader className="py-3 bg-sage-50 rounded-t-xl">
                         <CardTitle className="text-sm font-semibold text-sage-700 flex items-center gap-2">
                           <Package className="h-4 w-4" />
                           {categoryData.name}
+                          {categoryData.isCustom && (
+                            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">Custom</span>
+                          )}
                           <span className="text-xs font-normal text-sage-500">({items.length})</span>
                         </CardTitle>
                       </CardHeader>
@@ -656,9 +776,9 @@ export function ShoppingListView() {
                               key={item.item}
                               item={item}
                               onCheckOff={() => checkOffItem.mutate(item)}
-                              onRemove={() => removeItem.mutate(item.item)}
+                              onRemove={() => handleRemoveItem(item.item)}
                               isCheckingOff={checkOffItem.isPending}
-                              isRemoving={removeItem.isPending}
+                              isRemoving={false}
                               recipeColorMap={recipeColorMap}
                             />
                           ))}
@@ -675,7 +795,7 @@ export function ShoppingListView() {
           </DndContext>
 
           {/* Already Have Section */}
-          {shoppingList.already_have && shoppingList.already_have.length > 0 && (
+          {shoppingList?.already_have && shoppingList.already_have.length > 0 && (
             <Card className="animate-fade-in">
               <CardHeader className="py-3 bg-sage-50 rounded-t-xl">
                 <CardTitle className="text-sm font-semibold text-sage-700 flex items-center gap-2">
@@ -705,7 +825,7 @@ export function ShoppingListView() {
           )}
 
           {/* Excluded Section */}
-          {shoppingList.excluded && shoppingList.excluded.length > 0 && (
+          {shoppingList?.excluded && shoppingList.excluded.length > 0 && (
             <Card className="animate-fade-in">
               <CardHeader className="py-3 bg-terracotta-50 rounded-t-xl">
                 <CardTitle className="text-sm font-semibold text-terracotta-700 flex items-center gap-2">
@@ -736,6 +856,17 @@ export function ShoppingListView() {
 
         </div>
       )}
+
+      {/* Shopping Settings Modal */}
+      <ShoppingSettingsModal
+        open={showSettings}
+        onOpenChange={setShowSettings}
+        config={config || null}
+        onUpdateConfig={async (updates) => {
+          await updateConfig.mutateAsync(updates)
+        }}
+        isUpdating={updateConfig.isPending}
+      />
     </div>
   )
 }

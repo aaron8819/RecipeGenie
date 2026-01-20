@@ -5,6 +5,7 @@ export interface ParsedRecipe {
   ingredients: Ingredient[]
   instructions: string[]
   servings?: number
+  warnings: string[]
 }
 
 /**
@@ -16,12 +17,14 @@ export interface ParsedRecipe {
  */
 export function parseRecipeText(text: string): ParsedRecipe {
   const lines = text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0)
-  
+  const warnings: string[] = []
+
   if (lines.length === 0) {
     return {
       name: "",
       ingredients: [],
       instructions: [],
+      warnings: ["No text to parse"],
     }
   }
 
@@ -101,11 +104,37 @@ export function parseRecipeText(text: string): ParsedRecipe {
     .map((line) => line.replace(/^[\d\-\*•\.\)]\s+/, "").trim())
     .filter((line) => line.length > 0)
 
+  // Generate warnings for potential parsing issues
+  if (!name || name === "Untitled Recipe") {
+    warnings.push("No recipe name found - using placeholder")
+  }
+
+  if (ingredients.length === 0) {
+    warnings.push("No ingredients found")
+  } else {
+    // Check for ingredients without amounts
+    const noAmountIngredients = ingredients.filter(i => i.amount === null && i.item.length > 0)
+    if (noAmountIngredients.length > 0) {
+      if (noAmountIngredients.length === 1) {
+        warnings.push(`"${noAmountIngredients[0].item}" has no amount`)
+      } else if (noAmountIngredients.length <= 3) {
+        warnings.push(`${noAmountIngredients.length} ingredients have no amounts: ${noAmountIngredients.map(i => i.item).join(", ")}`)
+      } else {
+        warnings.push(`${noAmountIngredients.length} ingredients have no amounts`)
+      }
+    }
+  }
+
+  if (instructions.length === 0) {
+    warnings.push("No instructions found")
+  }
+
   return {
     name: name || "Untitled Recipe",
     ingredients,
     instructions,
     servings,
+    warnings,
   }
 }
 
