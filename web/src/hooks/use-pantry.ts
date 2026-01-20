@@ -37,12 +37,16 @@ export function usePantryItems() {
       return data as PantryItem[]
     },
     initialData: isGuest ? [] : undefined,
+    // Show cached data immediately while refetching (stale-while-revalidate)
+    placeholderData: (previousData) => previousData,
+    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
     enabled: !isGuest,
   })
 }
 
 /**
  * Hook to add a pantry item
+ * Implements optimistic updates for instant UI feedback
  */
 export function useAddPantryItem() {
   const queryClient = useQueryClient()
@@ -67,21 +71,64 @@ export function useAddPantryItem() {
       if (error) throw error
       return data as PantryItem
     },
+    // Optimistic update
+    onMutate: async (itemName) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<PantryItem[]>({ queryKey: PANTRY_KEY })
+
+      const normalizedItem = itemName.toLowerCase().trim()
+      const now = new Date().toISOString()
+      const optimisticItem: PantryItem = {
+        user_id: isGuest ? "guest" : user?.id || "",
+        item: normalizedItem,
+        created_at: now,
+      }
+
+      // Optimistically add to all pantry queries
+      queryClient.setQueriesData<PantryItem[]>(
+        { queryKey: PANTRY_KEY },
+        (old) => {
+          if (!old) return [optimisticItem]
+          if (old.some((p) => p.item === normalizedItem)) return old
+          return [...old, optimisticItem].sort((a, b) => a.item.localeCompare(b.item))
+        }
+      )
+
+      return { previousQueries }
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
     onSuccess: (newItem) => {
+      // Update with server response
       queryClient.setQueriesData<PantryItem[]>(
         { queryKey: PANTRY_KEY },
         (old) => {
           if (!old) return [newItem]
-          if (old.some((p) => p.item === newItem.item)) return old
-          return [...old, newItem].sort((a, b) => a.item.localeCompare(b.item))
+          // Replace optimistic with real data
+          const filtered = old.filter((p) => p.item !== newItem.item)
+          return [...filtered, newItem].sort((a, b) => a.item.localeCompare(b.item))
         }
       )
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
     },
   })
 }
 
 /**
  * Hook to remove a pantry item
+ * Implements optimistic updates for instant UI feedback
  */
 export function useRemovePantryItem() {
   const queryClient = useQueryClient()
@@ -103,11 +150,35 @@ export function useRemovePantryItem() {
       if (error) throw error
       return normalizedItem
     },
-    onSuccess: (removedItem) => {
+    // Optimistic update
+    onMutate: async (itemName) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<PantryItem[]>({ queryKey: PANTRY_KEY })
+
+      const normalizedItem = itemName.toLowerCase().trim()
+
+      // Optimistically remove from all pantry queries
       queryClient.setQueriesData<PantryItem[]>(
         { queryKey: PANTRY_KEY },
-        (old) => old?.filter((p) => p.item !== removedItem)
+        (old) => old?.filter((p) => p.item !== normalizedItem)
       )
+
+      return { previousQueries }
+    },
+    onError: (err, itemName, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
+    onSuccess: (removedItem) => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
     },
   })
 }
@@ -136,12 +207,16 @@ export function useExcludedKeywords() {
       return (data?.excluded_keywords as string[]) || []
     },
     initialData: isGuest ? [] : undefined,
+    // Show cached data immediately while refetching (stale-while-revalidate)
+    placeholderData: (previousData) => previousData,
+    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
     enabled: !isGuest,
   })
 }
 
 /**
  * Hook to add an excluded keyword
+ * Implements optimistic updates for instant UI feedback
  */
 export function useAddExcludedKeyword() {
   const queryClient = useQueryClient()
@@ -195,17 +270,46 @@ export function useAddExcludedKeyword() {
       }
       return normalizedKeyword
     },
-    onSuccess: (newKeyword) => {
+    // Optimistic update
+    onMutate: async (keyword) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<string[]>({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
+
+      const normalizedKeyword = keyword.toLowerCase().trim()
+
+      // Optimistically add to all excluded keywords queries
       queryClient.setQueriesData<string[]>(
         { queryKey: [...CONFIG_KEY, "excluded_keywords"] },
-        (old) => (old ? [...old, newKeyword] : [newKeyword])
+        (old) => {
+          if (!old) return [normalizedKeyword]
+          if (old.includes(normalizedKeyword)) return old
+          return [...old, normalizedKeyword]
+        }
       )
+
+      return { previousQueries }
+    },
+    onError: (err, keyword, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
+    onSuccess: (newKeyword) => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
     },
   })
 }
 
 /**
  * Hook to remove an excluded keyword
+ * Implements optimistic updates for instant UI feedback
  */
 export function useRemoveExcludedKeyword() {
   const queryClient = useQueryClient()
@@ -240,11 +344,35 @@ export function useRemoveExcludedKeyword() {
       if (error) throw error
       return normalizedKeyword
     },
-    onSuccess: (removedKeyword) => {
+    // Optimistic update
+    onMutate: async (keyword) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<string[]>({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
+
+      const normalizedKeyword = keyword.toLowerCase().trim()
+
+      // Optimistically remove from all excluded keywords queries
       queryClient.setQueriesData<string[]>(
         { queryKey: [...CONFIG_KEY, "excluded_keywords"] },
-        (old) => old?.filter((k) => k !== removedKeyword)
+        (old) => old?.filter((k) => k !== normalizedKeyword)
       )
+
+      return { previousQueries }
+    },
+    onError: (err, keyword, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
+    onSuccess: (removedKeyword) => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
     },
   })
 }

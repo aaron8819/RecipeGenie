@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   RefreshCw,
   Shuffle,
   Check,
@@ -110,9 +109,90 @@ function isDateInWeekRange(dateStr: string, weekStartDate: string): boolean {
   return date >= weekStart && date <= weekEnd
 }
 
-const MEALS_SECTION_COLLAPSED_KEY = "recipe-genie-meals-section-collapsed"
 const PLANNER_VIEW_KEY = "recipe-genie-planner-view"
 const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
+
+/**
+ * Hex colors for category pills (for inline styles)
+ */
+const CATEGORY_HEX_COLORS: Record<string, string> = {
+  chicken: "#4d7c0f",     // lime-700
+  beef: "#b91c1c",        // red-700
+  lamb: "#c2410c",        // orange-700
+  turkey: "#a16207",      // yellow-700
+  vegetarian: "#1d4ed8",  // blue-700
+}
+
+/**
+ * Get hex color for a category
+ */
+function getCategoryHexColor(category: string): string {
+  return CATEGORY_HEX_COLORS[category.toLowerCase()] || "#6b7280" // gray-500 fallback
+}
+
+/**
+ * Compact category pill with inline stepper for meal selection
+ */
+interface CategoryPillProps {
+  category: string
+  count: number
+  onIncrement: () => void
+  onDecrement: () => void
+}
+
+function CategoryPill({ category, count, onIncrement, onDecrement }: CategoryPillProps) {
+  const isActive = count > 0
+  const categoryColor = getCategoryHexColor(category)
+
+  return (
+    <div
+      className={cn(
+        "flex-shrink-0 flex flex-col items-center gap-2 px-4 py-3 rounded-xl border-2 transition-all",
+        isActive ? "bg-opacity-10" : "border-sage-200 bg-white"
+      )}
+      style={{
+        borderColor: isActive ? categoryColor : undefined,
+        backgroundColor: isActive ? `${categoryColor}10` : undefined,
+      }}
+    >
+      {/* Category label with color dot */}
+      <div className="flex items-center gap-2">
+        <div
+          className="w-3 h-3 rounded-full"
+          style={{ backgroundColor: categoryColor }}
+        />
+        <span className="text-sm font-medium capitalize whitespace-nowrap">
+          {category}
+        </span>
+      </div>
+
+      {/* Compact stepper */}
+      <div className="flex items-center gap-1">
+        <button
+          onClick={onDecrement}
+          disabled={count === 0}
+          className="w-7 h-7 rounded-full border border-sage-300 flex items-center justify-center
+                     disabled:opacity-30 hover:bg-sage-100 transition-colors"
+          aria-label={`Decrease ${category} count`}
+        >
+          <span className="text-lg leading-none">−</span>
+        </button>
+        <span className="w-6 text-center text-lg font-semibold tabular-nums">
+          {count}
+        </span>
+        <button
+          onClick={onIncrement}
+          disabled={count === 5}
+          className="w-7 h-7 rounded-full border border-sage-300 flex items-center justify-center
+                     disabled:opacity-30 hover:bg-sage-100 transition-colors"
+          aria-label={`Increase ${category} count`}
+        >
+          <span className="text-lg leading-none">+</span>
+        </button>
+      </div>
+    </div>
+  )
+}
 
 type PlannerView = "calendar" | "list" | "category"
 type RecipeDayAssignments = Record<string, number> // recipe_id -> dayIndex (0-6)
@@ -580,10 +660,6 @@ export function MealPlanner() {
   const [markingRecipeId, setMarkingRecipeId] = useState<string | null>(null)
   const [addingToCartRecipeId, setAddingToCartRecipeId] = useState<string | null>(null)
   const [swappingRecipeId, setSwappingRecipeId] = useState<string | null>(null)
-  const [mealsSectionCollapsed, setMealsSectionCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false
-    return localStorage.getItem(MEALS_SECTION_COLLAPSED_KEY) === "true"
-  })
   const [pendingRemovalRecipeId, setPendingRemovalRecipeId] = useState<string | null>(null)
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
@@ -619,11 +695,6 @@ export function MealPlanner() {
     }
     return {}
   }, [weeklyPlan?.day_assignments, currentWeekDate])
-
-  // Persist collapsed state to localStorage
-  useEffect(() => {
-    localStorage.setItem(MEALS_SECTION_COLLAPSED_KEY, String(mealsSectionCollapsed))
-  }, [mealsSectionCollapsed])
 
   // Persist view state to localStorage
   useEffect(() => {
@@ -955,45 +1026,22 @@ export function MealPlanner() {
         </CardContent>
       </Card>
 
-      {/* Category Selection - Improved */}
+      {/* Category Selection - Minimal Horizontal Pills */}
       <Card>
-        <CardHeader
-          className="pb-2 cursor-pointer select-none hover:bg-accent/50 transition-colors rounded-t-lg"
-          onClick={() => setMealsSectionCollapsed((prev) => !prev)}
-        >
+        <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">How many meals this week?</CardTitle>
-            <div className="flex items-center gap-2">
-              {mealsSectionCollapsed && totalMeals > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-sage-600">{totalMeals}</span>
-                  <span className="text-sm text-muted-foreground">meals selected</span>
-                </div>
-              )}
-              <ChevronDown
-                className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
-                  mealsSectionCollapsed ? "-rotate-90" : ""
-                }`}
-              />
-            </div>
-          </div>
-        </CardHeader>
-        {!mealsSectionCollapsed && (
-          <CardContent className="space-y-4">
-            {/* Quick Presets */}
-            <div className="flex flex-wrap items-center gap-2 pb-3 border-b">
-              <span className="text-xs font-medium text-muted-foreground self-center mr-1">Quick presets:</span>
+            <div className="flex gap-1">
               {[3, 4, 5].map((preset) => (
                 <Button
                   key={preset}
-                  variant={totalMeals === preset ? "default" : "outline"}
+                  variant={totalMeals === preset ? "default" : "ghost"}
                   size="sm"
                   className={cn(
-                    "h-8 px-3 text-xs transition-all",
-                    totalMeals === preset && "bg-sage-600 hover:bg-sage-700 text-white"
+                    "h-7 w-7 p-0 text-xs",
+                    totalMeals === preset && "bg-sage-600 hover:bg-sage-700"
                   )}
-                  onClick={(e) => {
-                    e.stopPropagation()
+                  onClick={() => {
                     // Distribute evenly across categories
                     const perCategory = Math.floor(preset / categories.length)
                     const remainder = preset % categories.length
@@ -1004,215 +1052,66 @@ export function MealPlanner() {
                     setSelection(newSelection)
                   }}
                 >
-                  {preset} meals
+                  {preset}
                 </Button>
               ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setSelection({})
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {/* Scrollable pill container */}
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+            {categories.map((category: string) => (
+              <CategoryPill
+                key={category}
+                category={category}
+                count={selection[category] || 0}
+                onIncrement={() => {
+                  setSelection((prev) => ({
+                    ...prev,
+                    [category]: Math.min(5, (prev[category] || 0) + 1),
+                  }))
                 }}
+                onDecrement={() => {
+                  setSelection((prev) => ({
+                    ...prev,
+                    [category]: Math.max(0, (prev[category] || 0) - 1),
+                  }))
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Minimal footer */}
+          <div className="flex items-center justify-between pt-4 border-t mt-4">
+            <div className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">{totalMeals}</span> meals selected
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsAddRecipeModalOpen(true)}
+                disabled={!hasAnyRecipes}
               >
-                Clear all
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleGeneratePlan}
+                disabled={generatePlan.isPending || totalMeals === 0}
+                className="bg-sage-600 hover:bg-sage-700"
+              >
+                {generatePlan.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Generate"
+                )}
               </Button>
             </div>
-
-            {/* Category Grid - Redesigned */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {categories.map((category: string) => {
-                const count = selection[category] || 0
-                const categoryColor = getTagClassName(category, true)
-                const isActive = count > 0
-                return (
-                  <div
-                    key={category}
-                    className={cn(
-                      "flex flex-col items-center p-4 rounded-xl border transition-all duration-200",
-                      isActive
-                        ? "border-sage-600 bg-sage-50 shadow-sm"
-                        : "border-sage-200 bg-white hover:border-sage-300 hover:shadow-sm"
-                    )}
-                  >
-                    {/* Category Label */}
-                    <div className="flex items-center gap-2 mb-4">
-                      <div className={cn(
-                        "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold",
-                        categoryColor
-                      )}>
-                        {category.charAt(0).toUpperCase()}
-                      </div>
-                      <span className={cn(
-                        "capitalize text-sm font-semibold",
-                        isActive ? "text-sage-700" : "text-muted-foreground"
-                      )}>
-                        {category}
-                      </span>
-                    </div>
-
-                    {/* Count Controls */}
-                    <div className="flex items-center justify-center gap-3 w-full">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className={cn(
-                          "h-10 w-10 rounded-full transition-all shrink-0",
-                          isActive
-                            ? "border-sage-600 text-sage-700 hover:bg-sage-100 hover:border-sage-700"
-                            : "border-sage-300 text-muted-foreground hover:border-sage-400"
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelection((prev) => ({
-                            ...prev,
-                            [category]: Math.max(0, (prev[category] || 0) - 1),
-                          }))
-                        }}
-                        disabled={count === 0}
-                        aria-label={`Decrease ${category} count`}
-                      >
-                        <span className="text-xl font-medium">−</span>
-                      </Button>
-                      
-                      <input
-                        type="number"
-                        min="0"
-                        max="5"
-                        value={count}
-                        onChange={(e) => {
-                          const inputValue = e.target.value
-                          if (inputValue === "") {
-                            setSelection((prev) => ({
-                              ...prev,
-                              [category]: 0,
-                            }))
-                            return
-                          }
-                          const numValue = parseInt(inputValue)
-                          if (!isNaN(numValue)) {
-                            const value = Math.max(0, Math.min(5, numValue))
-                            setSelection((prev) => ({
-                              ...prev,
-                              [category]: value,
-                            }))
-                          }
-                        }}
-                        onBlur={(e) => {
-                          const inputValue = e.target.value
-                          if (inputValue === "" || isNaN(parseInt(inputValue)) || parseInt(inputValue) < 0) {
-                            setSelection((prev) => ({
-                              ...prev,
-                              [category]: 0,
-                            }))
-                          } else {
-                            const value = Math.max(0, Math.min(5, parseInt(inputValue)))
-                            setSelection((prev) => ({
-                              ...prev,
-                              [category]: value,
-                            }))
-                          }
-                        }}
-                        className={cn(
-                          "w-14 text-center text-2xl sm:text-3xl font-bold tabular-nums bg-transparent border-none outline-none focus:outline-none focus:ring-0 p-0",
-                          isActive ? "text-sage-700" : "text-muted-foreground"
-                        )}
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.currentTarget.blur()
-                          }
-                          if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                            e.preventDefault()
-                          }
-                        }}
-                        aria-label={`${category} meal count`}
-                      />
-                      
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className={cn(
-                          "h-10 w-10 rounded-full transition-all shrink-0",
-                          isActive
-                            ? "border-sage-600 text-sage-700 hover:bg-sage-100 hover:border-sage-700"
-                            : "border-sage-300 text-muted-foreground hover:border-sage-400"
-                        )}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelection((prev) => ({
-                            ...prev,
-                            [category]: Math.min(5, (prev[category] || 0) + 1),
-                          }))
-                        }}
-                        disabled={count === 5}
-                        aria-label={`Increase ${category} count`}
-                      >
-                        <span className="text-xl font-medium">+</span>
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Enhanced Total Display */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-4 border-t">
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col">
-                  <span className="text-xs text-muted-foreground">Total meals this week</span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className={cn(
-                      "text-2xl sm:text-3xl font-bold tabular-nums transition-colors",
-                      totalMeals > 0 ? "text-sage-600" : "text-muted-foreground"
-                    )}>
-                      {totalMeals}
-                    </span>
-                    <span className="text-sm text-muted-foreground">meals</span>
-                  </div>
-                </div>
-                {totalMeals > 0 && (
-                  <div className="hidden sm:flex h-12 w-12 rounded-full bg-sage-100 border-2 border-sage-300 flex items-center justify-center">
-                    <span className="text-sm font-bold text-sage-700">{totalMeals}</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  onClick={() => setIsAddRecipeModalOpen(true)}
-                  disabled={!hasAnyRecipes}
-                  className="w-full sm:w-auto"
-                >
-                  <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                  <span className="hidden sm:inline">Add Recipe</span>
-                  <span className="sm:hidden">Add</span>
-                </Button>
-                <Button
-                  onClick={handleGeneratePlan}
-                  disabled={generatePlan.isPending || totalMeals === 0}
-                  size="lg"
-                  className="w-full sm:w-auto bg-sage-600 hover:bg-sage-700 disabled:opacity-50"
-                >
-                  {generatePlan.isPending ? (
-                    <>
-                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                      <span className="hidden sm:inline">Generating...</span>
-                      <span className="sm:hidden">Generating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-5 w-5 mr-2" />
-                      <span className="hidden sm:inline">Generate Meal Plan</span>
-                      <span className="sm:hidden">Generate</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        )}
+          </div>
+        </CardContent>
       </Card>
 
       {/* Meal Plan Display with View Tabs */}

@@ -26,6 +26,7 @@ export function useRecipes(options?: {
   tags?: string[]
 }) {
   const { isGuest } = useAuthContext()
+  const queryClient = useQueryClient()
 
   return useQuery({
     queryKey: [...RECIPES_KEY, options, isGuest],
@@ -90,6 +91,9 @@ export function useRecipes(options?: {
       }
       return recipes.sort((a, b) => a.name.localeCompare(b.name))
     } : undefined,
+    // Show cached data immediately while refetching (stale-while-revalidate)
+    placeholderData: (previousData) => previousData,
+    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
     enabled: !isGuest,
   })
 }
@@ -127,6 +131,7 @@ export function useRecipe(id: string | null) {
 
 /**
  * Hook to create a new recipe
+ * Implements optimistic updates for instant UI feedback
  */
 export function useCreateRecipe() {
   const queryClient = useQueryClient()
@@ -164,21 +169,72 @@ export function useCreateRecipe() {
       if (error) throw error
       return data as Recipe
     },
-    onSuccess: (newRecipe) => {
-      // Update cache for all recipe queries
+    // Optimistic update
+    onMutate: async (recipe) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+
+      // Create optimistic recipe
+      const id = recipe.id || recipe.name.toLowerCase().replace(/\s+/g, "-")
+      const now = new Date().toISOString()
+      const optimisticRecipe: Recipe = {
+        id,
+        user_id: isGuest ? "guest" : user?.id || "",
+        name: recipe.name,
+        category: recipe.category,
+        servings: recipe.servings ?? 4,
+        favorite: recipe.favorite ?? false,
+        tags: recipe.tags ?? [],
+        ingredients: recipe.ingredients ?? [],
+        instructions: recipe.instructions ?? [],
+        created_at: now,
+        updated_at: now,
+      }
+
+      // Optimistically add to all recipe queries
       queryClient.setQueriesData<Recipe[]>(
         { queryKey: RECIPES_KEY },
-        (old) => old ? [...old, newRecipe].sort((a, b) => a.name.localeCompare(b.name)) : [newRecipe]
+        (old) => old ? [...old, optimisticRecipe].sort((a, b) => a.name.localeCompare(b.name)) : [optimisticRecipe]
+      )
+
+      return { previousQueries }
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
+    onSuccess: (newRecipe) => {
+      // Update with server response (replace optimistic with real data)
+      queryClient.setQueriesData<Recipe[]>(
+        { queryKey: RECIPES_KEY },
+        (old) => {
+          if (!old) return [newRecipe]
+          // Replace optimistic recipe with server response
+          const filtered = old.filter((r) => r.id !== newRecipe.id)
+          return [...filtered, newRecipe].sort((a, b) => a.name.localeCompare(b.name))
+        }
       )
       // Invalidate tags queries to refresh tag lists
       queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
       queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
     },
   })
 }
 
 /**
  * Hook to update an existing recipe
+ * Implements optimistic updates for instant UI feedback
  */
 export function useUpdateRecipe() {
   const queryClient = useQueryClient()
@@ -212,7 +268,42 @@ export function useUpdateRecipe() {
       if (error) throw error
       return data as Recipe
     },
+    // Optimistic update
+    onMutate: async ({ id, updates }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+
+      // Ensure tags is always a defined array
+      const normalizedUpdates = {
+        ...updates,
+        tags: updates.tags ?? [],
+      }
+
+      // Optimistically update all recipe queries
+      queryClient.setQueriesData<Recipe[]>(
+        { queryKey: RECIPES_KEY },
+        (old) => old?.map((r) => 
+          r.id === id 
+            ? { ...r, ...normalizedUpdates, updated_at: new Date().toISOString() }
+            : r
+        )
+      )
+
+      return { previousQueries }
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
     onSuccess: (updated) => {
+      // Update with server response
       queryClient.setQueriesData<Recipe[]>(
         { queryKey: RECIPES_KEY },
         (old) => old?.map((r) => (r.id === updated.id ? updated : r))
@@ -221,11 +312,16 @@ export function useUpdateRecipe() {
       queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
       queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
     },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+    },
   })
 }
 
 /**
  * Hook to delete a recipe
+ * Implements optimistic updates for instant UI feedback
  */
 export function useDeleteRecipe() {
   const queryClient = useQueryClient()
@@ -242,20 +338,45 @@ export function useDeleteRecipe() {
       if (error) throw error
       return id
     },
-    onSuccess: (deletedId) => {
+    // Optimistic update
+    onMutate: async (id) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+
+      // Optimistically remove from all recipe queries
       queryClient.setQueriesData<Recipe[]>(
         { queryKey: RECIPES_KEY },
-        (old) => old?.filter((r) => r.id !== deletedId)
+        (old) => old?.filter((r) => r.id !== id)
       )
+
+      return { previousQueries }
+    },
+    onError: (err, id, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
+    onSuccess: (deletedId) => {
       // Invalidate tags queries to refresh tag lists
       queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
       queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
     },
   })
 }
 
 /**
  * Hook to toggle favorite status
+ * Implements optimistic updates for instant UI feedback
  */
 export function useToggleFavorite() {
   const queryClient = useQueryClient()
@@ -282,11 +403,40 @@ export function useToggleFavorite() {
       if (error) throw error
       return data as Recipe
     },
+    // Optimistic update
+    onMutate: async ({ id, favorite }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+
+      // Snapshot previous values for rollback
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+
+      // Optimistically update all recipe queries
+      queryClient.setQueriesData<Recipe[]>(
+        { queryKey: RECIPES_KEY },
+        (old) => old?.map((r) => (r.id === id ? { ...r, favorite: !favorite } : r))
+      )
+
+      return { previousQueries }
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([queryKey, data]) => {
+          queryClient.setQueryData(queryKey, data)
+        })
+      }
+    },
     onSuccess: (updated) => {
+      // Update with server response
       queryClient.setQueriesData<Recipe[]>(
         { queryKey: RECIPES_KEY },
         (old) => old?.map((r) => (r.id === updated.id ? updated : r))
       )
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
     },
   })
 }

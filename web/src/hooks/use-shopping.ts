@@ -53,6 +53,9 @@ export function useShoppingList() {
       if (error) throw error
       return data as ShoppingList || getDefaultShoppingList() as ShoppingList
     },
+    // Show cached data immediately while refetching (stale-while-revalidate)
+    placeholderData: (previousData) => previousData,
+    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
   })
 }
 
@@ -204,6 +207,7 @@ export function useSaveShoppingList() {
 
 /**
  * Hook to add a manual item to the shopping list
+ * Implements optimistic updates for instant UI feedback
  */
 export function useAddShoppingItem() {
   const queryClient = useQueryClient()
@@ -266,7 +270,60 @@ export function useAddShoppingItem() {
       if (saveError) throw saveError
       return newItem
     },
+    // Optimistic update
+    onMutate: async ({ itemName, amount, unit }) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
+
+      // Snapshot previous value for rollback
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+
+      // Get category overrides for optimistic item creation
+      const categoryOverrides = isGuest
+        ? getDefaultConfig().category_overrides
+        : (await getSupabase().from("user_config").select("category_overrides").single()).data?.category_overrides as Record<string, string> || {}
+
+      const optimisticItem = ensureCategoryInfo(
+        {
+          item: itemName.toLowerCase().trim(),
+          amount: amount || null,
+          unit: unit || "",
+          categoryKey: "",
+          categoryOrder: 5,
+          sources: [{ recipeName: "Manual" }],
+        },
+        categoryOverrides
+      )
+
+      // Optimistically update cache
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY, isGuest],
+        (old) => {
+          if (!old) {
+            const defaultList = getDefaultShoppingList() as ShoppingList
+            return { ...defaultList, items: [optimisticItem] }
+          }
+          if (old.items.some((i) => i.item.toLowerCase() === itemName.toLowerCase())) {
+            return old // Don't add duplicate
+          }
+          let updatedItems = [...old.items, optimisticItem]
+          if (!old.custom_order) {
+            updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+          }
+          return { ...old, items: updatedItems }
+        }
+      )
+
+      return { previousList }
+    },
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousList) {
+        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+      }
+    },
     onSuccess: () => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
   })
@@ -274,6 +331,7 @@ export function useAddShoppingItem() {
 
 /**
  * Hook to remove an item from the shopping list
+ * Implements optimistic updates for instant UI feedback
  */
 export function useRemoveShoppingItem() {
   const queryClient = useQueryClient()
@@ -309,7 +367,36 @@ export function useRemoveShoppingItem() {
       if (saveError) throw saveError
       return itemName
     },
+    // Optimistic update
+    onMutate: async (itemName) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
+
+      // Snapshot previous value for rollback
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+
+      // Optimistically remove from cache
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY, isGuest],
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            items: old.items.filter((i) => i.item.toLowerCase() !== itemName.toLowerCase()),
+          }
+        }
+      )
+
+      return { previousList }
+    },
+    onError: (err, itemName, context) => {
+      // Rollback on error
+      if (context?.previousList) {
+        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+      }
+    },
     onSuccess: () => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
   })
@@ -503,6 +590,10 @@ export function useAddToShoppingList() {
 /**
  * Hook to check off a shopping item
  */
+/**
+ * Hook to check off an item (move from items to already_have)
+ * Implements optimistic updates for instant UI feedback
+ */
 export function useCheckOffItem() {
   const queryClient = useQueryClient()
   const { isGuest, user } = useAuthContext()
@@ -544,7 +635,43 @@ export function useCheckOffItem() {
       if (saveError) throw saveError
       return item
     },
+    // Optimistic update
+    onMutate: async (item) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
+
+      // Snapshot previous value for rollback
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+
+      const normalizedItem = item.item.toLowerCase().trim()
+
+      // Optimistically update cache
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY, isGuest],
+        (old) => {
+          if (!old) return old
+          const currentItems = old.items || []
+          const alreadyHave = old.already_have || []
+          return {
+            ...old,
+            items: currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem),
+            already_have: alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem)
+              ? alreadyHave
+              : [...alreadyHave, item],
+          }
+        }
+      )
+
+      return { previousList }
+    },
+    onError: (err, item, context) => {
+      // Rollback on error
+      if (context?.previousList) {
+        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+      }
+    },
     onSuccess: () => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
   })

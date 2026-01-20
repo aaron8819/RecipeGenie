@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, Search, Heart, Filter, Grid3x3, List, X, Settings } from "lucide-react"
+import { Plus, Search, Heart, Filter, Grid3x3, List, X, Settings, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
@@ -115,7 +115,7 @@ export function RecipeList() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false)
 
-  const { data: recipes, isLoading } = useRecipes({
+  const { data: recipes, isLoading, isFetching } = useRecipes({
     category,
     search: search || null,
     favoritesOnly,
@@ -131,11 +131,17 @@ export function RecipeList() {
   // Build a map of recipe_id -> stats (last made + times made)
   const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
   
+  // Show cached data immediately even while fetching (stale-while-revalidate)
+  const displayRecipes = recipes || []
+  
   // Sort recipes based on selected sort option
   const sortedRecipes = useMemo(() => {
-    if (!recipes) return []
-    return sortRecipes(recipes, statsMap, sortBy)
-  }, [recipes, statsMap, sortBy])
+    if (!displayRecipes.length) return []
+    return sortRecipes(displayRecipes, statsMap, sortBy)
+  }, [displayRecipes, statsMap, sortBy])
+  
+  // Only show skeleton on initial load with no cached data
+  const showSkeleton = isLoading && !displayRecipes.length
 
   // Count active filters
   const activeFilterCount = useMemo(() => {
@@ -368,7 +374,7 @@ export function RecipeList() {
       </div>
 
       {/* Recipe Grid/List */}
-      {isLoading ? (
+      {showSkeleton ? (
         <div className={cn(
           viewMode === "grid"
             ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
@@ -396,7 +402,7 @@ export function RecipeList() {
             </div>
           ))}
         </div>
-      ) : recipes?.length === 0 ? (
+      ) : displayRecipes.length === 0 ? (
         <EmptyState
           icon={Search}
           title={
@@ -423,37 +429,47 @@ export function RecipeList() {
           }
         />
       ) : (
-        <div
-          className={cn(
-            viewMode === "grid"
-              ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-              : "space-y-3"
-          )}
-        >
-          {sortedRecipes.map((recipe, index) => {
-            const stats = statsMap.get(recipe.id)
-            return (
-              <div
-                key={recipe.id}
-                style={{ animationDelay: `${index * 50}ms` }}
-                className="animate-fade-in"
-              >
-                <RecipeCard
-                  recipe={recipe}
-                  viewMode={viewMode}
-                  onDelete={handleDelete}
-                  onToggleFavorite={(r) =>
-                    toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
-                  }
-                  onAddToPlan={setAddToPlanRecipe}
-                  onClick={setViewingRecipe}
-                  onTagClick={handleTagClick}
-                  lastMade={stats?.lastMade ?? null}
-                  timesMade={stats?.timesMade ?? 0}
-                />
+        <div className="relative">
+          {/* Subtle loading indicator for background refetch */}
+          {isFetching && !isLoading && (
+            <div className="absolute top-0 right-0 z-10 p-2">
+              <div className="bg-background/80 backdrop-blur-sm rounded-full p-1.5 shadow-sm border">
+                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
               </div>
-            )
-          })}
+            </div>
+          )}
+          <div
+            className={cn(
+              viewMode === "grid"
+                ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                : "space-y-3"
+            )}
+          >
+            {sortedRecipes.map((recipe, index) => {
+              const stats = statsMap.get(recipe.id)
+              return (
+                <div
+                  key={recipe.id}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                  className="animate-fade-in"
+                >
+                  <RecipeCard
+                    recipe={recipe}
+                    viewMode={viewMode}
+                    onDelete={handleDelete}
+                    onToggleFavorite={(r) =>
+                      toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
+                    }
+                    onAddToPlan={setAddToPlanRecipe}
+                    onClick={setViewingRecipe}
+                    onTagClick={handleTagClick}
+                    lastMade={stats?.lastMade ?? null}
+                    timesMade={stats?.timesMade ?? 0}
+                  />
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

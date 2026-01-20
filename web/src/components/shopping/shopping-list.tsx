@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
-import { Plus, Trash2, Package, Ban, Check, Copy, GripVertical, X, Settings } from "lucide-react"
+import { Plus, Trash2, Package, Ban, Check, Copy, GripVertical, X, Settings, Loader2 } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -41,8 +41,9 @@ import {
   useUpdateShoppingConfig,
 } from "@/hooks/use-shopping"
 import { SHOPPING_CATEGORIES, getAllShoppingCategories, getCategoryByKey } from "@/lib/shopping-categories"
+import { getDefaultShoppingList } from "@/lib/guest-storage"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
-import type { ShoppingItem } from "@/types/database"
+import type { ShoppingItem, ShoppingList } from "@/types/database"
 import { toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -581,7 +582,7 @@ export function ShoppingListView() {
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
-  const { data: shoppingList, isLoading } = useShoppingList()
+  const { data: shoppingList, isLoading, isFetching } = useShoppingList()
   const { data: config } = useShoppingConfig()
   const updateConfig = useUpdateShoppingConfig()
 
@@ -654,10 +655,16 @@ export function ShoppingListView() {
     })
   )
 
+  // Show cached data immediately even while fetching (stale-while-revalidate)
+  const displayShoppingList = shoppingList || getDefaultShoppingList() as ShoppingList
+  
+  // Only show loading on initial load with no cached data
+  const showLoading = isLoading && !shoppingList
+
   // Filter items for pending deletions
   const filteredItems = useMemo(() => {
     if (pendingClearList) return []
-    let items = shoppingList?.items || []
+    let items = displayShoppingList?.items || []
 
     // Filter out single pending item deletion
     if (pendingItemDeletion) {
@@ -675,7 +682,7 @@ export function ShoppingListView() {
     }
 
     return items
-  }, [shoppingList?.items, pendingItemDeletion, pendingRecipeDeletion, pendingClearList])
+  }, [displayShoppingList?.items, pendingItemDeletion, pendingRecipeDeletion, pendingClearList])
 
   // Group items by category
   const groupedItems = useMemo(() => {
@@ -979,7 +986,7 @@ export function ShoppingListView() {
       )}
 
       {/* Shopping List */}
-      {isLoading ? (
+      {showLoading ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
       ) : filteredItems.length === 0 ? (
         <EmptyState
@@ -988,14 +995,23 @@ export function ShoppingListView() {
           description="Add items manually above, or generate a meal plan and add it to your shopping list."
         />
       ) : (
-        <div 
-          className="space-y-4"
-          style={{
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehavior: 'contain',
-          }}
-        >
-          <DndContext
+        <div className="relative">
+          {/* Subtle loading indicator for background refetch */}
+          {isFetching && !isLoading && (
+            <div className="absolute top-0 right-0 z-10 p-2">
+              <div className="bg-background/80 backdrop-blur-sm rounded-full p-1.5 shadow-sm border">
+                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+              </div>
+            </div>
+          )}
+          <div 
+            className="space-y-4"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              overscrollBehavior: 'contain',
+            }}
+          >
+            <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragStart={handleDragStart}
@@ -1059,19 +1075,19 @@ export function ShoppingListView() {
           </DndContext>
 
           {/* Already Have Section */}
-          {shoppingList?.already_have && shoppingList.already_have.length > 0 && (
+          {displayShoppingList?.already_have && displayShoppingList.already_have.length > 0 && (
             <Card className="animate-fade-in">
               <CardHeader className="px-4 py-2.5 border-b border-sage-100 bg-transparent">
                 <CardTitle className="text-xs font-semibold text-sage-600 uppercase tracking-wide flex items-center gap-2">
                   <Package className="h-3.5 w-3.5" />
                   Already Have
-                  <span className="text-xs font-normal text-sage-400 ml-auto">({shoppingList.already_have.length})</span>
+                  <span className="text-xs font-normal text-sage-400 ml-auto">({displayShoppingList.already_have.length})</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-3 px-4 pb-4">
                 <p className="text-xs text-muted-foreground mb-2">Click to add back to list</p>
                 <div className="flex flex-wrap gap-2">
-                  {shoppingList.already_have.map((item, index) => (
+                  {displayShoppingList.already_have.map((item, index) => (
                     <button
                       key={item.item}
                       type="button"
@@ -1089,19 +1105,19 @@ export function ShoppingListView() {
           )}
 
           {/* Excluded Section */}
-          {shoppingList?.excluded && shoppingList.excluded.length > 0 && (
+          {displayShoppingList?.excluded && displayShoppingList.excluded.length > 0 && (
             <Card className="animate-fade-in">
               <CardHeader className="px-4 py-2.5 border-b border-terracotta-100 bg-transparent">
                 <CardTitle className="text-xs font-semibold text-terracotta-700 uppercase tracking-wide flex items-center gap-2">
                   <Ban className="h-3.5 w-3.5" />
                   Excluded
-                  <span className="text-xs font-normal text-terracotta-500 ml-auto">({shoppingList.excluded.length})</span>
+                  <span className="text-xs font-normal text-terracotta-500 ml-auto">({displayShoppingList.excluded.length})</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-3 px-4 pb-4">
                 <p className="text-xs text-muted-foreground mb-2">Click to add back to list</p>
                 <div className="flex flex-wrap gap-2">
-                  {shoppingList.excluded.map((item, index) => (
+                  {displayShoppingList.excluded.map((item, index) => (
                     <button
                       key={item.item}
                       type="button"
@@ -1118,6 +1134,7 @@ export function ShoppingListView() {
             </Card>
           )}
 
+          </div>
         </div>
       )}
 

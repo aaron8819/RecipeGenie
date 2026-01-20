@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { Plus, X, Package, Ban } from "lucide-react"
+import React, { useState, useCallback } from "react"
+import { Plus, X, Package, Ban, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,8 +22,8 @@ export function PantryList() {
   const [pendingPantryDeletion, setPendingPantryDeletion] = useState<string | null>(null)
   const [pendingKeywordDeletion, setPendingKeywordDeletion] = useState<string | null>(null)
 
-  const { data: pantryItems, isLoading: pantryLoading } = usePantryItems()
-  const { data: excludedKeywords, isLoading: keywordsLoading } = useExcludedKeywords()
+  const { data: pantryItems, isLoading: pantryLoading, isFetching: pantryFetching } = usePantryItems()
+  const { data: excludedKeywords, isLoading: keywordsLoading, isFetching: keywordsFetching } = useExcludedKeywords()
 
   const addPantryItem = useAddPantryItem()
   const removePantryItem = useRemovePantryItem()
@@ -61,9 +61,17 @@ export function PantryList() {
     })
   }, [undoToast, removeKeyword])
 
+  // Show cached data immediately even while fetching (stale-while-revalidate)
+  const displayPantryItems = pantryItems || []
+  const displayKeywords = excludedKeywords || []
+  
+  // Only show loading on initial load with no cached data
+  const showPantryLoading = pantryLoading && !pantryItems?.length
+  const showKeywordsLoading = keywordsLoading && !excludedKeywords?.length
+
   // Filter out pending deletions from display
-  const displayedPantryItems = pantryItems?.filter(item => item.item !== pendingPantryDeletion)
-  const displayedKeywords = excludedKeywords?.filter((kw: string) => kw !== pendingKeywordDeletion)
+  const displayedPantryItems = displayPantryItems.filter(item => item.item !== pendingPantryDeletion)
+  const displayedKeywords = displayKeywords.filter((kw: string) => kw !== pendingKeywordDeletion)
 
   const handleAddPantryItem = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -147,29 +155,39 @@ export function PantryList() {
             </Button>
           </form>
 
-          {pantryLoading ? (
+          {showPantryLoading ? (
             <p className="text-muted-foreground text-center py-4">Loading...</p>
-          ) : displayedPantryItems?.length === 0 ? (
+          ) : displayedPantryItems.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No pantry items yet
             </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {displayedPantryItems?.map((item, index) => (
-                <div
-                  key={item.item}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-sage-200"
-                  style={{ animationDelay: `${index * 30}ms` }}
-                >
-                  <span>{item.item}</span>
-                  <button
-                    onClick={() => handleRemovePantryItem(item.item)}
-                    className="hover:text-destructive transition-colors"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+            <div className="relative">
+              {/* Subtle loading indicator for background refetch */}
+              {pantryFetching && !pantryLoading && (
+                <div className="absolute top-0 right-0 z-10 p-2">
+                  <div className="bg-background/80 backdrop-blur-sm rounded-full p-1.5 shadow-sm border">
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                  </div>
                 </div>
-              ))}
+              )}
+              <div className="flex flex-wrap gap-2">
+                {displayedPantryItems.map((item, index) => (
+                  <div
+                    key={item.item}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-sage-200"
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <span>{item.item}</span>
+                    <button
+                      onClick={() => handleRemovePantryItem(item.item)}
+                      className="hover:text-destructive transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
@@ -199,29 +217,39 @@ export function PantryList() {
             </Button>
           </form>
 
-          {keywordsLoading ? (
+          {showKeywordsLoading ? (
             <p className="text-muted-foreground text-center py-4">Loading...</p>
-          ) : displayedKeywords?.length === 0 ? (
+          ) : displayedKeywords.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No excluded keywords
             </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {displayedKeywords?.map((keyword: string, index: number) => (
-                <div
-                  key={keyword}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-terracotta-200"
-                  style={{ animationDelay: `${index * 30}ms` }}
-                >
-                  <span>{keyword}</span>
-                  <button
-                    onClick={() => handleRemoveKeyword(keyword)}
-                    className="hover:text-terracotta-900 transition-colors"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+            <div className="relative">
+              {/* Subtle loading indicator for background refetch */}
+              {keywordsFetching && !keywordsLoading && (
+                <div className="absolute top-0 right-0 z-10 p-2">
+                  <div className="bg-background/80 backdrop-blur-sm rounded-full p-1.5 shadow-sm border">
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                  </div>
                 </div>
-              ))}
+              )}
+              <div className="flex flex-wrap gap-2">
+                {displayedKeywords.map((keyword: string, index: number) => (
+                  <div
+                    key={keyword}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-terracotta-200"
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <span>{keyword}</span>
+                    <button
+                      onClick={() => handleRemoveKeyword(keyword)}
+                      className="hover:text-terracotta-900 transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
