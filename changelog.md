@@ -30,6 +30,8 @@ All notable changes to Recipe Genie are documented here.
 - New hook `useSaveDayAssignments()` handles saving assignments to database
 - Guest mode uses query cache for day assignments (localStorage fallback)
 - Backward compatible: falls back to localStorage if database data unavailable
+- Added UI components: `alert-dialog`, `calendar`, `dropdown-menu`, `popover` (Radix UI primitives)
+- New dependencies: `@radix-ui/react-alert-dialog`, `@radix-ui/react-popover`
 
 ---
 

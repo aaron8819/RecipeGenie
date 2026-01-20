@@ -301,6 +301,7 @@ export function useGenerateMealPlan() {
 
 /**
  * Hook to swap a recipe in the meal plan
+ * Updates cache immediately after successful swap for instant UI feedback
  */
 export function useSwapRecipe() {
   const queryClient = useQueryClient()
@@ -320,7 +321,7 @@ export function useSwapRecipe() {
 
         const newRecipeIds = plan.recipe_ids.map((id) => id === oldRecipeId ? newRecipe.id : id)
         setGuestPlan(queryClient, weekDate, { ...plan, recipe_ids: newRecipeIds })
-        return newRecipe
+        return { newRecipe, oldRecipeId, weekDate }
       }
 
       const supabase = getSupabase()
@@ -351,9 +352,23 @@ export function useSwapRecipe() {
         .eq("week_date", weekDate)
 
       if (saveError) throw saveError
-      return newRecipe
+      return { newRecipe, oldRecipeId, weekDate }
     },
-    onSuccess: (_, variables) => {
+
+    onSuccess: (result, variables) => {
+      // Immediately update the cache with the new recipe
+      queryClient.setQueryData<WeeklyPlan>(
+        [...WEEKLY_PLANS_KEY, variables.weekDate, isGuest],
+        (old) => {
+          if (!old) return old
+          const newRecipeIds = old.recipe_ids.map((id) =>
+            id === variables.oldRecipeId ? result.newRecipe.id : id
+          )
+          return { ...old, recipe_ids: newRecipeIds }
+        }
+      )
+
+      // Then invalidate to ensure full consistency
       queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
       queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
     },
@@ -507,6 +522,7 @@ export function useAddRecipeToPlan() {
 
 /**
  * Hook to remove a recipe from the weekly plan
+ * Implements optimistic updates for instant UI feedback
  */
 export function useRemoveRecipeFromPlan() {
   const queryClient = useQueryClient()
@@ -543,7 +559,48 @@ export function useRemoveRecipeFromPlan() {
       if (error) throw error
       return { weekDate, recipeId }
     },
-    onSuccess: (_, variables) => {
+
+    // Optimistic update
+    onMutate: async (variables) => {
+      const { weekDate, recipeId } = variables
+
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: [...WEEKLY_PLANS_KEY, weekDate, isGuest],
+      })
+
+      // Snapshot previous value for rollback
+      const previousPlan = queryClient.getQueryData<WeeklyPlan>(
+        [...WEEKLY_PLANS_KEY, weekDate, isGuest]
+      )
+
+      // Optimistically update cache
+      queryClient.setQueryData<WeeklyPlan>(
+        [...WEEKLY_PLANS_KEY, weekDate, isGuest],
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            recipe_ids: old.recipe_ids.filter((id) => id !== recipeId),
+          }
+        }
+      )
+
+      return { previousPlan }
+    },
+
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousPlan) {
+        queryClient.setQueryData(
+          [...WEEKLY_PLANS_KEY, variables.weekDate, isGuest],
+          context.previousPlan
+        )
+      }
+    },
+
+    onSettled: (_, __, variables) => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
       queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
     },
@@ -552,6 +609,7 @@ export function useRemoveRecipeFromPlan() {
 
 /**
  * Hook to toggle recipe "made" status for a specific week
+ * Implements optimistic updates for instant UI feedback
  */
 export function useMarkRecipeMade() {
   const queryClient = useQueryClient()
@@ -655,7 +713,48 @@ export function useMarkRecipeMade() {
         return { action: "marked", recipeId, weekDate }
       }
     },
-    onSuccess: (_, variables) => {
+
+    // Optimistic update
+    onMutate: async (variables) => {
+      const { recipeId, weekDate, isMadeForWeek } = variables
+
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: [...WEEKLY_PLANS_KEY, weekDate, isGuest],
+      })
+
+      // Snapshot previous value for rollback
+      const previousPlan = queryClient.getQueryData<WeeklyPlan>(
+        [...WEEKLY_PLANS_KEY, weekDate, isGuest]
+      )
+
+      // Optimistically update cache
+      queryClient.setQueryData<WeeklyPlan>(
+        [...WEEKLY_PLANS_KEY, weekDate, isGuest],
+        (old) => {
+          if (!old) return old
+          const newMadeIds = isMadeForWeek
+            ? (old.made_recipe_ids || []).filter((id) => id !== recipeId)
+            : [...(old.made_recipe_ids || []), recipeId]
+          return { ...old, made_recipe_ids: newMadeIds }
+        }
+      )
+
+      return { previousPlan }
+    },
+
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousPlan) {
+        queryClient.setQueryData(
+          [...WEEKLY_PLANS_KEY, variables.weekDate, isGuest],
+          context.previousPlan
+        )
+      }
+    },
+
+    onSettled: (_, __, variables) => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
       queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
     },
@@ -664,6 +763,7 @@ export function useMarkRecipeMade() {
 
 /**
  * Hook to save day assignments for recipes in a weekly plan
+ * Implements optimistic updates for instant UI feedback
  */
 export function useSaveDayAssignments() {
   const queryClient = useQueryClient()
@@ -687,7 +787,7 @@ export function useSaveDayAssignments() {
       }
 
       const supabase = getSupabase()
-      
+
       // Check if plan already exists
       const { data: existingPlan } = await supabase
         .from("weekly_plans")
@@ -722,7 +822,56 @@ export function useSaveDayAssignments() {
 
       return { weekDate, dayAssignments }
     },
-    onSuccess: (_, variables) => {
+
+    // Optimistic update
+    onMutate: async (variables) => {
+      const { weekDate, dayAssignments } = variables
+
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({
+        queryKey: [...WEEKLY_PLANS_KEY, weekDate, isGuest],
+      })
+
+      // Snapshot previous value for rollback
+      const previousPlan = queryClient.getQueryData<WeeklyPlan>(
+        [...WEEKLY_PLANS_KEY, weekDate, isGuest]
+      )
+
+      // Optimistically update cache
+      queryClient.setQueryData<WeeklyPlan>(
+        [...WEEKLY_PLANS_KEY, weekDate, isGuest],
+        (old) => {
+          if (!old) {
+            // Create a new plan if none exists
+            return {
+              user_id: isGuest ? "guest" : "",
+              week_date: weekDate,
+              recipe_ids: [],
+              made_recipe_ids: [],
+              day_assignments: dayAssignments,
+              scale: 1.0,
+              generated_at: new Date().toISOString(),
+            }
+          }
+          return { ...old, day_assignments: dayAssignments }
+        }
+      )
+
+      return { previousPlan }
+    },
+
+    onError: (err, variables, context) => {
+      // Rollback on error
+      if (context?.previousPlan) {
+        queryClient.setQueryData(
+          [...WEEKLY_PLANS_KEY, variables.weekDate, isGuest],
+          context.previousPlan
+        )
+      }
+    },
+
+    onSettled: (_, __, variables) => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
     },
   })

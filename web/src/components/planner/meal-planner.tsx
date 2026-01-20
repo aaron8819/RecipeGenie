@@ -16,7 +16,7 @@ import {
   Plus,
   MoreVertical,
   GripVertical,
-  Move,
+  CalendarIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -52,6 +52,24 @@ import { CalendarDays, BookOpen } from "lucide-react"
 import { getTagClassName } from "@/lib/tag-colors"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import type { Recipe, RecipeHistory } from "@/types/database"
 
 /**
@@ -343,6 +361,10 @@ function RecipeCard({
   currentDayIndex: Record<string, number> | undefined
 }) {
   const currentDayValue = currentDayIndex?.[recipe.id] !== undefined ? String(currentDayIndex[recipe.id]) : undefined
+  const assignedDayIdx = currentDayIndex?.[recipe.id]
+  const assignedDayName = assignedDayIdx !== undefined && weekDays[assignedDayIdx]
+    ? weekDays[assignedDayIdx].dayName
+    : null
 
   return (
     <div
@@ -357,7 +379,7 @@ function RecipeCard({
         </div>
       )}
       <div className="flex items-start gap-1 mb-1">
-        <div 
+        <div
           className="font-semibold text-xs pr-5 cursor-pointer flex-1"
           onClick={onView}
         >
@@ -369,7 +391,9 @@ function RecipeCard({
           {recipe.category}
         </span>
       </div>
-      <div className="flex gap-1 mt-2 flex-wrap">
+
+      {/* Desktop: show all buttons */}
+      <div className="hidden lg:flex gap-1 mt-2 flex-wrap">
         <Button
           variant="outline"
           size="sm"
@@ -437,7 +461,83 @@ function RecipeCard({
           <Trash2 className="h-3 w-3" />
         </Button>
       </div>
-      {/* Move to day dropdown */}
+
+      {/* Mobile: show primary actions + overflow menu */}
+      <div className="flex lg:hidden gap-1 mt-2 flex-wrap">
+        <Button
+          variant={isMade ? "default" : "outline"}
+          size="sm"
+          className={cn(
+            "h-7 px-2 text-[10px] flex-1",
+            isMade
+              ? "bg-sage-600 hover:bg-sage-700 text-white"
+              : "text-sage-700 border-sage-300"
+          )}
+          onClick={(e) => {
+            e.stopPropagation()
+            onMarkMade()
+          }}
+          disabled={isMarkingThis}
+        >
+          <Check className="h-3 w-3 mr-1" />
+          {isMade ? "Made" : "Made"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-[10px] flex-1"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSwap()
+          }}
+          disabled={isSwapping}
+        >
+          {isSwapping ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <>
+              <Shuffle className="h-3 w-3 mr-1" />
+              Swap
+            </>
+          )}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreVertical className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddToCart()
+              }}
+              disabled={isAddingToCart}
+            >
+              <ShoppingCart className="h-4 w-4 mr-2" />
+              Add to cart
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemove()
+              }}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Day assignment dropdown - improved visibility */}
       <div className="mt-2">
         <Select
           value={currentDayValue}
@@ -448,9 +548,9 @@ function RecipeCard({
             }
           }}
         >
-          <SelectTrigger className="h-7 text-[10px] w-full">
-            <Move className="h-3 w-3 mr-1" />
-            <SelectValue placeholder="Move to..." />
+          <SelectTrigger className="h-7 text-[10px] w-full border-sage-300 bg-sage-50 hover:bg-sage-100">
+            <CalendarIcon className="h-3 w-3 mr-1 text-sage-600" />
+            <SelectValue placeholder={assignedDayName ? assignedDayName : "Assign day"} />
           </SelectTrigger>
           <SelectContent>
             {weekDays.map((day, idx) => (
@@ -486,6 +586,8 @@ export function MealPlanner() {
   })
   const [pendingRemovalRecipeId, setPendingRemovalRecipeId] = useState<string | null>(null)
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
   const [view, setView] = useState<PlannerView>(() => {
     if (typeof window === "undefined") return "calendar"
     return (localStorage.getItem(PLANNER_VIEW_KEY) as PlannerView) || "calendar"
@@ -566,8 +668,19 @@ export function MealPlanner() {
     setCurrentWeekDate((prev) => navigateWeek(prev, "next"))
   }
 
-  const handleGeneratePlan = async () => {
+  const handleGeneratePlan = () => {
     if (!currentWeekDate) return
+    // Show confirmation if there are existing recipes
+    if (weeklyPlan?.recipe_ids && weeklyPlan.recipe_ids.length > 0) {
+      setShowRegenerateConfirm(true)
+    } else {
+      executeGeneratePlan()
+    }
+  }
+
+  const executeGeneratePlan = async () => {
+    if (!currentWeekDate) return
+    setShowRegenerateConfirm(false)
     await generatePlan.mutateAsync({ weekDate: currentWeekDate, selection })
   }
 
@@ -587,20 +700,43 @@ export function MealPlanner() {
         excludeIds: weeklyPlan?.recipe_ids || [],
       })
     } finally {
-      // Clear swap state after animation completes
-      setTimeout(() => setSwappingRecipeId(null), 600)
+      setSwappingRecipeId(null)
     }
   }
 
-  const handleMarkMade = async (recipeId: string, isMadeForWeek: boolean) => {
+  const handleMarkMade = useCallback(async (recipeId: string, isMadeForWeek: boolean) => {
     if (!currentWeekDate) return
+
+    // Get recipe name for the toast message
+    const recipe = recipes?.find(r => r.id === recipeId)
+    const recipeName = recipe?.name || "Recipe"
+
     setMarkingRecipeId(recipeId)
     try {
+      // Execute the mutation immediately
       await markMade.mutateAsync({ recipeId, weekDate: currentWeekDate, isMadeForWeek })
+
+      // Show undo toast after mutation succeeds
+      undoToast.show({
+        message: isMadeForWeek
+          ? `"${recipeName}" unmarked as made`
+          : `"${recipeName}" marked as made`,
+        onUndo: () => {
+          // Toggle back the made status
+          markMade.mutate({
+            recipeId,
+            weekDate: currentWeekDate,
+            isMadeForWeek: !isMadeForWeek, // Toggle back
+          })
+        },
+        onExpire: () => {
+          // Mutation already executed, nothing to do
+        },
+      })
     } finally {
       setMarkingRecipeId(null)
     }
-  }
+  }, [currentWeekDate, recipes, markMade, undoToast])
 
   const handleRemoveFromPlan = useCallback((recipe: Recipe) => {
     if (!currentWeekDate) return
@@ -775,6 +911,28 @@ export function MealPlanner() {
               <span className="hidden sm:inline">Next</span>
               <ChevronRight className="h-5 w-5 sm:ml-1" />
             </Button>
+
+            {/* Date picker for direct week navigation */}
+            <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="lg" className="px-3" title="Jump to date">
+                  <CalendarIcon className="h-5 w-5" />
+                  <span className="hidden sm:inline ml-1">Jump</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  selected={currentWeekDate ? new Date(currentWeekDate) : undefined}
+                  onSelect={(date) => {
+                    if (date) {
+                      const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
+                      setCurrentWeekDate(weekStart)
+                      setIsDatePickerOpen(false)
+                    }
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Progress Indicator */}
@@ -1488,6 +1646,29 @@ export function MealPlanner() {
         onOpenChange={setIsAddRecipeModalOpen}
         weekDate={currentWeekDate}
       />
+
+      {/* Regeneration Confirmation Dialog */}
+      <AlertDialog open={showRegenerateConfirm} onOpenChange={setShowRegenerateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace existing plan?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will replace {weeklyPlan?.recipe_ids?.length || 0} existing{" "}
+              {weeklyPlan?.recipe_ids?.length === 1 ? "recipe" : "recipes"} in your meal plan.
+              Day assignments will be preserved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeGeneratePlan}
+              className="bg-sage-600 hover:bg-sage-700"
+            >
+              Generate New Plan
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
