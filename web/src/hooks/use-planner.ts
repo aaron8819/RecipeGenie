@@ -223,6 +223,7 @@ export function useGenerateMealPlan() {
           week_date: weekDate,
           recipe_ids: result.recipes.map((r) => r.id),
           made_recipe_ids: [],
+          day_assignments: null,
           scale: 1.0,
           generated_at: new Date().toISOString(),
         }
