@@ -532,9 +532,6 @@ export function MealPlanner() {
   const { data: allRecipes } = useRecipes({})
   const hasAnyRecipes = (allRecipes?.length ?? 0) > 0
 
-  // Hook to save day assignments to database
-  const saveDayAssignments = useSaveDayAssignments()
-
   const generatePlan = useGenerateMealPlan()
   const swapRecipe = useSwapRecipe()
   const markMade = useMarkRecipeMade()
