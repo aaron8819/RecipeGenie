@@ -1042,3 +1042,112 @@ export function useUpdateShoppingConfig() {
     },
   })
 }
+
+/**
+ * Hook to check off multiple items at once (move from items to already_have)
+ * Used for "Check All" in a category
+ */
+export function useBulkCheckOff() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async (itemsToCheck: ShoppingItem[]) => {
+      const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
+
+      if (isGuest) {
+        const current = getGuestList(queryClient)
+        // Remove items from items array
+        const remainingItems = current.items.filter(i => !itemNames.has(i.item.toLowerCase().trim()))
+        // Add items to already_have (avoid duplicates)
+        const existingAlreadyHave = new Set(current.already_have.map(i => i.item.toLowerCase().trim()))
+        const newAlreadyHave = [
+          ...current.already_have,
+          ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
+        ]
+        setGuestList(queryClient, {
+          items: remainingItems,
+          already_have: newAlreadyHave,
+        })
+        return { count: itemsToCheck.length }
+      }
+
+      const supabase = getSupabase()
+      const { data: currentList, error: fetchError } = await supabase
+        .from("shopping_list")
+        .select("items, already_have")
+        .single()
+
+      if (fetchError) throw fetchError
+
+      const currentItems = (currentList?.items as ShoppingItem[]) || []
+      const alreadyHave = (currentList?.already_have as ShoppingItem[]) || []
+
+      // Remove items from items array
+      const remainingItems = currentItems.filter(i => !itemNames.has(i.item.toLowerCase().trim()))
+
+      // Add items to already_have (avoid duplicates)
+      const existingAlreadyHave = new Set(alreadyHave.map(i => i.item.toLowerCase().trim()))
+      const newAlreadyHave = [
+        ...alreadyHave,
+        ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
+      ]
+
+      const { error: saveError } = await supabase
+        .from("shopping_list")
+        .update({
+          items: remainingItems,
+          already_have: newAlreadyHave,
+        })
+        .eq("user_id", user?.id)
+
+      if (saveError) throw saveError
+      return { count: itemsToCheck.length }
+    },
+    // Optimistic update
+    onMutate: async (itemsToCheck) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
+
+      // Snapshot previous value for rollback
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+
+      const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
+
+      // Optimistically update cache
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY, isGuest],
+        (old) => {
+          if (!old) return old
+          const currentItems = old.items || []
+          const alreadyHave = old.already_have || []
+
+          const remainingItems = currentItems.filter(i => !itemNames.has(i.item.toLowerCase().trim()))
+          const existingAlreadyHave = new Set(alreadyHave.map(i => i.item.toLowerCase().trim()))
+          const newAlreadyHave = [
+            ...alreadyHave,
+            ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
+          ]
+
+          return {
+            ...old,
+            items: remainingItems,
+            already_have: newAlreadyHave,
+          }
+        }
+      )
+
+      return { previousList }
+    },
+    onError: (err, itemsToCheck, context) => {
+      // Rollback on error
+      if (context?.previousList) {
+        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+      }
+    },
+    onSuccess: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+    },
+  })
+}

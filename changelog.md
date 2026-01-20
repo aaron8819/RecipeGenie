@@ -4,6 +4,56 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.4.1] - 2026-01-20
+
+**Summary:** Shopping list UX enhancements with mobile swipe hints, bulk actions, and improved feedback
+
+### Added
+
+- **Mobile Swipe Hint**: 
+  - First-time mobile users see an animated hint showing "Swipe left to delete"
+  - Hint appears on the first shopping list item on mobile devices only
+  - Automatically dismissed after animation and stored in localStorage to prevent re-showing
+  - Smooth animation guides users to discover swipe-to-delete functionality
+
+- **Bulk Check-Off**: 
+  - "Check All" button in category headers (appears when category has 2+ items)
+  - Move all items in a category to "Already Have" with one click
+  - Optimistic updates for instant feedback
+  - Toast notification confirms action with item count
+
+- **Enhanced Source Tags**: 
+  - Truncated recipe names in source tags are now tappable on mobile
+  - Tap to expand and see full recipe name in popover
+  - Improves mobile usability when recipe names are long
+
+- **Toast Notifications**: 
+  - Copy to clipboard now shows confirmation toast
+  - Adding items manually shows confirmation toast with count
+  - Bulk check-off shows confirmation toast
+  - All toasts use consistent styling and timing
+
+- **Flexible Undo Toast**: 
+  - Undo toast component now supports informational toasts (without undo button)
+  - `onUndo` callback is now optional
+  - Enables consistent toast UI for both undoable and informational actions
+
+### Changed
+
+- Shopping list item animations improved for better visual feedback
+- Source tag component refactored to support mobile tap-to-expand
+- Toast system unified for consistent user feedback across shopping list actions
+
+### Technical Notes
+
+- New hook: `useBulkCheckOff()` for bulk item check-off operations
+- New hook: `useSwipeHint()` for managing swipe hint display logic
+- CSS animation: `swipeHint` keyframes for hint animation
+- Popover component used for expandable source tags on mobile
+- localStorage key: `shopping-swipe-hint-shown` tracks hint display
+
+---
+
 ## [2.4.0] - 2026-01-17
 
 **Summary:** Recipe category management with drag-and-drop reordering and bulk updates

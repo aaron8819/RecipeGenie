@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
-import { Plus, Trash2, Package, Ban, Check, Copy, GripVertical, X, Settings, Loader2 } from "lucide-react"
+import { Plus, Trash2, Package, Ban, Check, CheckCheck, Copy, GripVertical, X, Settings, Loader2 } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -25,6 +25,7 @@ import { CSS } from "@dnd-kit/utilities"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
   useShoppingList,
   useAddShoppingItem,
@@ -32,6 +33,7 @@ import {
   useRemoveRecipeItems,
   useClearShoppingList,
   useCheckOffItem,
+  useBulkCheckOff,
   useMoveToShoppingList,
   useMoveExcludedToShoppingList,
   useReorderShoppingList,
@@ -72,16 +74,16 @@ function getColorIndex(str: string): number {
   return Math.abs(hash) % RECIPE_COLORS.length
 }
 
-// Source tag component (for item rows)
-function SourceTag({ 
-  recipeName, 
-  colorIndex 
-}: { 
+// Source tag component (for item rows) - with tap-to-expand for truncated names
+function SourceTag({
+  recipeName,
+  colorIndex
+}: {
   recipeName: string
-  colorIndex?: number 
+  colorIndex?: number
 }) {
   const isManual = recipeName === "Manual"
-  
+
   if (isManual) {
     return (
       <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
@@ -89,20 +91,42 @@ function SourceTag({
       </span>
     )
   }
-  
+
   const index = colorIndex !== undefined ? colorIndex : getColorIndex(recipeName)
   const colors = RECIPE_COLORS[index % RECIPE_COLORS.length]
-  
+
   // Truncate long recipe names
-  const displayName = recipeName.length > 20 ? recipeName.slice(0, 18) + "…" : recipeName
-  
-  return (
-    <span 
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
-      title={recipeName}
+  const isTruncated = recipeName.length > 20
+  const displayName = isTruncated ? recipeName.slice(0, 18) + "…" : recipeName
+
+  const tagContent = (
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border cursor-default ${colors.bg} ${colors.text} ${colors.border}`}
     >
       {displayName}
     </span>
+  )
+
+  // If not truncated, just show the tag
+  if (!isTruncated) {
+    return tagContent
+  }
+
+  // If truncated, wrap in popover for tap-to-expand on mobile
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <span
+          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border cursor-pointer ${colors.bg} ${colors.text} ${colors.border}`}
+          title={recipeName}
+        >
+          {displayName}
+        </span>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="text-sm p-2 w-auto max-w-[200px]">
+        {recipeName}
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -154,6 +178,7 @@ function SwipeableItem({
   dragHandleProps,
   dragStyle,
   isDragging,
+  showSwipeHint,
 }: {
   item: ShoppingItem
   onCheckOff: () => void
@@ -164,6 +189,7 @@ function SwipeableItem({
   dragHandleProps?: any
   dragStyle?: React.CSSProperties
   isDragging?: boolean
+  showSwipeHint?: boolean
 }) {
   const [swipeOffset, setSwipeOffset] = useState(0)
   const [isSwiping, setIsSwiping] = useState(false)
@@ -376,14 +402,20 @@ function SwipeableItem({
 
       {/* Main item content */}
       <div
-        className="flex items-center justify-between px-4 py-3.5 md:py-3 group transition-transform duration-200 ease-out swipeable-content hover:bg-sage-50/50"
+        className={`flex items-center justify-between px-4 py-3.5 md:py-3 group transition-transform duration-200 ease-out swipeable-content hover:bg-sage-50/50 ${showSwipeHint ? 'animate-swipe-hint' : ''}`}
         style={{
-          transform: `translateX(-${swipeOffset}px)`,
+          transform: showSwipeHint ? undefined : `translateX(-${swipeOffset}px)`,
           ...dragStyle,
           opacity: isDragging ? 0.5 : 1,
           willChange: isSwiping || isDragging ? 'transform' : 'auto',
         }}
       >
+        {/* Swipe hint tooltip */}
+        {showSwipeHint && (
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-foreground text-background text-xs px-2 py-1 rounded whitespace-nowrap z-10 md:hidden">
+            Swipe left to delete
+          </div>
+        )}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {/* Drag handle - visible on all screen sizes */}
           <button
@@ -456,6 +488,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isCheckingOff,
   isRemoving,
   recipeColorMap,
+  showSwipeHint,
 }: {
   item: ShoppingItem
   onCheckOff: () => void
@@ -463,6 +496,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isCheckingOff: boolean
   isRemoving: boolean
   recipeColorMap: Map<string, number>
+  showSwipeHint?: boolean
 }) {
   const {
     attributes,
@@ -490,6 +524,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
         dragHandleProps={{ ...attributes, ...listeners }}
         dragStyle={dragStyle}
         isDragging={isDragging}
+        showSwipeHint={showSwipeHint}
       />
     </li>
   )
@@ -502,6 +537,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
     prevProps.isRemoving === nextProps.isRemoving &&
+    prevProps.showSwipeHint === nextProps.showSwipeHint &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 })
@@ -573,6 +609,35 @@ function DragOverlayItem({
   )
 }
 
+// Custom hook for swipe hint on first visit
+function useSwipeHint() {
+  const [showSwipeHint, setShowSwipeHint] = useState(false)
+  const [hintDismissed, setHintDismissed] = useState(false)
+
+  useEffect(() => {
+    // Only show on mobile devices
+    if (typeof window === 'undefined' || window.innerWidth >= 768) return
+
+    // Check if hint has been shown before
+    const hintShown = localStorage.getItem('shopping-swipe-hint-shown')
+    if (!hintShown) {
+      // Delay the hint to allow list to render
+      const timer = setTimeout(() => {
+        setShowSwipeHint(true)
+        // Mark as shown
+        localStorage.setItem('shopping-swipe-hint-shown', 'true')
+        // Auto-dismiss hint after animation completes
+        setTimeout(() => {
+          setHintDismissed(true)
+        }, 2000)
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+  }, [])
+
+  return { showSwipeHint: showSwipeHint && !hintDismissed }
+}
+
 export function ShoppingListView() {
   const [newItem, setNewItem] = useState("")
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
@@ -581,6 +646,7 @@ export function ShoppingListView() {
   const [pendingClearList, setPendingClearList] = useState(false)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const { showSwipeHint } = useSwipeHint()
 
   const { data: shoppingList, isLoading, isFetching } = useShoppingList()
   const { data: config } = useShoppingConfig()
@@ -591,6 +657,7 @@ export function ShoppingListView() {
   const removeRecipeItems = useRemoveRecipeItems()
   const clearList = useClearShoppingList()
   const checkOffItem = useCheckOffItem()
+  const bulkCheckOff = useBulkCheckOff()
   const moveToList = useMoveToShoppingList()
   const moveExcludedToList = useMoveExcludedToShoppingList()
   const reorderList = useReorderShoppingList()
@@ -642,6 +709,23 @@ export function ShoppingListView() {
       },
     })
   }, [undoToast, clearList])
+
+  // Handle bulk check-off (check all items in a category)
+  const handleBulkCheckOff = useCallback((items: ShoppingItem[], categoryName: string) => {
+    if (items.length === 0) return
+
+    // Perform the bulk check-off immediately (with optimistic update)
+    bulkCheckOff.mutate(items)
+
+    // Show confirmation toast
+    const message = items.length === 1
+      ? `Moved "${items[0].item}" to Already Have`
+      : `Moved ${items.length} items to Already Have`
+    undoToast.show({
+      message,
+      duration: 3000,
+    })
+  }, [bulkCheckOff, undoToast])
 
   // Set up drag sensors with higher activation distance on mobile to avoid interfering with scrolling
   const sensors = useSensors(
@@ -753,15 +837,28 @@ export function ShoppingListView() {
 
     try {
       // Add each item
+      const addedItems: string[] = []
       for (const item of items) {
         try {
           await addItem.mutateAsync({ itemName: item })
+          addedItems.push(item)
         } catch (error) {
           // Skip duplicates or errors for individual items
           console.warn(`Skipped item "${item}":`, error)
         }
       }
       setNewItem("")
+
+      // Show confirmation toast
+      if (addedItems.length > 0) {
+        const message = addedItems.length === 1
+          ? `Added: ${addedItems[0]}`
+          : `Added ${addedItems.length} items`
+        undoToast.show({
+          message,
+          duration: 2000,
+        })
+      }
     } catch (error) {
       console.error("Failed to add items:", error)
     }
@@ -794,6 +891,10 @@ export function ShoppingListView() {
 
     try {
       await navigator.clipboard.writeText(text)
+      undoToast.show({
+        message: "Copied to clipboard!",
+        duration: 2000,
+      })
     } catch (error) {
       console.error("Failed to copy:", error)
     }
@@ -1023,7 +1124,9 @@ export function ShoppingListView() {
               strategy={verticalListSortingStrategy}
             >
               {/* Main shopping items grouped by category */}
-              {orderedCategories.map((categoryData) => {
+              {(() => {
+                let isFirstItem = true // Track if we've shown hint yet
+                return orderedCategories.map((categoryData) => {
                   const items = groupedItems[categoryData.key]
                   if (!items || items.length === 0) return null
 
@@ -1046,27 +1149,48 @@ export function ShoppingListView() {
                           {categoryData.isCustom && (
                             <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded normal-case">Custom</span>
                           )}
-                          <span className="text-xs font-normal text-sage-400 ml-auto">({items.length})</span>
+                          <div className="flex items-center gap-2 ml-auto">
+                            {items.length > 1 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleBulkCheckOff(items, categoryData.name)}
+                                disabled={bulkCheckOff.isPending}
+                                className="h-6 px-2 text-[10px] text-sage-500 hover:text-sage-700 hover:bg-sage-100"
+                                title={`Check all items in ${categoryData.name}`}
+                              >
+                                <CheckCheck className="h-3 w-3 mr-1" />
+                                <span className="hidden sm:inline">All</span>
+                              </Button>
+                            )}
+                            <span className="text-xs font-normal text-sage-400">({items.length})</span>
+                          </div>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="p-0">
                         <ul className="divide-y divide-sage-50" style={{ contain: 'layout style paint' }}>
-                          {items.map((item) => (
-                            <SortableShoppingItem
-                              key={item.item}
-                              item={item}
-                              onCheckOff={() => checkOffItem.mutate(item)}
-                              onRemove={() => handleRemoveItem(item.item)}
-                              isCheckingOff={checkOffItem.isPending}
-                              isRemoving={false}
-                              recipeColorMap={recipeColorMap}
-                            />
-                          ))}
+                          {items.map((item) => {
+                            const showHintForThisItem = isFirstItem && showSwipeHint
+                            if (isFirstItem) isFirstItem = false
+                            return (
+                              <SortableShoppingItem
+                                key={item.item}
+                                item={item}
+                                onCheckOff={() => checkOffItem.mutate(item)}
+                                onRemove={() => handleRemoveItem(item.item)}
+                                isCheckingOff={checkOffItem.isPending}
+                                isRemoving={false}
+                                recipeColorMap={recipeColorMap}
+                                showSwipeHint={showHintForThisItem}
+                              />
+                            )
+                          })}
                         </ul>
                       </CardContent>
                     </Card>
                   )
-                })}
+                })
+              })()}
             </SortableContext>
 
             <DragOverlay>

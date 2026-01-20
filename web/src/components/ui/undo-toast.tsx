@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 interface UndoToastOptions {
   message: string
   duration?: number // default 5000ms
-  onUndo: () => void
+  onUndo?: () => void // Optional - if not provided, shows informational toast without undo button
   onExpire?: () => void
 }
 
@@ -30,7 +30,7 @@ export function useUndoToast() {
 interface ToastState {
   message: string
   duration: number
-  onUndo: () => void
+  onUndo?: () => void
   onExpire?: () => void
   startTime: number
 }
@@ -96,7 +96,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   }, [clearTimers, dismiss])
 
   const handleUndo = useCallback(() => {
-    if (toast) {
+    if (toast && toast.onUndo) {
       clearTimers()
       toast.onUndo()
       setIsVisible(false)
@@ -126,14 +126,16 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
           <div className="bg-foreground text-background rounded-lg shadow-lg overflow-hidden min-w-[280px] max-w-[400px]">
             <div className="flex items-center gap-3 px-4 py-3">
               <span className="flex-1 text-sm">{toast.message}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleUndo}
-                className="h-8 px-3 text-background hover:text-background hover:bg-background/20 font-medium"
-              >
-                Undo
-              </Button>
+              {toast.onUndo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleUndo}
+                  className="h-8 px-3 text-background hover:text-background hover:bg-background/20 font-medium"
+                >
+                  Undo
+                </Button>
+              )}
               <button
                 onClick={dismiss}
                 className="text-background/60 hover:text-background transition-colors"

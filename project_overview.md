@@ -254,7 +254,7 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-20 (v2.4.0)*
+*Last updated: 2026-01-20 (v2.4.1)*
 
 ## Recent Updates (v2.4.0)
 
