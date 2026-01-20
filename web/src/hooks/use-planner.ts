@@ -661,6 +661,72 @@ export function useMarkRecipeMade() {
   })
 }
 
+/**
+ * Hook to save day assignments for recipes in a weekly plan
+ */
+export function useSaveDayAssignments() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async ({ weekDate, dayAssignments }: { weekDate: string; dayAssignments: Record<string, number> }) => {
+      if (isGuest) {
+        const existing = getGuestPlan(queryClient, weekDate)
+        const plan: WeeklyPlan = {
+          user_id: "guest",
+          week_date: weekDate,
+          recipe_ids: existing?.recipe_ids || [],
+          made_recipe_ids: existing?.made_recipe_ids || [],
+          day_assignments: dayAssignments,
+          scale: existing?.scale || 1.0,
+          generated_at: existing?.generated_at || new Date().toISOString(),
+        }
+        setGuestPlan(queryClient, weekDate, plan)
+        return { weekDate, dayAssignments }
+      }
+
+      const supabase = getSupabase()
+      
+      // Check if plan already exists
+      const { data: existingPlan } = await supabase
+        .from("weekly_plans")
+        .select("*")
+        .eq("user_id", user?.id)
+        .eq("week_date", weekDate)
+        .maybeSingle()
+
+      // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
+      if (existingPlan) {
+        // Update existing plan
+        const { error } = await supabase
+          .from("weekly_plans")
+          .update({
+            day_assignments: dayAssignments,
+          })
+          .eq("user_id", user?.id)
+          .eq("week_date", weekDate)
+        if (error) throw error
+      } else {
+        // Insert new plan with day assignments
+        const { error } = await supabase.from("weekly_plans").insert({
+          user_id: user?.id,
+          week_date: weekDate,
+          recipe_ids: [],
+          day_assignments: dayAssignments,
+          scale: 1.0,
+          generated_at: new Date().toISOString(),
+        })
+        if (error) throw error
+      }
+
+      return { weekDate, dayAssignments }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
+    },
+  })
+}
+
 export function getWeekStartDate(date: Date, weekStartDay: number = 1): string {
   const d = new Date(date)
   const day = d.getDay()
