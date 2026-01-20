@@ -133,6 +133,18 @@ The app includes an auth callback route at `/auth/callback` that handles email c
      - Recognizes common section headers: "Ingredients", "Instructions", "Directions", "Method", "Steps"
 4. Click "Save Recipe"
 
+### Managing Recipe Categories
+
+1. Click "My Recipes" tab
+2. Click the category settings button (⚙️) in the header
+3. In the category settings modal:
+   - **Add categories**: Type a name and click "Add"
+   - **Edit categories**: Click the pencil icon to rename a category (all recipes with that category are automatically updated)
+   - **Reorder categories**: Drag and drop categories to reorder them
+   - **Delete categories**: Click the trash icon (requires reassigning recipes if the category has recipes)
+   - **Reset to defaults**: Restore default categories (chicken, beef, turkey, lamb, vegetarian)
+4. Category changes automatically sync with your meal planner preferences
+
 ### Generating a Meal Plan
 
 1. Click "Meal Planner" tab

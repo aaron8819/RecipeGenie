@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Check, ChevronDown, X } from "lucide-react"
+import { Check, ChevronDown, X, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
 
@@ -12,6 +13,7 @@ interface MultiSelectProps {
   onChange: (value: string[]) => void
   placeholder?: string
   className?: string
+  tagCounts?: Array<{ tag: string; count: number }>
 }
 
 export function MultiSelect({
@@ -20,9 +22,23 @@ export function MultiSelect({
   onChange,
   placeholder = "Select tags...",
   className,
+  tagCounts,
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const containerRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Create a map of tag to count for quick lookup
+  const tagCountMap = tagCounts 
+    ? new Map(tagCounts.map(tc => [tc.tag, tc.count]))
+    : new Map<string, number>()
+
+  // Filter options based on search query
+  const filteredOptions = options.filter((option) => {
+    if (!searchQuery) return true
+    return option.toLowerCase().includes(searchQuery.toLowerCase())
+  })
 
   const toggleOption = (option: string) => {
     if (value.includes(option)) {
@@ -50,16 +66,23 @@ export function MultiSelect({
         !containerRef.current.contains(event.target as Node)
       ) {
         setOpen(false)
+        setSearchQuery("")
       }
     }
 
     if (open) {
       document.addEventListener("mousedown", handleClickOutside)
+      // Focus search input when dropdown opens
+      if (searchInputRef.current && options.length > 5) {
+        setTimeout(() => searchInputRef.current?.focus(), 0)
+      }
       return () => {
         document.removeEventListener("mousedown", handleClickOutside)
       }
+    } else {
+      setSearchQuery("")
     }
-  }, [open])
+  }, [open, options.length])
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
@@ -135,15 +158,33 @@ export function MultiSelect({
       </Button>
 
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-60 overflow-auto">
-          <div className="p-1">
-            {options.length === 0 ? (
+        <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-60 overflow-hidden flex flex-col">
+          {/* Search input */}
+          {options.length > 5 && (
+            <div className="p-2 border-b">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search tags..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 h-8 text-sm"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
+          )}
+          <div className="overflow-auto p-1">
+            {filteredOptions.length === 0 ? (
               <div className="px-3 py-2 text-sm text-muted-foreground">
-                No tags available
+                {searchQuery ? "No tags match your search" : "No tags available"}
               </div>
             ) : (
-              options.map((option) => {
+              filteredOptions.map((option) => {
                 const isSelected = value.includes(option)
+                const count = tagCountMap.get(option)
                 return (
                   <button
                     key={option}
@@ -153,7 +194,7 @@ export function MultiSelect({
                   >
                     <div
                       className={cn(
-                        "flex h-4 w-4 items-center justify-center rounded border",
+                        "flex h-4 w-4 items-center justify-center rounded border flex-shrink-0",
                         isSelected
                           ? "bg-primary border-primary text-primary-foreground"
                           : "border-input"
@@ -161,7 +202,12 @@ export function MultiSelect({
                     >
                       {isSelected && <Check className="h-3 w-3" />}
                     </div>
-                    <span>{option}</span>
+                    <span className="flex-1">{option}</span>
+                    {count !== undefined && (
+                      <span className="text-xs text-muted-foreground">
+                        ({count})
+                      </span>
+                    )}
                   </button>
                 )
               })

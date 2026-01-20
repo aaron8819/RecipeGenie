@@ -1,18 +1,20 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, Search, Heart, Filter, Grid3x3, List, X } from "lucide-react"
+import { Plus, Search, Heart, Filter, Grid3x3, List, X, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
 import { RecipeDialog } from "./recipe-dialog"
 import { RecipeDetailDialog } from "./recipe-detail-dialog"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
+import { RecipeCategorySettingsModal } from "./recipe-category-settings-modal"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   useRecipes,
   useCategories,
   useAllTags,
+  useTagsWithCounts,
   useToggleFavorite,
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
@@ -97,6 +99,7 @@ import {
 } from "@/components/ui/select"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { cn } from "@/lib/utils"
+import { getTagClassName } from "@/lib/tag-colors"
 
 export function RecipeList() {
   const [search, setSearch] = useState("")
@@ -110,6 +113,7 @@ export function RecipeList() {
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
   const [addToPlanRecipe, setAddToPlanRecipe] = useState<Recipe | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false)
 
   const { data: recipes, isLoading } = useRecipes({
     category,
@@ -119,6 +123,7 @@ export function RecipeList() {
   })
   const { data: categories } = useCategories()
   const { data: allTags = [] } = useAllTags()
+  const { data: tagCounts = [] } = useTagsWithCounts()
   const { data: history } = useRecipeHistory()
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
@@ -148,6 +153,14 @@ export function RecipeList() {
     setSelectedTags([])
     setFavoritesOnly(false)
     setSearch("")
+  }
+
+  const handleTagClick = (tag: string) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(selectedTags.filter((t) => t !== tag))
+    } else {
+      setSelectedTags([...selectedTags, tag])
+    }
   }
 
   return (
@@ -207,6 +220,35 @@ export function RecipeList() {
         )}
       </div>
 
+      {/* Tag Cloud - Quick Filter */}
+      {tagCounts.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-sm font-medium text-muted-foreground">Quick filter by tags:</div>
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
+            {tagCounts.map(({ tag, count }) => {
+              const isSelected = selectedTags.includes(tag)
+              const colors = getTagClassName(tag, false)
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => handleTagClick(tag)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all",
+                    isSelected
+                      ? "ring-2 ring-primary ring-offset-2 " + colors
+                      : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground " + colors
+                  )}
+                >
+                  <span>{tag}</span>
+                  <span className="text-xs opacity-70">({count})</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Filters and Add Recipe - NOT sticky */}
       <div className="flex flex-col sm:flex-row gap-3 items-start">
         {/* Mobile: Filter Toggle */}
@@ -254,6 +296,7 @@ export function RecipeList() {
               onChange={setSelectedTags}
               placeholder="Filter by tags..."
               className="w-full sm:w-[180px]"
+              tagCounts={tagCounts}
             />
           )}
 
@@ -307,11 +350,21 @@ export function RecipeList() {
         </div>
         </div>
 
-        {/* Add Recipe Button - NOT sticky */}
-        <Button onClick={() => setIsAddDialogOpen(true)} className="w-full sm:w-auto sm:ml-auto">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Recipe
-        </Button>
+        {/* Add Recipe and Settings Buttons - NOT sticky */}
+        <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
+          <Button
+            variant="outline"
+            onClick={() => setIsCategorySettingsOpen(true)}
+            className="w-full sm:w-auto"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Categories</span>
+          </Button>
+          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full sm:w-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Recipe
+          </Button>
+        </div>
       </div>
 
       {/* Recipe Grid/List */}
@@ -394,6 +447,7 @@ export function RecipeList() {
                   }
                   onAddToPlan={setAddToPlanRecipe}
                   onClick={setViewingRecipe}
+                  onTagClick={handleTagClick}
                   lastMade={stats?.lastMade ?? null}
                   timesMade={stats?.timesMade ?? 0}
                 />
@@ -434,6 +488,12 @@ export function RecipeList() {
         open={!!addToPlanRecipe}
         onOpenChange={(open) => !open && setAddToPlanRecipe(null)}
         recipe={addToPlanRecipe}
+      />
+
+      {/* Category Settings Modal */}
+      <RecipeCategorySettingsModal
+        open={isCategorySettingsOpen}
+        onOpenChange={setIsCategorySettingsOpen}
       />
     </div>
   )

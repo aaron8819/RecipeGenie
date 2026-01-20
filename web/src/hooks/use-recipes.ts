@@ -5,6 +5,7 @@ import { createBrowserClient } from "@supabase/ssr"
 import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { getDefaultRecipes, getDefaultConfig } from "@/lib/guest-storage"
+import { useUpdateUserConfig } from "@/hooks/use-planner"
 
 const RECIPES_KEY = ["recipes"]
 
@@ -169,6 +170,9 @@ export function useCreateRecipe() {
         { queryKey: RECIPES_KEY },
         (old) => old ? [...old, newRecipe].sort((a, b) => a.name.localeCompare(b.name)) : [newRecipe]
       )
+      // Invalidate tags queries to refresh tag lists
+      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
     },
   })
 }
@@ -182,18 +186,24 @@ export function useUpdateRecipe() {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: RecipeUpdate }) => {
+      // Ensure tags is always a defined array
+      const normalizedUpdates = {
+        ...updates,
+        tags: updates.tags ?? [],
+      }
+
       if (isGuest) {
         // Get from cache and apply updates
         const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
         const existing = recipes.find((r) => r.id === id)
         if (!existing) throw new Error("Recipe not found")
-        return { ...existing, ...updates, updated_at: new Date().toISOString() } as Recipe
+        return { ...existing, ...normalizedUpdates, updated_at: new Date().toISOString() } as Recipe
       }
 
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        .update(updates)
+        .update(normalizedUpdates)
         .eq("id", id)
         .eq("user_id", user?.id)
         .select()
@@ -207,6 +217,9 @@ export function useUpdateRecipe() {
         { queryKey: RECIPES_KEY },
         (old) => old?.map((r) => (r.id === updated.id ? updated : r))
       )
+      // Invalidate tags queries to refresh tag lists
+      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
     },
   })
 }
@@ -234,6 +247,9 @@ export function useDeleteRecipe() {
         { queryKey: RECIPES_KEY },
         (old) => old?.filter((r) => r.id !== deletedId)
       )
+      // Invalidate tags queries to refresh tag lists
+      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
     },
   })
 }
@@ -275,13 +291,13 @@ export function useToggleFavorite() {
   })
 }
 
-// Preferred display order for recipe categories
-const CATEGORY_ORDER = ["chicken", "beef", "lamb", "turkey", "vegetarian"]
+// Preferred display order for recipe categories (fallback for default categories)
+const DEFAULT_CATEGORY_ORDER = ["chicken", "beef", "lamb", "turkey", "vegetarian"]
 
-function sortCategories(categories: string[]): string[] {
+function sortDefaultCategories(categories: string[]): string[] {
   return [...categories].sort((a, b) => {
-    const indexA = CATEGORY_ORDER.indexOf(a)
-    const indexB = CATEGORY_ORDER.indexOf(b)
+    const indexA = DEFAULT_CATEGORY_ORDER.indexOf(a)
+    const indexB = DEFAULT_CATEGORY_ORDER.indexOf(b)
     if (indexA === -1 && indexB === -1) return a.localeCompare(b)
     if (indexA === -1) return 1
     if (indexB === -1) return -1
@@ -291,6 +307,7 @@ function sortCategories(categories: string[]): string[] {
 
 /**
  * Hook to fetch all categories
+ * Returns categories in the order they are stored (user's custom order)
  */
 export function useCategories() {
   const { isGuest } = useAuthContext()
@@ -299,7 +316,9 @@ export function useCategories() {
     queryKey: ["user_config", "categories", isGuest],
     queryFn: async () => {
       if (isGuest) {
-        return sortCategories(getDefaultConfig().categories)
+        const guestConfig = getDefaultConfig()
+        // For guest mode, return in default order
+        return sortDefaultCategories(guestConfig.categories || [])
       }
 
       const supabase = getSupabase()
@@ -310,19 +329,24 @@ export function useCategories() {
 
       if (error) {
         console.warn("Config not found, using defaults:", error.message)
-        return sortCategories(["chicken", "beef", "lamb", "turkey", "vegetarian"])
+        return sortDefaultCategories(["chicken", "beef", "lamb", "turkey", "vegetarian"])
       }
-      return sortCategories((data?.categories as string[]) || ["chicken", "turkey", "beef"])
+      
+      const userCategories = (data?.categories as string[]) || []
+      // Return categories in the order they are stored (user's custom order)
+      // If empty, return defaults in sorted order
+      return userCategories.length > 0 ? userCategories : sortDefaultCategories(["chicken", "beef", "lamb", "turkey", "vegetarian"])
     },
     staleTime: Infinity,
   })
 }
 
 /**
- * Hook to fetch all unique tags from all recipes
+ * Hook to fetch all unique tags from all recipes with counts
  */
 export function useAllTags() {
   const { isGuest, user } = useAuthContext()
+  const queryClient = useQueryClient()
 
   return useQuery({
     queryKey: ["recipes", "all-tags", isGuest],
@@ -356,5 +380,142 @@ export function useAllTags() {
       return Array.from(allTags).sort()
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+/**
+ * Hook to fetch tags with usage counts
+ */
+export function useTagsWithCounts() {
+  const { isGuest, user } = useAuthContext()
+  const { data: recipes } = useRecipes()
+
+  return useQuery({
+    queryKey: ["recipes", "tags-with-counts", isGuest, recipes?.length],
+    queryFn: async () => {
+      if (isGuest) {
+        const recipeList = recipes || getDefaultRecipes()
+        const tagCounts = new Map<string, number>()
+        recipeList.forEach((recipe) => {
+          if (recipe.tags && Array.isArray(recipe.tags)) {
+            recipe.tags.forEach((tag) => {
+              tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1)
+            })
+          }
+        })
+        return Array.from(tagCounts.entries())
+          .map(([tag, count]) => ({ tag, count }))
+          .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+      }
+
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("recipes")
+        .select("tags")
+        .eq("user_id", user?.id)
+
+      if (error) throw error
+
+      const tagCounts = new Map<string, number>()
+      ;(data || []).forEach((recipe: { tags: string[] | null }) => {
+        if (recipe.tags && Array.isArray(recipe.tags)) {
+          recipe.tags.forEach((tag) => {
+            tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1)
+          })
+        }
+      })
+
+      return Array.from(tagCounts.entries())
+        .map(([tag, count]) => ({ tag, count }))
+        .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+    },
+    enabled: isGuest || !!user,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+/**
+ * Hook to check if a category has recipes assigned to it
+ */
+export function useCategoryHasRecipes(categoryName: string | null) {
+  const { data: recipes } = useRecipes({ category: categoryName || undefined })
+  return (recipes?.length || 0) > 0
+}
+
+/**
+ * Hook to update recipe categories
+ */
+export function useUpdateCategories() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+  const updateConfig = useUpdateUserConfig()
+
+  return useMutation({
+    mutationFn: async (categories: string[]) => {
+      // Validate: no empty or duplicate categories
+      const trimmed = categories.map((c) => c.trim()).filter((c) => c.length > 0)
+      const unique = Array.from(new Set(trimmed.map((c) => c.toLowerCase())))
+      if (trimmed.length !== unique.length) {
+        throw new Error("Duplicate category names are not allowed")
+      }
+
+      // Use the updateConfig mutation
+      await updateConfig.mutateAsync({ categories: trimmed })
+      return trimmed
+    },
+    onSuccess: () => {
+      // Invalidate categories query
+      queryClient.invalidateQueries({ queryKey: ["user_config", "categories"] })
+      // Also invalidate config query
+      queryClient.invalidateQueries({ queryKey: ["user_config"] })
+    },
+  })
+}
+
+/**
+ * Hook to bulk update recipe categories (for reassignment)
+ */
+export function useBulkUpdateRecipeCategories() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async ({
+      oldCategory,
+      newCategory,
+    }: {
+      oldCategory: string
+      newCategory: string
+    }) => {
+      if (isGuest) {
+        // For guest mode, update cache
+        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
+        let count = 0
+        const updated = recipes.map((r) => {
+          if (r.category === oldCategory) {
+            count++
+            return { ...r, category: newCategory, updated_at: new Date().toISOString() }
+          }
+          return r
+        })
+        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
+        return count
+      }
+
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("recipes")
+        .update({ category: newCategory })
+        .eq("user_id", user?.id)
+        .eq("category", oldCategory)
+        .select("id")
+
+      if (error) throw error
+      return data?.length || 0
+    },
+    onSuccess: () => {
+      // Invalidate all recipe queries
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+    },
   })
 }

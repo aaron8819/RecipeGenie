@@ -26,7 +26,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs"
-import { useCreateRecipe, useUpdateRecipe, useAllTags } from "@/hooks/use-recipes"
+import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from "@/hooks/use-recipes"
 import { parseRecipeText, type ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
 import type { Recipe, Ingredient } from "@/types/database"
@@ -63,6 +63,7 @@ export function RecipeDialog({
   const [parsedPreview, setParsedPreview] = useState<ParsedRecipe | null>(null)
 
   const { data: allTags = [] } = useAllTags()
+  const { data: tagCounts = [] } = useTagsWithCounts()
 
   // Reset form when dialog opens/closes or recipe changes
   useEffect(() => {
@@ -172,7 +173,7 @@ export function RecipeDialog({
       name: name.trim(),
       category,
       servings,
-      tags,
+      tags: tags || [], // Ensure tags is always an array, never null/undefined
       ingredients: validIngredients,
       instructions: instructionLines,
     }
@@ -365,6 +366,7 @@ Instructions:
                 tags={tags}
                 setTags={setTags}
                 allTags={allTags}
+                tagCounts={tagCounts}
                 ingredients={ingredients}
                 instructions={instructions}
                 setInstructions={setInstructions}
@@ -388,6 +390,7 @@ Instructions:
             tags={tags}
             setTags={setTags}
             allTags={allTags}
+            tagCounts={tagCounts}
             ingredients={ingredients}
             instructions={instructions}
             setInstructions={setInstructions}
@@ -425,6 +428,7 @@ interface RecipeFormContentProps {
   tags: string[]
   setTags: (tags: string[]) => void
   allTags: string[]
+  tagCounts?: Array<{ tag: string; count: number }>
   ingredients: Ingredient[]
   instructions: string
   setInstructions: (instructions: string) => void
@@ -448,6 +452,7 @@ function RecipeFormContent({
   tags,
   setTags,
   allTags,
+  tagCounts,
   ingredients,
   instructions,
   setInstructions,
@@ -505,6 +510,7 @@ function RecipeFormContent({
           value={tags}
           onChange={setTags}
           suggestions={allTags}
+          tagCounts={tagCounts}
           placeholder="Add tags..."
         />
       </div>

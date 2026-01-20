@@ -4,6 +4,50 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.4.0] - 2026-01-17
+
+**Summary:** Recipe category management with drag-and-drop reordering and bulk updates
+
+### Added
+
+- **Recipe Category Settings Modal**: 
+  - New settings modal accessible from the recipe list view
+  - Manage all recipe categories in one place
+  - Add new custom categories
+  - Edit category names with inline editing
+  - Delete categories (with recipe reassignment if needed)
+  - Drag-and-drop reordering of categories
+  - Recipe count display per category
+  - Reset to default categories option
+
+- **Category Management Features**:
+  - Bulk update recipes when renaming categories (all recipes with old category name are updated)
+  - Reassign recipes dialog when deleting categories with recipes
+  - Prevents deletion of categories that have recipes (requires reassignment first)
+  - Automatically updates `default_selection` config when categories are renamed or deleted
+  - Case-insensitive duplicate detection for category names
+
+- **Enhanced Recipe Hooks**:
+  - `useUpdateCategories()` - Update category list
+  - `useBulkUpdateRecipeCategories()` - Bulk reassign recipes to new categories
+  - Category validation and error handling
+
+### Changed
+
+- Recipe list view now includes a category settings button in the header
+- Category management moved from inline editing to dedicated settings modal
+- Improved category validation (no duplicates, no empty names)
+
+### Technical Notes
+
+- New component: `recipe-category-settings-modal.tsx` (600 lines)
+- Uses `@dnd-kit` for drag-and-drop category reordering
+- Bulk category updates use optimized database queries
+- Category changes automatically sync with meal planner `default_selection` preferences
+- Guest mode supported with guest config fallback
+
+---
+
 ## [2.3.0] - 2026-01-17
 
 **Summary:** Recipe day assignments with cross-device persistence

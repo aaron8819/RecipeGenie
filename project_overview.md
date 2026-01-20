@@ -254,9 +254,21 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-17 (v2.3.0)*
+*Last updated: 2026-01-17 (v2.4.0)*
 
-## Recent Updates (v2.3.0)
+## Recent Updates (v2.4.0)
+
+### Recipe Category Management
+- **Category Settings Modal**: New dedicated modal for managing recipe categories
+- **Add/Edit/Delete Categories**: Full category lifecycle management with validation
+- **Drag-and-Drop Reordering**: Reorder categories to match your preferences
+- **Bulk Recipe Updates**: Automatically updates all recipes when renaming categories
+- **Recipe Reassignment**: Reassign recipes to other categories when deleting categories
+- **Recipe Count Display**: See how many recipes are in each category
+- **Config Sync**: Category changes automatically update meal planner `default_selection` preferences
+- Accessible from recipe list view via settings button
+
+## Previous Updates (v2.3.0)
 
 ### Recipe Day Assignments
 - **Day Assignments**: Assign recipes to specific days of the week in calendar view

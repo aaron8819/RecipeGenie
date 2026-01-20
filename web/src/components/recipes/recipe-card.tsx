@@ -14,6 +14,7 @@ interface RecipeCardProps {
   onToggleFavorite?: (recipe: Recipe) => void
   onAddToPlan?: (recipe: Recipe) => void
   onClick?: (recipe: Recipe) => void
+  onTagClick?: (tag: string) => void
   lastMade?: string | null
   timesMade?: number
   isAddingToPlan?: boolean
@@ -26,6 +27,7 @@ export function RecipeCard({
   onToggleFavorite,
   onAddToPlan,
   onClick,
+  onTagClick,
   lastMade,
   timesMade = 0,
   isAddingToPlan = false,
@@ -66,9 +68,21 @@ export function RecipeCard({
                 {recipe.category}
               </span>
               {recipe.tags?.slice(0, 2).map((tag) => (
-                <span key={tag} className={getTagClassName(tag, false)}>
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTagClick?.(tag)
+                  }}
+                  className={cn(
+                    getTagClassName(tag, false),
+                    onTagClick && "cursor-pointer hover:opacity-80 transition-opacity"
+                  )}
+                  title={onTagClick ? "Click to filter by this tag" : undefined}
+                >
                   {tag}
-                </span>
+                </button>
               ))}
               {timesMade > 0 && (
                 <span className="text-muted-foreground">
@@ -155,9 +169,21 @@ export function RecipeCard({
           {recipe.tags && recipe.tags.length > 0 && (
             <>
               {recipe.tags.map((tag) => (
-                <span key={tag} className={getTagClassName(tag, false)}>
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTagClick?.(tag)
+                  }}
+                  className={cn(
+                    getTagClassName(tag, false),
+                    onTagClick && "cursor-pointer hover:opacity-80 transition-opacity"
+                  )}
+                  title={onTagClick ? "Click to filter by this tag" : undefined}
+                >
                   {tag}
-                </span>
+                </button>
               ))}
             </>
           )}
