@@ -490,6 +490,13 @@ export function MealPlanner() {
     if (typeof window === "undefined") return "calendar"
     return (localStorage.getItem(PLANNER_VIEW_KEY) as PlannerView) || "calendar"
   })
+
+  // Hook to save day assignments to database
+  const saveDayAssignments = useSaveDayAssignments()
+
+  const { data: config } = useUserConfig()
+  const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
+
   // Get day assignments from the weekly plan (database) with localStorage fallback
   const recipeDayAssignments = useMemo(() => {
     // First try to get from database (weekly plan)
@@ -520,12 +527,6 @@ export function MealPlanner() {
   useEffect(() => {
     localStorage.setItem(PLANNER_VIEW_KEY, view)
   }, [view])
-
-  // Hook to save day assignments to database
-  const saveDayAssignments = useSaveDayAssignments()
-
-  const { data: config } = useUserConfig()
-  const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecipeHistory()
   const { data: allCategories } = useCategories()
