@@ -26,6 +26,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - Category overrides allow custom categorization of shopping list items
 - Custom shopping categories: users can create their own categories (e.g., "Asian Market", "Specialty Store")
 - Category ordering: drag-and-drop reordering of categories to match store layout
+- Day assignments: assign recipes to specific days of the week in the calendar view (persists across devices)
 
 ---
 
@@ -119,7 +120,7 @@ One-time import of legacy `data/*.json` files into Supabase. Uses service role k
 | `pantry_items` | `user_id, item (PK), created_at` | Items user has on hand |
 | `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, category_overrides, custom_categories[], category_order[]` | User preferences |
 | `recipe_history` | `id, user_id, recipe_id (FK), date_made` | When recipes were cooked |
-| `weekly_plans` | `user_id, week_date (PK), recipe_ids[], scale, generated_at` | Saved plans keyed by week start |
+| `weekly_plans` | `user_id, week_date (PK), recipe_ids[], day_assignments (JSONB), scale, generated_at` | Saved plans keyed by week start with day assignments |
 | `shopping_list` | `user_id (PK), items[], already_have[], excluded[], source_recipes[], scale, total_servings, custom_order, generated_at` | Current shopping list state |
 
 ### Client-Side State (TanStack Query)
@@ -253,9 +254,19 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-16 (v2.2.0)*
+*Last updated: 2026-01-17 (v2.3.0)*
 
-## Recent Updates (v2.2.0)
+## Recent Updates (v2.3.0)
+
+### Recipe Day Assignments
+- **Day Assignments**: Assign recipes to specific days of the week in calendar view
+- **Cross-Device Sync**: Day assignments persist in database and sync across all devices
+- **Dropdown Interface**: Simple dropdown menu on each recipe card to move recipes between days
+- **Calendar View**: Visual calendar grid showing recipes organized by day
+- Day assignments stored in `weekly_plans.day_assignments` JSONB column
+- Works seamlessly with existing meal planning workflow
+
+## Previous Updates (v2.2.0)
 
 ### Custom Shopping Categories & Category Ordering
 - **Custom Categories**: Create user-defined shopping categories (e.g., "Asian Market", "Specialty Store")

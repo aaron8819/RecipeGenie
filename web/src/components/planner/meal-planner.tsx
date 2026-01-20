@@ -40,6 +40,7 @@ import {
   useRemoveRecipeFromPlan,
   useAddRecipeToPlan,
   useRecipeHistory,
+  useSaveDayAssignments,
   getWeekStartDate,
   navigateWeek,
 } from "@/hooks/use-planner"
@@ -489,20 +490,26 @@ export function MealPlanner() {
     if (typeof window === "undefined") return "calendar"
     return (localStorage.getItem(PLANNER_VIEW_KEY) as PlannerView) || "calendar"
   })
-  // Store all weeks' assignments, keyed by week date
-  const [allWeekAssignments, setAllWeekAssignments] = useState<WeekAssignments>(() => {
-    if (typeof window === "undefined") return {}
-    try {
-      const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
-      return stored ? JSON.parse(stored) : {}
-    } catch {
-      return {}
-    }
-  })
-  // Get assignments for the current week
+  // Get day assignments from the weekly plan (database) with localStorage fallback
   const recipeDayAssignments = useMemo(() => {
-    return allWeekAssignments[currentWeekDate] || {}
-  }, [allWeekAssignments, currentWeekDate])
+    // First try to get from database (weekly plan)
+    if (weeklyPlan?.day_assignments) {
+      return weeklyPlan.day_assignments
+    }
+    // Fallback to localStorage for backward compatibility and guest mode
+    if (typeof window !== "undefined" && currentWeekDate) {
+      try {
+        const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
+        if (stored) {
+          const allAssignments: WeekAssignments = JSON.parse(stored)
+          return allAssignments[currentWeekDate] || {}
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+    return {}
+  }, [weeklyPlan?.day_assignments, currentWeekDate])
 
   // Persist collapsed state to localStorage
   useEffect(() => {
@@ -514,12 +521,8 @@ export function MealPlanner() {
     localStorage.setItem(PLANNER_VIEW_KEY, view)
   }, [view])
 
-  // Persist all week assignments to localStorage
-  useEffect(() => {
-    if (Object.keys(allWeekAssignments).length > 0) {
-      localStorage.setItem(RECIPE_DAY_ASSIGNMENTS_KEY, JSON.stringify(allWeekAssignments))
-    }
-  }, [allWeekAssignments])
+  // Hook to save day assignments to database
+  const saveDayAssignments = useSaveDayAssignments()
 
   const { data: config } = useUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
@@ -528,6 +531,9 @@ export function MealPlanner() {
   const { data: allCategories } = useCategories()
   const { data: allRecipes } = useRecipes({})
   const hasAnyRecipes = (allRecipes?.length ?? 0) > 0
+
+  // Hook to save day assignments to database
+  const saveDayAssignments = useSaveDayAssignments()
 
   const generatePlan = useGenerateMealPlan()
   const swapRecipe = useSwapRecipe()
@@ -626,17 +632,30 @@ export function MealPlanner() {
   const handleMoveToDay = useCallback((recipeId: string, dayIndex: number) => {
     if (!currentWeekDate || dayIndex < 0 || dayIndex >= 7) return
     
-    setAllWeekAssignments(prev => {
-      const currentWeekAssignments = prev[currentWeekDate] || {}
-      return {
-        ...prev,
-        [currentWeekDate]: {
-          ...currentWeekAssignments,
-          [recipeId]: dayIndex,
-        },
-      }
+    // Update local state immediately for optimistic UI update
+    const updatedAssignments = {
+      ...recipeDayAssignments,
+      [recipeId]: dayIndex,
+    }
+    
+    // Save to database (or localStorage for guest mode)
+    saveDayAssignments.mutate({
+      weekDate: currentWeekDate,
+      dayAssignments: updatedAssignments,
     })
-  }, [currentWeekDate])
+    
+    // Also update localStorage as fallback
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
+        const allAssignments: WeekAssignments = stored ? JSON.parse(stored) : {}
+        allAssignments[currentWeekDate] = updatedAssignments
+        localStorage.setItem(RECIPE_DAY_ASSIGNMENTS_KEY, JSON.stringify(allAssignments))
+      } catch {
+        // Ignore localStorage errors
+      }
+    }
+  }, [currentWeekDate, recipeDayAssignments, saveDayAssignments])
 
   const formatWeekLabel = (dateStr: string) => {
     if (!dateStr) return ""

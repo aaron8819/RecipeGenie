@@ -143,9 +143,20 @@ Stores weekly meal plans for users.
 | `user_id` | UUID | PRIMARY KEY (composite with week_date), FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the plan |
 | `week_date` | DATE | PRIMARY KEY (composite with user_id) | Start date of the week (typically Monday) |
 | `recipe_ids` | TEXT[] | NOT NULL, DEFAULT '{}' | Array of recipe IDs in the plan |
+| `day_assignments` | JSONB | DEFAULT '{}' | Maps recipe_id to day_index (0-6) for the week. Example: `{"recipe-1": 0, "recipe-2": 3}` where 0 = Sunday, 1 = Monday, etc. |
 | `scale` | NUMERIC | DEFAULT 1.0 | Scaling factor for recipe servings |
 | `made_recipe_ids` | TEXT[] | DEFAULT '{}' | Recipe IDs marked as "made" for this specific week (for toggle state) |
 | `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when plan was generated |
+
+**Example day_assignments JSONB:**
+```json
+{
+  "recipe-1": 0,
+  "recipe-2": 3,
+  "recipe-3": 5
+}
+```
+This assigns recipe-1 to Sunday (0), recipe-2 to Wednesday (3), and recipe-3 to Friday (5).
 
 **Note:** The primary key is a composite of `(user_id, week_date)` enforced by a unique index.
 
@@ -316,6 +327,7 @@ The schema has evolved through the following migrations:
 5. **005_multi_user_support.sql** - Added full multi-user support with `user_id` columns, updated RLS policies, and default recipes trigger
 6. **006_fix_signup_trigger.sql** - Improved signup trigger error handling with explicit search_path and graceful error handling
 7. **007_custom_categories.sql** - Added `custom_categories` and `category_order` to `user_config` for user-defined shopping categories and custom category ordering
+8. **008_add_day_assignments.sql** - Added `day_assignments` JSONB column to `weekly_plans` to store recipe-to-day mappings for calendar view (enables cross-device persistence)
 
 ## Query Examples
 

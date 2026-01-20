@@ -41,6 +41,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
    - `supabase/migrations/005_multi_user_support.sql`
    - `supabase/migrations/006_fix_signup_trigger.sql`
    - `supabase/migrations/007_custom_categories.sql`
+   - `supabase/migrations/008_add_day_assignments.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 
 ### 2. Configure Environment

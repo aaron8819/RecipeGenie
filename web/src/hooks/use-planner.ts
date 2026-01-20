@@ -43,6 +43,7 @@ export function useWeeklyPlan(weekDate: string) {
         week_date: weekDate,
         recipe_ids: [],
         made_recipe_ids: [],
+        day_assignments: null,
         scale: 1.0,
         generated_at: "",
       }
@@ -374,6 +375,7 @@ export function useSaveWeeklyPlan() {
           week_date: weekDate,
           recipe_ids: recipeIds,
           made_recipe_ids: existing?.made_recipe_ids || [],
+          day_assignments: existing?.day_assignments || null,
           scale: scale || 1.0,
           generated_at: new Date().toISOString(),
         }
@@ -400,6 +402,7 @@ export function useSaveWeeklyPlan() {
             recipe_ids: recipeIds,
             scale: scale || 1.0,
             made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
+            day_assignments: (existingPlan as WeeklyPlan).day_assignments || null,
             generated_at: new Date().toISOString(),
           })
           .eq("user_id", user?.id)
@@ -411,6 +414,7 @@ export function useSaveWeeklyPlan() {
           user_id: user?.id,
           week_date: weekDate,
           recipe_ids: recipeIds,
+          day_assignments: null,
           scale: scale || 1.0,
           generated_at: new Date().toISOString(),
         })
@@ -445,6 +449,7 @@ export function useAddRecipeToPlan() {
           week_date: weekDate,
           recipe_ids: [...currentIds, recipeId],
           made_recipe_ids: existing?.made_recipe_ids || [],
+          day_assignments: existing?.day_assignments || null,
           scale: existing?.scale || 1.0,
           generated_at: new Date().toISOString(),
         }

@@ -128,6 +128,7 @@ export interface Database {
           week_date: string
           recipe_ids: string[]
           made_recipe_ids: string[]
+          day_assignments: Record<string, number> | null
           scale: number
           generated_at: string
         }
@@ -136,6 +137,7 @@ export interface Database {
           week_date: string
           recipe_ids?: string[]
           made_recipe_ids?: string[]
+          day_assignments?: Record<string, number> | null
           scale?: number
           generated_at?: string
         }
@@ -144,6 +146,7 @@ export interface Database {
           week_date?: string
           recipe_ids?: string[]
           made_recipe_ids?: string[]
+          day_assignments?: Record<string, number> | null
           scale?: number
           generated_at?: string
         }

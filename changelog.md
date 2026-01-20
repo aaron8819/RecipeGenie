@@ -4,6 +4,35 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.3.0] - 2026-01-17
+
+**Summary:** Recipe day assignments with cross-device persistence
+
+### Added
+
+- **Day Assignments in Calendar View**: 
+  - Assign recipes to specific days of the week in the calendar view
+  - Dropdown menu on each recipe card to move recipes between days
+  - Visual indication of which day each recipe is assigned to
+  - Day assignments persist across page refreshes and devices (stored in database)
+  - Works in both desktop grid view and mobile stack view
+
+### Changed
+
+- Calendar view now uses dropdown-based day selection instead of drag-and-drop
+- Day assignments stored in `weekly_plans.day_assignments` JSONB column
+- Improved reliability and cross-device synchronization
+
+### Technical Notes
+
+- Migration `008_add_day_assignments.sql` adds `day_assignments` JSONB column to `weekly_plans` table
+- `day_assignments` format: `{"recipe-id": dayIndex}` where dayIndex is 0-6 (0 = Sunday, 6 = Saturday)
+- New hook `useSaveDayAssignments()` handles saving assignments to database
+- Guest mode uses query cache for day assignments (localStorage fallback)
+- Backward compatible: falls back to localStorage if database data unavailable
+
+---
+
 ## [2.2.0] - 2026-01-16
 
 **Summary:** Custom shopping categories, category ordering, and enhanced shopping list settings
