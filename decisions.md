@@ -475,3 +475,55 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - Could add support for more recipe formats (markdown, structured JSON)
 - Could learn from user corrections to improve parsing accuracy
 - Could support batch import of multiple recipes from a single text block
+
+---
+
+## ADR-015: Custom Shopping Categories and Category Ordering
+
+**Status:** Accepted (2026-01-16)
+
+**Context:** Users shop at different stores with varying layouts. The default shopping categories (produce, dairy, protein, etc.) may not match a user's store organization, and users may shop at specialty stores (e.g., Asian markets, specialty grocers) that require separate categories. Additionally, users want to reorder categories to match their store's physical layout for more efficient shopping.
+
+**Decision:** Implement user-defined custom shopping categories and drag-and-drop category ordering to allow users to customize their shopping list organization.
+
+**Rationale:**
+- Enables users to match their shopping list to their store's layout
+- Supports specialty shopping categories (e.g., "Asian Market", "Specialty Store")
+- Improves shopping efficiency by organizing items in the order they appear in the store
+- Custom categories integrate seamlessly with existing category override system
+- Category ordering persists across shopping list generations
+
+**Implementation:**
+- `custom_categories` JSONB column in `user_config` table: `[{ "id": "uuid", "name": "Category Name", "order": number }]`
+- `category_order` JSONB column in `user_config` table: `["produce", "dairy", "custom_abc123", ...]` or `null` for default order
+- Custom category keys prefixed with `custom_` to avoid collisions with default categories
+- Shopping Settings Modal with three tabs:
+  - **Order Tab**: Drag-and-drop reordering of all categories (default + custom)
+  - **Custom Tab**: Create, edit, and delete custom categories (up to 10 per user)
+  - **Overrides Tab**: View and manage category overrides
+- `getAllShoppingCategories()` function merges default and custom categories
+- Shopping list UI respects custom ordering when `category_order` is set
+- Category deletion moves affected items to "misc" category automatically
+
+**Tradeoffs:**
+- (+) Highly customizable to match any store layout
+- (+) Supports specialty shopping scenarios
+- (+) Improves shopping efficiency
+- (+) Backward compatible (default order when `category_order` is null)
+- (-) Additional complexity in shopping list rendering logic
+- (-) Requires UI for category management (settings modal)
+- (-) Category ordering must be maintained when categories are added/removed
+
+**Risks:**
+- Users may create too many categories, making the list cluttered
+- **Mitigation**: Limit to 10 custom categories per user
+- Category deletion may leave items in unexpected categories
+- **Mitigation**: Automatically move items to "misc" category on deletion
+- Custom ordering may become out of sync if default categories change
+- **Mitigation**: Default order is preserved; custom order is additive
+
+**Future Considerations:**
+- Could support category templates for common store chains
+- Could allow users to save multiple category orderings for different stores
+- Could add category icons or colors for visual organization
+- Could support category-based shopping list filtering

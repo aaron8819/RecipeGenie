@@ -92,11 +92,11 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx` | Recipe CRUD UI with text import parser |
 | `components/planner/` | `meal-planner.tsx` | Week navigation, plan generation, history |
 | `components/pantry/` | `pantry-list.tsx` | Pantry items, excluded keywords |
-| `components/shopping/` | `shopping-list.tsx` | Shopping list display, scaling, drag-and-drop reordering |
+| `components/shopping/` | `shopping-list.tsx`, `shopping-settings-modal.tsx` | Shopping list display, scaling, drag-and-drop reordering, category management |
 | `components/ui/` | Various | Radix UI primitives (button, dialog, tabs, etc.) |
 | `hooks/` | `use-recipes.ts`, `use-planner.ts`, etc. | TanStack Query hooks for Supabase |
 | `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization |
-| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation, recipe text parsing) |
+| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation, category management, recipe text parsing) |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
 
 ### Middleware (`src/middleware.ts`)
@@ -179,7 +179,7 @@ CREATE POLICY "authenticated_full_access" ON recipes
 
 ### Before You Start
 
-1. **Review `decisions.md`** for architectural context (ADR-010 through ADR-012)
+1. **Review `decisions.md`** for architectural context (ADR-010 through ADR-015)
 2. **Check existing hooks** in `src/hooks/` for data access patterns
 3. **Trace a similar feature** through: hook → component → Supabase query
 
@@ -243,6 +243,7 @@ For UI changes:
 | Understand data fetching | `src/hooks/use-recipes.ts` |
 | Understand meal plan generation | `src/lib/meal-planner.ts` |
 | Understand shopping list logic | `src/lib/shopping-list.ts` |
+| Understand shopping categories | `src/lib/shopping-categories.ts` |
 | Modify recipe form | `src/components/recipes/recipe-dialog.tsx` |
 | Understand recipe parsing | `src/lib/recipe-parser.ts` |
 | Change tab navigation | `src/app/page.tsx` |

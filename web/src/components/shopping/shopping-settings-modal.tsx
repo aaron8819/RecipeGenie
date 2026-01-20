@@ -439,7 +439,7 @@ export function ShoppingSettingsModal({
                 placeholder="Category name..."
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                className="flex-1"
+                className="flex-1 text-base sm:text-sm"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleAddCategory()
                 }}

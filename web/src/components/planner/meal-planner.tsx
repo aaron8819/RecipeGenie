@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,8 +14,18 @@ import {
   Heart,
   Loader2,
   Plus,
+  MoreVertical,
+  GripVertical,
+  Move,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
@@ -40,6 +50,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { CalendarDays, BookOpen } from "lucide-react"
 import { getTagClassName } from "@/lib/tag-colors"
 import { cn } from "@/lib/utils"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Recipe, RecipeHistory } from "@/types/database"
 
 /**
@@ -81,6 +92,384 @@ function isDateInWeekRange(dateStr: string, weekStartDate: string): boolean {
 }
 
 const MEALS_SECTION_COLLAPSED_KEY = "recipe-genie-meals-section-collapsed"
+const PLANNER_VIEW_KEY = "recipe-genie-planner-view"
+const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
+
+type PlannerView = "calendar" | "list" | "category"
+type RecipeDayAssignments = Record<string, number> // recipe_id -> dayIndex (0-6)
+type WeekAssignments = Record<string, RecipeDayAssignments> // week_date -> RecipeDayAssignments
+
+/**
+ * Get array of day objects for a week
+ */
+function getWeekDays(weekStartDate: string, weekStartDay: number = 1): Array<{ date: Date; dayName: string; dayNumber: number }> {
+  if (!weekStartDate) return []
+  
+  const startDate = new Date(weekStartDate)
+  const days: Array<{ date: Date; dayName: string; dayNumber: number }> = []
+  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(startDate)
+    date.setDate(date.getDate() + i)
+    const dayIndex = date.getDay()
+    days.push({
+      date,
+      dayName: dayNames[dayIndex],
+      dayNumber: date.getDate(),
+    })
+  }
+  
+  return days
+}
+
+/**
+ * Day column component (Desktop)
+ */
+function DayColumn({
+  day,
+  dayIndex,
+  dayRecipes,
+  isRecipeMade,
+  markingRecipeId,
+  addingToCartRecipeId,
+  swappingRecipeId,
+  onViewRecipe,
+  onSwapRecipe,
+  onMarkMade,
+  onAddToCart,
+  onRemoveRecipe,
+  onMoveToDay,
+  getTagClassName,
+  weekDays,
+  currentDayIndex,
+}: {
+  day: { date: Date; dayName: string; dayNumber: number }
+  dayIndex: number
+  dayRecipes: Recipe[]
+  isRecipeMade: (recipe: Recipe) => boolean
+  markingRecipeId: string | null
+  addingToCartRecipeId: string | null
+  swappingRecipeId: string | null
+  onViewRecipe: (recipe: Recipe) => void
+  onSwapRecipe: (recipe: Recipe) => void
+  onMarkMade: (recipeId: string, isMade: boolean) => void
+  onAddToCart: (recipeId: string) => void
+  onRemoveRecipe: (recipe: Recipe) => void
+  onMoveToDay: (recipeId: string, dayIndex: number) => void
+  getTagClassName: (tag: string, isCategory: boolean) => string
+  weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
+  currentDayIndex: Record<string, number> | undefined
+}) {
+  return (
+    <div
+      data-day-index={dayIndex}
+      className="min-h-[200px] p-3 border-r border-b border-sage-200 last:border-r-0 bg-sage-50/30"
+    >
+      <div className="text-xs font-medium text-gray-500 mb-2">
+        {day.dayName}, {day.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+      </div>
+      <div className="space-y-2">
+        {dayRecipes.length > 0 ? (
+          dayRecipes.map((recipe) => {
+            const isMade = isRecipeMade(recipe)
+            const isMarkingThis = markingRecipeId === recipe.id
+            const isAddingToCart = addingToCartRecipeId === recipe.id
+            const isSwapping = swappingRecipeId === recipe.id
+            return (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                isMade={isMade}
+                isMarkingThis={isMarkingThis}
+                isAddingToCart={isAddingToCart}
+                isSwapping={isSwapping}
+                onView={() => onViewRecipe(recipe)}
+                onSwap={() => onSwapRecipe(recipe)}
+                onMarkMade={() => onMarkMade(recipe.id, isMade)}
+                onAddToCart={() => onAddToCart(recipe.id)}
+                onRemove={() => onRemoveRecipe(recipe)}
+                onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
+                getTagClassName={getTagClassName}
+                weekDays={weekDays}
+                currentDayIndex={currentDayIndex?.[recipe.id] !== undefined ? currentDayIndex : undefined}
+              />
+            )
+          })
+        ) : (
+          <div className="text-xs text-gray-400 italic py-4 text-center">
+            No meals planned
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Day column component (Mobile)
+ */
+function MobileDayColumn({
+  day,
+  dayIndex,
+  dayRecipes,
+  isRecipeMade,
+  markingRecipeId,
+  addingToCartRecipeId,
+  swappingRecipeId,
+  onViewRecipe,
+  onSwapRecipe,
+  onMarkMade,
+  onAddToCart,
+  onRemoveRecipe,
+  onMoveToDay,
+  getTagClassName,
+  weekDays,
+  currentDayIndex,
+}: {
+  day: { date: Date; dayName: string; dayNumber: number }
+  dayIndex: number
+  dayRecipes: Recipe[]
+  isRecipeMade: (recipe: Recipe) => boolean
+  markingRecipeId: string | null
+  addingToCartRecipeId: string | null
+  swappingRecipeId: string | null
+  onViewRecipe: (recipe: Recipe) => void
+  onSwapRecipe: (recipe: Recipe) => void
+  onMarkMade: (recipeId: string, isMade: boolean) => void
+  onAddToCart: (recipeId: string) => void
+  onRemoveRecipe: (recipe: Recipe) => void
+  onMoveToDay: (recipeId: string, dayIndex: number) => void
+  getTagClassName: (tag: string, isCategory: boolean) => string
+  weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
+  currentDayIndex: Record<string, number> | undefined
+}) {
+  const hasMadeRecipes = dayRecipes.some(r => isRecipeMade(r))
+
+  return (
+    <div
+      data-day-index={dayIndex}
+      className={cn(
+        "border-l-4 pl-4 rounded-lg p-3",
+        hasMadeRecipes ? "border-sage-500" : "border-gray-300"
+      )}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <div className="text-sm font-semibold">
+            {day.dayName}, {day.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          </div>
+          <div className="text-xs text-gray-500">
+            {dayRecipes.length} meal{dayRecipes.length !== 1 ? "s" : ""} planned
+          </div>
+        </div>
+        {hasMadeRecipes && (
+          <div className="flex items-center gap-1">
+            <Check className="w-4 h-4 text-sage-600" />
+            <span className="text-xs font-medium text-sage-600">Made</span>
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        {dayRecipes.length > 0 ? (
+          dayRecipes.map((recipe) => {
+            const isMade = isRecipeMade(recipe)
+            const isMarkingThis = markingRecipeId === recipe.id
+            const isAddingToCart = addingToCartRecipeId === recipe.id
+            const isSwapping = swappingRecipeId === recipe.id
+            return (
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                isMade={isMade}
+                isMarkingThis={isMarkingThis}
+                isAddingToCart={isAddingToCart}
+                isSwapping={isSwapping}
+                onView={() => onViewRecipe(recipe)}
+                onSwap={() => onSwapRecipe(recipe)}
+                onMarkMade={() => onMarkMade(recipe.id, isMade)}
+                onAddToCart={() => onAddToCart(recipe.id)}
+                onRemove={() => onRemoveRecipe(recipe)}
+                onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
+                getTagClassName={getTagClassName}
+                weekDays={weekDays}
+                currentDayIndex={currentDayIndex}
+              />
+            )
+          })
+        ) : (
+          <div className="text-sm text-gray-400 italic py-2 text-center">
+            No meals planned
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Recipe card component for calendar view
+ */
+function RecipeCard({
+  recipe,
+  isMade,
+  isMarkingThis,
+  isAddingToCart,
+  isSwapping,
+  onView,
+  onSwap,
+  onMarkMade,
+  onAddToCart,
+  onRemove,
+  onMoveToDay,
+  getTagClassName,
+  weekDays,
+  currentDayIndex,
+}: {
+  recipe: Recipe
+  isMade: boolean
+  isMarkingThis: boolean
+  isAddingToCart: boolean
+  isSwapping: boolean
+  onView: () => void
+  onSwap: () => void
+  onMarkMade: () => void
+  onAddToCart: () => void
+  onRemove: () => void
+  onMoveToDay: (dayIndex: number) => void
+  getTagClassName: (tag: string, isCategory: boolean) => string
+  weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
+  currentDayIndex: Record<string, number> | undefined
+}) {
+  const currentDayValue = currentDayIndex?.[recipe.id] !== undefined ? String(currentDayIndex[recipe.id]) : undefined
+
+  return (
+    <div
+      className={cn(
+        "bg-white rounded-lg p-2 border border-sage-200 hover:shadow-md transition-shadow",
+        isMade && "opacity-70 relative"
+      )}
+    >
+      {isMade && (
+        <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-sage-600 flex items-center justify-center z-10">
+          <Check className="h-2.5 w-2.5 text-white" />
+        </div>
+      )}
+      <div className="flex items-start gap-1 mb-1">
+        <div 
+          className="font-semibold text-xs pr-5 cursor-pointer flex-1"
+          onClick={onView}
+        >
+          {recipe.name}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 mt-1 mb-2">
+        <span className={cn("text-[10px] px-1.5 py-0.5 rounded", getTagClassName(recipe.category, true))}>
+          {recipe.category}
+        </span>
+      </div>
+      <div className="flex gap-1 mt-2 flex-wrap">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-[10px] flex-1 min-w-[60px]"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSwap()
+          }}
+          disabled={isSwapping}
+        >
+          {isSwapping ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <>
+              <Shuffle className="h-3 w-3 mr-1" />
+              Swap
+            </>
+          )}
+        </Button>
+        <Button
+          variant={isMade ? "default" : "outline"}
+          size="sm"
+          className={cn(
+            "h-7 px-2 text-[10px] flex-1 min-w-[60px]",
+            isMade
+              ? "bg-sage-600 hover:bg-sage-700 text-white"
+              : "text-sage-700 border-sage-300"
+          )}
+          onClick={(e) => {
+            e.stopPropagation()
+            onMarkMade()
+          }}
+          disabled={isMarkingThis}
+        >
+          <Check className="h-3 w-3 mr-1" />
+          {isMade ? "Made" : "Made"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 w-7 p-0"
+          onClick={(e) => {
+            e.stopPropagation()
+            onAddToCart()
+          }}
+          disabled={isAddingToCart}
+          title="Add to cart"
+        >
+          {isAddingToCart ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <ShoppingCart className="h-3 w-3" />
+          )}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+          title="Remove"
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </div>
+      {/* Move to day dropdown */}
+      <div className="mt-2">
+        <Select
+          value={currentDayValue}
+          onValueChange={(value) => {
+            const dayIndex = parseInt(value, 10)
+            if (!isNaN(dayIndex)) {
+              onMoveToDay(dayIndex)
+            }
+          }}
+        >
+          <SelectTrigger className="h-7 text-[10px] w-full">
+            <Move className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="Move to..." />
+          </SelectTrigger>
+          <SelectContent>
+            {weekDays.map((day, idx) => (
+              <SelectItem key={idx} value={String(idx)}>
+                {day.dayName}, {day.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Get day name abbreviation
+ */
+function getDayName(date: Date): string {
+  return date.toLocaleDateString("en-US", { weekday: "short" })
+}
 
 export function MealPlanner() {
   const [currentWeekDate, setCurrentWeekDate] = useState<string>("")
@@ -96,11 +485,41 @@ export function MealPlanner() {
   })
   const [pendingRemovalRecipeId, setPendingRemovalRecipeId] = useState<string | null>(null)
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
+  const [view, setView] = useState<PlannerView>(() => {
+    if (typeof window === "undefined") return "calendar"
+    return (localStorage.getItem(PLANNER_VIEW_KEY) as PlannerView) || "calendar"
+  })
+  // Store all weeks' assignments, keyed by week date
+  const [allWeekAssignments, setAllWeekAssignments] = useState<WeekAssignments>(() => {
+    if (typeof window === "undefined") return {}
+    try {
+      const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  })
+  // Get assignments for the current week
+  const recipeDayAssignments = useMemo(() => {
+    return allWeekAssignments[currentWeekDate] || {}
+  }, [allWeekAssignments, currentWeekDate])
 
   // Persist collapsed state to localStorage
   useEffect(() => {
     localStorage.setItem(MEALS_SECTION_COLLAPSED_KEY, String(mealsSectionCollapsed))
   }, [mealsSectionCollapsed])
+
+  // Persist view state to localStorage
+  useEffect(() => {
+    localStorage.setItem(PLANNER_VIEW_KEY, view)
+  }, [view])
+
+  // Persist all week assignments to localStorage
+  useEffect(() => {
+    if (Object.keys(allWeekAssignments).length > 0) {
+      localStorage.setItem(RECIPE_DAY_ASSIGNMENTS_KEY, JSON.stringify(allWeekAssignments))
+    }
+  }, [allWeekAssignments])
 
   const { data: config } = useUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
@@ -203,6 +622,22 @@ export function MealPlanner() {
     }
   }
 
+  // Move recipe to a different day
+  const handleMoveToDay = useCallback((recipeId: string, dayIndex: number) => {
+    if (!currentWeekDate || dayIndex < 0 || dayIndex >= 7) return
+    
+    setAllWeekAssignments(prev => {
+      const currentWeekAssignments = prev[currentWeekDate] || {}
+      return {
+        ...prev,
+        [currentWeekDate]: {
+          ...currentWeekAssignments,
+          [recipeId]: dayIndex,
+        },
+      }
+    })
+  }, [currentWeekDate])
+
   const formatWeekLabel = (dateStr: string) => {
     if (!dateStr) return ""
     const date = new Date(dateStr)
@@ -219,37 +654,133 @@ export function MealPlanner() {
   // Filter out pending removal recipes
   const displayedRecipes = recipes?.filter(r => r.id !== pendingRemovalRecipeId)
 
+  // Get recipes assigned to each day
+  const getRecipesByDay = useCallback((dayIndex: number): Recipe[] => {
+    if (!displayedRecipes) return []
+    
+    // Get recipes explicitly assigned to this day
+    const assignedRecipes = displayedRecipes.filter(
+      recipe => recipeDayAssignments[recipe.id] === dayIndex
+    )
+    
+    // Get recipes that aren't assigned to any day
+    const unassignedRecipes = displayedRecipes.filter(
+      recipe => recipeDayAssignments[recipe.id] === undefined
+    )
+    
+    // Distribute unassigned recipes evenly across days (original behavior)
+    // We need to maintain the original order, so we filter by the index in the full displayedRecipes array
+    const unassignedForThisDay = displayedRecipes.filter((recipe, idx) => {
+      // Only include if it's unassigned AND would fall on this day in the original distribution
+      return recipeDayAssignments[recipe.id] === undefined && (idx % 7 === dayIndex)
+    })
+    
+    // Combine assigned recipes with unassigned recipes for this day
+    return [...assignedRecipes, ...unassignedForThisDay]
+  }, [displayedRecipes, recipeDayAssignments])
+
   // Check if displayed week is the current week
   const currentWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
   const isCurrentWeek = currentWeekDate === currentWeekStart
 
+  // Calculate progress (made recipes / total recipes)
+  const progress = useMemo(() => {
+    if (!displayedRecipes || displayedRecipes.length === 0) return { made: 0, total: 0, percentage: 0 }
+    
+    const madeCount = displayedRecipes.filter(recipe => {
+      const isManuallyMarked = weeklyPlan?.made_recipe_ids?.includes(recipe.id) || false
+      const lastMade = lastMadeMap.get(recipe.id)
+      const isMadeInWeek = lastMade ? isDateInWeekRange(lastMade, currentWeekDate) : false
+      return isManuallyMarked || isMadeInWeek
+    }).length
+    
+    return {
+      made: madeCount,
+      total: displayedRecipes.length,
+      percentage: displayedRecipes.length > 0 ? Math.round((madeCount / displayedRecipes.length) * 100) : 0,
+    }
+  }, [displayedRecipes, weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
+
+  // Get week days for calendar view
+  const weekDays = useMemo(() => {
+    return getWeekDays(currentWeekDate, config?.week_start_day || 1)
+  }, [currentWeekDate, config?.week_start_day])
+
+  // Group recipes by category for category view
+  const recipesByCategory = useMemo(() => {
+    if (!displayedRecipes) return new Map<string, Recipe[]>()
+    
+    const grouped = new Map<string, Recipe[]>()
+    displayedRecipes.forEach(recipe => {
+      const category = recipe.category
+      if (!grouped.has(category)) {
+        grouped.set(category, [])
+      }
+      grouped.get(category)!.push(recipe)
+    })
+    
+    return grouped
+  }, [displayedRecipes])
+
+  // Helper to check if recipe is made
+  const isRecipeMade = useCallback((recipe: Recipe): boolean => {
+    const isManuallyMarked = weeklyPlan?.made_recipe_ids?.includes(recipe.id) || false
+    const lastMade = lastMadeMap.get(recipe.id)
+    const isMadeInWeek = lastMade ? isDateInWeekRange(lastMade, currentWeekDate) : false
+    return isManuallyMarked || isMadeInWeek
+  }, [weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
+
   return (
-    <div className="space-y-6">
-      {/* Week Navigation */}
-      <div className="flex items-center justify-between gap-4">
-        <Button variant="outline" size="lg" onClick={handlePrevWeek} className="px-3 sm:px-4">
-          <ChevronLeft className="h-5 w-5 sm:mr-1" />
-          <span className="hidden sm:inline">Prev</span>
-        </Button>
+    <div className="space-y-6 pb-20 sm:pb-6">
+      {/* Week Navigation with Progress */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <Button variant="outline" size="lg" onClick={handlePrevWeek} className="px-3 sm:px-4">
+              <ChevronLeft className="h-5 w-5 sm:mr-1" />
+              <span className="hidden sm:inline">Prev</span>
+            </Button>
 
-        <div className="text-center">
-          <h2 className="text-lg font-semibold">
-            Week of {formatWeekLabel(currentWeekDate)}
-          </h2>
-          {isCurrentWeek && (
-            <span className="text-xs font-medium text-sage-600 bg-sage-100 px-2 py-0.5 rounded-full">
-              Current Week
-            </span>
+            <div className="text-center flex-1">
+              <h2 className="text-lg sm:text-xl font-semibold mb-1">
+                Week of {formatWeekLabel(currentWeekDate)}
+              </h2>
+              <div className="flex items-center justify-center gap-2 flex-wrap">
+                {isCurrentWeek && (
+                  <span className="text-xs font-medium text-sage-600 bg-sage-100 px-2 py-0.5 rounded-full">
+                    Current Week
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <Button variant="outline" size="lg" onClick={handleNextWeek} className="px-3 sm:px-4">
+              <span className="hidden sm:inline">Next</span>
+              <ChevronRight className="h-5 w-5 sm:ml-1" />
+            </Button>
+          </div>
+
+          {/* Progress Indicator */}
+          {displayedRecipes && displayedRecipes.length > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Week Progress</span>
+                <span className="text-sm font-semibold text-sage-600">
+                  {progress.made} of {progress.total} meals made
+                </span>
+              </div>
+              <div className="h-1.5 bg-sage-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-sage-600 to-sage-500 transition-all duration-300"
+                  style={{ width: `${progress.percentage}%` }}
+                />
+              </div>
+            </div>
           )}
-        </div>
+        </CardContent>
+      </Card>
 
-        <Button variant="outline" size="lg" onClick={handleNextWeek} className="px-3 sm:px-4">
-          <span className="hidden sm:inline">Next</span>
-          <ChevronRight className="h-5 w-5 sm:ml-1" />
-        </Button>
-      </div>
-
-      {/* Category Selection */}
+      {/* Category Selection - Improved */}
       <Card>
         <CardHeader
           className="pb-2 cursor-pointer select-none hover:bg-accent/50 transition-colors rounded-t-lg"
@@ -259,9 +790,10 @@ export function MealPlanner() {
             <CardTitle className="text-base">How many meals this week?</CardTitle>
             <div className="flex items-center gap-2">
               {mealsSectionCollapsed && totalMeals > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  {totalMeals} meals selected
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-sage-600">{totalMeals}</span>
+                  <span className="text-sm text-muted-foreground">meals selected</span>
+                </div>
               )}
               <ChevronDown
                 className={`h-5 w-5 text-muted-foreground transition-transform duration-200 ${
@@ -271,103 +803,267 @@ export function MealPlanner() {
             </div>
           </div>
         </CardHeader>
-        {!mealsSectionCollapsed && <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {categories.map((category: string) => {
-              const count = selection[category] || 0
-              return (
-                <div
-                  key={category}
-                  className="flex flex-col items-center p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+        {!mealsSectionCollapsed && (
+          <CardContent className="space-y-4">
+            {/* Quick Presets */}
+            <div className="flex flex-wrap items-center gap-2 pb-3 border-b">
+              <span className="text-xs font-medium text-muted-foreground self-center mr-1">Quick presets:</span>
+              {[3, 4, 5].map((preset) => (
+                <Button
+                  key={preset}
+                  variant={totalMeals === preset ? "default" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "h-8 px-3 text-xs transition-all",
+                    totalMeals === preset && "bg-sage-600 hover:bg-sage-700 text-white"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // Distribute evenly across categories
+                    const perCategory = Math.floor(preset / categories.length)
+                    const remainder = preset % categories.length
+                    const newSelection: Record<string, number> = {}
+                    categories.forEach((cat, idx) => {
+                      newSelection[cat] = Math.min(5, perCategory + (idx < remainder ? 1 : 0))
+                    })
+                    setSelection(newSelection)
+                  }}
                 >
-                  <span className="capitalize text-sm font-medium text-muted-foreground mb-2">
-                    {category}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full"
-                      onClick={() =>
-                        setSelection((prev) => ({
-                          ...prev,
-                          [category]: Math.max(0, (prev[category] || 0) - 1),
-                        }))
-                      }
-                      disabled={count === 0}
-                    >
-                      <span className="text-lg font-medium">−</span>
-                    </Button>
-                    <span className="w-6 text-center text-lg font-semibold tabular-nums">
-                      {count}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8 rounded-full"
-                      onClick={() =>
-                        setSelection((prev) => ({
-                          ...prev,
-                          [category]: Math.min(5, (prev[category] || 0) + 1),
-                        }))
-                      }
-                      disabled={count === 5}
-                    >
-                      <span className="text-lg font-medium">+</span>
-                    </Button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          <div className="flex items-center justify-between mt-4 pt-4 border-t">
-            <span className="text-sm text-muted-foreground">
-              Total: <span className="font-semibold text-foreground">{totalMeals} meals</span>
-            </span>
-            <div className="flex gap-2">
+                  {preset} meals
+                </Button>
+              ))}
               <Button
-                variant="outline"
-                onClick={() => setIsAddRecipeModalOpen(true)}
-                disabled={!hasAnyRecipes}
+                variant="ghost"
+                size="sm"
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelection({})
+                }}
               >
-                <Plus className="h-5 w-5 mr-2" />
-                Add Recipe
-              </Button>
-              <Button
-                onClick={handleGeneratePlan}
-                disabled={generatePlan.isPending || totalMeals === 0}
-                size="lg"
-              >
-                {generatePlan.isPending ? (
-                  <>
-                    <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-5 w-5 mr-2" />
-                    Generate Meal Plan
-                  </>
-                )}
+                Clear all
               </Button>
             </div>
-          </div>
-        </CardContent>}
+
+            {/* Category Grid - Redesigned */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {categories.map((category: string) => {
+                const count = selection[category] || 0
+                const categoryColor = getTagClassName(category, true)
+                const isActive = count > 0
+                return (
+                  <div
+                    key={category}
+                    className={cn(
+                      "flex flex-col items-center p-4 rounded-xl border transition-all duration-200",
+                      isActive
+                        ? "border-sage-600 bg-sage-50 shadow-sm"
+                        : "border-sage-200 bg-white hover:border-sage-300 hover:shadow-sm"
+                    )}
+                  >
+                    {/* Category Label */}
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className={cn(
+                        "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold",
+                        categoryColor
+                      )}>
+                        {category.charAt(0).toUpperCase()}
+                      </div>
+                      <span className={cn(
+                        "capitalize text-sm font-semibold",
+                        isActive ? "text-sage-700" : "text-muted-foreground"
+                      )}>
+                        {category}
+                      </span>
+                    </div>
+
+                    {/* Count Controls */}
+                    <div className="flex items-center justify-center gap-3 w-full">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className={cn(
+                          "h-10 w-10 rounded-full transition-all shrink-0",
+                          isActive
+                            ? "border-sage-600 text-sage-700 hover:bg-sage-100 hover:border-sage-700"
+                            : "border-sage-300 text-muted-foreground hover:border-sage-400"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelection((prev) => ({
+                            ...prev,
+                            [category]: Math.max(0, (prev[category] || 0) - 1),
+                          }))
+                        }}
+                        disabled={count === 0}
+                        aria-label={`Decrease ${category} count`}
+                      >
+                        <span className="text-xl font-medium">−</span>
+                      </Button>
+                      
+                      <input
+                        type="number"
+                        min="0"
+                        max="5"
+                        value={count}
+                        onChange={(e) => {
+                          const inputValue = e.target.value
+                          if (inputValue === "") {
+                            setSelection((prev) => ({
+                              ...prev,
+                              [category]: 0,
+                            }))
+                            return
+                          }
+                          const numValue = parseInt(inputValue)
+                          if (!isNaN(numValue)) {
+                            const value = Math.max(0, Math.min(5, numValue))
+                            setSelection((prev) => ({
+                              ...prev,
+                              [category]: value,
+                            }))
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const inputValue = e.target.value
+                          if (inputValue === "" || isNaN(parseInt(inputValue)) || parseInt(inputValue) < 0) {
+                            setSelection((prev) => ({
+                              ...prev,
+                              [category]: 0,
+                            }))
+                          } else {
+                            const value = Math.max(0, Math.min(5, parseInt(inputValue)))
+                            setSelection((prev) => ({
+                              ...prev,
+                              [category]: value,
+                            }))
+                          }
+                        }}
+                        className={cn(
+                          "w-14 text-center text-2xl sm:text-3xl font-bold tabular-nums bg-transparent border-none outline-none focus:outline-none focus:ring-0 p-0",
+                          isActive ? "text-sage-700" : "text-muted-foreground"
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur()
+                          }
+                          if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                            e.preventDefault()
+                          }
+                        }}
+                        aria-label={`${category} meal count`}
+                      />
+                      
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className={cn(
+                          "h-10 w-10 rounded-full transition-all shrink-0",
+                          isActive
+                            ? "border-sage-600 text-sage-700 hover:bg-sage-100 hover:border-sage-700"
+                            : "border-sage-300 text-muted-foreground hover:border-sage-400"
+                        )}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelection((prev) => ({
+                            ...prev,
+                            [category]: Math.min(5, (prev[category] || 0) + 1),
+                          }))
+                        }}
+                        disabled={count === 5}
+                        aria-label={`Increase ${category} count`}
+                      >
+                        <span className="text-xl font-medium">+</span>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Enhanced Total Display */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-4 border-t">
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col">
+                  <span className="text-xs text-muted-foreground">Total meals this week</span>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className={cn(
+                      "text-2xl sm:text-3xl font-bold tabular-nums transition-colors",
+                      totalMeals > 0 ? "text-sage-600" : "text-muted-foreground"
+                    )}>
+                      {totalMeals}
+                    </span>
+                    <span className="text-sm text-muted-foreground">meals</span>
+                  </div>
+                </div>
+                {totalMeals > 0 && (
+                  <div className="hidden sm:flex h-12 w-12 rounded-full bg-sage-100 border-2 border-sage-300 flex items-center justify-center">
+                    <span className="text-sm font-bold text-sage-700">{totalMeals}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  onClick={() => setIsAddRecipeModalOpen(true)}
+                  disabled={!hasAnyRecipes}
+                  className="w-full sm:w-auto"
+                >
+                  <Plus className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                  <span className="hidden sm:inline">Add Recipe</span>
+                  <span className="sm:hidden">Add</span>
+                </Button>
+                <Button
+                  onClick={handleGeneratePlan}
+                  disabled={generatePlan.isPending || totalMeals === 0}
+                  size="lg"
+                  className="w-full sm:w-auto bg-sage-600 hover:bg-sage-700 disabled:opacity-50"
+                >
+                  {generatePlan.isPending ? (
+                    <>
+                      <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                      <span className="hidden sm:inline">Generating...</span>
+                      <span className="sm:hidden">Generating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-5 w-5 mr-2" />
+                      <span className="hidden sm:inline">Generate Meal Plan</span>
+                      <span className="sm:hidden">Generate</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
-      {/* Meal Plan Display */}
+      {/* Meal Plan Display with View Tabs */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold">
-            This Week&apos;s Meals ({displayedRecipes?.length || 0} recipes)
-          </h3>
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4 flex-1">
+            <h3 className="font-semibold">
+              This Week&apos;s Meals ({displayedRecipes?.length || 0} recipes)
+            </h3>
+            {displayedRecipes && displayedRecipes.length > 0 && (
+              <Tabs value={view} onValueChange={(v) => setView(v as PlannerView)} className="hidden sm:block">
+                <TabsList>
+                  <TabsTrigger value="calendar">Calendar</TabsTrigger>
+                  <TabsTrigger value="list">List</TabsTrigger>
+                  <TabsTrigger value="category">Category</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
           {displayedRecipes && displayedRecipes.length > 0 && (
             <Button
               onClick={handleGenerateShoppingList}
               disabled={addToShoppingList.isPending}
               variant="outline"
               size="default"
+              className="flex-shrink-0"
             >
               {addToShoppingList.isPending ? (
                 <>
@@ -377,12 +1073,26 @@ export function MealPlanner() {
               ) : (
                 <>
                   <ShoppingCart className="h-4 w-4 mr-2" />
-                  Add to Shopping List
+                  <span className="hidden sm:inline">Add to Shopping List</span>
+                  <span className="sm:hidden">Add to List</span>
                 </>
               )}
             </Button>
           )}
         </div>
+
+        {/* Mobile View Toggle */}
+        {displayedRecipes && displayedRecipes.length > 0 && (
+          <div className="sm:hidden">
+            <Tabs value={view} onValueChange={(v) => setView(v as PlannerView)}>
+              <TabsList className="w-full">
+                <TabsTrigger value="calendar" className="flex-1">Calendar</TabsTrigger>
+                <TabsTrigger value="list" className="flex-1">List</TabsTrigger>
+                <TabsTrigger value="category" className="flex-1">Category</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        )}
 
         {planLoading ? (
           <p className="text-muted-foreground text-center py-8">Loading...</p>
@@ -401,149 +1111,338 @@ export function MealPlanner() {
             />
           )
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {displayedRecipes.map((recipe, index) => {
-              const lastMade = lastMadeMap.get(recipe.id)
-              const isManuallyMarked = weeklyPlan?.made_recipe_ids?.includes(recipe.id) || false
-              const isMadeInWeek = lastMade ? isDateInWeekRange(lastMade, currentWeekDate) : false
-              const isMadeForWeek = isManuallyMarked || isMadeInWeek
-              const isMarkingThis = markingRecipeId === recipe.id
-              const isAddingToCart = addingToCartRecipeId === recipe.id
-              const isSwapping = swappingRecipeId === recipe.id
-
-              return (
-                <Card
-                  key={`${recipe.id}-${index}`}
-                  className={cn(
-                    "cursor-pointer hover:shadow-md transition-shadow max-w-xs",
-                    isSwapping ? "animate-flip" : "animate-fade-in"
-                  )}
-                  style={isSwapping ? undefined : { animationDelay: `${index * 50}ms` }}
-                  onClick={() => setViewingRecipe(recipe)}
-                >
-                  <CardContent className="pt-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex-1 pr-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-semibold text-foreground">{recipe.name}</h4>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 flex-shrink-0 transition-transform hover:scale-110"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              toggleFavorite.mutate({ id: recipe.id, favorite: recipe.favorite })
-                            }}
+          <>
+            {/* Calendar View */}
+            {view === "calendar" && (
+              <div className="space-y-4">
+                {/* Desktop Calendar Grid */}
+                <div className="hidden lg:block">
+                  <Card>
+                    <CardContent className="p-0">
+                      <div className="grid grid-cols-7 border-b border-sage-200">
+                        {weekDays.map((day) => (
+                          <div
+                            key={day.date.toISOString()}
+                            className="p-3 text-center text-xs font-semibold text-sage-600 bg-sage-50 border-r border-sage-200 last:border-r-0"
                           >
-                            <Heart
-                              className={`h-5 w-5 transition-colors ${
-                                recipe.favorite
-                                  ? "fill-terracotta-500 text-terracotta-500"
-                                  : "text-muted-foreground hover:text-terracotta-400"
-                              }`}
+                            {day.dayName}
+                            <div className="text-xs font-normal text-gray-500 mt-1">{day.dayNumber}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-7">
+                        {weekDays.map((day, dayIndex) => {
+                          const dayRecipes = getRecipesByDay(dayIndex)
+                          return (
+                            <DayColumn
+                              key={day.date.toISOString()}
+                              day={day}
+                              dayIndex={dayIndex}
+                              dayRecipes={dayRecipes}
+                              isRecipeMade={isRecipeMade}
+                              markingRecipeId={markingRecipeId}
+                              addingToCartRecipeId={addingToCartRecipeId}
+                              swappingRecipeId={swappingRecipeId}
+                              onViewRecipe={setViewingRecipe}
+                              onSwapRecipe={handleSwapRecipe}
+                              onMarkMade={handleMarkMade}
+                              onAddToCart={handleAddRecipeToCart}
+                              onRemoveRecipe={handleRemoveFromPlan}
+                              onMoveToDay={handleMoveToDay}
+                              getTagClassName={getTagClassName}
+                              weekDays={weekDays}
+                              currentDayIndex={recipeDayAssignments}
                             />
-                          </Button>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap mt-1">
-                          <span className={cn("capitalize", getTagClassName(recipe.category, true))}>
-                            {recipe.category}
-                          </span>
-                          {recipe.tags && recipe.tags.length > 0 && (
-                            <>
-                              {recipe.tags.map((tag) => (
-                                <span key={tag} className={getTagClassName(tag, false)}>
-                                  {tag}
-                                </span>
-                              ))}
-                            </>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Mobile Calendar Stack */}
+                <div className="lg:hidden space-y-4">
+                  {weekDays.map((day, dayIndex) => {
+                    const dayRecipes = getRecipesByDay(dayIndex)
+                    return (
+                      <MobileDayColumn
+                        key={day.date.toISOString()}
+                        day={day}
+                        dayIndex={dayIndex}
+                        dayRecipes={dayRecipes}
+                        isRecipeMade={isRecipeMade}
+                        markingRecipeId={markingRecipeId}
+                        addingToCartRecipeId={addingToCartRecipeId}
+                        swappingRecipeId={swappingRecipeId}
+                        onViewRecipe={setViewingRecipe}
+                        onSwapRecipe={handleSwapRecipe}
+                        onMarkMade={handleMarkMade}
+                        onAddToCart={handleAddRecipeToCart}
+                        onRemoveRecipe={handleRemoveFromPlan}
+                        onMoveToDay={handleMoveToDay}
+                        getTagClassName={getTagClassName}
+                        weekDays={weekDays}
+                        currentDayIndex={recipeDayAssignments}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* List View */}
+            {view === "list" && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="space-y-3">
+                    {displayedRecipes.map((recipe, index) => {
+                      const isMade = isRecipeMade(recipe)
+                      const lastMade = lastMadeMap.get(recipe.id)
+                      
+                      return (
+                        <div
+                          key={recipe.id}
+                          className={cn(
+                            "flex items-center gap-3 p-3 rounded-lg border border-sage-200 hover:shadow-md transition-shadow cursor-pointer",
+                            isMade && "opacity-70 relative"
                           )}
-                          <span className="text-xs text-muted-foreground">{recipe.servings} servings</span>
+                          onClick={() => setViewingRecipe(recipe)}
+                        >
+                          {isMade && (
+                            <div className="absolute inset-0 bg-gradient-to-br from-sage-600/5 to-transparent pointer-events-none rounded-lg" />
+                          )}
+                          <div className="flex-shrink-0">
+                            {isMade ? (
+                              <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center">
+                                <Check className="w-5 h-5 text-sage-600" />
+                              </div>
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                                <span className="text-xs font-semibold text-gray-600">
+                                  {recipe.category.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-1">
+                              <h4 className="font-semibold text-sm">{recipe.name}</h4>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={cn("text-xs px-2 py-0.5 rounded", getTagClassName(recipe.category, true))}>
+                                {recipe.category}
+                              </span>
+                              <span className="text-xs text-gray-500">{recipe.servings} servings</span>
+                              {lastMade && (
+                                <>
+                                  <span className="text-xs text-gray-400">•</span>
+                                  <span className="text-xs text-gray-500">
+                                    Last made: {new Date(lastMade).toLocaleDateString()}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex-shrink-0 flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-2 text-xs hidden sm:flex"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSwapRecipe(recipe)
+                              }}
+                              disabled={swappingRecipeId === recipe.id || swapRecipe.isPending}
+                            >
+                              <Shuffle className="h-3 w-3 mr-1" />
+                              Swap
+                            </Button>
+                            <Button
+                              variant={isMade ? "default" : "outline"}
+                              size="sm"
+                              className={cn(
+                                "h-8 px-2 text-xs",
+                                isMade
+                                  ? "bg-sage-600 hover:bg-sage-700 text-white"
+                                  : "text-sage-700 border-sage-300"
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleMarkMade(recipe.id, isMade)
+                              }}
+                              disabled={markingRecipeId === recipe.id}
+                            >
+                              <Check className="h-3 w-3 mr-1" />
+                              {isMade ? "Made" : "Made It"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleAddRecipeToCart(recipe.id)
+                              }}
+                              disabled={addingToCartRecipeId === recipe.id}
+                              title="Add to cart"
+                            >
+                              {addingToCartRecipeId === recipe.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <ShoppingCart className="h-3 w-3" />
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRemoveFromPlan(recipe)
+                              }}
+                              title="Remove"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-                    {lastMade && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-3">
-                        <Clock className="h-3 w-3" />
-                        <span>Last made: {new Date(lastMade).toLocaleDateString()}</span>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        variant="outline"
-                        size="default"
-                        className="h-10 px-3"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleSwapRecipe(recipe)
-                        }}
-                        disabled={isSwapping || swapRecipe.isPending}
-                      >
-                        {isSwapping ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
-                            Swapping...
-                          </>
-                        ) : (
-                          <>
-                            <Shuffle className="h-4 w-4 mr-1.5" />
-                            Swap
-                          </>
-                        )}
-                      </Button>
-                      <Button
-                        variant={isMadeForWeek ? "default" : "outline"}
-                        size="default"
-                        className={
-                          isMadeForWeek
-                            ? "h-10 px-3 bg-sage-600 hover:bg-sage-700 text-white"
-                            : "h-10 px-3 text-sage-700 border-sage-300 hover:bg-sage-50"
-                        }
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleMarkMade(recipe.id, isMadeForWeek)
-                        }}
-                        disabled={isMarkingThis}
-                      >
-                        <Check className="h-4 w-4 mr-1.5" />
-                        {isMarkingThis ? "..." : isMadeForWeek ? "Made" : "Made It"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="default"
-                        className="h-10 w-10 p-0 text-sage-700 border-sage-300 hover:bg-sage-50"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleAddRecipeToCart(recipe.id)
-                        }}
-                        disabled={isAddingToCart}
-                        title="Add to shopping list"
-                      >
-                        {isAddingToCart ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <ShoppingCart className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="default"
-                        className="h-10 w-10 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleRemoveFromPlan(recipe)
-                        }}
-                        title="Remove from plan"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+            {/* Category View */}
+            {view === "category" && (
+              <div className="space-y-4">
+                {Array.from(recipesByCategory.entries())
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([category, categoryRecipes]) => {
+                    const madeCount = categoryRecipes.filter(r => isRecipeMade(r)).length
+                    const categoryColor = getTagClassName(category, true)
+                    
+                    return (
+                      <Card key={category}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold capitalize">{category}</span>
+                              <span className={cn("text-xs px-2 py-0.5 rounded-full", categoryColor)}>
+                                {categoryRecipes.length} recipe{categoryRecipes.length !== 1 ? "s" : ""}
+                              </span>
+                            </div>
+                            {madeCount > 0 && (
+                              <span className="text-xs text-sage-600 font-medium">
+                                {madeCount} made
+                              </span>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            {categoryRecipes.map((recipe, idx) => {
+                              const isMade = isRecipeMade(recipe)
+                              return (
+                                <div
+                                  key={recipe.id}
+                                  className={cn(
+                                    "bg-white rounded-lg p-3 border border-sage-200",
+                                    isMade && "opacity-70 relative"
+                                  )}
+                                >
+                                  {isMade && (
+                                    <div className="absolute inset-0 bg-gradient-to-br from-sage-600/10 to-transparent pointer-events-none rounded-lg" />
+                                  )}
+                                  <div className="flex items-start justify-between mb-2">
+                                    <div className="flex-1">
+                                      <h4 className="font-semibold text-sm mb-1">{recipe.name}</h4>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs text-gray-500">{recipe.servings} servings</span>
+                                        {lastMadeMap.get(recipe.id) && (
+                                          <>
+                                            <span className="text-xs text-gray-400">•</span>
+                                            <span className="text-xs text-gray-500">
+                                              {new Date(lastMadeMap.get(recipe.id)!).toLocaleDateString("en-US", {
+                                                month: "short",
+                                                day: "numeric",
+                                              })}
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {isMade && (
+                                      <div className="w-5 h-5 rounded-full bg-sage-600 flex items-center justify-center flex-shrink-0 ml-2">
+                                        <Check className="h-3 w-3 text-white" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-2 mt-3">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9 px-3 flex-1 text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleSwapRecipe(recipe)
+                                      }}
+                                    >
+                                      <Shuffle className="h-3 w-3 mr-1" />
+                                      Swap
+                                    </Button>
+                                    <Button
+                                      variant={isMade ? "default" : "outline"}
+                                      size="sm"
+                                      className={cn(
+                                        "h-9 px-3 flex-1 text-xs",
+                                        isMade
+                                          ? "bg-sage-600 hover:bg-sage-700 text-white"
+                                          : "text-sage-700 border-sage-300"
+                                      )}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleMarkMade(recipe.id, isMade)
+                                      }}
+                                    >
+                                      <Check className="h-3 w-3 mr-1" />
+                                      {isMade ? "Made" : "Made It"}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9 w-9 p-0"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleAddRecipeToCart(recipe.id)
+                                      }}
+                                    >
+                                      <ShoppingCart className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9 w-9 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleRemoveFromPlan(recipe)
+                                      }}
+                                      title="Remove"
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+              </div>
+            )}
+          </>
         )}
       </div>
 

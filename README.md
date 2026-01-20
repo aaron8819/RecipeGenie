@@ -8,7 +8,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
   - Manual entry or import from plain text with automatic parsing
   - Supports Unicode fractions, ranges, and various recipe formats
 - **Meal Planning**: Randomly generate weekly meal plans based on your preferences
-- **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering
+- **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering, custom categories, and category ordering to match your store layout
 - **Pantry Tracking**: Mark items you have on hand to get only what you need to buy
 - **Multi-User Support**: Each user has their own private data via Supabase Auth
 - **Guest Mode**: Try the app without signing up (data stored in browser session)

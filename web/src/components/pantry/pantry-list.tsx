@@ -69,11 +69,27 @@ export function PantryList() {
     e.preventDefault()
     if (!newItem.trim()) return
 
+    // Split by comma and filter empty strings
+    const items = newItem
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+
+    if (items.length === 0) return
+
     try {
-      await addPantryItem.mutateAsync(newItem)
+      // Add each item
+      for (const item of items) {
+        try {
+          await addPantryItem.mutateAsync(item)
+        } catch (error) {
+          // Skip duplicates or errors for individual items
+          console.warn(`Skipped pantry item "${item}":`, error)
+        }
+      }
       setNewItem("")
     } catch (error) {
-      console.error("Failed to add pantry item:", error)
+      console.error("Failed to add pantry items:", error)
     }
   }
 
@@ -81,11 +97,27 @@ export function PantryList() {
     e.preventDefault()
     if (!newKeyword.trim()) return
 
+    // Split by comma and filter empty strings
+    const keywords = newKeyword
+      .split(",")
+      .map((keyword) => keyword.trim())
+      .filter((keyword) => keyword.length > 0)
+
+    if (keywords.length === 0) return
+
     try {
-      await addKeyword.mutateAsync(newKeyword)
+      // Add each keyword
+      for (const keyword of keywords) {
+        try {
+          await addKeyword.mutateAsync(keyword)
+        } catch (error) {
+          // Skip duplicates or errors for individual keywords
+          console.warn(`Skipped keyword "${keyword}":`, error)
+        }
+      }
       setNewKeyword("")
     } catch (error) {
-      console.error("Failed to add keyword:", error)
+      console.error("Failed to add keywords:", error)
     }
   }
 
@@ -105,9 +137,10 @@ export function PantryList() {
         <CardContent>
           <form onSubmit={handleAddPantryItem} className="flex gap-2 mb-4">
             <Input
-              placeholder="Add pantry item..."
+              placeholder="Add pantry item (comma-separated)..."
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
+              className="text-base sm:text-sm"
             />
             <Button type="submit" size="icon" disabled={addPantryItem.isPending}>
               <Plus className="h-4 w-4" />
@@ -156,9 +189,10 @@ export function PantryList() {
         <CardContent>
           <form onSubmit={handleAddKeyword} className="flex gap-2 mb-4">
             <Input
-              placeholder="Add excluded keyword..."
+              placeholder="Add excluded keyword (comma-separated)..."
               value={newKeyword}
               onChange={(e) => setNewKeyword(e.target.value)}
+              className="text-base sm:text-sm"
             />
             <Button type="submit" size="icon" disabled={addKeyword.isPending}>
               <Plus className="h-4 w-4" />

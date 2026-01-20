@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
 import { Plus, Trash2, Package, Ban, Check, Copy, GripVertical, X, Settings } from "lucide-react"
 import {
   DndContext,
@@ -83,7 +83,7 @@ function SourceTag({
   
   if (isManual) {
     return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200">
         Manual
       </span>
     )
@@ -97,7 +97,7 @@ function SourceTag({
   
   return (
     <span 
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
       title={recipeName}
     >
       {displayName}
@@ -133,23 +133,26 @@ function RecipeTag({
         type="button"
         onClick={onRemove}
         disabled={isRemoving}
-        className={`p-0.5 rounded-full transition-colors hover:bg-black/10 disabled:opacity-50`}
+        className={`p-1 md:p-0.5 rounded-full transition-colors hover:bg-black/10 active:bg-black/20 disabled:opacity-50 min-w-[28px] min-h-[28px] md:min-w-0 md:min-h-0 flex items-center justify-center`}
         title={`Remove all items from ${recipeName}`}
       >
-        <X className="h-3 w-3" />
+        <X className="h-3.5 w-3.5 md:h-3 md:w-3" />
       </button>
     </span>
   )
 }
 
-// Sortable item component
-function SortableShoppingItem({
+// Swipeable item component with swipe-to-delete
+function SwipeableItem({
   item,
   onCheckOff,
   onRemove,
   isCheckingOff,
   isRemoving,
   recipeColorMap,
+  dragHandleProps,
+  dragStyle,
+  isDragging,
 }: {
   item: ShoppingItem
   onCheckOff: () => void
@@ -157,21 +160,21 @@ function SortableShoppingItem({
   isCheckingOff: boolean
   isRemoving: boolean
   recipeColorMap: Map<string, number>
+  dragHandleProps?: any
+  dragStyle?: React.CSSProperties
+  isDragging?: boolean
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: item.item })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
+  const [swipeOffset, setSwipeOffset] = useState(0)
+  const [isSwiping, setIsSwiping] = useState(false)
+  const touchStartX = useRef<number | null>(null)
+  const touchStartY = useRef<number | null>(null)
+  const touchStartTime = useRef<number | null>(null)
+  const itemRef = useRef<HTMLDivElement>(null)
+  const SWIPE_THRESHOLD = 100 // Minimum swipe distance to reveal delete
+  const DELETE_THRESHOLD = 150 // Distance to trigger delete
+  const SWIPE_VELOCITY_THRESHOLD = 0.5 // Minimum velocity for quick swipe
+  const MIN_SWIPE_DISTANCE = 20 // Minimum distance before tracking
+  const MAX_VERTICAL_DEVIATION = 30 // Max vertical movement allowed
 
   const formatAmount = (item: ShoppingItem) => {
     const parts: string[] = []
@@ -206,63 +209,301 @@ function SortableShoppingItem({
     })
   }, [item.sources])
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // Only handle swipe on mobile (touch devices)
+    if (window.innerWidth >= 768) return
+    
+    // Don't start swipe if touch started on drag handle, checkbox, or delete button
+    const target = e.target as HTMLElement
+    const button = target.closest('button')
+    
+    // If touching a button, check if it's the drag handle or checkbox
+    if (button) {
+      // Don't start swipe for drag handle or checkbox buttons (using data attributes)
+      if (button.hasAttribute('data-drag-handle') || button.hasAttribute('data-checkbox')) {
+        return
+      }
+      
+      // Don't start swipe for the delete button (revealed on swipe)
+      if (button.closest('.bg-destructive')) {
+        return
+      }
+    }
+    
+    // The touch-action CSS property will handle preventing scroll interference
+    // No need to check for scrollable parents as it blocks all swipes
+    
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+    touchStartTime.current = Date.now()
+    setIsSwiping(false) // Don't set to true until we confirm it's a horizontal swipe
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null || window.innerWidth >= 768) return
+    
+    const currentX = e.touches[0].clientX
+    const currentY = e.touches[0].clientY
+    const deltaX = touchStartX.current - currentX
+    const deltaY = Math.abs(touchStartY.current - currentY)
+    const absDeltaX = Math.abs(deltaX)
+    
+    // If vertical movement is significantly greater than horizontal, allow scrolling
+    if (deltaY > absDeltaX * 1.5 && deltaY > 10) {
+      // This is a scroll gesture, not a swipe - reset and allow native scrolling
+      touchStartX.current = null
+      touchStartY.current = null
+      touchStartTime.current = null
+      setIsSwiping(false)
+      setSwipeOffset(0)
+      return
+    }
+    
+    // Only proceed if horizontal movement is dominant and we've moved enough
+    if (absDeltaX > MIN_SWIPE_DISTANCE && absDeltaX > deltaY && deltaY < MAX_VERTICAL_DEVIATION) {
+      if (!isSwiping) {
+        setIsSwiping(true)
+      }
+      
+      // Only allow left swipe (positive deltaX)
+      if (deltaX > 0) {
+        const maxSwipe = 120 // Maximum swipe distance
+        setSwipeOffset(Math.min(deltaX, maxSwipe))
+        // Only prevent default once we're actually swiping horizontally
+        e.preventDefault()
+      }
+    } else if (isSwiping && deltaY > absDeltaX) {
+      // If we were swiping but now it's more vertical, cancel the swipe
+      setIsSwiping(false)
+      setSwipeOffset(0)
+      touchStartX.current = null
+      touchStartY.current = null
+      touchStartTime.current = null
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (touchStartX.current === null || touchStartTime.current === null || window.innerWidth >= 768) {
+      setIsSwiping(false)
+      touchStartX.current = null
+      touchStartY.current = null
+      return
+    }
+
+    // Only process if we were actually swiping
+    if (!isSwiping || swipeOffset < MIN_SWIPE_DISTANCE) {
+      setSwipeOffset(0)
+      setIsSwiping(false)
+      touchStartX.current = null
+      touchStartY.current = null
+      touchStartTime.current = null
+      return
+    }
+
+    const timeElapsed = Date.now() - touchStartTime.current
+    const velocity = timeElapsed > 0 ? swipeOffset / timeElapsed : 0
+
+    // Trigger delete if swiped far enough or with enough velocity
+    if (swipeOffset >= DELETE_THRESHOLD || (swipeOffset >= SWIPE_THRESHOLD && velocity > SWIPE_VELOCITY_THRESHOLD)) {
+      onRemove()
+      setSwipeOffset(0)
+    } else if (swipeOffset >= SWIPE_THRESHOLD) {
+      // Reveal delete button
+      setSwipeOffset(100) // Slightly increased reveal distance
+    } else {
+      // Snap back
+      setSwipeOffset(0)
+    }
+    
+    setIsSwiping(false)
+    touchStartX.current = null
+    touchStartY.current = null
+    touchStartTime.current = null
+  }
+
+  // Reset swipe when item changes
+  useEffect(() => {
+    setSwipeOffset(0)
+  }, [item.item])
+
+  // Close swipe when clicking outside
+  useEffect(() => {
+    if (swipeOffset > 0) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (itemRef.current && !itemRef.current.contains(e.target as Node)) {
+          setSwipeOffset(0)
+        }
+      }
+      document.addEventListener('click', handleClickOutside)
+      return () => document.removeEventListener('click', handleClickOutside)
+    }
+  }, [swipeOffset])
+
+  const handleDeleteClick = () => {
+    onRemove()
+    setSwipeOffset(0)
+  }
+
   return (
-    <li
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center justify-between py-1.5 group"
+    <div
+      ref={itemRef}
+      className="relative overflow-hidden"
+      style={{ touchAction: 'pan-y pinch-zoom' }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <button
-          type="button"
-          className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={onCheckOff}
-          disabled={isCheckingOff}
-          className="w-5 h-5 rounded border-2 border-sage-300 flex items-center justify-center transition-colors hover:border-sage-500 hover:bg-sage-100 flex-shrink-0"
-        >
-          <Check className="h-3 w-3 text-transparent hover:text-sage-500" />
-        </button>
-        <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
-          <span className="text-foreground">
-            {formatAmount(item) && (
-              <span className="text-muted-foreground mr-1.5 font-medium">
-                {formatAmount(item)}
-              </span>
-            )}
-            {item.item}
-          </span>
-          {uniqueSources.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {uniqueSources.map((source, idx) => (
-                <SourceTag 
-                  key={`${source.recipeName}-${idx}`} 
-                  recipeName={source.recipeName}
-                  colorIndex={recipeColorMap.get(source.recipeName)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-        onClick={onRemove}
-        disabled={isRemoving}
+      {/* Delete button (revealed on swipe) */}
+      <div
+        className="absolute right-0 top-0 bottom-0 flex items-center bg-destructive px-4 transition-transform duration-200 ease-out md:hidden"
+        style={{
+          transform: `translateX(${swipeOffset > 0 ? 0 : 100}%)`,
+          width: '80px',
+          willChange: isSwiping ? 'transform' : 'auto',
+        }}
       >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </li>
+        <button
+          type="button"
+          onClick={handleDeleteClick}
+          disabled={isRemoving}
+          className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-white disabled:opacity-50"
+          aria-label="Delete item"
+        >
+          <Trash2 className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Main item content */}
+      <div
+        className="flex items-center justify-between px-4 py-3.5 md:py-3 group transition-transform duration-200 ease-out swipeable-content hover:bg-sage-50/50"
+        style={{
+          transform: `translateX(-${swipeOffset}px)`,
+          ...dragStyle,
+          opacity: isDragging ? 0.5 : 1,
+          willChange: isSwiping || isDragging ? 'transform' : 'auto',
+        }}
+      >
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {/* Drag handle - visible on all screen sizes */}
+          <button
+            type="button"
+            data-drag-handle="true"
+            className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
+            style={{ touchAction: 'none' }}
+            {...dragHandleProps}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          
+          {/* Checkbox - larger on mobile for better touch target */}
+          <button
+            type="button"
+            data-checkbox="true"
+            onClick={onCheckOff}
+            disabled={isCheckingOff}
+            className="w-6 h-6 md:w-5 md:h-5 rounded border-2 border-sage-300 flex items-center justify-center transition-all hover:border-sage-500 hover:bg-sage-100 active:bg-sage-200 active:scale-95 flex-shrink-0"
+            aria-label="Check off item"
+          >
+            <Check className="h-4 w-4 md:h-3 md:w-3 text-transparent hover:text-sage-500 active:text-sage-600" />
+          </button>
+          
+          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              {formatAmount(item) && (
+                <span className="text-sm font-medium text-gray-700">
+                  {formatAmount(item)}
+                </span>
+              )}
+              <span className="text-sm text-gray-600">
+                {item.item}
+              </span>
+              {uniqueSources.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {uniqueSources.map((source, idx) => (
+                    <SourceTag 
+                      key={`${source.recipeName}-${idx}`} 
+                      recipeName={source.recipeName}
+                      colorIndex={recipeColorMap.get(source.recipeName)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* Desktop delete button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:flex h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          onClick={onRemove}
+          disabled={isRemoving}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
   )
 }
+
+// Sortable item component - memoized for better scroll performance
+const SortableShoppingItem = memo(function SortableShoppingItem({
+  item,
+  onCheckOff,
+  onRemove,
+  isCheckingOff,
+  isRemoving,
+  recipeColorMap,
+}: {
+  item: ShoppingItem
+  onCheckOff: () => void
+  onRemove: () => void
+  isCheckingOff: boolean
+  isRemoving: boolean
+  recipeColorMap: Map<string, number>
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: item.item })
+
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <li ref={setNodeRef}>
+      <SwipeableItem
+        item={item}
+        onCheckOff={onCheckOff}
+        onRemove={onRemove}
+        isCheckingOff={isCheckingOff}
+        isRemoving={isRemoving}
+        recipeColorMap={recipeColorMap}
+        dragHandleProps={{ ...attributes, ...listeners }}
+        dragStyle={dragStyle}
+        isDragging={isDragging}
+      />
+    </li>
+  )
+}, (prevProps, nextProps) => {
+  // Custom comparison function for memo
+  return (
+    prevProps.item.item === nextProps.item.item &&
+    prevProps.item.amount === nextProps.item.amount &&
+    prevProps.item.unit === nextProps.item.unit &&
+    prevProps.item.categoryKey === nextProps.item.categoryKey &&
+    prevProps.isCheckingOff === nextProps.isCheckingOff &&
+    prevProps.isRemoving === nextProps.isRemoving &&
+    JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
+  )
+})
 
 // Drag overlay item (shown while dragging)
 function DragOverlayItem({ 
@@ -401,11 +642,11 @@ export function ShoppingListView() {
     })
   }, [undoToast, clearList])
 
-  // Set up drag sensors
+  // Set up drag sensors with higher activation distance on mobile to avoid interfering with scrolling
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px movement before starting drag
+        distance: typeof window !== 'undefined' && window.innerWidth < 768 ? 15 : 8, // Higher threshold on mobile
       },
     }),
     useSensor(KeyboardSensor, {
@@ -659,7 +900,7 @@ export function ShoppingListView() {
               placeholder="Add items (comma separated)..."
               value={newItem}
               onChange={(e) => setNewItem(e.target.value)}
-              className="flex-1"
+              className="flex-1 text-base sm:text-sm"
             />
             <Button type="submit" disabled={addItem.isPending}>
               <Plus className="h-4 w-4 mr-1" />
@@ -671,52 +912,69 @@ export function ShoppingListView() {
 
       {/* Recipe Sources and Action Buttons */}
       {(uniqueRecipes.length > 0 || filteredItems.length > 0) && (
-        <div className="space-y-2">
-          <div className="flex items-start justify-between gap-4">
-            {uniqueRecipes.length > 0 ? (
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-muted-foreground mb-2">Recipes in list:</p>
-                <div className="flex flex-wrap gap-2">
-                  {uniqueRecipes.map((recipeName) => (
-                    <RecipeTag
-                      key={recipeName}
-                      recipeName={recipeName}
-                      onRemove={() => handleRemoveRecipeItems(recipeName)}
-                      isRemoving={false}
-                      colorIndex={recipeColorMap.get(recipeName)}
-                    />
-                  ))}
+        <div className="space-y-3 md:space-y-2">
+          {/* Recipe tags - horizontally scrollable on mobile */}
+          {uniqueRecipes.length > 0 && (
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-muted-foreground mb-2">Recipes in list:</p>
+              <div className="relative">
+                {/* Scrollable container with fade indicators */}
+                <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0 md:overflow-visible">
+                  <div className="flex gap-2 md:flex-wrap min-w-max md:min-w-0 pb-1 md:pb-0">
+                    {uniqueRecipes.map((recipeName) => (
+                      <RecipeTag
+                        key={recipeName}
+                        recipeName={recipeName}
+                        onRemove={() => handleRemoveRecipeItems(recipeName)}
+                        isRemoving={false}
+                        colorIndex={recipeColorMap.get(recipeName)}
+                      />
+                    ))}
+                  </div>
                 </div>
+                {/* Fade indicator on mobile - only show if scrollable */}
+                {uniqueRecipes.length > 2 && (
+                  <div className="absolute right-0 top-6 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none md:hidden" />
+                )}
               </div>
-            ) : (
-              <div className="flex-1" />
-            )}
-            {filteredItems.length > 0 && (
-              <div className="flex gap-2 flex-shrink-0">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowSettings(true)}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  Organize
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleCopyList}
-                >
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleClearListWithUndo}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Clear
-                </Button>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
+          
+          {/* Action buttons - icon-only on mobile */}
+          {filteredItems.length > 0 && (
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowSettings(true)}
+                className="h-11 w-11 md:h-auto md:w-auto md:px-4"
+                title="Organize categories"
+              >
+                <Settings className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Organize</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleCopyList}
+                className="h-11 w-11 md:h-auto md:w-auto md:px-4"
+                title="Copy list"
+              >
+                <Copy className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Copy</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleClearListWithUndo}
+                className="h-11 w-11 md:h-auto md:w-auto md:px-4"
+                title="Clear list"
+              >
+                <Trash2 className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Clear</span>
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -730,7 +988,13 @@ export function ShoppingListView() {
           description="Add items manually above, or generate a meal plan and add it to your shopping list."
         />
       ) : (
-        <div className="space-y-4">
+        <div 
+          className="space-y-4"
+          style={{
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehavior: 'contain',
+          }}
+        >
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -759,18 +1023,18 @@ export function ShoppingListView() {
                         isDragTarget ? 'border-2 border-dashed border-primary bg-primary/5' : ''
                       }`}
                     >
-                      <CardHeader className="py-3 bg-sage-50 rounded-t-xl">
-                        <CardTitle className="text-sm font-semibold text-sage-700 flex items-center gap-2">
-                          <Package className="h-4 w-4" />
+                      <CardHeader className="px-4 py-2.5 border-b border-sage-100 bg-transparent">
+                        <CardTitle className="text-xs font-semibold text-sage-600 uppercase tracking-wide flex items-center gap-2">
+                          <Package className="h-3.5 w-3.5" />
                           {categoryData.name}
                           {categoryData.isCustom && (
-                            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">Custom</span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded normal-case">Custom</span>
                           )}
-                          <span className="text-xs font-normal text-sage-500">({items.length})</span>
+                          <span className="text-xs font-normal text-sage-400 ml-auto">({items.length})</span>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="pt-3">
-                        <ul className="space-y-1">
+                      <CardContent className="p-0">
+                        <ul className="divide-y divide-sage-50" style={{ contain: 'layout style paint' }}>
                           {items.map((item) => (
                             <SortableShoppingItem
                               key={item.item}
@@ -797,14 +1061,14 @@ export function ShoppingListView() {
           {/* Already Have Section */}
           {shoppingList?.already_have && shoppingList.already_have.length > 0 && (
             <Card className="animate-fade-in">
-              <CardHeader className="py-3 bg-sage-50 rounded-t-xl">
-                <CardTitle className="text-sm font-semibold text-sage-700 flex items-center gap-2">
-                  <Package className="h-4 w-4" />
+              <CardHeader className="px-4 py-2.5 border-b border-sage-100 bg-transparent">
+                <CardTitle className="text-xs font-semibold text-sage-600 uppercase tracking-wide flex items-center gap-2">
+                  <Package className="h-3.5 w-3.5" />
                   Already Have
-                  <span className="text-xs font-normal text-sage-500">({shoppingList.already_have.length})</span>
+                  <span className="text-xs font-normal text-sage-400 ml-auto">({shoppingList.already_have.length})</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-3">
+              <CardContent className="pt-3 px-4 pb-4">
                 <p className="text-xs text-muted-foreground mb-2">Click to add back to list</p>
                 <div className="flex flex-wrap gap-2">
                   {shoppingList.already_have.map((item, index) => (
@@ -813,7 +1077,7 @@ export function ShoppingListView() {
                       type="button"
                       onClick={() => moveToList.mutate(item)}
                       disabled={moveToList.isPending}
-                      className="px-2.5 py-1 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in hover:bg-sage-200 transition-colors cursor-pointer"
+                      className="px-3 py-2 md:px-2.5 md:py-1 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in hover:bg-sage-200 active:bg-sage-300 transition-colors cursor-pointer min-h-[44px] md:min-h-0"
                       style={{ animationDelay: `${index * 20}ms` }}
                     >
                       {item.item}
@@ -827,14 +1091,14 @@ export function ShoppingListView() {
           {/* Excluded Section */}
           {shoppingList?.excluded && shoppingList.excluded.length > 0 && (
             <Card className="animate-fade-in">
-              <CardHeader className="py-3 bg-terracotta-50 rounded-t-xl">
-                <CardTitle className="text-sm font-semibold text-terracotta-700 flex items-center gap-2">
-                  <Ban className="h-4 w-4" />
+              <CardHeader className="px-4 py-2.5 border-b border-terracotta-100 bg-transparent">
+                <CardTitle className="text-xs font-semibold text-terracotta-700 uppercase tracking-wide flex items-center gap-2">
+                  <Ban className="h-3.5 w-3.5" />
                   Excluded
-                  <span className="text-xs font-normal text-terracotta-500">({shoppingList.excluded.length})</span>
+                  <span className="text-xs font-normal text-terracotta-500 ml-auto">({shoppingList.excluded.length})</span>
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-3">
+              <CardContent className="pt-3 px-4 pb-4">
                 <p className="text-xs text-muted-foreground mb-2">Click to add back to list</p>
                 <div className="flex flex-wrap gap-2">
                   {shoppingList.excluded.map((item, index) => (
@@ -843,7 +1107,7 @@ export function ShoppingListView() {
                       type="button"
                       onClick={() => moveExcludedToList.mutate(item)}
                       disabled={moveExcludedToList.isPending}
-                      className="px-2.5 py-1 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in hover:bg-terracotta-200 transition-colors cursor-pointer"
+                      className="px-3 py-2 md:px-2.5 md:py-1 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in hover:bg-terracotta-200 active:bg-terracotta-300 transition-colors cursor-pointer min-h-[44px] md:min-h-0"
                       style={{ animationDelay: `${index * 20}ms` }}
                     >
                       {item.item}
