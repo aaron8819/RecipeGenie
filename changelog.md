@@ -4,6 +4,61 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.6.0] - 2026-01-21
+
+**Summary:** Major shopping list refactor with unit normalization, unified merging, and comprehensive test suite
+
+### Added
+
+- **Unit Normalization System**:
+  - `normalizeUnit()` function normalizes all units to lowercase canonical form (e.g., "TBSP" → "tbsp")
+  - `normalizeItemName()` function ensures consistent item name formatting
+  - Applied at all entry points: recipe parsing, item creation, merging, storage
+
+- **Unified Merging Logic**:
+  - `mergeShoppingItems()` function provides single source of truth for item merging
+  - Eliminates code duplication across 4+ locations
+  - Handles compatible unit merging, incompatible units (via `additionalAmounts`), and source deduplication
+  - Preserves user overrides and custom order when requested
+
+- **Comprehensive Test Suite**:
+  - 28 tests covering unit normalization, item merging, and shopping list generation
+  - Vitest testing framework with full coverage
+  - Tests ensure deterministic behavior and catch regressions
+
+- **Recipe Source Tracking**:
+  - Sources now include both `recipeId` and `recipeName` for better tracking
+  - Recipe removal properly handles source cleanup and item removal
+
+### Changed
+
+- **Shopping List Generation**:
+  - Units normalized during generation (consistent lowercase canonical form)
+  - Item names normalized (lowercase, trimmed)
+  - Merging by normalized item name (not item+unit) for better deduplication
+  - Compatible units automatically merged (e.g., cups + fl oz)
+
+- **Hook Updates**:
+  - `useAddToShoppingList()` uses unified merging function
+  - `useRemoveRecipeItems()` uses unified removal function
+  - Manual item creation normalizes units and item names
+  - Custom order preserved when adding new recipes (inserts at end of category section)
+
+- **Backward Compatibility**:
+  - Existing shopping lists work without changes
+  - Normalization happens on next generation
+  - No database schema changes required
+
+### Technical Notes
+
+- New files: `shopping-list-normalization.ts`, `shopping-list-merging.ts`, test files
+- Refactored: `shopping-list.ts`, `use-shopping.ts`
+- All tests passing (28/28)
+- Deterministic generation: same inputs → same outputs
+- Maintainable: single source of truth for merging logic
+
+---
+
 ## [2.5.0] - 2026-01-21
 
 **Summary:** Planner settings for day placement rules and automatic day assignment

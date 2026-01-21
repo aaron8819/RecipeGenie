@@ -1,10 +1,13 @@
 /**
  * Shopping list generation business logic
  * Ported from app.py:788-865
+ * Refactored with unit normalization and unified merging
  */
 
 import type { Recipe, ShoppingItem, PantryItem } from "@/types/database"
 import { categorizeIngredient, isExcludedIngredient } from "./shopping-categories"
+import { normalizeItemName, normalizeUnit } from "./shopping-list-normalization"
+import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 
 export interface ShoppingListResult {
   items: ShoppingItem[]
@@ -34,6 +37,7 @@ export function generateShoppingList(
   )
 
   // Aggregate ingredients from selected recipes
+  // Use normalized item name as key (not item+unit) to merge same items with different units
   const ingredientMap = new Map<
     string,
     {
@@ -41,7 +45,8 @@ export function generateShoppingList(
       amount: number
       unit: string
       shoppingCategory?: string
-      sources: { recipeName: string }[]
+      sources: { recipeId: string; recipeName: string }[]
+      additionalAmounts?: { amount: number; unit: string }[]
     }
   >()
 
@@ -51,17 +56,40 @@ export function generateShoppingList(
     totalBaseServings += recipe.servings || 4
 
     for (const ingredient of recipe.ingredients || []) {
-      const itemName = ingredient.item.toLowerCase().trim()
+      // Normalize item name and unit
+      const itemName = normalizeItemName(ingredient.item)
       const amount = (ingredient.amount || 0) * scale
-      const unit = ingredient.unit || ""
+      const unit = normalizeUnit(ingredient.unit || "")
       const shoppingCategory = ingredient.shoppingCategory
 
-      const key = `${itemName}|${unit}`
+      // Use normalized item name as key (merge by item, not item+unit)
+      const key = itemName
 
       if (ingredientMap.has(key)) {
         const existing = ingredientMap.get(key)!
-        existing.amount += amount
-        existing.sources.push({ recipeName: recipe.name })
+        
+        // Try to merge amounts
+        const mergeResult = mergeAmounts(existing.amount, existing.unit, amount, unit)
+        
+        if (mergeResult) {
+          // Units are compatible, merge amounts
+          existing.amount = mergeResult.amount
+          existing.unit = mergeResult.unit
+          existing.additionalAmounts = undefined // Clear if we successfully merged
+        } else {
+          // Units are incompatible, use additionalAmounts
+          if (!existing.additionalAmounts) {
+            existing.additionalAmounts = []
+          }
+          existing.additionalAmounts.push({ amount, unit })
+        }
+        
+        // Add source (deduplicate by recipeId)
+        const hasSource = existing.sources.some(s => s.recipeId === recipe.id)
+        if (!hasSource) {
+          existing.sources.push({ recipeId: recipe.id, recipeName: recipe.name })
+        }
+        
         // Keep the first shopping category override encountered
         if (shoppingCategory && !existing.shoppingCategory) {
           existing.shoppingCategory = shoppingCategory
@@ -72,7 +100,7 @@ export function generateShoppingList(
           amount,
           unit,
           shoppingCategory,
-          sources: [{ recipeName: recipe.name }],
+          sources: [{ recipeId: recipe.id, recipeName: recipe.name }],
         })
       }
     }
@@ -91,13 +119,17 @@ export function generateShoppingList(
     )
 
     const shoppingItem: ShoppingItem = {
-      item: ingredient.item,
-      amount: ingredient.amount > 0 ? ingredient.amount : null,
-      unit: ingredient.unit,
+      item: ingredient.item, // Already normalized
+      amount: ingredient.amount > 0 ? roundForDisplay(ingredient.amount) : null,
+      unit: ingredient.unit, // Already normalized
       categoryKey: catKey,
       categoryOrder: catOrder,
       sources: ingredient.sources,
       shoppingCategory: ingredient.shoppingCategory,
+      additionalAmounts: ingredient.additionalAmounts?.map(a => ({
+        amount: roundForDisplay(a.amount),
+        unit: a.unit, // Already normalized
+      })),
     }
 
     if (pantrySet.has(ingredient.item)) {

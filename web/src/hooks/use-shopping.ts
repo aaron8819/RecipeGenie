@@ -6,6 +6,8 @@ import type { ShoppingList, ShoppingItem, Recipe, PantryItem, UserConfig } from 
 import { generateShoppingList, ensureCategoryInfo } from "@/lib/shopping-list"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
+import { mergeShoppingItems, removeRecipeByNameFromItems } from "@/lib/shopping-list-merging"
+import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getDefaultRecipes, getDefaultShoppingList, getDefaultConfig } from "@/lib/guest-storage"
 
@@ -221,12 +223,12 @@ export function useAddShoppingItem() {
 
       const newItem = ensureCategoryInfo(
         {
-          item: itemName.toLowerCase().trim(),
+          item: normalizeItemName(itemName),
           amount: amount || null,
-          unit: unit || "",
+          unit: normalizeUnit(unit || ""),
           categoryKey: "",
           categoryOrder: 5,
-          sources: [{ recipeName: "Manual" }],
+          sources: [{ recipeId: "", recipeName: "Manual" }],
         },
         categoryOverrides
       )
@@ -285,12 +287,12 @@ export function useAddShoppingItem() {
 
       const optimisticItem = ensureCategoryInfo(
         {
-          item: itemName.toLowerCase().trim(),
+          item: normalizeItemName(itemName),
           amount: amount || null,
-          unit: unit || "",
+          unit: normalizeUnit(unit || ""),
           categoryKey: "",
           categoryOrder: 5,
-          sources: [{ recipeName: "Manual" }],
+          sources: [{ recipeId: "", recipeName: "Manual" }],
         },
         categoryOverrides
       )
@@ -411,14 +413,8 @@ export function useRemoveRecipeItems() {
 
   return useMutation({
     mutationFn: async (recipeName: string) => {
-      const filterItems = (items: ShoppingItem[]) =>
-        items
-          .map((item) => {
-            if (!item.sources) return item
-            const newSources = item.sources.filter((s) => s.recipeName !== recipeName)
-            return newSources.length === 0 ? null : { ...item, sources: newSources }
-          })
-          .filter((item): item is ShoppingItem => item !== null)
+      // Use the unified remove function
+      const filterItems = (items: ShoppingItem[]) => removeRecipeByNameFromItems(items, recipeName)
 
       if (isGuest) {
         const current = getGuestList(queryClient)
@@ -545,63 +541,82 @@ export function useAddToShoppingList() {
 
       const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale)
 
-      // Merge items
-      const currentItemMap = new Map(currentList.items.map((item) => [item.item.toLowerCase(), item]))
-      let addedCount = 0
-      let mergedCount = 0
-
-      for (const newItem of result.items) {
-        const key = newItem.item.toLowerCase()
-        const existingItem = currentItemMap.get(key)
-
-        if (existingItem) {
-          const existingSources = existingItem.sources || []
-          const newSources = newItem.sources || []
-          const sourceSet = new Set(existingSources.map((s) => s.recipeName))
-          const combinedSources = [...existingSources]
-          for (const source of newSources) {
-            if (!sourceSet.has(source.recipeName)) {
-              combinedSources.push(source)
-            }
-          }
-
-          const mergeResult = mergeAmounts(existingItem.amount, existingItem.unit, newItem.amount, newItem.unit)
-          if (mergeResult) {
-            currentItemMap.set(key, {
-              ...existingItem,
-              amount: roundForDisplay(mergeResult.amount),
-              unit: mergeResult.unit,
-              sources: combinedSources,
-              additionalAmounts: undefined,
-            })
-          } else {
-            currentItemMap.set(key, {
-              ...existingItem,
-              sources: combinedSources,
-              additionalAmounts: [...(existingItem.additionalAmounts || []), { amount: newItem.amount || 0, unit: newItem.unit }],
-            })
-          }
-          mergedCount++
-        } else {
-          currentItemMap.set(key, newItem)
-          addedCount++
-        }
+      // Get user category overrides for merging (already fetched above for excluded keywords)
+      let categoryOverrides: Record<string, string> = {}
+      if (isGuest) {
+        categoryOverrides = getDefaultConfig().category_overrides || {}
+      } else {
+        // Reuse configRes from above if available, otherwise fetch
+        const configRes = await getSupabase().from("user_config").select("category_overrides").single()
+        categoryOverrides = (configRes.data?.category_overrides as Record<string, string>) || {}
       }
 
-      let updatedItems = Array.from(currentItemMap.values())
-      // Ensure no duplicates by item name after merge (case-insensitive)
-      const seenItems = new Set<string>()
-      updatedItems = updatedItems.filter(item => {
-        const normalizedItemName = item.item.toLowerCase()
-        if (seenItems.has(normalizedItemName)) {
-          return false
+      // Merge items using unified merging function
+      const existingCount = currentList.items.length
+      const updatedItems = mergeShoppingItems(
+        currentList.items,
+        result.items,
+        {
+          preserveUserOverrides: true,
+          preserveCustomOrder: currentList.custom_order || false,
+          userCategoryOverrides: categoryOverrides,
         }
-        seenItems.add(normalizedItemName)
-        return true
-      })
-      if (!currentList.custom_order) {
-        updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+      )
+      
+      // If custom order is enabled, insert new items at end of their category section
+      // This maintains the user's category grouping
+      if (currentList.custom_order && updatedItems.length > existingCount) {
+        const existingItems = updatedItems.slice(0, existingCount)
+        const newItems = updatedItems.slice(existingCount)
+        
+        // Group new items by category
+        const newItemsByCategory = new Map<string, ShoppingItem[]>()
+        for (const item of newItems) {
+          const category = item.categoryKey
+          if (!newItemsByCategory.has(category)) {
+            newItemsByCategory.set(category, [])
+          }
+          newItemsByCategory.get(category)!.push(item)
+        }
+        
+        // Find the last index of each category in existing items
+        const categoryLastIndex = new Map<string, number>()
+        for (let i = existingItems.length - 1; i >= 0; i--) {
+          const category = existingItems[i].categoryKey
+          if (!categoryLastIndex.has(category)) {
+            categoryLastIndex.set(category, i)
+          }
+        }
+        
+        // Build reordered list: insert new items after their category's last item
+        const reordered: ShoppingItem[] = []
+        const insertedCategories = new Set<string>()
+        
+        for (let i = 0; i < existingItems.length; i++) {
+          reordered.push(existingItems[i])
+          
+          // Check if this is the last item of its category
+          const category = existingItems[i].categoryKey
+          const lastIndex = categoryLastIndex.get(category)!
+          if (i === lastIndex && newItemsByCategory.has(category)) {
+            // Insert new items from this category
+            reordered.push(...newItemsByCategory.get(category)!)
+            insertedCategories.add(category)
+          }
+        }
+        
+        // Add any remaining new items (categories not in existing list)
+        for (const [category, items] of newItemsByCategory.entries()) {
+          if (!insertedCategories.has(category)) {
+            reordered.push(...items)
+          }
+        }
+        
+        updatedItems.splice(0, updatedItems.length, ...reordered)
       }
+      
+      const addedCount = updatedItems.length - existingCount
+      const mergedCount = Math.max(0, existingCount - (updatedItems.length - result.items.length))
 
       const mergedSourceRecipes = [...new Set([...currentList.source_recipes, ...recipeIds])]
 

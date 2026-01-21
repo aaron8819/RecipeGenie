@@ -26,6 +26,9 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - Category overrides allow custom categorization of shopping list items
 - Custom shopping categories: users can create their own categories (e.g., "Asian Market", "Specialty Store")
 - Category ordering: drag-and-drop reordering of categories to match store layout
+- **Unit normalization**: All units normalized to lowercase canonical form for consistent merging (e.g., "TBSP" → "tbsp")
+- **Smart merging**: Compatible units automatically merged (e.g., cups + fl oz), incompatible units use `additionalAmounts`
+- **Comprehensive testing**: 28 tests ensure deterministic behavior and catch regressions
 - Day assignments: assign recipes to specific days of the week in the calendar view (persists across devices)
 - Planner settings: configure excluded days, preferred days, and automatic day assignment for meal plan generation
 
@@ -79,7 +82,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | Operation | Input | Transform | Output |
 |-----------|-------|-----------|--------|
 | Generate Meal Plan | category counts + history | Random sample excluding recent | Recipe list |
-| Generate Shopping List | recipe IDs + pantry + keywords | Aggregate quantities, subtract pantry, filter keywords | 3 lists: to_buy, already_have, excluded |
+| Generate Shopping List | recipe IDs + pantry + keywords | Normalize units/names, aggregate quantities (merge compatible units), subtract pantry, filter keywords | 3 lists: to_buy, already_have, excluded |
 | Mark Recipe Made | recipe ID | Insert timestamped entry | Updated history |
 
 ---
@@ -98,7 +101,8 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | `components/ui/` | Various | Radix UI primitives (button, dialog, tabs, etc.) |
 | `hooks/` | `use-recipes.ts`, `use-planner.ts`, etc. | TanStack Query hooks for Supabase |
 | `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization |
-| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation, category management, recipe text parsing) |
+| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation with normalization, category management, recipe text parsing) |
+| `lib/__tests__/` | Test files | Comprehensive test suite for shopping list functionality |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
 
 ### Middleware (`src/middleware.ts`)
