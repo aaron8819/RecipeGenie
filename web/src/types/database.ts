@@ -228,7 +228,7 @@ export interface ShoppingItem {
   unit: string
   categoryKey: string
   categoryOrder: number
-  sources?: { recipeName: string }[]
+  sources?: { recipeId?: string; recipeName: string }[]
   shoppingCategory?: string
   // Additional amounts when units can't be converted (e.g., "1/3 cup + 4 oz")
   additionalAmounts?: { amount: number; unit: string }[]
