@@ -1562,7 +1562,7 @@ export function MealPlanner() {
       <PlanSettingsModal
         open={isSettingsModalOpen}
         onOpenChange={setIsSettingsModalOpen}
-        config={config}
+        config={config ?? null}
         currentSelection={selection}
         categories={categories}
         onUpdateConfig={async (updates) => {
