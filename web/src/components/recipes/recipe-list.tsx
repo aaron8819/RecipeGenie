@@ -9,6 +9,7 @@ import { RecipeDialog } from "./recipe-dialog"
 import { RecipeDetailDialog } from "./recipe-detail-dialog"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
 import { RecipeCategorySettingsModal } from "./recipe-category-settings-modal"
+import { TagManagementModal } from "./tag-management-modal"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   useRecipes,
@@ -114,6 +115,7 @@ export function RecipeList() {
   const [addToPlanRecipe, setAddToPlanRecipe] = useState<Recipe | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false)
+  const [isTagManagementOpen, setIsTagManagementOpen] = useState(false)
 
   const { data: recipes, isLoading, isFetching } = useRecipes({
     category,
@@ -161,13 +163,6 @@ export function RecipeList() {
     setSearch("")
   }
 
-  const handleTagClick = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter((t) => t !== tag))
-    } else {
-      setSelectedTags([...selectedTags, tag])
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -197,20 +192,23 @@ export function RecipeList() {
                 </button>
               </div>
             )}
-            {selectedTags.map((tag) => (
-              <div
-                key={tag}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium"
-              >
-                {tag}
-                <button
-                  onClick={() => setSelectedTags((prev) => prev.filter((t) => t !== tag))}
-                  className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+            {selectedTags.map((tag) => {
+              const tagColors = getTagClassName(tag, false)
+              return (
+                <div
+                  key={tag}
+                  className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium", tagColors)}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+                  {tag}
+                  <button
+                    onClick={() => setSelectedTags((prev) => prev.filter((t) => t !== tag))}
+                    className="hover:opacity-70 rounded-full p-0.5 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )
+            })}
             {favoritesOnly && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
                 Favorites
@@ -225,35 +223,6 @@ export function RecipeList() {
           </div>
         )}
       </div>
-
-      {/* Tag Cloud - Quick Filter */}
-      {tagCounts.length > 0 && (
-        <div className="space-y-2">
-          <div className="text-sm font-medium text-muted-foreground">Quick filter by tags:</div>
-          <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
-            {tagCounts.map(({ tag, count }) => {
-              const isSelected = selectedTags.includes(tag)
-              const colors = getTagClassName(tag, false)
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => handleTagClick(tag)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all",
-                    isSelected
-                      ? "ring-2 ring-primary ring-offset-2 " + colors
-                      : "bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground " + colors
-                  )}
-                >
-                  <span>{tag}</span>
-                  <span className="text-xs opacity-70">({count})</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Filters and Add Recipe - NOT sticky */}
       <div className="flex flex-col sm:flex-row gap-3 items-start">
@@ -366,6 +335,16 @@ export function RecipeList() {
             <Settings className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Categories</span>
           </Button>
+          {allTags.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => setIsTagManagementOpen(true)}
+              className="w-full sm:w-auto"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              <span className="hidden sm:inline">Tags</span>
+            </Button>
+          )}
           <Button onClick={() => setIsAddDialogOpen(true)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Add Recipe
@@ -462,7 +441,11 @@ export function RecipeList() {
                     }
                     onAddToPlan={setAddToPlanRecipe}
                     onClick={setViewingRecipe}
-                    onTagClick={handleTagClick}
+                    onTagClick={(tag) => {
+                      if (!selectedTags.includes(tag)) {
+                        setSelectedTags([...selectedTags, tag])
+                      }
+                    }}
                     lastMade={stats?.lastMade ?? null}
                     timesMade={stats?.timesMade ?? 0}
                   />
@@ -510,6 +493,12 @@ export function RecipeList() {
       <RecipeCategorySettingsModal
         open={isCategorySettingsOpen}
         onOpenChange={setIsCategorySettingsOpen}
+      />
+
+      {/* Tag Management Modal */}
+      <TagManagementModal
+        open={isTagManagementOpen}
+        onOpenChange={setIsTagManagementOpen}
       />
     </div>
   )

@@ -93,6 +93,9 @@ Stores user-specific configuration and preferences.
 | `category_overrides` | JSONB | DEFAULT '{}' | User-defined category overrides for shopping list items (maps item names to category keys) |
 | `custom_categories` | JSONB | DEFAULT '[]' | User-defined shopping categories: `[{ "id": "uuid", "name": "Category Name", "order": number }]` |
 | `category_order` | JSONB | DEFAULT NULL | Custom order for all categories (array of category keys), null uses default order |
+| `excluded_days` | INTEGER[] | DEFAULT '{}' | Day indices (0-6) to exclude from meal placement. 0=Sunday, 1=Monday, etc. |
+| `preferred_days` | INTEGER[] | DEFAULT NULL | Preferred day indices (0-6) for meal placement, or null for no preference |
+| `auto_assign_days` | BOOLEAN | DEFAULT TRUE | Whether to automatically assign days to recipes when generating a meal plan |
 
 **Example category_overrides JSONB:**
 ```json
@@ -328,6 +331,7 @@ The schema has evolved through the following migrations:
 6. **006_fix_signup_trigger.sql** - Improved signup trigger error handling with explicit search_path and graceful error handling
 7. **007_custom_categories.sql** - Added `custom_categories` and `category_order` to `user_config` for user-defined shopping categories and custom category ordering
 8. **008_add_day_assignments.sql** - Added `day_assignments` JSONB column to `weekly_plans` to store recipe-to-day mappings for calendar view (enables cross-device persistence)
+9. **009_planner_settings.sql** - Added `excluded_days`, `preferred_days`, and `auto_assign_days` to `user_config` for planner day placement rules and automatic day assignment
 
 ## Query Examples
 

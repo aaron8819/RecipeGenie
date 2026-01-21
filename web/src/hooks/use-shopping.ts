@@ -422,9 +422,32 @@ export function useRemoveRecipeItems() {
 
       if (isGuest) {
         const current = getGuestList(queryClient)
+        const filteredActiveItems = filterItems(current.items)
+        const filteredAlreadyHave = filterItems(current.already_have)
+        
+        // Check if any items (checked or unchecked) still reference this recipe
+        const allItems = [...filteredActiveItems, ...filteredAlreadyHave]
+        const hasRecipeItems = allItems.some((item) => 
+          item.sources?.some((s) => s.recipeName === recipeName)
+        )
+        
+        // Remove recipe ID from source_recipes if no items remain
+        let updatedSourceRecipes = current.source_recipes || []
+        if (!hasRecipeItems) {
+          // For guest mode, we need to find recipe ID from name
+          // Since we don't have easy access, we'll clear all if we can't match
+          // In practice, this is fine since guest mode is temporary
+          const allRecipes = getDefaultRecipes()
+          const recipe = allRecipes.find((r) => r.name === recipeName)
+          if (recipe) {
+            updatedSourceRecipes = updatedSourceRecipes.filter((id) => id !== recipe.id)
+          }
+        }
+        
         setGuestList(queryClient, {
-          items: filterItems(current.items),
-          already_have: filterItems(current.already_have),
+          items: filteredActiveItems,
+          already_have: filteredAlreadyHave,
+          source_recipes: updatedSourceRecipes,
         })
         return { recipeName, removedCount: 0 }
       }
@@ -432,16 +455,42 @@ export function useRemoveRecipeItems() {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
-        .select("items, already_have")
+        .select("items, already_have, source_recipes")
         .single()
 
       if (fetchError) throw fetchError
 
+      const filteredActiveItems = filterItems((currentList?.items as ShoppingItem[]) || [])
+      const filteredAlreadyHave = filterItems((currentList?.already_have as ShoppingItem[]) || [])
+      
+      // Check if any items (checked or unchecked) still reference this recipe
+      const allItems = [...filteredActiveItems, ...filteredAlreadyHave]
+      const hasRecipeItems = allItems.some((item) => 
+        item.sources?.some((s) => s.recipeName === recipeName)
+      )
+      
+      // Remove recipe ID from source_recipes if no items remain
+      let updatedSourceRecipes = (currentList?.source_recipes as string[]) || []
+      if (!hasRecipeItems) {
+        // Find recipe ID from recipe name
+        const { data: recipe } = await supabase
+          .from("recipes")
+          .select("id, name")
+          .eq("user_id", user?.id)
+          .eq("name", recipeName)
+          .maybeSingle()
+        
+        if (recipe) {
+          updatedSourceRecipes = updatedSourceRecipes.filter((id) => id !== recipe.id)
+        }
+      }
+
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({
-          items: filterItems((currentList?.items as ShoppingItem[]) || []),
-          already_have: filterItems((currentList?.already_have as ShoppingItem[]) || []),
+          items: filteredActiveItems,
+          already_have: filteredAlreadyHave,
+          source_recipes: updatedSourceRecipes,
         })
         .eq("user_id", user?.id)
 
@@ -540,6 +589,16 @@ export function useAddToShoppingList() {
       }
 
       let updatedItems = Array.from(currentItemMap.values())
+      // Ensure no duplicates by item name after merge (case-insensitive)
+      const seenItems = new Set<string>()
+      updatedItems = updatedItems.filter(item => {
+        const normalizedItemName = item.item.toLowerCase()
+        if (seenItems.has(normalizedItemName)) {
+          return false
+        }
+        seenItems.add(normalizedItemName)
+        return true
+      })
       if (!currentList.custom_order) {
         updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
       }
@@ -604,11 +663,21 @@ export function useCheckOffItem() {
 
       if (isGuest) {
         const current = getGuestList(queryClient)
+        const updatedItems = current.items.filter((i) => i.item.toLowerCase() !== normalizedItem)
+        const updatedAlreadyHave = current.already_have.some((i) => i.item.toLowerCase() === normalizedItem)
+          ? current.already_have
+          : [...current.already_have, item]
+        
+        // Auto-clear source_recipes when all items are checked
+        let updatedSourceRecipes = current.source_recipes || []
+        if (updatedItems.length === 0 && updatedAlreadyHave.length > 0) {
+          updatedSourceRecipes = []
+        }
+        
         setGuestList(queryClient, {
-          items: current.items.filter((i) => i.item.toLowerCase() !== normalizedItem),
-          already_have: current.already_have.some((i) => i.item.toLowerCase() === normalizedItem)
-            ? current.already_have
-            : [...current.already_have, item],
+          items: updatedItems,
+          already_have: updatedAlreadyHave,
+          source_recipes: updatedSourceRecipes,
         })
         return item
       }
@@ -616,19 +685,28 @@ export function useCheckOffItem() {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
-        .select("items, already_have")
+        .select("items, already_have, source_recipes")
         .single()
 
       if (fetchError) throw fetchError
 
       const currentItems = (currentList?.items as ShoppingItem[]) || []
       const alreadyHave = (currentList?.already_have as ShoppingItem[]) || []
+      const updatedItems = currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem)
+      const updatedAlreadyHave = alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem) ? alreadyHave : [...alreadyHave, item]
+
+      // Auto-clear source_recipes when all items are checked
+      let updatedSourceRecipes = currentList?.source_recipes || []
+      if (updatedItems.length === 0 && updatedAlreadyHave.length > 0) {
+        updatedSourceRecipes = []
+      }
 
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({
-          items: currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem),
-          already_have: alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem) ? alreadyHave : [...alreadyHave, item],
+          items: updatedItems,
+          already_have: updatedAlreadyHave,
+          source_recipes: updatedSourceRecipes,
         })
         .eq("user_id", user?.id)
 
@@ -652,12 +730,22 @@ export function useCheckOffItem() {
           if (!old) return old
           const currentItems = old.items || []
           const alreadyHave = old.already_have || []
+          const updatedItems = currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem)
+          const updatedAlreadyHave = alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem)
+            ? alreadyHave
+            : [...alreadyHave, item]
+          
+          // Auto-clear source_recipes when all items are checked
+          let updatedSourceRecipes = old.source_recipes || []
+          if (updatedItems.length === 0 && updatedAlreadyHave.length > 0) {
+            updatedSourceRecipes = []
+          }
+          
           return {
             ...old,
-            items: currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem),
-            already_have: alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem)
-              ? alreadyHave
-              : [...alreadyHave, item],
+            items: updatedItems,
+            already_have: updatedAlreadyHave,
+            source_recipes: updatedSourceRecipes,
           }
         }
       )
@@ -728,18 +816,58 @@ export function useMoveToShoppingList() {
 
       if (isGuest) {
         const current = getGuestList(queryClient)
+        
+        // Find all items with the same name in already_have and merge them
+        const itemsToMerge = current.already_have.filter((i) => i.item.toLowerCase() === normalizedItem)
+        if (itemsToMerge.length === 0) return item
+        
+        // Merge all items with the same name
+        let mergedItem = itemsToMerge[0]
+        for (let i = 1; i < itemsToMerge.length; i++) {
+          const nextItem = itemsToMerge[i]
+          
+          // Merge sources
+          const existingSources = mergedItem.sources || []
+          const newSources = nextItem.sources || []
+          const sourceSet = new Set(existingSources.map((s) => s.recipeName))
+          const combinedSources = [...existingSources]
+          for (const source of newSources) {
+            if (!sourceSet.has(source.recipeName)) {
+              combinedSources.push(source)
+            }
+          }
+          
+          // Merge amounts
+          const mergeResult = mergeAmounts(mergedItem.amount, mergedItem.unit, nextItem.amount, nextItem.unit)
+          if (mergeResult) {
+            mergedItem = {
+              ...mergedItem,
+              amount: roundForDisplay(mergeResult.amount),
+              unit: mergeResult.unit,
+              sources: combinedSources,
+            }
+          } else {
+            // Units incompatible, keep existing but combine sources
+            mergedItem = {
+              ...mergedItem,
+              sources: combinedSources,
+            }
+          }
+        }
+        
         let updatedItems = current.items
         if (!current.items.some((i) => i.item.toLowerCase() === normalizedItem)) {
-          updatedItems = [...current.items, item]
+          updatedItems = [...current.items, mergedItem]
           if (!current.custom_order) {
             updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
           }
         }
+        
         setGuestList(queryClient, {
           items: updatedItems,
           already_have: current.already_have.filter((i) => i.item.toLowerCase() !== normalizedItem),
         })
-        return item
+        return mergedItem
       }
 
       const supabase = getSupabase()
@@ -753,9 +881,47 @@ export function useMoveToShoppingList() {
       const currentItems = (currentList?.items as ShoppingItem[]) || []
       const alreadyHave = (currentList?.already_have as ShoppingItem[]) || []
 
+      // Find all items with the same name in already_have and merge them
+      const itemsToMerge = alreadyHave.filter((i) => i.item.toLowerCase() === normalizedItem)
+      if (itemsToMerge.length === 0) return item
+      
+      // Merge all items with the same name
+      let mergedItem = itemsToMerge[0]
+      for (let i = 1; i < itemsToMerge.length; i++) {
+        const nextItem = itemsToMerge[i]
+        
+        // Merge sources
+        const existingSources = mergedItem.sources || []
+        const newSources = nextItem.sources || []
+        const sourceSet = new Set(existingSources.map((s) => s.recipeName))
+        const combinedSources = [...existingSources]
+        for (const source of newSources) {
+          if (!sourceSet.has(source.recipeName)) {
+            combinedSources.push(source)
+          }
+        }
+        
+        // Merge amounts
+        const mergeResult = mergeAmounts(mergedItem.amount, mergedItem.unit, nextItem.amount, nextItem.unit)
+        if (mergeResult) {
+          mergedItem = {
+            ...mergedItem,
+            amount: roundForDisplay(mergeResult.amount),
+            unit: mergeResult.unit,
+            sources: combinedSources,
+          }
+        } else {
+          // Units incompatible, keep existing but combine sources
+          mergedItem = {
+            ...mergedItem,
+            sources: combinedSources,
+          }
+        }
+      }
+
       let updatedItems = currentItems
       if (!currentItems.some((i) => i.item.toLowerCase() === normalizedItem)) {
-        updatedItems = [...currentItems, item]
+        updatedItems = [...currentItems, mergedItem]
         if (!currentList?.custom_order) {
           updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
         }
@@ -770,7 +936,7 @@ export function useMoveToShoppingList() {
         .eq("user_id", user?.id)
 
       if (saveError) throw saveError
-      return item
+      return mergedItem
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
@@ -1065,9 +1231,17 @@ export function useBulkCheckOff() {
           ...current.already_have,
           ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
         ]
+        
+        // Auto-clear source_recipes when all items are checked
+        let updatedSourceRecipes = current.source_recipes || []
+        if (remainingItems.length === 0 && newAlreadyHave.length > 0) {
+          updatedSourceRecipes = []
+        }
+        
         setGuestList(queryClient, {
           items: remainingItems,
           already_have: newAlreadyHave,
+          source_recipes: updatedSourceRecipes,
         })
         return { count: itemsToCheck.length }
       }
@@ -1075,7 +1249,7 @@ export function useBulkCheckOff() {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
-        .select("items, already_have")
+        .select("items, already_have, source_recipes")
         .single()
 
       if (fetchError) throw fetchError
@@ -1093,11 +1267,18 @@ export function useBulkCheckOff() {
         ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
       ]
 
+      // Auto-clear source_recipes when all items are checked
+      let updatedSourceRecipes = (currentList?.source_recipes as string[]) || []
+      if (remainingItems.length === 0 && newAlreadyHave.length > 0) {
+        updatedSourceRecipes = []
+      }
+
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({
           items: remainingItems,
           already_have: newAlreadyHave,
+          source_recipes: updatedSourceRecipes,
         })
         .eq("user_id", user?.id)
 
@@ -1129,10 +1310,17 @@ export function useBulkCheckOff() {
             ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
           ]
 
+          // Auto-clear source_recipes when all items are checked
+          let updatedSourceRecipes = old.source_recipes || []
+          if (remainingItems.length === 0 && newAlreadyHave.length > 0) {
+            updatedSourceRecipes = []
+          }
+
           return {
             ...old,
             items: remainingItems,
             already_have: newAlreadyHave,
+            source_recipes: updatedSourceRecipes,
           }
         }
       )

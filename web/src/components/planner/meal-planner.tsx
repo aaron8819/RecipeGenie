@@ -16,6 +16,7 @@ import {
   MoreVertical,
   GripVertical,
   CalendarIcon,
+  Settings,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -29,10 +30,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import { AddRecipeToPlanModal } from "./add-recipe-to-plan-modal"
+import { PlanSettingsModal } from "./plan-settings-modal"
 import {
   useWeeklyPlan,
   useWeeklyPlanRecipes,
   useUserConfig,
+  useUpdateUserConfig,
   useGenerateMealPlan,
   useSwapRecipe,
   useMarkRecipeMade,
@@ -664,6 +667,7 @@ export function MealPlanner() {
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [view, setView] = useState<PlannerView>(() => {
     if (typeof window === "undefined") return "calendar"
     return (localStorage.getItem(PLANNER_VIEW_KEY) as PlannerView) || "calendar"
@@ -673,6 +677,7 @@ export function MealPlanner() {
   const saveDayAssignments = useSaveDayAssignments()
 
   const { data: config } = useUserConfig()
+  const updateConfig = useUpdateUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
 
   // Get day assignments from the weekly plan (database) with localStorage fallback
@@ -1031,31 +1036,15 @@ export function MealPlanner() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">How many meals this week?</CardTitle>
-            <div className="flex gap-1">
-              {[3, 4, 5].map((preset) => (
-                <Button
-                  key={preset}
-                  variant={totalMeals === preset ? "default" : "ghost"}
-                  size="sm"
-                  className={cn(
-                    "h-7 w-7 p-0 text-xs",
-                    totalMeals === preset && "bg-sage-600 hover:bg-sage-700"
-                  )}
-                  onClick={() => {
-                    // Distribute evenly across categories
-                    const perCategory = Math.floor(preset / categories.length)
-                    const remainder = preset % categories.length
-                    const newSelection: Record<string, number> = {}
-                    categories.forEach((cat, idx) => {
-                      newSelection[cat] = Math.min(5, perCategory + (idx < remainder ? 1 : 0))
-                    })
-                    setSelection(newSelection)
-                  }}
-                >
-                  {preset}
-                </Button>
-              ))}
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setIsSettingsModalOpen(true)}
+              title="Plan Settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="pt-0">
@@ -1554,7 +1543,7 @@ export function MealPlanner() {
             <AlertDialogDescription>
               This will replace {weeklyPlan?.recipe_ids?.length || 0} existing{" "}
               {weeklyPlan?.recipe_ids?.length === 1 ? "recipe" : "recipes"} in your meal plan.
-              Day assignments will be preserved.
+              Recipes marked as made will be preserved.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1568,6 +1557,24 @@ export function MealPlanner() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Plan Settings Modal */}
+      <PlanSettingsModal
+        open={isSettingsModalOpen}
+        onOpenChange={setIsSettingsModalOpen}
+        config={config}
+        currentSelection={selection}
+        categories={categories}
+        onUpdateConfig={async (updates) => {
+          await updateConfig.mutateAsync(updates)
+        }}
+        onLoadDefault={() => {
+          if (config?.default_selection) {
+            setSelection(config.default_selection as Record<string, number>)
+          }
+        }}
+        isUpdating={updateConfig.isPending}
+      />
     </div>
   )
 }

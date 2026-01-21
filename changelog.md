@@ -4,6 +4,44 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.5.0] - 2026-01-21
+
+**Summary:** Planner settings for day placement rules and automatic day assignment
+
+### Added
+
+- **Planner Settings Modal Enhancements**:
+  - **Excluded Days**: Configure which days of the week to exclude from automatic meal placement
+  - **Preferred Days**: Set preferred days for meal placement (recipes will be prioritized to these days)
+  - **Auto Assign Days**: Toggle to automatically assign recipes to days when generating meal plans
+  - Visual day selector with checkboxes for excluded and preferred days
+  - Settings persist in user configuration and apply to all future meal plan generations
+
+- **Automatic Day Assignment Logic**:
+  - `autoAssignDays()` function in `meal-planner.ts` intelligently distributes recipes across available days
+  - Respects excluded days (never places meals on excluded days)
+  - Prioritizes preferred days when available
+  - Preserves existing day assignments when regenerating plans
+  - Round-robin distribution when preferred days are exhausted
+
+### Changed
+
+- Meal plan generation now automatically assigns recipes to days when `auto_assign_days` is enabled
+- Plan settings modal now includes day placement rules section alongside category breakdown
+- Day assignments are preserved when regenerating meal plans (unless explicitly changed)
+
+### Technical Notes
+
+- Migration `009_planner_settings.sql` adds three columns to `user_config`:
+  - `excluded_days`: INTEGER[] - Day indices (0-6) to exclude from placement
+  - `preferred_days`: INTEGER[] | null - Day indices (0-6) to prefer for placement
+  - `auto_assign_days`: BOOLEAN - Whether to auto-assign days on generation (default: true)
+- `autoAssignDays()` function handles day distribution logic with priority ordering
+- Settings are accessible via plan settings modal (⚙️ button in meal planner)
+- Guest mode includes default settings (no excluded days, no preferred days, auto-assign enabled)
+
+---
+
 ## [2.4.1] - 2026-01-20
 
 **Summary:** Shopping list UX enhancements with mobile swipe hints, bulk actions, and improved feedback

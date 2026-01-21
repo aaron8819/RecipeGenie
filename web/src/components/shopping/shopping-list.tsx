@@ -50,6 +50,7 @@ import { toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
+import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
 
 // Color palette for recipe source tags (excluding grey which is reserved for Manual)
 const RECIPE_COLORS = [
@@ -483,6 +484,7 @@ function SwipeableItem({
 // Sortable item component - memoized for better scroll performance
 const SortableShoppingItem = memo(function SortableShoppingItem({
   item,
+  itemIdx,
   onCheckOff,
   onRemove,
   isCheckingOff,
@@ -491,6 +493,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   showSwipeHint,
 }: {
   item: ShoppingItem
+  itemIdx: number
   onCheckOff: () => void
   onRemove: () => void
   isCheckingOff: boolean
@@ -505,7 +508,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.item })
+  } = useSortable({ id: `idx-${itemIdx}` })
 
   const dragStyle = {
     transform: CSS.Transform.toString(transform),
@@ -719,8 +722,8 @@ export function ShoppingListView() {
 
     // Show confirmation toast
     const message = items.length === 1
-      ? `Moved "${items[0].item}" to Already Have`
-      : `Moved ${items.length} items to Already Have`
+      ? `Moved "${items[0].item}" to Got It`
+      : `Moved ${items.length} items to Got It`
     undoToast.show({
       message,
       duration: 3000,
@@ -741,6 +744,53 @@ export function ShoppingListView() {
 
   // Show cached data immediately even while fetching (stale-while-revalidate)
   const displayShoppingList = shoppingList || getDefaultShoppingList() as ShoppingList
+  
+  // Merge duplicate items in already_have by name (e.g., multiple "garlic" entries)
+  const mergedAlreadyHave = useMemo(() => {
+    const alreadyHave = displayShoppingList.already_have || []
+    if (alreadyHave.length === 0) return []
+    
+    const itemMap = new Map<string, ShoppingItem>()
+    
+    for (const item of alreadyHave) {
+      const key = item.item.toLowerCase()
+      const existing = itemMap.get(key)
+      
+      if (existing) {
+        // Merge sources
+        const existingSources = existing.sources || []
+        const newSources = item.sources || []
+        const sourceSet = new Set(existingSources.map((s) => s.recipeName))
+        const combinedSources = [...existingSources]
+        for (const source of newSources) {
+          if (!sourceSet.has(source.recipeName)) {
+            combinedSources.push(source)
+          }
+        }
+        
+        // Merge amounts
+        const mergeResult = mergeAmounts(existing.amount, existing.unit, item.amount, item.unit)
+        if (mergeResult) {
+          itemMap.set(key, {
+            ...existing,
+            amount: roundForDisplay(mergeResult.amount),
+            unit: mergeResult.unit,
+            sources: combinedSources,
+          })
+        } else {
+          // Units incompatible, keep existing but combine sources
+          itemMap.set(key, {
+            ...existing,
+            sources: combinedSources,
+          })
+        }
+      } else {
+        itemMap.set(key, item)
+      }
+    }
+    
+    return Array.from(itemMap.values())
+  }, [displayShoppingList.already_have])
   
   // Only show loading on initial load with no cached data
   const showLoading = isLoading && !shoppingList
@@ -790,19 +840,22 @@ export function ShoppingListView() {
   }, [config?.custom_categories, config?.category_order])
 
   // Create a flat list of all item IDs for the sortable context
+  // Use index-based IDs to ensure uniqueness while preserving drag-and-drop functionality
+  // Format: "idx-{index}" to avoid conflicts with item names that contain hyphens
   const allItemIds = useMemo(() => {
-    return filteredItems.map((item) => item.item)
+    return filteredItems.map((item, idx) => `idx-${idx}`)
   }, [filteredItems])
 
-  // Get unique recipe names from all items (excluding "Manual" and pending deletions)
+  // Get unique recipe names from active items only (excluding "Manual" and pending deletions)
+  // Only show recipe tags when there are active unchecked items
   const uniqueRecipes = useMemo(() => {
     if (pendingClearList) return []
     const items = shoppingList?.items || []
-    const alreadyHave = shoppingList?.already_have || []
-    const allItems = [...items, ...alreadyHave]
+    // Only show recipes for active items, not checked ones
+    if (items.length === 0) return []
 
     const recipeSet = new Set<string>()
-    for (const item of allItems) {
+    for (const item of items) {
       if (item.sources) {
         for (const source of item.sources) {
           if (source.recipeName !== "Manual" && source.recipeName !== pendingRecipeDeletion) {
@@ -812,7 +865,7 @@ export function ShoppingListView() {
       }
     }
     return Array.from(recipeSet).sort()
-  }, [shoppingList?.items, shoppingList?.already_have, pendingRecipeDeletion, pendingClearList])
+  }, [shoppingList?.items, pendingRecipeDeletion, pendingClearList])
 
   // Create a color mapping that assigns unique colors sequentially to recipes
   const recipeColorMap = useMemo(() => {
@@ -902,20 +955,23 @@ export function ShoppingListView() {
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event
-    const item = shoppingList?.items?.find((i) => i.item === active.id)
-    if (item) {
-      setActiveItem(item)
+    // Extract index from ID (format: "idx-{index}")
+    const index = typeof active.id === 'string' ? parseInt(active.id.replace('idx-', ''), 10) : -1
+    if (index >= 0 && index < filteredItems.length) {
+      setActiveItem(filteredItems[index])
     }
   }
 
   const handleDragOver = (event: DragOverEvent) => {
     const { over } = event
-    if (!over || !shoppingList?.items) {
+    if (!over || !filteredItems) {
       setDragOverCategory(null)
       return
     }
-    const overItem = shoppingList.items.find((i) => i.item === over.id)
-    if (overItem) {
+    // Extract index from ID (format: "idx-{index}")
+    const index = typeof over.id === 'string' ? parseInt(over.id.replace('idx-', ''), 10) : -1
+    if (index >= 0 && index < filteredItems.length) {
+      const overItem = filteredItems[index]
       setDragOverCategory(overItem.categoryKey || null)
     }
   }
@@ -927,14 +983,23 @@ export function ShoppingListView() {
 
     if (!over || active.id === over.id || !shoppingList?.items) return
 
+    // Extract indices from IDs (format: "idx-{index}")
+    const activeIndex = typeof active.id === 'string' ? parseInt(active.id.replace('idx-', ''), 10) : -1
+    const overIndex = typeof over.id === 'string' ? parseInt(over.id.replace('idx-', ''), 10) : -1
+
+    if (activeIndex === -1 || overIndex === -1 || activeIndex >= filteredItems.length || overIndex >= filteredItems.length) return
+
+    // Map filtered indices to actual item indices in shoppingList.items
+    const activeItemFromFiltered = filteredItems[activeIndex]
+    const overItemFromFiltered = filteredItems[overIndex]
     const items = shoppingList.items
-    const activeIndex = items.findIndex((i) => i.item === active.id)
-    const overIndex = items.findIndex((i) => i.item === over.id)
+    const actualActiveIndex = items.findIndex((i) => i.item === activeItemFromFiltered.item)
+    const actualOverIndex = items.findIndex((i) => i.item === overItemFromFiltered.item)
 
-    if (activeIndex === -1 || overIndex === -1) return
+    if (actualActiveIndex === -1 || actualOverIndex === -1) return
 
-    const draggedItem = items[activeIndex]
-    const overItem = items[overIndex]
+    const draggedItem = items[actualActiveIndex]
+    const overItem = items[actualOverIndex]
 
     // Create new array with reordered items
     const newItems = [...items]
@@ -1126,6 +1191,16 @@ export function ShoppingListView() {
               {/* Main shopping items grouped by category */}
               {(() => {
                 let isFirstItem = true // Track if we've shown hint yet
+                let globalIndexCounter = 0 // Track global index across all categories
+                // Create a map of item to global index for reliable lookup
+                const itemToGlobalIndex = new Map<ShoppingItem, number>()
+                filteredItems.forEach((item, idx) => {
+                  // Use a unique key based on item properties to handle potential duplicates
+                  const itemKey = `${item.item.toLowerCase()}-${item.unit || ''}-${item.amount || 0}`
+                  if (!itemToGlobalIndex.has(item)) {
+                    itemToGlobalIndex.set(item, idx)
+                  }
+                })
                 return orderedCategories.map((categoryData) => {
                   const items = groupedItems[categoryData.key]
                   if (!items || items.length === 0) return null
@@ -1169,13 +1244,23 @@ export function ShoppingListView() {
                       </CardHeader>
                       <CardContent className="p-0">
                         <ul className="divide-y divide-sage-50" style={{ contain: 'layout style paint' }}>
-                          {items.map((item) => {
+                          {items.map((item, itemIdx) => {
                             const showHintForThisItem = isFirstItem && showSwipeHint
                             if (isFirstItem) isFirstItem = false
+                            // Get global index from map, or use counter as fallback
+                            let globalIndex = itemToGlobalIndex.get(item)
+                            if (globalIndex === undefined) {
+                              globalIndex = globalIndexCounter++
+                              itemToGlobalIndex.set(item, globalIndex)
+                            }
+                            // Use a unique key that includes category, item name, unit, and GLOBAL index to prevent duplicates
+                            // Using globalIndex ensures uniqueness even if items have the same name/unit
+                            const reactKey = `${categoryData.key}-${item.item}-${item.unit || ''}-${globalIndex}`
                             return (
                               <SortableShoppingItem
-                                key={item.item}
+                                key={reactKey}
                                 item={item}
+                                itemIdx={globalIndex}
                                 onCheckOff={() => checkOffItem.mutate(item)}
                                 onRemove={() => handleRemoveItem(item.item)}
                                 isCheckingOff={checkOffItem.isPending}
@@ -1198,22 +1283,47 @@ export function ShoppingListView() {
             </DragOverlay>
           </DndContext>
 
-          {/* Already Have Section */}
-          {displayShoppingList?.already_have && displayShoppingList.already_have.length > 0 && (
+          {/* Completed State - All items checked */}
+          {filteredItems.length === 0 && displayShoppingList?.already_have && displayShoppingList.already_have.length > 0 && (
+            <Card className="animate-fade-in border-primary/20 bg-primary/5">
+              <CardContent className="pt-6 pb-4 px-4">
+                <div className="flex flex-col items-center gap-3 text-center">
+                  <div className="flex items-center gap-2 text-primary">
+                    <CheckCheck className="h-5 w-5" />
+                    <p className="text-sm font-semibold">Shopping complete!</p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    All items have been checked off. Start a new list when you're ready.
+                  </p>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleClearListWithUndo}
+                    className="mt-1"
+                  >
+                    Start New List
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Got It Section */}
+          {mergedAlreadyHave && mergedAlreadyHave.length > 0 && (
             <Card className="animate-fade-in">
               <CardHeader className="px-4 py-2.5 border-b border-sage-100 bg-transparent">
                 <CardTitle className="text-xs font-semibold text-sage-600 uppercase tracking-wide flex items-center gap-2">
                   <Package className="h-3.5 w-3.5" />
-                  Already Have
-                  <span className="text-xs font-normal text-sage-400 ml-auto">({displayShoppingList.already_have.length})</span>
+                  Got It
+                  <span className="text-xs font-normal text-sage-400 ml-auto">({mergedAlreadyHave.length})</span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-3 px-4 pb-4">
                 <p className="text-xs text-muted-foreground mb-2">Click to add back to list</p>
                 <div className="flex flex-wrap gap-2">
-                  {displayShoppingList.already_have.map((item, index) => (
+                  {mergedAlreadyHave.map((item, index) => (
                     <button
-                      key={item.item}
+                      key={`already-have-${item.item}-${item.unit || ''}-${index}`}
                       type="button"
                       onClick={() => moveToList.mutate(item)}
                       disabled={moveToList.isPending}
@@ -1243,7 +1353,7 @@ export function ShoppingListView() {
                 <div className="flex flex-wrap gap-2">
                   {displayShoppingList.excluded.map((item, index) => (
                     <button
-                      key={item.item}
+                      key={`excluded-${item.item}-${item.unit || ''}-${index}`}
                       type="button"
                       onClick={() => moveExcludedToList.mutate(item)}
                       disabled={moveExcludedToList.isPending}

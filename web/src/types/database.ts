@@ -78,6 +78,9 @@ export interface Database {
           category_overrides: Record<string, string>
           custom_categories: CustomShoppingCategory[]
           category_order: string[] | null
+          excluded_days: number[]
+          preferred_days: number[] | null
+          auto_assign_days: boolean
         }
         Insert: {
           user_id?: string // Optional - will be set by RLS/trigger
@@ -89,6 +92,9 @@ export interface Database {
           category_overrides?: Record<string, string>
           custom_categories?: CustomShoppingCategory[]
           category_order?: string[] | null
+          excluded_days?: number[]
+          preferred_days?: number[] | null
+          auto_assign_days?: boolean
         }
         Update: {
           user_id?: string
@@ -100,6 +106,9 @@ export interface Database {
           category_overrides?: Record<string, string>
           custom_categories?: CustomShoppingCategory[]
           category_order?: string[] | null
+          excluded_days?: number[]
+          preferred_days?: number[] | null
+          auto_assign_days?: boolean
         }
       }
       recipe_history: {

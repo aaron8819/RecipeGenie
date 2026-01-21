@@ -669,3 +669,209 @@ export function useBulkUpdateRecipeCategories() {
     },
   })
 }
+
+/**
+ * Hook to rename a tag across all recipes
+ */
+export function useRenameTag() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async ({ oldTag, newTag }: { oldTag: string; newTag: string }) => {
+      if (isGuest) {
+        // For guest mode, update cache
+        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
+        let count = 0
+        const updated = recipes.map((r) => {
+          if (r.tags && r.tags.includes(oldTag)) {
+            count++
+            const newTags = r.tags.map((t) => (t === oldTag ? newTag : t))
+            return { ...r, tags: newTags, updated_at: new Date().toISOString() }
+          }
+          return r
+        })
+        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
+        return count
+      }
+
+      const supabase = getSupabase()
+      // Fetch all recipes with the old tag
+      const { data: recipes, error: fetchError } = await supabase
+        .from("recipes")
+        .select("id, tags")
+        .eq("user_id", user?.id)
+        .contains("tags", [oldTag])
+
+      if (fetchError) throw fetchError
+
+      if (!recipes || recipes.length === 0) return 0
+
+      // Update each recipe's tags array
+      const updates = recipes.map((recipe) => {
+        const newTags = (recipe.tags || []).map((t: string) => (t === oldTag ? newTag : t))
+        return supabase
+          .from("recipes")
+          .update({ tags: newTags })
+          .eq("id", recipe.id)
+          .eq("user_id", user?.id)
+      })
+
+      const results = await Promise.all(updates)
+      const errors = results.filter((r) => r.error)
+      if (errors.length > 0) {
+        throw new Error(`Failed to update ${errors.length} recipes`)
+      }
+
+      return recipes.length
+    },
+    onSuccess: () => {
+      // Invalidate all recipe queries and tag queries
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+    },
+  })
+}
+
+/**
+ * Hook to merge multiple tags into one
+ */
+export function useMergeTags() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async ({ sourceTags, targetTag }: { sourceTags: string[]; targetTag: string }) => {
+      if (isGuest) {
+        // For guest mode, update cache
+        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
+        let count = 0
+        const updated = recipes.map((r) => {
+          if (r.tags && r.tags.some((t) => sourceTags.includes(t))) {
+            count++
+            // Remove source tags and add target tag if not already present
+            const newTags = r.tags
+              .filter((t) => !sourceTags.includes(t))
+              .concat(r.tags.includes(targetTag) ? [] : [targetTag])
+            return { ...r, tags: newTags, updated_at: new Date().toISOString() }
+          }
+          return r
+        })
+        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
+        return count
+      }
+
+      const supabase = getSupabase()
+      // Fetch all recipes for this user
+      const { data: allRecipes, error: fetchError } = await supabase
+        .from("recipes")
+        .select("id, tags")
+        .eq("user_id", user?.id)
+
+      if (fetchError) throw fetchError
+
+      // Filter recipes that have any of the source tags
+      const recipes = (allRecipes || []).filter((recipe) => {
+        const tags = recipe.tags || []
+        return sourceTags.some((tag) => tags.includes(tag))
+      })
+
+      if (fetchError) throw fetchError
+
+      if (!recipes || recipes.length === 0) return 0
+
+      // Update each recipe's tags array
+      const updates = recipes.map((recipe) => {
+        const currentTags = recipe.tags || []
+        // Remove source tags and add target tag if not already present
+        const newTags = currentTags
+          .filter((t: string) => !sourceTags.includes(t))
+          .concat(currentTags.includes(targetTag) ? [] : [targetTag])
+        return supabase
+          .from("recipes")
+          .update({ tags: newTags })
+          .eq("id", recipe.id)
+          .eq("user_id", user?.id)
+      })
+
+      const results = await Promise.all(updates)
+      const errors = results.filter((r) => r.error)
+      if (errors.length > 0) {
+        throw new Error(`Failed to update ${errors.length} recipes`)
+      }
+
+      return recipes.length
+    },
+    onSuccess: () => {
+      // Invalidate all recipe queries and tag queries
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+    },
+  })
+}
+
+/**
+ * Hook to delete a tag from all recipes
+ */
+export function useDeleteTag() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async (tag: string) => {
+      if (isGuest) {
+        // For guest mode, update cache
+        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
+        let count = 0
+        const updated = recipes.map((r) => {
+          if (r.tags && r.tags.includes(tag)) {
+            count++
+            const newTags = r.tags.filter((t) => t !== tag)
+            return { ...r, tags: newTags, updated_at: new Date().toISOString() }
+          }
+          return r
+        })
+        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
+        return count
+      }
+
+      const supabase = getSupabase()
+      // Fetch all recipes with the tag
+      const { data: recipes, error: fetchError } = await supabase
+        .from("recipes")
+        .select("id, tags")
+        .eq("user_id", user?.id)
+        .contains("tags", [tag])
+
+      if (fetchError) throw fetchError
+
+      if (!recipes || recipes.length === 0) return 0
+
+      // Update each recipe's tags array
+      const updates = recipes.map((recipe) => {
+        const newTags = (recipe.tags || []).filter((t: string) => t !== tag)
+        return supabase
+          .from("recipes")
+          .update({ tags: newTags })
+          .eq("id", recipe.id)
+          .eq("user_id", user?.id)
+      })
+
+      const results = await Promise.all(updates)
+      const errors = results.filter((r) => r.error)
+      if (errors.length > 0) {
+        throw new Error(`Failed to update ${errors.length} recipes`)
+      }
+
+      return recipes.length
+    },
+    onSuccess: () => {
+      // Invalidate all recipe queries and tag queries
+      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
+      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+    },
+  })
+}

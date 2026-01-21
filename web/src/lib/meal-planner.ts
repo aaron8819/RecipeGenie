@@ -113,6 +113,60 @@ export function getSwapRecipe(
 }
 
 /**
+ * Auto-assign recipes to days based on placement rules.
+ * 
+ * @param recipeIds - Array of recipe IDs to assign
+ * @param excludedDays - Day indices (0-6) to exclude from placement
+ * @param preferredDays - Day indices (0-6) to prefer, or null for no preference
+ * @param existingAssignments - Existing recipe_id -> day_index mappings to preserve
+ * @returns Map of recipe_id -> day_index (0-6)
+ */
+export function autoAssignDays(
+  recipeIds: string[],
+  excludedDays: number[] = [],
+  preferredDays: number[] | null = null,
+  existingAssignments: Record<string, number> = {}
+): Record<string, number> {
+  const assignments: Record<string, number> = { ...existingAssignments }
+  
+  // Get available days (0-6, excluding excluded days)
+  const allDays = [0, 1, 2, 3, 4, 5, 6]
+  const availableDays = allDays.filter((day) => !excludedDays.includes(day))
+  
+  if (availableDays.length === 0) {
+    // No available days, return existing assignments only
+    return assignments
+  }
+  
+  // Separate recipes into already assigned and unassigned
+  const unassignedRecipes = recipeIds.filter((id) => assignments[id] === undefined)
+  
+  if (unassignedRecipes.length === 0) {
+    return assignments
+  }
+  
+  // Build day priority list: preferred days first, then other available days
+  let dayPriority: number[]
+  if (preferredDays && preferredDays.length > 0) {
+    // Filter preferred days to only include available days
+    const availablePreferred = preferredDays.filter((day) => availableDays.includes(day))
+    const otherAvailable = availableDays.filter((day) => !availablePreferred.includes(day))
+    dayPriority = [...availablePreferred, ...otherAvailable]
+  } else {
+    dayPriority = [...availableDays]
+  }
+  
+  // Distribute recipes across days
+  // Round-robin through day priority, then cycle if needed
+  unassignedRecipes.forEach((recipeId, index) => {
+    const dayIndex = dayPriority[index % dayPriority.length]
+    assignments[recipeId] = dayIndex
+  })
+  
+  return assignments
+}
+
+/**
  * Fisher-Yates shuffle algorithm
  */
 function shuffleArray<T>(array: T[]): T[] {

@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { createBrowserClient } from "@supabase/ssr"
 import type { Recipe, RecipeHistory, WeeklyPlan, UserConfig } from "@/types/database"
-import { generateMealPlan, getSwapRecipe } from "@/lib/meal-planner"
+import { generateMealPlan, getSwapRecipe, autoAssignDays } from "@/lib/meal-planner"
 import { useAuthContext } from "@/lib/auth-context"
 import { getDefaultRecipes, getDefaultConfig } from "@/lib/guest-storage"
 
@@ -161,6 +161,9 @@ export function useUserConfig() {
           category_overrides: {},
           custom_categories: [],
           category_order: null,
+          excluded_days: [],
+          preferred_days: null,
+          auto_assign_days: true,
         } as UserConfig
       }
       return data as UserConfig
@@ -218,12 +221,23 @@ export function useGenerateMealPlan() {
 
         const result = generateMealPlan(recipes, history, selection, config.history_exclusion_days)
 
+        // Auto-assign days if enabled
+        let dayAssignments: Record<string, number> | null = null
+        if (config.auto_assign_days) {
+          dayAssignments = autoAssignDays(
+            result.recipes.map((r) => r.id),
+            config.excluded_days || [],
+            config.preferred_days || null,
+            {}
+          )
+        }
+
         const plan: WeeklyPlan = {
           user_id: "guest",
           week_date: weekDate,
           recipe_ids: result.recipes.map((r) => r.id),
           made_recipe_ids: [],
-          day_assignments: null,
+          day_assignments: dayAssignments,
           scale: 1.0,
           generated_at: new Date().toISOString(),
         }
@@ -245,19 +259,13 @@ export function useGenerateMealPlan() {
         .eq("user_id", user?.id)
       if (historyError) throw historyError
 
+      // Get full config for planner settings
       const { data: config } = await supabase
         .from("user_config")
-        .select("history_exclusion_days")
+        .select("history_exclusion_days, excluded_days, preferred_days, auto_assign_days")
         .single()
 
-      const result = generateMealPlan(
-        recipes as Recipe[],
-        history as RecipeHistory[],
-        selection,
-        config?.history_exclusion_days || 7
-      )
-
-      // Check if plan already exists
+      // Check if plan already exists to preserve made recipes
       const { data: existingPlan } = await supabase
         .from("weekly_plans")
         .select("*")
@@ -265,14 +273,50 @@ export function useGenerateMealPlan() {
         .eq("week_date", weekDate)
         .maybeSingle()
 
+      const madeRecipeIds = (existingPlan as WeeklyPlan)?.made_recipe_ids || []
+      const existingDayAssignments = (existingPlan as WeeklyPlan)?.day_assignments || null
+
+      // If regenerating and we need to preserve made recipes, filter them out from selection
+      let recipesToGenerate = recipes as Recipe[]
+      let preservedRecipeIds: string[] = []
+      
+      if (existingPlan && madeRecipeIds.length > 0) {
+        // Preserve recipes that are marked as made
+        preservedRecipeIds = madeRecipeIds
+        // Remove preserved recipes from the pool for generation
+        recipesToGenerate = recipesToGenerate.filter((r) => !preservedRecipeIds.includes(r.id))
+      }
+
+      const result = generateMealPlan(
+        recipesToGenerate,
+        history as RecipeHistory[],
+        selection,
+        config?.history_exclusion_days || 7
+      )
+
+      // Combine preserved recipes with newly generated ones
+      const allRecipeIds = [...preservedRecipeIds, ...result.recipes.map((r) => r.id)]
+
+      // Auto-assign days if enabled
+      let dayAssignments: Record<string, number> | null = existingDayAssignments
+      if (config?.auto_assign_days) {
+        dayAssignments = autoAssignDays(
+          allRecipeIds,
+          config.excluded_days || [],
+          config.preferred_days || null,
+          existingDayAssignments || {}
+        )
+      }
+
       // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
       if (existingPlan) {
-        // Update existing plan - preserve made_recipe_ids but reset recipe_ids
+        // Update existing plan - preserve made_recipe_ids
         const { error: saveError } = await supabase
           .from("weekly_plans")
           .update({
-            recipe_ids: result.recipes.map((r) => r.id),
-            made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
+            recipe_ids: allRecipeIds,
+            made_recipe_ids: madeRecipeIds,
+            day_assignments: dayAssignments,
             scale: 1.0,
             generated_at: new Date().toISOString(),
           })
@@ -284,7 +328,8 @@ export function useGenerateMealPlan() {
         const { error: saveError } = await supabase.from("weekly_plans").insert({
           user_id: user?.id,
           week_date: weekDate,
-          recipe_ids: result.recipes.map((r) => r.id),
+          recipe_ids: allRecipeIds,
+          day_assignments: dayAssignments,
           scale: 1.0,
           generated_at: new Date().toISOString(),
         })

@@ -27,6 +27,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - Custom shopping categories: users can create their own categories (e.g., "Asian Market", "Specialty Store")
 - Category ordering: drag-and-drop reordering of categories to match store layout
 - Day assignments: assign recipes to specific days of the week in the calendar view (persists across devices)
+- Planner settings: configure excluded days, preferred days, and automatic day assignment for meal plan generation
 
 ---
 
@@ -118,7 +119,7 @@ One-time import of legacy `data/*.json` files into Supabase. Uses service role k
 |-------|--------|---------|
 | `recipes` | `id, user_id, name, category, servings, ingredients (JSONB), instructions, favorite, created_at, updated_at` | Recipe collection |
 | `pantry_items` | `user_id, item (PK), created_at` | Items user has on hand |
-| `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, category_overrides, custom_categories[], category_order[]` | User preferences |
+| `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, category_overrides, custom_categories[], category_order[], excluded_days[], preferred_days[], auto_assign_days` | User preferences |
 | `recipe_history` | `id, user_id, recipe_id (FK), date_made` | When recipes were cooked |
 | `weekly_plans` | `user_id, week_date (PK), recipe_ids[], day_assignments (JSONB), scale, generated_at` | Saved plans keyed by week start with day assignments |
 | `shopping_list` | `user_id (PK), items[], already_have[], excluded[], source_recipes[], scale, total_servings, custom_order, generated_at` | Current shopping list state |
@@ -254,9 +255,19 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-20 (v2.4.1)*
+*Last updated: 2026-01-21 (v2.5.0)*
 
-## Recent Updates (v2.4.0)
+## Recent Updates (v2.5.0)
+
+### Planner Settings for Day Placement
+- **Excluded Days**: Configure which days of the week to exclude from automatic meal placement
+- **Preferred Days**: Set preferred days for meal placement (recipes prioritized to these days)
+- **Auto Assign Days**: Toggle to automatically assign recipes to days when generating meal plans
+- Settings accessible via plan settings modal (⚙️ button in meal planner)
+- Automatic day assignment uses intelligent distribution respecting excluded/preferred days
+- Day assignments preserved when regenerating plans
+
+## Previous Updates (v2.4.0)
 
 ### Recipe Category Management
 - **Category Settings Modal**: New dedicated modal for managing recipe categories

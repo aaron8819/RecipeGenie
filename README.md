@@ -42,6 +42,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
    - `supabase/migrations/006_fix_signup_trigger.sql`
    - `supabase/migrations/007_custom_categories.sql`
    - `supabase/migrations/008_add_day_assignments.sql`
+   - `supabase/migrations/009_planner_settings.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 
 ### 2. Configure Environment
@@ -152,6 +153,15 @@ The app includes an auth callback route at `/auth/callback` that handles email c
 3. Click "Generate Meal Plan"
 4. Review your randomly selected recipes
 5. Click "View Shopping List" to see aggregated ingredients
+
+**Plan Settings:**
+- Click the settings button (⚙️) to configure:
+  - **Default Category Breakdown**: Set your preferred meal distribution (saved as default for future plans)
+  - **Day Placement Rules**: 
+    - Exclude specific days from meal placement (e.g., skip weekends)
+    - Set preferred days for meal placement (recipes prioritized to these days)
+    - Toggle automatic day assignment (recipes automatically assigned to days when generating plans)
+  - **History Exclusion Days**: Control how many days back to exclude recently-made recipes
 
 ### Managing Your Pantry
 

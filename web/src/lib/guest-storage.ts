@@ -302,6 +302,9 @@ export function getDefaultConfig() {
     category_overrides: {} as Record<string, string>,
     custom_categories: [] as { id: string; name: string; order: number }[],
     category_order: null as string[] | null,
+    excluded_days: [] as number[],
+    preferred_days: null as number[] | null,
+    auto_assign_days: true,
   }
 }
 
