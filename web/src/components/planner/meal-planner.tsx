@@ -51,7 +51,7 @@ import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useCategories, useToggleFavorite, useRecipes } from "@/hooks/use-recipes"
 import { EmptyState } from "@/components/ui/empty-state"
 import { CalendarDays, BookOpen } from "lucide-react"
-import { getTagClassName } from "@/lib/tag-colors"
+import { getTagClassName, getTagColor } from "@/lib/tag-colors"
 import { cn } from "@/lib/utils"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -453,54 +453,58 @@ function RecipeCard({
     <div
       className={cn(
         "bg-white rounded-lg p-2 border border-sage-200 hover:shadow-md transition-shadow",
-        isMade && "opacity-70 relative"
+        isMade && "opacity-70"
       )}
     >
-      {isMade && (
-        <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-sage-600 flex items-center justify-center z-10">
-          <Check className="h-2.5 w-2.5 text-white" />
-        </div>
-      )}
-      <div className="flex items-start gap-1 mb-1">
+      <div className="flex items-start gap-2 mb-2">
         <div
-          className="font-semibold text-xs pr-5 cursor-pointer flex-1"
+          className="font-semibold text-sm pr-5 cursor-pointer flex-1"
           onClick={onView}
         >
           {recipe.name}
         </div>
-      </div>
-      <div className="flex items-center gap-1.5 mt-1 mb-2">
-        <span className={cn("text-[10px] px-1.5 py-0.5 rounded", getTagClassName(recipe.category, true))}>
-          {recipe.category}
-        </span>
+        {(() => {
+          const tagColors = getTagColor(recipe.category, true)
+          return (
+            <div
+              className={cn(
+                "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                tagColors.bg,
+                tagColors.text,
+                "text-xs font-semibold"
+              )}
+              title={recipe.category}
+            >
+              {recipe.category.charAt(0).toUpperCase()}
+            </div>
+          )
+        })()}
       </div>
 
       {/* Desktop: show all buttons */}
-      <div className="hidden lg:flex gap-1 mt-2 flex-wrap">
+      <div className="hidden lg:flex gap-1 mt-2 w-full">
         <Button
           variant="outline"
           size="sm"
-          className="h-7 px-2 text-[10px] flex-1 min-w-[60px]"
+          className="h-7 flex-1 p-0"
           onClick={(e) => {
             e.stopPropagation()
             onSwap()
           }}
           disabled={isSwapping}
+          title="Swap"
         >
           {isSwapping ? (
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
-            <>
-              <Shuffle className="h-3 w-3 mr-1" />
-              Swap
-            </>
+            <Shuffle className="h-3 w-3" />
           )}
         </Button>
         <Button
           variant={isMade ? "default" : "outline"}
           size="sm"
           className={cn(
-            "h-7 px-2 text-[10px] flex-1 min-w-[60px]",
+            "h-7 flex-1 p-0",
             isMade
               ? "bg-sage-600 hover:bg-sage-700 text-white"
               : "text-sage-700 border-sage-300"
@@ -510,14 +514,14 @@ function RecipeCard({
             onMarkMade()
           }}
           disabled={isMarkingThis}
+          title={isMade ? "Unmark as made" : "Mark as made"}
         >
-          <Check className="h-3 w-3 mr-1" />
-          {isMade ? "Made" : "Made"}
+          <Check className="h-3 w-3" />
         </Button>
         <Button
           variant="outline"
           size="sm"
-          className="h-7 w-7 p-0"
+          className="h-7 flex-1 p-0"
           onClick={(e) => {
             e.stopPropagation()
             onAddToCart()
@@ -534,7 +538,7 @@ function RecipeCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="h-7 flex-1 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
           onClick={(e) => {
             e.stopPropagation()
             onRemove()
@@ -546,12 +550,12 @@ function RecipeCard({
       </div>
 
       {/* Mobile: show primary actions + overflow menu */}
-      <div className="flex lg:hidden gap-1 mt-2 flex-wrap">
+      <div className="flex lg:hidden gap-1 mt-2 w-full">
         <Button
           variant={isMade ? "default" : "outline"}
           size="sm"
           className={cn(
-            "h-7 px-2 text-[10px] flex-1",
+            "h-7 flex-1 p-0",
             isMade
               ? "bg-sage-600 hover:bg-sage-700 text-white"
               : "text-sage-700 border-sage-300"
@@ -561,27 +565,25 @@ function RecipeCard({
             onMarkMade()
           }}
           disabled={isMarkingThis}
+          title={isMade ? "Unmark as made" : "Mark as made"}
         >
-          <Check className="h-3 w-3 mr-1" />
-          {isMade ? "Made" : "Made"}
+          <Check className="h-3 w-3" />
         </Button>
         <Button
           variant="outline"
           size="sm"
-          className="h-7 px-2 text-[10px] flex-1"
+          className="h-7 flex-1 p-0"
           onClick={(e) => {
             e.stopPropagation()
             onSwap()
           }}
           disabled={isSwapping}
+          title="Swap"
         >
           {isSwapping ? (
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : (
-            <>
-              <Shuffle className="h-3 w-3 mr-1" />
-              Swap
-            </>
+            <Shuffle className="h-3 w-3" />
           )}
         </Button>
         <DropdownMenu>
@@ -589,7 +591,7 @@ function RecipeCard({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 w-7 p-0"
+              className="h-7 flex-1 p-0"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreVertical className="h-3 w-3" />
@@ -1410,55 +1412,71 @@ export function MealPlanner() {
                                 <div
                                   key={recipe.id}
                                   className={cn(
-                                    "bg-white rounded-lg p-3 border border-sage-200",
+                                    "bg-white rounded-lg p-3 border border-sage-200 hover:shadow-md transition-shadow cursor-pointer",
                                     isMade && "opacity-70 relative"
                                   )}
+                                  onClick={() => setViewingRecipe(recipe)}
                                 >
                                   {isMade && (
                                     <div className="absolute inset-0 bg-gradient-to-br from-sage-600/10 to-transparent pointer-events-none rounded-lg" />
                                   )}
-                                  <div className="flex items-start justify-between mb-2">
-                                    <div className="flex-1">
-                                      <h4 className="font-semibold text-sm mb-1">{recipe.name}</h4>
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-xs text-gray-500">{recipe.servings} servings</span>
-                                        {lastMadeMap.get(recipe.id) && (
-                                          <>
-                                            <span className="text-xs text-gray-400">•</span>
-                                            <span className="text-xs text-gray-500">
-                                              {new Date(lastMadeMap.get(recipe.id)!).toLocaleDateString("en-US", {
-                                                month: "short",
-                                                day: "numeric",
-                                              })}
-                                            </span>
-                                          </>
-                                        )}
-                                      </div>
-                                    </div>
-                                    {isMade && (
-                                      <div className="w-5 h-5 rounded-full bg-sage-600 flex items-center justify-center flex-shrink-0 ml-2">
-                                        <Check className="h-3 w-3 text-white" />
-                                      </div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <h4 className="font-semibold text-sm pr-2">{recipe.name}</h4>
+                                    {(() => {
+                                      const tagColors = getTagColor(recipe.category, true)
+                                      return (
+                                        <div
+                                          className={cn(
+                                            "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0",
+                                            tagColors.bg,
+                                            tagColors.text,
+                                            "text-xs font-semibold"
+                                          )}
+                                          title={recipe.category}
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          {recipe.category.charAt(0).toUpperCase()}
+                                        </div>
+                                      )
+                                    })()}
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className="text-xs text-gray-500">{recipe.servings} servings</span>
+                                    {lastMadeMap.get(recipe.id) && (
+                                      <>
+                                        <span className="text-xs text-gray-400">•</span>
+                                        <span className="text-xs text-gray-500">
+                                          {new Date(lastMadeMap.get(recipe.id)!).toLocaleDateString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                          })}
+                                        </span>
+                                      </>
                                     )}
                                   </div>
-                                  <div className="flex gap-2 mt-3">
+                                  <div className="flex gap-1.5 mt-3">
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-9 px-3 flex-1 text-xs"
+                                      className="h-8 w-8 p-0"
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         handleSwapRecipe(recipe)
                                       }}
+                                      disabled={swappingRecipeId === recipe.id || swapRecipe.isPending}
+                                      title="Swap"
                                     >
-                                      <Shuffle className="h-3 w-3 mr-1" />
-                                      Swap
+                                      {swappingRecipeId === recipe.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Shuffle className="h-3.5 w-3.5" />
+                                      )}
                                     </Button>
                                     <Button
                                       variant={isMade ? "default" : "outline"}
                                       size="sm"
                                       className={cn(
-                                        "h-9 px-3 flex-1 text-xs",
+                                        "h-8 w-8 p-0",
                                         isMade
                                           ? "bg-sage-600 hover:bg-sage-700 text-white"
                                           : "text-sage-700 border-sage-300"
@@ -1467,32 +1485,39 @@ export function MealPlanner() {
                                         e.stopPropagation()
                                         handleMarkMade(recipe.id, isMade)
                                       }}
+                                      disabled={markingRecipeId === recipe.id}
+                                      title={isMade ? "Unmark as made" : "Mark as made"}
                                     >
-                                      <Check className="h-3 w-3 mr-1" />
-                                      {isMade ? "Made" : "Made It"}
+                                      <Check className="h-3.5 w-3.5" />
                                     </Button>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-9 w-9 p-0"
+                                      className="h-8 w-8 p-0"
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         handleAddRecipeToCart(recipe.id)
                                       }}
+                                      disabled={addingToCartRecipeId === recipe.id}
+                                      title="Add to cart"
                                     >
-                                      <ShoppingCart className="h-3 w-3" />
+                                      {addingToCartRecipeId === recipe.id ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <ShoppingCart className="h-3.5 w-3.5" />
+                                      )}
                                     </Button>
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      className="h-9 w-9 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         handleRemoveFromPlan(recipe)
                                       }}
                                       title="Remove"
                                     >
-                                      <Trash2 className="h-3 w-3" />
+                                      <Trash2 className="h-3.5 w-3.5" />
                                     </Button>
                                   </div>
                                 </div>

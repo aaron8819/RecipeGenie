@@ -4,6 +4,40 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.6.1] - 2026-01-22
+
+**Summary:** Refined recipe card design in planner views with improved button layout and visual consistency
+
+### Changed
+
+- **Calendar View Recipe Cards**:
+  - Buttons are now icon-only (removed "Swap" and "Made" text labels) for cleaner, more compact design
+  - All four action buttons (Swap, Made, Cart, Trash) now span full width of card with even spacing
+  - Removed `flex-wrap` to ensure buttons always stay in one row
+  - Removed redundant green circle checkmark in top-right corner (Made button already indicates status)
+  - Category tags converted to circular badges showing only first letter (e.g., "V" for Vegetarian)
+  - Tag positioned inline with recipe name for better visual hierarchy
+  - Tag aligned closer to top of card for improved layout
+
+- **Category View Recipe Cards**:
+  - Buttons redesigned to be icon-only and properly sized (no longer overly wide)
+  - All buttons are uniform size (`h-8 w-8`) with consistent spacing
+  - Category tags converted to circular badges matching calendar view design
+  - Tag positioned inline with recipe name (right after title)
+  - Recipe cards are now clickable to open recipe detail modal (consistent with list and calendar views)
+  - Added hover effects (`hover:shadow-md`) for better interactivity feedback
+  - Improved button layout with tighter spacing (`gap-1.5`)
+
+### Technical Notes
+
+- Button containers use `flex-1` for even distribution in calendar view
+- All button clicks properly stop propagation to prevent card click when interacting with buttons
+- Circular tags use existing `getTagColor()` function for consistent color coding
+- Category view cards use same click handler pattern as list view (`onClick={() => setViewingRecipe(recipe)}`)
+- Loading states added for swap and add-to-cart actions in category view
+
+---
+
 ## [2.6.0] - 2026-01-21
 
 **Summary:** Major shopping list refactor with unit normalization, unified merging, and comprehensive test suite
