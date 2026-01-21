@@ -33,13 +33,17 @@ export function RecipeDetailDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-start justify-between pr-8">
-            <DialogTitle className="text-xl">{recipe.name}</DialogTitle>
-            <div className="flex items-center gap-2">
+        <DialogHeader className="space-y-4 pb-4">
+          {/* Top row: Title and action buttons */}
+          <div className="flex items-start justify-between gap-4 pr-8">
+            <DialogTitle className="text-2xl font-bold leading-tight flex-1">
+              {recipe.name}
+            </DialogTitle>
+            <div className="flex items-center gap-2 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
+                className="h-9 w-9"
                 onClick={() =>
                   toggleFavorite.mutate({ id: recipe.id, favorite: recipe.favorite })
                 }
@@ -61,25 +65,28 @@ export function RecipeDetailDialog({
               )}
             </div>
           </div>
-        </DialogHeader>
 
-        <div className="space-y-6 pt-2 pb-4">
-          {/* Meta info */}
-          <div className="flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
-            <span className={cn("capitalize", getTagClassName(recipe.category, true))}>
+          {/* Meta info: Tags and servings in a more spacious layout */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className={cn("capitalize text-sm font-medium px-2.5 py-1 rounded-md", getTagClassName(recipe.category, true))}>
               {recipe.category}
             </span>
             {recipe.tags && recipe.tags.length > 0 && (
               <>
                 {recipe.tags.map((tag) => (
-                  <span key={tag} className={getTagClassName(tag, false)}>
+                  <span key={tag} className={cn("text-sm font-medium px-2.5 py-1 rounded-md", getTagClassName(tag, false))}>
                     {tag}
                   </span>
                 ))}
               </>
             )}
-            <span className="text-xs">{recipe.servings} servings</span>
+            <span className="text-sm text-muted-foreground ml-auto">
+              {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
+            </span>
           </div>
+        </DialogHeader>
+
+        <div className="space-y-6 pt-2 pb-4">
 
           {/* Ingredients */}
           <div>
