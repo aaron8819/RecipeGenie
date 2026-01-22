@@ -653,6 +653,142 @@ export function useRemoveRecipeFromPlan() {
 }
 
 /**
+ * Hook to mark a recipe as made (adds to history without requiring a week plan)
+ * Implements optimistic updates for instant UI feedback
+ */
+export function useMarkRecipeAsMade() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async (recipeId: string) => {
+      if (isGuest) {
+        // For guest mode, the optimistic update handles the cache update
+        return { recipeId }
+      }
+
+      const supabase = getSupabase()
+      const { error: insertError } = await supabase
+        .from("recipe_history")
+        .insert({ user_id: user?.id, recipe_id: recipeId, date_made: new Date().toISOString() })
+
+      if (insertError) throw insertError
+      return { recipeId }
+    },
+    // Optimistic update
+    onMutate: async (recipeId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: HISTORY_KEY })
+
+      // Snapshot previous value for rollback
+      const previousHistory = queryClient.getQueryData<RecipeHistory[]>([...HISTORY_KEY, isGuest])
+
+      // Optimistically update cache
+      queryClient.setQueryData<RecipeHistory[]>(
+        [...HISTORY_KEY, isGuest],
+        (old) => {
+          const existing = old || []
+          return [
+            { id: Date.now(), user_id: isGuest ? "guest" : user?.id || "", recipe_id: recipeId, date_made: new Date().toISOString() },
+            ...existing
+          ]
+        }
+      )
+
+      return { previousHistory }
+    },
+    onError: (err, recipeId, context) => {
+      // Rollback on error
+      if (context?.previousHistory !== undefined) {
+        queryClient.setQueryData([...HISTORY_KEY, isGuest], context.previousHistory)
+      }
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
+    },
+  })
+}
+
+/**
+ * Hook to remove the most recent history entry for a recipe
+ * Implements optimistic updates for instant UI feedback
+ */
+export function useUnmarkRecipeAsMade() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async (recipeId: string) => {
+      if (isGuest) {
+        // For guest mode, the optimistic update handles the cache update
+        return { recipeId }
+      }
+
+      const supabase = getSupabase()
+      
+      // Get the most recent history entry for this recipe
+      const { data: recentHistory, error: historyError } = await supabase
+        .from("recipe_history")
+        .select("id")
+        .eq("user_id", user?.id)
+        .eq("recipe_id", recipeId)
+        .order("date_made", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (historyError && historyError.code !== "PGRST116") throw historyError
+
+      if (recentHistory) {
+        const { error: deleteError } = await supabase
+          .from("recipe_history")
+          .delete()
+          .eq("user_id", user?.id)
+          .eq("id", recentHistory.id)
+        if (deleteError) throw deleteError
+      }
+
+      return { recipeId }
+    },
+    // Optimistic update
+    onMutate: async (recipeId) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: HISTORY_KEY })
+
+      // Snapshot previous value for rollback
+      const previousHistory = queryClient.getQueryData<RecipeHistory[]>([...HISTORY_KEY, isGuest])
+
+      // Optimistically update cache - remove most recent entry for this recipe
+      queryClient.setQueryData<RecipeHistory[]>(
+        [...HISTORY_KEY, isGuest],
+        (old) => {
+          const existing = old || []
+          // Find and remove the most recent entry for this recipe
+          // History is sorted by date_made DESC, so first match is most recent
+          const index = existing.findIndex(entry => entry.recipe_id === recipeId)
+          if (index !== -1) {
+            return [...existing.slice(0, index), ...existing.slice(index + 1)]
+          }
+          return existing
+        }
+      )
+
+      return { previousHistory }
+    },
+    onError: (err, recipeId, context) => {
+      // Rollback on error
+      if (context?.previousHistory !== undefined) {
+        queryClient.setQueryData([...HISTORY_KEY, isGuest], context.previousHistory)
+      }
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
+    },
+  })
+}
+
+/**
  * Hook to toggle recipe "made" status for a specific week
  * Implements optimistic updates for instant UI feedback
  */

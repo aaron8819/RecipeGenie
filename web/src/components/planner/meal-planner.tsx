@@ -245,6 +245,7 @@ function DayColumn({
   getTagClassName,
   weekDays,
   currentDayIndex,
+  isToday,
 }: {
   day: { date: Date; dayName: string; dayNumber: number }
   dayIndex: number
@@ -262,16 +263,14 @@ function DayColumn({
   getTagClassName: (tag: string, isCategory: boolean) => string
   weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
   currentDayIndex: Record<string, number> | undefined
+  isToday?: boolean
 }) {
   return (
     <div
       data-day-index={dayIndex}
-      className="min-h-[200px] p-3 border-r border-b border-sage-200 last:border-r-0 bg-sage-50/30"
+      className="min-h-[300px] p-4 border-r border-b border-gray-200 last:border-r-0 bg-gradient-to-b from-white to-gray-50/50 overflow-y-auto max-h-[600px] scrollbar-thin"
     >
-      <div className="text-xs font-medium text-gray-500 mb-2">
-        {day.dayName}, {day.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-      </div>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {dayRecipes.length > 0 ? (
           dayRecipes.map((recipe) => {
             const isMade = isRecipeMade(recipe)
@@ -299,8 +298,11 @@ function DayColumn({
             )
           })
         ) : (
-          <div className="text-xs text-gray-400 italic py-4 text-center">
-            No meals planned
+          <div className="empty-state rounded-lg p-8 text-center border-2 border-dashed border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100/50">
+            <svg className="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p className="text-sm text-gray-400 font-medium">No meals planned</p>
           </div>
         )}
       </div>
@@ -400,8 +402,11 @@ function MobileDayColumn({
             )
           })
         ) : (
-          <div className="text-sm text-gray-400 italic py-2 text-center">
-            No meals planned
+          <div className="rounded-lg p-6 text-center border-2 border-dashed border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100/50">
+            <svg className="w-10 h-10 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <p className="text-sm text-gray-400 font-medium">No meals planned</p>
           </div>
         )}
       </div>
@@ -452,13 +457,16 @@ function RecipeCard({
   return (
     <div
       className={cn(
-        "bg-white rounded-lg p-2 border border-sage-200 hover:shadow-md transition-shadow",
-        isMade && "opacity-70"
+        "bg-white rounded-xl p-3 border-2 border-gray-100 shadow-sm hover:border-sage-300 hover:shadow-md transition-all duration-200",
+        isMade && "relative"
       )}
+      style={isMade ? {
+        background: "linear-gradient(to bottom, rgba(34, 197, 94, 0.03), rgba(34, 197, 94, 0.01))"
+      } : undefined}
     >
-      <div className="flex items-start gap-2 mb-2">
+      <div className="flex items-start justify-between mb-2">
         <div
-          className="font-semibold text-sm pr-5 cursor-pointer flex-1"
+          className="font-semibold text-sm text-gray-800 pr-2 leading-tight cursor-pointer flex-1 hover:text-sage-700 transition-colors"
           onClick={onView}
         >
           {recipe.name}
@@ -468,10 +476,10 @@ function RecipeCard({
           return (
             <div
               className={cn(
-                "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm",
                 tagColors.bg,
                 tagColors.text,
-                "text-xs font-semibold"
+                "text-xs font-bold"
               )}
               title={recipe.category}
             >
@@ -482,11 +490,11 @@ function RecipeCard({
       </div>
 
       {/* Desktop: show all buttons */}
-      <div className="hidden lg:flex gap-1 mt-2 w-full">
+      <div className="hidden lg:grid grid-cols-4 gap-1.5 mb-2">
         <Button
           variant="outline"
           size="sm"
-          className="h-7 flex-1 p-0"
+          className="h-7 p-0 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all hover:scale-105"
           onClick={(e) => {
             e.stopPropagation()
             onSwap()
@@ -495,19 +503,19 @@ function RecipeCard({
           title="Swap"
         >
           {isSwapping ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-600" />
           ) : (
-            <Shuffle className="h-3 w-3" />
+            <Shuffle className="h-3.5 w-3.5 text-gray-600" />
           )}
         </Button>
         <Button
           variant={isMade ? "default" : "outline"}
           size="sm"
           className={cn(
-            "h-7 flex-1 p-0",
+            "h-7 p-0 transition-all hover:scale-105",
             isMade
-              ? "bg-sage-600 hover:bg-sage-700 text-white"
-              : "text-sage-700 border-sage-300"
+              ? "bg-green-600 hover:bg-green-700 text-white border-green-700 shadow-sm"
+              : "text-sage-700 border-sage-200 hover:border-green-300 hover:bg-green-50"
           )}
           onClick={(e) => {
             e.stopPropagation()
@@ -516,12 +524,12 @@ function RecipeCard({
           disabled={isMarkingThis}
           title={isMade ? "Unmark as made" : "Mark as made"}
         >
-          <Check className="h-3 w-3" />
+          <Check className="h-3.5 w-3.5" />
         </Button>
         <Button
           variant="outline"
           size="sm"
-          className="h-7 flex-1 p-0"
+          className="h-7 p-0 border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all hover:scale-105"
           onClick={(e) => {
             e.stopPropagation()
             onAddToCart()
@@ -530,35 +538,35 @@ function RecipeCard({
           title="Add to cart"
         >
           {isAddingToCart ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-600" />
           ) : (
-            <ShoppingCart className="h-3 w-3" />
+            <ShoppingCart className="h-3.5 w-3.5 text-gray-600" />
           )}
         </Button>
         <Button
           variant="outline"
           size="sm"
-          className="h-7 flex-1 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="h-7 p-0 border-gray-200 hover:border-red-300 hover:bg-red-50 text-gray-600 hover:text-red-600 transition-all hover:scale-105"
           onClick={(e) => {
             e.stopPropagation()
             onRemove()
           }}
           title="Remove"
         >
-          <Trash2 className="h-3 w-3" />
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
 
       {/* Mobile: show primary actions + overflow menu */}
-      <div className="flex lg:hidden gap-1 mt-2 w-full">
+      <div className="flex lg:hidden gap-1.5 mt-2 w-full">
         <Button
           variant={isMade ? "default" : "outline"}
           size="sm"
           className={cn(
-            "h-7 flex-1 p-0",
+            "h-7 flex-1 p-0 transition-all",
             isMade
-              ? "bg-sage-600 hover:bg-sage-700 text-white"
-              : "text-sage-700 border-sage-300"
+              ? "bg-green-600 hover:bg-green-700 text-white"
+              : "text-sage-700 border-sage-200 hover:bg-green-50"
           )}
           onClick={(e) => {
             e.stopPropagation()
@@ -633,7 +641,7 @@ function RecipeCard({
             }
           }}
         >
-          <SelectTrigger className="h-7 text-[10px] w-full border-sage-300 bg-sage-50 hover:bg-sage-100">
+          <SelectTrigger className="h-7 text-[10px] w-full border-sage-200 bg-sage-50 hover:bg-sage-100 text-sage-700 font-medium transition-colors">
             <CalendarIcon className="h-3 w-3 mr-1 text-sage-600" />
             <SelectValue placeholder={assignedDayName ? assignedDayName : "Assign day"} />
           </SelectTrigger>
@@ -764,7 +772,29 @@ export function MealPlanner() {
 
   const handleGenerateShoppingList = async () => {
     if (!weeklyPlan?.recipe_ids || weeklyPlan.recipe_ids.length === 0) return
-    await addToShoppingList.mutateAsync({ recipeIds: weeklyPlan.recipe_ids })
+    try {
+      const result = await addToShoppingList.mutateAsync({ recipeIds: weeklyPlan.recipe_ids })
+      
+      // Show success message based on what happened
+      let message = ""
+      if (result.added > 0 && result.merged > 0) {
+        message = `${result.added} item${result.added !== 1 ? "s" : ""} added, ${result.merged} item${result.merged !== 1 ? "s" : ""} merged to shopping list`
+      } else if (result.added > 0) {
+        message = `${result.added} item${result.added !== 1 ? "s" : ""} added to shopping list`
+      } else if (result.merged > 0) {
+        message = `${result.merged} item${result.merged !== 1 ? "s" : ""} merged to shopping list`
+      } else {
+        message = "All items already in shopping list"
+      }
+      
+      undoToast.show({
+        message,
+        duration: 4000,
+      })
+    } catch (error) {
+      // Error handling is done by the mutation itself
+      console.error("Failed to add to shopping list:", error)
+    }
   }
 
   const handleSwapRecipe = async (recipe: Recipe) => {
@@ -1182,22 +1212,40 @@ export function MealPlanner() {
               <div className="space-y-4">
                 {/* Desktop Calendar Grid */}
                 <div className="hidden lg:block">
-                  <Card>
+                  <Card className="overflow-hidden border-gray-200 shadow-xl">
                     <CardContent className="p-0">
-                      <div className="grid grid-cols-7 border-b border-sage-200">
-                        {weekDays.map((day) => (
-                          <div
-                            key={day.date.toISOString()}
-                            className="p-3 text-center text-xs font-semibold text-sage-600 bg-sage-50 border-r border-sage-200 last:border-r-0"
-                          >
-                            {day.dayName}
-                            <div className="text-xs font-normal text-gray-500 mt-1">{day.dayNumber}</div>
-                          </div>
-                        ))}
+                      {/* Enhanced Day Headers */}
+                      <div className="grid grid-cols-7 border-b-2 border-gray-200">
+                        {weekDays.map((day, dayIndex) => {
+                          const today = new Date()
+                          const isToday = day.date.toDateString() === today.toDateString()
+                          return (
+                            <div
+                              key={day.date.toISOString()}
+                              className={cn(
+                                "p-4 text-center border-r border-gray-200 last:border-r-0 bg-gradient-to-br from-sage-50 to-emerald-50 relative",
+                                isToday && "bg-gradient-to-br from-green-50 to-emerald-100"
+                              )}
+                            >
+                              <div className="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">
+                                {day.dayName}
+                              </div>
+                              <div className="text-lg font-bold text-gray-800">{day.dayNumber}</div>
+                              {isToday && (
+                                <>
+                                  <span className="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full"></span>
+                                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full"></div>
+                                </>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                       <div className="grid grid-cols-7">
                         {weekDays.map((day, dayIndex) => {
                           const dayRecipes = getRecipesByDay(dayIndex)
+                          const today = new Date()
+                          const isToday = day.date.toDateString() === today.toDateString()
                           return (
                             <DayColumn
                               key={day.date.toISOString()}
@@ -1217,6 +1265,7 @@ export function MealPlanner() {
                               getTagClassName={getTagClassName}
                               weekDays={weekDays}
                               currentDayIndex={recipeDayAssignments}
+                              isToday={isToday}
                             />
                           )
                         })}

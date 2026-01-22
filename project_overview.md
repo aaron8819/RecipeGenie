@@ -30,7 +30,10 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - **Smart merging**: Compatible units automatically merged (e.g., cups + fl oz), incompatible units use `additionalAmounts`
 - **Comprehensive testing**: 28 tests ensure deterministic behavior and catch regressions
 - Day assignments: assign recipes to specific days of the week in the calendar view (persists across devices)
-- Planner settings: configure excluded days, preferred days, and automatic day assignment for meal plan generation
+- **Planner settings**: Configure default category breakdown, excluded days, preferred days, and automatic day assignment for meal plan generation
+  - Default category breakdown persists across sessions
+  - Day placement rules control which days meals can be placed on
+  - Automatic day assignment intelligently distributes recipes respecting excluded/preferred days
 
 ---
 
@@ -259,9 +262,19 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-24 (v2.7.1)*
+*Last updated: 2026-01-25 (v2.8.0)*
 
-## Recent Updates (v2.7.0)
+## Recent Updates (v2.8.0)
+
+### Meal Planner Settings
+- **Plan Settings Modal**: New comprehensive settings modal for meal planning preferences
+- **Default Category Breakdown**: Save your preferred meal distribution as default (persists across sessions)
+- **Day Placement Rules**: Configure excluded days (never place meals) and preferred days (prioritize placement)
+- **Automatic Day Assignment**: Toggle to automatically assign recipes to days when generating plans
+- **Intelligent Distribution**: Recipes distributed respecting excluded/preferred days with round-robin fallback
+- **History Exclusion**: Configure history exclusion days directly from plan settings
+
+## Previous Updates (v2.7.0)
 
 ### Enhanced Shopping List Workflow
 - **Checked States**: Items can be checked off while remaining in the shopping list (toggleable checked state with strikethrough)

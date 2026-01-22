@@ -160,12 +160,16 @@ The app includes an auth callback route at `/auth/callback` that handles email c
 5. Click "View Shopping List" to see aggregated ingredients
 
 **Plan Settings:**
-- Click the settings button (⚙️) to configure:
+- Click the settings button (⚙️) next to the "Generate Meal Plan" button to configure:
   - **Default Category Breakdown**: Set your preferred meal distribution (saved as default for future plans)
+    - Use category pills to set counts for each category
+    - Save current selection as default or load saved defaults
+    - Default selection automatically loads when generating new plans
   - **Day Placement Rules**: 
-    - Exclude specific days from meal placement (e.g., skip weekends)
-    - Set preferred days for meal placement (recipes prioritized to these days)
-    - Toggle automatic day assignment (recipes automatically assigned to days when generating plans)
+    - **Excluded Days**: Exclude specific days from meal placement (e.g., skip weekends)
+    - **Preferred Days**: Set preferred days for meal placement (recipes prioritized to these days)
+    - **Auto-assign Days**: Toggle automatic day assignment (recipes automatically assigned to days when generating plans)
+    - Visual day selector with conflict detection (warns if more meals than available days)
   - **History Exclusion Days**: Control how many days back to exclude recently-made recipes
 
 ### Managing Your Pantry

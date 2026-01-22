@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meal Planner Calendar View - Enhanced Design</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Custom animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .animate-fade-in-up {
+            animation: fadeInUp 0.3s ease-out;
+        }
+        
+        /* Smooth transitions */
+        .smooth-transition {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        /* Hover effects */
+        .recipe-card {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .recipe-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Gradient backgrounds */
+        .day-header-gradient {
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        }
+        
+        .empty-day-gradient {
+            background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+        }
+        
+        /* Category colors */
+        .category-chicken { background: #4d7c0f; }
+        .category-beef { background: #b91c1c; }
+        .category-lamb { background: #c2410c; }
+        .category-vegetarian { background: #1d4ed8; }
+        .category-turkey { background: #a16207; }
+        
+        /* Scrollbar styling */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        /* Pulse animation for made recipes */
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 0 4px rgba(34, 197, 94, 0);
+            }
+        }
+        
+        .made-recipe {
+            position: relative;
+        }
+        
+        .made-recipe::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));
+            z-index: -1;
+        }
+        
+        /* Empty state styling */
+        .empty-state {
+            background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+            border: 2px dashed #e5e7eb;
+        }
+        
+        /* Action button hover states */
+        .action-btn {
+            transition: all 0.15s ease;
+        }
+        
+        .action-btn:hover {
+            transform: scale(1.05);
+        }
+        
+        /* Day column styling */
+        .day-column {
+            min-height: 300px;
+            background: linear-gradient(to bottom, #ffffff 0%, #fafafa 100%);
+        }
+        
+        /* Today indicator */
+        .today-indicator {
+            position: relative;
+        }
+        
+        .today-indicator::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 3px;
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-sage-50 via-white to-amber-50 min-h-screen py-8 px-4">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header Section -->
+        <div class="mb-8 animate-fade-in-up">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-1">This Week's Meals</h1>
+                    <p class="text-gray-600 text-sm">4 recipes planned</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <!-- View Tabs -->
+                    <div class="flex bg-white rounded-lg p-1 shadow-sm border border-gray-200">
+                        <button class="px-4 py-2 rounded-md bg-sage-100 text-sage-700 font-medium text-sm transition-all">
+                            Calendar
+                        </button>
+                        <button class="px-4 py-2 rounded-md text-gray-600 hover:text-gray-800 text-sm transition-all">
+                            List
+                        </button>
+                        <button class="px-4 py-2 rounded-md text-gray-600 hover:text-gray-800 text-sm transition-all">
+                            Category
+                        </button>
+                    </div>
+                    <!-- Add to Shopping List Button -->
+                    <button class="px-4 py-2 bg-sage-600 text-white rounded-lg hover:bg-sage-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        <span class="hidden sm:inline">Add to Shopping List</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div class="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200 animate-fade-in-up" style="animation-delay: 0.1s">
+            <!-- Day Headers -->
+            <div class="grid grid-cols-7 border-b-2 border-gray-200">
+                <div class="day-header-gradient p-4 text-center border-r border-gray-200 last:border-r-0">
+                    <div class="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">Sun</div>
+                    <div class="text-lg font-bold text-gray-800">18</div>
+                </div>
+                <div class="day-header-gradient p-4 text-center border-r border-gray-200 last:border-r-0">
+                    <div class="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">Mon</div>
+                    <div class="text-lg font-bold text-gray-800">19</div>
+                </div>
+                <div class="day-header-gradient p-4 text-center border-r border-gray-200 last:border-r-0 today-indicator">
+                    <div class="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">Tue</div>
+                    <div class="text-lg font-bold text-gray-800">20</div>
+                    <span class="absolute top-2 right-2 w-2 h-2 bg-green-500 rounded-full"></span>
+                </div>
+                <div class="day-header-gradient p-4 text-center border-r border-gray-200 last:border-r-0">
+                    <div class="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">Wed</div>
+                    <div class="text-lg font-bold text-gray-800">21</div>
+                </div>
+                <div class="day-header-gradient p-4 text-center border-r border-gray-200 last:border-r-0">
+                    <div class="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">Thu</div>
+                    <div class="text-lg font-bold text-gray-800">22</div>
+                </div>
+                <div class="day-header-gradient p-4 text-center border-r border-gray-200 last:border-r-0">
+                    <div class="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">Fri</div>
+                    <div class="text-lg font-bold text-gray-800">23</div>
+                </div>
+                <div class="day-header-gradient p-4 text-center border-r border-gray-200 last:border-r-0">
+                    <div class="text-xs font-semibold text-sage-700 uppercase tracking-wide mb-1">Sat</div>
+                    <div class="text-lg font-bold text-gray-800">24</div>
+                </div>
+            </div>
+
+            <!-- Day Columns -->
+            <div class="grid grid-cols-7">
+                <!-- Sunday -->
+                <div class="day-column p-4 border-r border-b border-gray-200 last:border-r-0 custom-scrollbar overflow-y-auto" style="max-height: 600px;">
+                    <div class="empty-state rounded-lg p-8 text-center">
+                        <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p class="text-sm text-gray-400 font-medium">No meals planned</p>
+                    </div>
+                </div>
+
+                <!-- Monday -->
+                <div class="day-column p-4 border-r border-b border-gray-200 last:border-r-0 custom-scrollbar overflow-y-auto" style="max-height: 600px;">
+                    <div class="empty-state rounded-lg p-8 text-center">
+                        <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p class="text-sm text-gray-400 font-medium">No meals planned</p>
+                    </div>
+                </div>
+
+                <!-- Tuesday -->
+                <div class="day-column p-4 border-r border-b border-gray-200 last:border-r-0 custom-scrollbar overflow-y-auto" style="max-height: 600px;">
+                    <div class="space-y-3">
+                        <!-- Recipe Card 1: Mediterranean Rice -->
+                        <div class="recipe-card bg-white rounded-xl p-3 border-2 border-gray-100 shadow-sm hover:border-sage-300">
+                            <div class="flex items-start justify-between mb-2">
+                                <h3 class="font-semibold text-sm text-gray-800 pr-2 leading-tight cursor-pointer hover:text-sage-700 transition-colors">
+                                    Mediterranean Rice
+                                </h3>
+                                <div class="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                    <span class="text-xs font-bold text-white">V</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="grid grid-cols-4 gap-1.5 mb-2">
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-gray-300 hover:bg-gray-50 flex items-center justify-center" title="Swap">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md bg-green-50 border border-green-200 hover:bg-green-100 flex items-center justify-center" title="Mark as made">
+                                    <svg class="w-3.5 h-3.5 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-blue-300 hover:bg-blue-50 flex items-center justify-center" title="Add to cart">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-red-300 hover:bg-red-50 flex items-center justify-center" title="Remove">
+                                    <svg class="w-3.5 h-3.5 text-gray-600 hover:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <!-- Day Assignment -->
+                            <div class="mt-2">
+                                <select class="w-full text-[10px] px-2 py-1.5 rounded-md border border-sage-200 bg-sage-50 hover:bg-sage-100 text-sage-700 font-medium cursor-pointer transition-colors">
+                                    <option>Tue, Jan 20</option>
+                                    <option>Wed, Jan 21</option>
+                                    <option>Thu, Jan 22</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Recipe Card 2: Lamb Meatball Gyros -->
+                        <div class="recipe-card bg-white rounded-xl p-3 border-2 border-gray-100 shadow-sm hover:border-sage-300 made-recipe">
+                            <div class="flex items-start justify-between mb-2">
+                                <h3 class="font-semibold text-sm text-gray-800 pr-2 leading-tight cursor-pointer hover:text-sage-700 transition-colors">
+                                    Lamb Meatball Gyros
+                                </h3>
+                                <div class="w-6 h-6 rounded-full bg-orange-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                    <span class="text-xs font-bold text-white">L</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="grid grid-cols-4 gap-1.5 mb-2">
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-gray-300 hover:bg-gray-50 flex items-center justify-center" title="Swap">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md bg-green-600 border border-green-700 hover:bg-green-700 flex items-center justify-center shadow-sm" title="Mark as made">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-blue-300 hover:bg-blue-50 flex items-center justify-center" title="Add to cart">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-red-300 hover:bg-red-50 flex items-center justify-center" title="Remove">
+                                    <svg class="w-3.5 h-3.5 text-gray-600 hover:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <!-- Day Assignment -->
+                            <div class="mt-2">
+                                <select class="w-full text-[10px] px-2 py-1.5 rounded-md border border-sage-200 bg-sage-50 hover:bg-sage-100 text-sage-700 font-medium cursor-pointer transition-colors">
+                                    <option>Tue, Jan 20</option>
+                                    <option>Wed, Jan 21</option>
+                                    <option>Thu, Jan 22</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Wednesday -->
+                <div class="day-column p-4 border-r border-b border-gray-200 last:border-r-0 custom-scrollbar overflow-y-auto" style="max-height: 600px;">
+                    <div class="space-y-3">
+                        <!-- Recipe Card: Chicken Shawarma -->
+                        <div class="recipe-card bg-white rounded-xl p-3 border-2 border-gray-100 shadow-sm hover:border-sage-300 made-recipe">
+                            <div class="flex items-start justify-between mb-2">
+                                <h3 class="font-semibold text-sm text-gray-800 pr-2 leading-tight cursor-pointer hover:text-sage-700 transition-colors">
+                                    Chicken Shawarma
+                                </h3>
+                                <div class="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                    <span class="text-xs font-bold text-white">C</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="grid grid-cols-4 gap-1.5 mb-2">
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-gray-300 hover:bg-gray-50 flex items-center justify-center" title="Swap">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md bg-green-600 border border-green-700 hover:bg-green-700 flex items-center justify-center shadow-sm" title="Mark as made">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-blue-300 hover:bg-blue-50 flex items-center justify-center" title="Add to cart">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-red-300 hover:bg-red-50 flex items-center justify-center" title="Remove">
+                                    <svg class="w-3.5 h-3.5 text-gray-600 hover:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <!-- Day Assignment -->
+                            <div class="mt-2">
+                                <select class="w-full text-[10px] px-2 py-1.5 rounded-md border border-sage-200 bg-sage-50 hover:bg-sage-100 text-sage-700 font-medium cursor-pointer transition-colors">
+                                    <option>Wed, Jan 21</option>
+                                    <option>Tue, Jan 20</option>
+                                    <option>Thu, Jan 22</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thursday -->
+                <div class="day-column p-4 border-r border-b border-gray-200 last:border-r-0 custom-scrollbar overflow-y-auto" style="max-height: 600px;">
+                    <div class="space-y-3">
+                        <!-- Recipe Card: Honey Garlic Chicken -->
+                        <div class="recipe-card bg-white rounded-xl p-3 border-2 border-gray-100 shadow-sm hover:border-sage-300 made-recipe">
+                            <div class="flex items-start justify-between mb-2">
+                                <h3 class="font-semibold text-sm text-gray-800 pr-2 leading-tight cursor-pointer hover:text-sage-700 transition-colors">
+                                    Honey Garlic Chicken
+                                </h3>
+                                <div class="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 shadow-sm">
+                                    <span class="text-xs font-bold text-white">C</span>
+                                </div>
+                            </div>
+                            
+                            <!-- Action Buttons -->
+                            <div class="grid grid-cols-4 gap-1.5 mb-2">
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-gray-300 hover:bg-gray-50 flex items-center justify-center" title="Swap">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md bg-green-600 border border-green-700 hover:bg-green-700 flex items-center justify-center shadow-sm" title="Mark as made">
+                                    <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-blue-300 hover:bg-blue-50 flex items-center justify-center" title="Add to cart">
+                                    <svg class="w-3.5 h-3.5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                    </svg>
+                                </button>
+                                <button class="action-btn p-1.5 rounded-md border border-gray-200 hover:border-red-300 hover:bg-red-50 flex items-center justify-center" title="Remove">
+                                    <svg class="w-3.5 h-3.5 text-gray-600 hover:text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <!-- Day Assignment -->
+                            <div class="mt-2">
+                                <select class="w-full text-[10px] px-2 py-1.5 rounded-md border border-sage-200 bg-sage-50 hover:bg-sage-100 text-sage-700 font-medium cursor-pointer transition-colors">
+                                    <option>Thu, Jan 22</option>
+                                    <option>Tue, Jan 20</option>
+                                    <option>Wed, Jan 21</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Friday -->
+                <div class="day-column p-4 border-r border-b border-gray-200 last:border-r-0 custom-scrollbar overflow-y-auto" style="max-height: 600px;">
+                    <div class="empty-state rounded-lg p-8 text-center">
+                        <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p class="text-sm text-gray-400 font-medium">No meals planned</p>
+                    </div>
+                </div>
+
+                <!-- Saturday -->
+                <div class="day-column p-4 border-r border-b border-gray-200 last:border-r-0 custom-scrollbar overflow-y-auto" style="max-height: 600px;">
+                    <div class="empty-state rounded-lg p-8 text-center">
+                        <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <p class="text-sm text-gray-400 font-medium">No meals planned</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Design Notes -->
+        <div class="mt-12 max-w-4xl mx-auto bg-white rounded-2xl shadow-lg p-8 border border-gray-200 animate-fade-in-up" style="animation-delay: 0.2s">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6">Design Enhancements</h2>
+            <div class="space-y-4 text-gray-700">
+                <div>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">✨ Visual Improvements</h3>
+                    <ul class="list-disc list-inside space-y-1 ml-4">
+                        <li><strong>Enhanced Day Headers:</strong> Gradient backgrounds, better typography, and a subtle "today" indicator</li>
+                        <li><strong>Refined Recipe Cards:</strong> Rounded corners, subtle shadows, and smooth hover effects</li>
+                        <li><strong>Better Empty States:</strong> Dashed borders with icons and helpful messaging</li>
+                        <li><strong>Category Badges:</strong> Larger, more prominent circular badges with better contrast</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">🎨 Color & Spacing</h3>
+                    <ul class="list-disc list-inside space-y-1 ml-4">
+                        <li><strong>Consistent Color Palette:</strong> Sage green accents, warm backgrounds, and category-specific colors</li>
+                        <li><strong>Improved Spacing:</strong> Better padding, margins, and visual breathing room</li>
+                        <li><strong>Action Button Styling:</strong> Color-coded hover states and better visual feedback</li>
+                        <li><strong>Made Recipe Indicators:</strong> Subtle green glow and background tint for completed meals</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">⚡ Interactions</h3>
+                    <ul class="list-disc list-inside space-y-1 ml-4">
+                        <li><strong>Smooth Transitions:</strong> All hover states and interactions use smooth animations</li>
+                        <li><strong>Hover Effects:</strong> Cards lift slightly on hover with enhanced shadows</li>
+                        <li><strong>Button Feedback:</strong> Scale and color changes on interaction</li>
+                        <li><strong>Scrollable Columns:</strong> Custom scrollbars for better aesthetics</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg mb-2 text-gray-800">📱 Responsive Considerations</h3>
+                    <ul class="list-disc list-inside space-y-1 ml-4">
+                        <li>Grid layout adapts to smaller screens</li>
+                        <li>Touch-friendly button sizes</li>
+                        <li>Optimized spacing for mobile viewing</li>
+                        <li>Scrollable day columns prevent overflow</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

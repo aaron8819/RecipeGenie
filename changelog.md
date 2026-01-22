@@ -4,6 +4,55 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.8.0] - 2026-01-25
+
+**Summary:** Meal planner settings with default category breakdown, day placement rules, and automatic day assignment
+
+### Added
+
+- **Plan Settings Modal**:
+  - New settings modal accessible via settings button (⚙️) in meal planner
+  - Configure default category breakdown that persists across sessions
+  - Save current selection as default or load saved defaults
+  - Visual category pills with color coding for easy configuration
+
+- **Day Placement Rules**:
+  - **Excluded Days**: Configure which days of the week to exclude from automatic meal placement
+  - **Preferred Days**: Set preferred days for meal placement (recipes prioritized to these days)
+  - Visual day selector with checkboxes for excluded and preferred days
+  - Conflict detection warns when more meals are selected than available days
+  - Prevents excluding all days (validation)
+
+- **Automatic Day Assignment**:
+  - Toggle to automatically assign recipes to days when generating meal plans
+  - Intelligent distribution respecting excluded and preferred days
+  - Round-robin distribution when preferred days are exhausted
+  - Day assignments preserved when regenerating plans (when possible)
+
+- **History Exclusion Settings**:
+  - Configure history exclusion days directly from plan settings modal
+  - Previously only accessible via pantry settings
+  - Integrated into meal planning workflow for better UX
+
+### Changed
+
+- Meal plan generation now uses saved default category breakdown when available
+- Plan settings modal consolidates all meal planning preferences in one place
+- Default selection automatically loads from saved preferences on page load
+- "Use Current Selection" button to quickly update defaults from current pill selection
+
+### Technical Notes
+
+- Migration `009_planner_settings.sql` adds three columns to `user_config`:
+  - `excluded_days`: INTEGER[] - Day indices (0-6) to exclude from placement
+  - `preferred_days`: INTEGER[] | null - Day indices (0-6) to prefer for placement
+  - `auto_assign_days`: BOOLEAN - Whether to auto-assign days on generation (default: true)
+- `autoAssignDays()` function in `meal-planner.ts` handles intelligent day distribution
+- Settings persist in user configuration and apply to all future meal plan generations
+- Guest mode includes default settings (no excluded days, no preferred days, auto-assign enabled)
+
+---
+
 ## [2.7.1] - 2026-01-24
 
 **Summary:** Shopping list improvements for better merging and consistent recipe colors

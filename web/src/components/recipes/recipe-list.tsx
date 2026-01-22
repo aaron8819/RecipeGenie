@@ -19,7 +19,7 @@ import {
   useToggleFavorite,
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
-import { useRecipeHistory } from "@/hooks/use-planner"
+import { useRecipeHistory, useMarkRecipeAsMade, useUnmarkRecipeAsMade } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import type { Recipe, RecipeHistory } from "@/types/database"
@@ -123,6 +123,7 @@ export function RecipeList() {
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
   const [addToPlanRecipe, setAddToPlanRecipe] = useState<Recipe | null>(null)
   const [addingToShoppingListId, setAddingToShoppingListId] = useState<string | null>(null)
+  const [markingAsMadeId, setMarkingAsMadeId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false)
   const [isTagManagementOpen, setIsTagManagementOpen] = useState(false)
@@ -140,6 +141,8 @@ export function RecipeList() {
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
   const addToShoppingList = useAddToShoppingList()
+  const markAsMade = useMarkRecipeAsMade()
+  const unmarkAsMade = useUnmarkRecipeAsMade()
   const { show: showToast } = useUndoToast()
 
   // Build a map of recipe_id -> stats (last made + times made)
@@ -186,6 +189,31 @@ export function RecipeList() {
       })
     } finally {
       setAddingToShoppingListId(null)
+    }
+  }
+
+  const handleMarkAsMade = async (recipe: Recipe) => {
+    setMarkingAsMadeId(recipe.id)
+    try {
+      await markAsMade.mutateAsync(recipe.id)
+      
+      // Show undo toast after mutation succeeds
+      showToast({
+        message: `"${recipe.name}" marked as made`,
+        onUndo: () => {
+          // Remove the most recent history entry for this recipe
+          unmarkAsMade.mutate(recipe.id)
+        },
+        onExpire: () => {
+          // Mutation already executed, nothing to do
+        },
+      })
+    } catch (error) {
+      showToast({
+        message: error instanceof Error ? error.message : "Failed to mark recipe as made",
+      })
+    } finally {
+      setMarkingAsMadeId(null)
     }
   }
 
@@ -474,6 +502,7 @@ export function RecipeList() {
                     }
                     onAddToPlan={setAddToPlanRecipe}
                     onAddToShoppingList={handleAddToShoppingList}
+                    onMarkAsMade={handleMarkAsMade}
                     onClick={setViewingRecipe}
                     onTagClick={(tag) => {
                       if (!selectedTags.includes(tag)) {
@@ -483,6 +512,7 @@ export function RecipeList() {
                     lastMade={stats?.lastMade ?? null}
                     timesMade={stats?.timesMade ?? 0}
                     isAddingToShoppingList={addingToShoppingListId === recipe.id}
+                    isMarkingAsMade={markingAsMadeId === recipe.id}
                   />
                 </div>
               )
@@ -515,6 +545,9 @@ export function RecipeList() {
           setViewingRecipe(null)
           setEditingRecipe(r)
         }}
+        onDelete={handleDelete}
+        lastMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.lastMade ?? null : null}
+        timesMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.timesMade ?? 0 : 0}
       />
 
       {/* Add to Plan Dialog */}
