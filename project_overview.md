@@ -259,7 +259,7 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-23 (v2.7.0)*
+*Last updated: 2026-01-24 (v2.7.1)*
 
 ## Recent Updates (v2.7.0)
 

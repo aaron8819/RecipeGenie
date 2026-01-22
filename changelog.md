@@ -4,6 +4,24 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.7.1] - 2026-01-24
+
+**Summary:** Shopping list improvements for better merging and consistent recipe colors
+
+### Changed
+
+- **Recipe Color Mapping**:
+  - Recipe source tag colors now use hash-based assignment instead of order-based
+  - Colors remain stable regardless of recipe order in the list
+  - Same recipe always gets the same color for better visual consistency
+
+- **Shopping List Merging**:
+  - When adding recipes to existing shopping lists, `already_have` and `excluded` arrays are now properly merged
+  - Preserves items from previous recipes when adding new recipes
+  - Prevents loss of pantry and excluded items when building shopping lists incrementally
+
+---
+
 ## [2.7.0] - 2026-01-23
 
 **Summary:** Enhanced shopping list workflow with checked states, pantry integration, recipe tag navigation, and bug fixes
