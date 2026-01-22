@@ -262,9 +262,17 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-25 (v2.8.0)*
+*Last updated: 2026-01-26 (v2.8.1)*
 
-## Recent Updates (v2.8.0)
+## Recent Updates (v2.8.1)
+
+### Recipe Ingredient Reordering
+- **Drag-and-Drop Ingredients**: Reorder ingredients in recipe dialog using drag-and-drop
+- **Visual Feedback**: Grip handle icon indicates draggable items
+- **Keyboard Support**: Full keyboard navigation for accessibility
+- **Persistent Order**: Ingredient order saved with recipe
+
+## Previous Updates (v2.8.0)
 
 ### Meal Planner Settings
 - **Plan Settings Modal**: New comprehensive settings modal for meal planning preferences

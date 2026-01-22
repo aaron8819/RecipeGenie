@@ -4,6 +4,32 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.8.1] - 2026-01-26
+
+**Summary:** Recipe ingredient drag-and-drop reordering and UI improvements
+
+### Added
+
+- **Drag-and-Drop Ingredient Reordering**:
+  - Ingredients in recipe dialog can now be reordered via drag-and-drop
+  - Visual drag handle (grip icon) for better UX
+  - Keyboard navigation support for accessibility
+  - Maintains ingredient order when saving recipes
+
+### Changed
+
+- Recipe dialog UI improvements for better ingredient management
+- Removed unused mockup HTML files (meal-planner-calendar-mockup.html, recipe-card-mockup.html)
+- Improved recipe card styling and layout
+
+### Technical Notes
+
+- Uses `@dnd-kit` library for drag-and-drop functionality
+- Ingredient reordering persists in recipe data structure
+- Supports both mouse and keyboard interactions
+
+---
+
 ## [2.8.0] - 2026-01-25
 
 **Summary:** Meal planner settings with default category breakdown, day placement rules, and automatic day assignment

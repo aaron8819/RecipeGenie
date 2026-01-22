@@ -226,9 +226,9 @@ export function RecipeList() {
 
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full min-w-0 overflow-x-hidden">
       {/* Sticky Search Bar Only */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b pb-3 mb-4">
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b pb-3 mb-4 w-full">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -469,7 +469,7 @@ export function RecipeList() {
           }
         />
       ) : (
-        <div className="relative">
+        <div className="relative w-full overflow-hidden">
           {/* Subtle loading indicator for background refetch */}
           {isFetching && !isLoading && (
             <div className="absolute top-0 right-0 z-10 p-2">
@@ -481,8 +481,8 @@ export function RecipeList() {
           <div
             className={cn(
               viewMode === "grid"
-                ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-                : "space-y-3"
+                ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 w-full"
+                : "space-y-3 w-full"
             )}
           >
             {sortedRecipes.map((recipe, index) => {
@@ -491,7 +491,7 @@ export function RecipeList() {
                 <div
                   key={recipe.id}
                   style={{ animationDelay: `${index * 50}ms` }}
-                  className="animate-fade-in"
+                  className="animate-fade-in w-full min-w-0"
                 >
                   <RecipeCard
                     recipe={recipe}

@@ -1,7 +1,25 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical } from "lucide-react"
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import {
   Dialog,
   DialogContent,
@@ -111,6 +129,23 @@ export function RecipeDialog({
     newIngredients[index] = { ...newIngredients[index], [field]: value }
     setIngredients(newIngredients)
   }
+
+  const handleReorderIngredients = useCallback((event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (over && active.id !== over.id) {
+      setIngredients((items) => {
+        const oldIndex = items.findIndex((_, i) => i.toString() === active.id)
+        const newIndex = items.findIndex((_, i) => i.toString() === over.id)
+
+        const newItems = [...items]
+        const [removed] = newItems.splice(oldIndex, 1)
+        newItems.splice(newIndex, 0, removed)
+
+        return newItems
+      })
+    }
+  }, [])
 
   const handleParseImport = () => {
     if (!importText.trim()) {
@@ -377,6 +412,8 @@ Instructions:
                 onAddIngredient={handleAddIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
                 onIngredientChange={handleIngredientChange}
+                isEditing={false}
+                onReorderIngredients={handleReorderIngredients}
               />
             </TabsContent>
           </Tabs>
@@ -401,6 +438,8 @@ Instructions:
             onAddIngredient={handleAddIngredient}
             onRemoveIngredient={handleRemoveIngredient}
             onIngredientChange={handleIngredientChange}
+            isEditing={true}
+            onReorderIngredients={handleReorderIngredients}
           />
         )}
 
@@ -443,6 +482,115 @@ interface RecipeFormContentProps {
     field: keyof Ingredient,
     value: string | number | null
   ) => void
+  isEditing: boolean
+  onReorderIngredients: (event: DragEndEvent) => void
+}
+
+// Sortable ingredient row component
+function SortableIngredientRow({
+  ingredient,
+  index,
+  onRemoveIngredient,
+  onIngredientChange,
+  ingredients,
+  isEditing,
+}: {
+  ingredient: Ingredient
+  index: number
+  onRemoveIngredient: (index: number) => void
+  onIngredientChange: (
+    index: number,
+    field: keyof Ingredient,
+    value: string | number | null
+  ) => void
+  ingredients: Ingredient[]
+  isEditing: boolean
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: index.toString() })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex gap-2 items-center ${isDragging ? "z-50" : ""}`}
+    >
+      {isEditing && (
+        <button
+          type="button"
+          className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      )}
+      <Input
+        className="flex-1"
+        placeholder="Ingredient"
+        value={ingredient.item}
+        onChange={(e) =>
+          onIngredientChange(index, "item", e.target.value)
+        }
+      />
+      <Input
+        className="w-20"
+        type="number"
+        step="0.25"
+        placeholder="Amt"
+        value={ingredient.amount ?? ""}
+        onChange={(e) =>
+          onIngredientChange(
+            index,
+            "amount",
+            e.target.value ? parseFloat(e.target.value) : null
+          )
+        }
+      />
+      <Input
+        className="w-24"
+        placeholder="Unit"
+        value={ingredient.unit}
+        onChange={(e) =>
+          onIngredientChange(index, "unit", e.target.value)
+        }
+      />
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => onRemoveIngredient(index)}
+        disabled={ingredients.length === 1}
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+
+// Drag overlay for ingredient
+function IngredientDragOverlay({ ingredient }: { ingredient: Ingredient }) {
+  return (
+    <div className="flex gap-2 items-center bg-card border rounded-lg p-2 shadow-lg">
+      <GripVertical className="h-4 w-4 text-muted-foreground" />
+      <span className="flex-1 text-sm">
+        {ingredient.amount && ingredient.unit
+          ? `${ingredient.amount} ${ingredient.unit} ${ingredient.item}`
+          : ingredient.item || "Ingredient"}
+      </span>
+    </div>
+  )
 }
 
 function RecipeFormContent({
@@ -463,7 +611,31 @@ function RecipeFormContent({
   onAddIngredient,
   onRemoveIngredient,
   onIngredientChange,
+  isEditing,
+  onReorderIngredients,
 }: RecipeFormContentProps) {
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveId(null)
+    onReorderIngredients(event)
+  }
+
+  const activeIngredient = activeId
+    ? ingredients[parseInt(activeId)]
+    : null
+
+  const ingredientIds = ingredients.map((_, i) => i.toString())
   return (
     <div className="space-y-6 py-4">
       {/* Name */}
@@ -521,59 +693,101 @@ function RecipeFormContent({
       {/* Ingredients */}
       <div className="space-y-2">
         <Label>Ingredients</Label>
-        <div className="space-y-2">
-          {ingredients.map((ingredient, index) => (
-            <div key={index} className="flex gap-2">
-              <Input
-                className="flex-1"
-                placeholder="Ingredient"
-                value={ingredient.item}
-                onChange={(e) =>
-                  onIngredientChange(index, "item", e.target.value)
-                }
-              />
-              <Input
-                className="w-20"
-                type="number"
-                step="0.25"
-                placeholder="Amt"
-                value={ingredient.amount ?? ""}
-                onChange={(e) =>
-                  onIngredientChange(
-                    index,
-                    "amount",
-                    e.target.value ? parseFloat(e.target.value) : null
-                  )
-                }
-              />
-              <Input
-                className="w-24"
-                placeholder="Unit"
-                value={ingredient.unit}
-                onChange={(e) =>
-                  onIngredientChange(index, "unit", e.target.value)
-                }
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onRemoveIngredient(index)}
-                disabled={ingredients.length === 1}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onAddIngredient}
-            className="w-full"
+        {isEditing ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Ingredient
-          </Button>
-        </div>
+            <SortableContext
+              items={ingredientIds}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-2">
+                {ingredients.map((ingredient, index) => (
+                  <SortableIngredientRow
+                    key={index}
+                    ingredient={ingredient}
+                    index={index}
+                    onRemoveIngredient={onRemoveIngredient}
+                    onIngredientChange={onIngredientChange}
+                    ingredients={ingredients}
+                    isEditing={isEditing}
+                  />
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onAddIngredient}
+                  className="w-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Ingredient
+                </Button>
+              </div>
+            </SortableContext>
+            <DragOverlay>
+              {activeIngredient ? (
+                <IngredientDragOverlay ingredient={activeIngredient} />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <div className="space-y-2">
+            {ingredients.map((ingredient, index) => (
+              <div key={index} className="flex gap-2">
+                <Input
+                  className="flex-1"
+                  placeholder="Ingredient"
+                  value={ingredient.item}
+                  onChange={(e) =>
+                    onIngredientChange(index, "item", e.target.value)
+                  }
+                />
+                <Input
+                  className="w-20"
+                  type="number"
+                  step="0.25"
+                  placeholder="Amt"
+                  value={ingredient.amount ?? ""}
+                  onChange={(e) =>
+                    onIngredientChange(
+                      index,
+                      "amount",
+                      e.target.value ? parseFloat(e.target.value) : null
+                    )
+                  }
+                />
+                <Input
+                  className="w-24"
+                  placeholder="Unit"
+                  value={ingredient.unit}
+                  onChange={(e) =>
+                    onIngredientChange(index, "unit", e.target.value)
+                  }
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onRemoveIngredient(index)}
+                  disabled={ingredients.length === 1}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAddIngredient}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Ingredient
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Instructions */}

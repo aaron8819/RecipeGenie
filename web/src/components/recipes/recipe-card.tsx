@@ -44,10 +44,10 @@ export function RecipeCard({
   if (viewMode === "list") {
     return (
       <Card
-        className="group cursor-pointer hover:shadow-md transition-shadow animate-fade-in"
+        className="group cursor-pointer hover:shadow-md transition-shadow animate-fade-in overflow-hidden w-full"
         onClick={() => onClick?.(recipe)}
       >
-        <div className="flex items-center gap-4 p-4">
+        <div className="flex items-center gap-2 sm:gap-4 p-3 sm:p-4">
           {/* Favorite Button - Always Visible */}
           <Button
             variant="ghost"
@@ -69,10 +69,10 @@ export function RecipeCard({
           </Button>
 
           {/* Content */}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-base line-clamp-1 mb-1 w-full">{recipe.name}</h3>
-            <div className="flex items-center gap-2 flex-wrap text-xs">
-              <span className={cn("capitalize", getTagClassName(recipe.category, true))}>
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <h3 className="font-semibold text-base line-clamp-1 mb-1">{recipe.name}</h3>
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs">
+              <span className={cn("capitalize whitespace-nowrap", getTagClassName(recipe.category, true))}>
                 {recipe.category}
               </span>
               {recipe.tags?.slice(0, 2).map((tag) => (
@@ -84,6 +84,7 @@ export function RecipeCard({
                     onTagClick?.(tag)
                   }}
                   className={cn(
+                    "whitespace-nowrap",
                     getTagClassName(tag, false),
                     onTagClick && "cursor-pointer hover:opacity-80 transition-opacity"
                   )}
@@ -93,7 +94,7 @@ export function RecipeCard({
                 </button>
               ))}
               {timesMade > 0 && (
-                <span className="text-muted-foreground">
+                <span className="text-muted-foreground whitespace-nowrap">
                   Made {timesMade}x
                   {lastMade && ` · Last: ${new Date(lastMade).toLocaleDateString()}`}
                 </span>
@@ -102,7 +103,7 @@ export function RecipeCard({
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             {onMarkAsMade && (
               <Button
                 variant="outline"
@@ -112,7 +113,7 @@ export function RecipeCard({
                   onMarkAsMade?.(recipe)
                 }}
                 disabled={isMarkingAsMade}
-                className="text-green-700 hover:text-green-800 hover:bg-green-50"
+                className="text-green-700 hover:text-green-800 hover:bg-green-50 p-2"
                 title="Mark as Made"
               >
                 {isMarkingAsMade ? (
@@ -130,7 +131,7 @@ export function RecipeCard({
                 onAddToShoppingList?.(recipe)
               }}
               disabled={isAddingToShoppingList}
-              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 p-2"
               title="Add to Shopping List"
             >
               {isAddingToShoppingList ? (
@@ -147,7 +148,7 @@ export function RecipeCard({
                 onAddToPlan?.(recipe)
               }}
               disabled={isAddingToPlan}
-              className="text-sage-700 hover:text-sage-800 hover:bg-sage-50"
+              className="text-sage-700 hover:text-sage-800 hover:bg-sage-50 p-2"
               title="Add to Meal Plan"
             >
               {isAddingToPlan ? (
@@ -163,6 +164,7 @@ export function RecipeCard({
                 e.stopPropagation()
                 onClick?.(recipe)
               }}
+              className="h-8 w-8"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -180,19 +182,20 @@ export function RecipeCard({
         "border-2 border-amber-200/50 hover:border-terracotta-300/60",
         "shadow-md hover:shadow-xl hover:-translate-y-1",
         "bg-gradient-to-br from-white to-amber-50/30",
+        "overflow-hidden w-full",
         recipe.favorite && "ring-2 ring-terracotta-200/50 border-terracotta-300/70"
       )}
       onClick={() => onClick?.(recipe)}
     >
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <CardTitle className="text-lg line-clamp-2 pr-8 font-bold leading-tight">
+      <CardHeader className="pb-3 p-4 sm:p-6">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-lg line-clamp-2 pr-8 font-bold leading-tight min-w-0 flex-1">
             {recipe.name}
           </CardTitle>
           <Button
             variant="ghost"
             size="icon"
-            className="absolute top-2 right-2 h-9 w-9 rounded-full transition-all hover:bg-red-50"
+            className="absolute top-2 right-2 h-9 w-9 rounded-full transition-all hover:bg-red-50 flex-shrink-0"
             onClick={(e) => {
               e.stopPropagation()
               onToggleFavorite?.(recipe)
@@ -209,9 +212,9 @@ export function RecipeCard({
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-4 sm:p-6 pt-0">
             <div className="flex items-center gap-2 flex-wrap mb-4">
-              <span className={cn("capitalize text-sm font-semibold px-3 py-1.5 rounded-lg", getTagClassName(recipe.category, true))}>
+              <span className={cn("capitalize text-sm font-semibold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg whitespace-nowrap", getTagClassName(recipe.category, true))}>
                 {recipe.category}
               </span>
               {recipe.tags && recipe.tags.length > 0 && (
@@ -225,7 +228,7 @@ export function RecipeCard({
                         onTagClick?.(tag)
                       }}
                       className={cn(
-                        "text-sm font-semibold px-3 py-1.5 rounded-lg",
+                        "text-sm font-semibold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg whitespace-nowrap",
                         getTagClassName(tag, false),
                         onTagClick && "cursor-pointer hover:opacity-80 transition-opacity"
                       )}
@@ -239,9 +242,9 @@ export function RecipeCard({
             </div>
 
             {timesMade > 0 && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-6">
-                <Clock className="h-4 w-4" />
-                <span>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 sm:mb-6">
+                <Clock className="h-4 w-4 flex-shrink-0" />
+                <span className="min-w-0 break-words">
                   Made {timesMade} time{timesMade !== 1 ? "s" : ""}
                   {lastMade && ` · Last: ${new Date(lastMade).toLocaleDateString()}`}
                 </span>
@@ -249,12 +252,12 @@ export function RecipeCard({
             )}
 
             {/* Actions - Visible on mobile, hover-reveal on desktop */}
-            <div className="flex gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
+            <div className="flex flex-wrap gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
               {onMarkAsMade && (
                 <Button
                   variant="outline"
                   size="sm"
-                  className="flex-1 sm:flex-initial text-green-700 hover:text-green-800 hover:bg-green-50 border-green-200"
+                  className="text-green-700 hover:text-green-800 hover:bg-green-50 border-green-200"
                   onClick={(e) => {
                     e.stopPropagation()
                     onMarkAsMade?.(recipe)
@@ -265,17 +268,14 @@ export function RecipeCard({
                   {isMarkingAsMade ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <>
-                      <Check className="h-3.5 w-3.5 mr-1.5 sm:mr-0" />
-                      <span className="sm:hidden">Mark Made</span>
-                    </>
+                    <Check className="h-3.5 w-3.5" />
                   )}
                 </Button>
               )}
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 sm:flex-initial text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200"
+                className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200"
                 onClick={(e) => {
                   e.stopPropagation()
                   onAddToShoppingList?.(recipe)
@@ -286,16 +286,13 @@ export function RecipeCard({
                 {isAddingToShoppingList ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <>
-                    <ShoppingCart className="h-3.5 w-3.5 mr-1.5 sm:mr-0" />
-                    <span className="sm:hidden">Add to Cart</span>
-                  </>
+                  <ShoppingCart className="h-3.5 w-3.5" />
                 )}
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 sm:flex-initial text-sage-700 hover:text-sage-800 hover:bg-sage-50 border-sage-200"
+                className="text-sage-700 hover:text-sage-800 hover:bg-sage-50 border-sage-200"
                 onClick={(e) => {
                   e.stopPropagation()
                   onAddToPlan?.(recipe)
@@ -306,10 +303,7 @@ export function RecipeCard({
                 {isAddingToPlan ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <>
-                    <CalendarPlus className="h-3.5 w-3.5 mr-1.5 sm:mr-0" />
-                    <span className="sm:hidden">Add to Plan</span>
-                  </>
+                  <CalendarPlus className="h-3.5 w-3.5" />
                 )}
               </Button>
             </div>

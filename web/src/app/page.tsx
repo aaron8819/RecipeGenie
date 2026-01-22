@@ -168,7 +168,7 @@ export default function Home() {
         onSignUpClick={handleSignUpClick}
       />
 
-      <div className="container mx-auto px-4 py-4">
+      <div className="container mx-auto px-4 py-4 max-w-full overflow-x-hidden">
         {activeTab === "recipes" && <RecipeList />}
         {activeTab === "planner" && <MealPlanner />}
         {activeTab === "pantry" && <PantryList />}
