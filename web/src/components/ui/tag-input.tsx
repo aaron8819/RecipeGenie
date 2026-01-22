@@ -31,13 +31,14 @@ export function TagInput({
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Get available tags (from tagCounts if available, otherwise from suggestions)
-  const availableTags = tagCounts 
-    ? tagCounts.map(tc => tc.tag)
-    : suggestions
+  // Filter out any undefined/null/non-string values
+  const availableTags = (tagCounts 
+    ? tagCounts.map(tc => tc.tag).filter((tag): tag is string => typeof tag === 'string' && tag.trim() !== '')
+    : suggestions.filter((tag): tag is string => typeof tag === 'string' && tag.trim() !== ''))
 
   // Create a map of tag to count for quick lookup
   const tagCountMap = tagCounts 
-    ? new Map(tagCounts.map(tc => [tc.tag, tc.count]))
+    ? new Map(tagCounts.filter(tc => typeof tc.tag === 'string').map(tc => [tc.tag, tc.count]))
     : new Map<string, number>()
 
   // Filter suggestions based on input and exclude already selected tags

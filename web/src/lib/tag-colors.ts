@@ -67,8 +67,8 @@ export function getTagColor(
   tag: string | null | undefined,
   isCategory: boolean = false
 ): { bg: string; text: string } {
-  // Handle null/undefined tags
-  if (!tag) {
+  // Handle null/undefined/non-string tags
+  if (!tag || typeof tag !== 'string') {
     return {
       bg: "bg-gray-100",
       text: "text-gray-700",

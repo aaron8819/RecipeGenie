@@ -20,6 +20,8 @@ import {
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
 import { useRecipeHistory } from "@/hooks/use-planner"
+import { useAddToShoppingList } from "@/hooks/use-shopping"
+import { useUndoToast } from "@/hooks/use-undo-toast"
 import type { Recipe, RecipeHistory } from "@/types/database"
 
 interface RecipeStats {
@@ -63,6 +65,13 @@ function sortRecipes(
     const statsA = statsMap.get(a.id)
     const statsB = statsMap.get(b.id)
 
+    // Helper to safely compare names
+    const compareNames = (nameA: string | undefined, nameB: string | undefined) => {
+      const safeA = nameA || ""
+      const safeB = nameB || ""
+      return safeA.localeCompare(safeB)
+    }
+
     switch (sortBy) {
       case "timesMade": {
         const timesMadeA = statsA?.timesMade ?? 0
@@ -70,22 +79,22 @@ function sortRecipes(
         if (timesMadeA !== timesMadeB) {
           return timesMadeB - timesMadeA
         }
-        return a.name.localeCompare(b.name)
+        return compareNames(a.name, b.name)
       }
       case "lastMade": {
         const lastMadeA = statsA?.lastMade
         const lastMadeB = statsB?.lastMade
-        if (!lastMadeA && !lastMadeB) return a.name.localeCompare(b.name)
+        if (!lastMadeA && !lastMadeB) return compareNames(a.name, b.name)
         if (!lastMadeA) return 1
         if (!lastMadeB) return -1
         return new Date(lastMadeB).getTime() - new Date(lastMadeA).getTime()
       }
       case "name":
-        return a.name.localeCompare(b.name)
+        return compareNames(a.name, b.name)
       case "newest":
         // Assuming recipes have created_at or we use id as proxy
         // If you have created_at in your Recipe type, use that instead
-        return b.id.localeCompare(a.id)
+        return (b.id || "").localeCompare(a.id || "")
       default:
         return 0
     }
@@ -113,6 +122,7 @@ export function RecipeList() {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
   const [addToPlanRecipe, setAddToPlanRecipe] = useState<Recipe | null>(null)
+  const [addingToShoppingListId, setAddingToShoppingListId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false)
   const [isTagManagementOpen, setIsTagManagementOpen] = useState(false)
@@ -129,6 +139,8 @@ export function RecipeList() {
   const { data: history } = useRecipeHistory()
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
+  const addToShoppingList = useAddToShoppingList()
+  const { show: showToast } = useUndoToast()
 
   // Build a map of recipe_id -> stats (last made + times made)
   const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
@@ -153,6 +165,27 @@ export function RecipeList() {
   const handleDelete = async (recipe: Recipe) => {
     if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
       await deleteRecipe.mutateAsync(recipe.id)
+    }
+  }
+
+  const handleAddToShoppingList = async (recipe: Recipe) => {
+    setAddingToShoppingListId(recipe.id)
+    try {
+      const result = await addToShoppingList.mutateAsync({
+        recipeIds: [recipe.id],
+        scale: 1.0,
+      })
+      
+      const itemCount = result.added + result.merged
+      showToast({
+        message: `Added ${itemCount} ingredient${itemCount !== 1 ? "s" : ""} from "${recipe.name}" to shopping list`,
+      })
+    } catch (error) {
+      showToast({
+        message: error instanceof Error ? error.message : "Failed to add ingredients to shopping list",
+      })
+    } finally {
+      setAddingToShoppingListId(null)
     }
   }
 
@@ -440,6 +473,7 @@ export function RecipeList() {
                       toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
                     }
                     onAddToPlan={setAddToPlanRecipe}
+                    onAddToShoppingList={handleAddToShoppingList}
                     onClick={setViewingRecipe}
                     onTagClick={(tag) => {
                       if (!selectedTags.includes(tag)) {
@@ -448,6 +482,7 @@ export function RecipeList() {
                     }}
                     lastMade={stats?.lastMade ?? null}
                     timesMade={stats?.timesMade ?? 0}
+                    isAddingToShoppingList={addingToShoppingListId === recipe.id}
                   />
                 </div>
               )

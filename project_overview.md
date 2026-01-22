@@ -259,9 +259,36 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-21 (v2.5.0)*
+*Last updated: 2026-01-23 (v2.7.0)*
 
-## Recent Updates (v2.5.0)
+## Recent Updates (v2.7.0)
+
+### Enhanced Shopping List Workflow
+- **Checked States**: Items can be checked off while remaining in the shopping list (toggleable checked state with strikethrough)
+- **Category Auto-Collapse**: Categories automatically collapse when all items are checked off
+- **Complete Shopping Button**: Appears when all items are checked - clears list for clean slate
+- **Pantry Integration**: "Got it" section renamed to "Pantry", items clickable to add back to shopping list
+- **Add to Pantry**: New button to add items to pantry directly from shopping list (removes from list)
+- **Recipe Tag Navigation**: Recipe source tags in shopping list are now clickable to view recipe details
+- **Excluded Items Clarity**: Excluded items now display the matching keyword for better visibility
+
+## Previous Updates (v2.6.1)
+
+### Recipe Card Design Refinements
+- **Icon-Only Buttons**: Buttons in calendar and category views are now icon-only for cleaner design
+- **Circular Category Badges**: Category tags converted to circular badges showing only first letter
+- **Improved Layout**: Better button spacing and visual hierarchy in recipe cards
+- **Clickable Cards**: Category view cards are now clickable to open recipe detail modal
+
+## Previous Updates (v2.6.0)
+
+### Shopping List Refactor
+- **Unit Normalization**: All units normalized to lowercase canonical form for consistent merging
+- **Unified Merging Logic**: Single source of truth for item merging eliminates code duplication
+- **Comprehensive Test Suite**: 28 tests covering unit normalization, item merging, and shopping list generation
+- **Recipe Source Tracking**: Sources now include both `recipeId` and `recipeName` for better tracking
+
+## Previous Updates (v2.5.0)
 
 ### Planner Settings for Day Placement
 - **Excluded Days**: Configure which days of the week to exclude from automatic meal placement

@@ -1,6 +1,6 @@
 "use client"
 
-import { Heart, Trash2, Clock, CalendarPlus, Loader2, ChevronRight } from "lucide-react"
+import { Heart, Trash2, Clock, CalendarPlus, Loader2, ChevronRight, ShoppingCart } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import type { Recipe } from "@/types/database"
@@ -13,11 +13,13 @@ interface RecipeCardProps {
   onDelete?: (recipe: Recipe) => void
   onToggleFavorite?: (recipe: Recipe) => void
   onAddToPlan?: (recipe: Recipe) => void
+  onAddToShoppingList?: (recipe: Recipe) => void
   onClick?: (recipe: Recipe) => void
   onTagClick?: (tag: string) => void
   lastMade?: string | null
   timesMade?: number
   isAddingToPlan?: boolean
+  isAddingToShoppingList?: boolean
 }
 
 export function RecipeCard({
@@ -26,11 +28,13 @@ export function RecipeCard({
   onDelete,
   onToggleFavorite,
   onAddToPlan,
+  onAddToShoppingList,
   onClick,
   onTagClick,
   lastMade,
   timesMade = 0,
   isAddingToPlan = false,
+  isAddingToShoppingList = false,
 }: RecipeCardProps) {
   // List view
   if (viewMode === "list") {
@@ -100,10 +104,28 @@ export function RecipeCard({
               size="sm"
               onClick={(e) => {
                 e.stopPropagation()
+                onAddToShoppingList?.(recipe)
+              }}
+              disabled={isAddingToShoppingList}
+              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+              title="Add to Shopping List"
+            >
+              {isAddingToShoppingList ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShoppingCart className="h-4 w-4" />
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
                 onAddToPlan?.(recipe)
               }}
               disabled={isAddingToPlan}
               className="text-sage-700 hover:text-sage-800 hover:bg-sage-50"
+              title="Add to Meal Plan"
             >
               {isAddingToPlan ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -202,6 +224,26 @@ export function RecipeCard({
 
         {/* Actions - Visible on mobile, hover-reveal on desktop */}
         <div className="flex gap-2 mt-3 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 sm:flex-initial text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAddToShoppingList?.(recipe)
+            }}
+            disabled={isAddingToShoppingList}
+            title="Add to Shopping List"
+          >
+            {isAddingToShoppingList ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                <ShoppingCart className="h-3.5 w-3.5 mr-1.5 sm:mr-0" />
+                <span className="sm:hidden">Add to Cart</span>
+              </>
+            )}
+          </Button>
           <Button
             variant="outline"
             size="sm"

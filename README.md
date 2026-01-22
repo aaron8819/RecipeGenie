@@ -134,6 +134,11 @@ The app includes an auth callback route at `/auth/callback` that handles email c
      - Recognizes common section headers: "Ingredients", "Instructions", "Directions", "Method", "Steps"
 4. Click "Save Recipe"
 
+**Quick Actions from Recipe Cards:**
+- Click the shopping cart icon (🛒) to add a recipe's ingredients directly to your shopping list
+- Click the calendar icon (📅) to add a recipe to your meal plan
+- Click any recipe card to view full recipe details
+
 ### Managing Recipe Categories
 
 1. Click "My Recipes" tab
@@ -183,6 +188,7 @@ After generating a meal plan, the shopping list shows:
 - **Complete Shopping**: Button appears when all items are checked - clears list for clean slate
 - **Pantry integration**: Add items to pantry directly from shopping list (removes from list)
 - **Recipe tag navigation**: Click recipe source tags to view recipe details and edit recipes
+- **Add recipes directly**: Use the shopping cart icon on any recipe card to add its ingredients to your shopping list
 - Drag and drop to reorder items manually
 - Add items manually to your list
 - Add meal plan ingredients to existing lists (merges quantities)

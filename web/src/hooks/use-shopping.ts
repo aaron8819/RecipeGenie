@@ -1314,9 +1314,20 @@ export function useAddToPantryAndRemove() {
 
       if (isGuest) {
         const current = getGuestList(queryClient)
-        // Remove from shopping list
+        // Remove from shopping list items
         const updatedItems = current.items.filter((i) => i.item.toLowerCase() !== normalizedItem)
-        setGuestList(queryClient, { items: updatedItems })
+        // Add to already_have (preserving all item properties)
+        const alreadyHave = current.already_have || []
+        // Check if item already exists in already_have
+        const existingInAlreadyHave = alreadyHave.find((i) => i.item.toLowerCase() === normalizedItem)
+        const updatedAlreadyHave = existingInAlreadyHave
+          ? alreadyHave // Item already in already_have, keep as is
+          : [...alreadyHave, item] // Add item to already_have
+        
+        setGuestList(queryClient, { 
+          items: updatedItems,
+          already_have: updatedAlreadyHave,
+        })
         // Note: In guest mode, pantry items aren't persisted, so we just remove from list
         return { itemName: normalizedItem }
       }
@@ -1335,21 +1346,32 @@ export function useAddToPantryAndRemove() {
         throw pantryError
       }
 
-      // Remove from shopping list
+      // Remove from shopping list items and add to already_have
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
-        .select("items")
+        .select("items, already_have")
         .single()
 
       if (fetchError) throw fetchError
 
       const currentItems = (currentList?.items as ShoppingItem[]) || []
+      const alreadyHave = (currentList?.already_have as ShoppingItem[]) || []
+      
+      // Remove from items
       const updatedItems = currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem)
+      
+      // Add to already_have (preserving all item properties)
+      // Check if item already exists in already_have
+      const existingInAlreadyHave = alreadyHave.find((i) => i.item.toLowerCase() === normalizedItem)
+      const updatedAlreadyHave = existingInAlreadyHave
+        ? alreadyHave // Item already in already_have, keep as is
+        : [...alreadyHave, item] // Add item to already_have
 
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({
           items: updatedItems,
+          already_have: updatedAlreadyHave,
         })
         .eq("user_id", user?.id)
 
@@ -1368,14 +1390,22 @@ export function useAddToPantryAndRemove() {
 
       const normalizedItem = item.item.toLowerCase().trim()
 
-      // Optimistically remove from shopping list
+      // Optimistically remove from shopping list items and add to already_have
       queryClient.setQueryData<ShoppingList>(
         [...SHOPPING_KEY, isGuest],
         (old) => {
           if (!old) return old
+          const alreadyHave = old.already_have || []
+          // Check if item already exists in already_have
+          const existingInAlreadyHave = alreadyHave.find((i) => i.item.toLowerCase() === normalizedItem)
+          const updatedAlreadyHave = existingInAlreadyHave
+            ? alreadyHave // Item already in already_have, keep as is
+            : [...alreadyHave, item] // Add item to already_have
+          
           return {
             ...old,
             items: old.items.filter((i) => i.item.toLowerCase() !== normalizedItem),
+            already_have: updatedAlreadyHave,
           }
         }
       )

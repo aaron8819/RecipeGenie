@@ -105,7 +105,11 @@ export function useRecipes(options?: {
           return options.tags!.some((tag) => recipe.tags!.includes(tag))
         })
       }
-      return recipes.sort((a, b) => a.name.localeCompare(b.name))
+      return recipes.sort((a, b) => {
+        const nameA = a.name || ""
+        const nameB = b.name || ""
+        return nameA.localeCompare(nameB)
+      })
     } : undefined,
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
@@ -211,9 +215,19 @@ export function useCreateRecipe() {
       }
 
       // Optimistically add to all recipe queries
-      queryClient.setQueriesData<Recipe[]>(
+      queryClient.setQueriesData<Recipe[] | Recipe | null>(
         { queryKey: RECIPES_KEY },
-        (old) => old ? [...old, optimisticRecipe].sort((a, b) => a.name.localeCompare(b.name)) : [optimisticRecipe]
+        (old) => {
+          if (Array.isArray(old)) {
+            return [...old, optimisticRecipe].sort((a, b) => {
+              const nameA = a.name || ""
+              const nameB = b.name || ""
+              return nameA.localeCompare(nameB)
+            })
+          }
+          // For single recipe queries, don't modify them
+          return old
+        }
       )
 
       return { previousQueries }
@@ -228,13 +242,23 @@ export function useCreateRecipe() {
     },
     onSuccess: (newRecipe) => {
       // Update with server response (replace optimistic with real data)
-      queryClient.setQueriesData<Recipe[]>(
+      queryClient.setQueriesData<Recipe[] | Recipe | null>(
         { queryKey: RECIPES_KEY },
         (old) => {
-          if (!old) return [newRecipe]
-          // Replace optimistic recipe with server response
-          const filtered = old.filter((r) => r.id !== newRecipe.id)
-          return [...filtered, newRecipe].sort((a, b) => a.name.localeCompare(b.name))
+          if (Array.isArray(old)) {
+            // Replace optimistic recipe with server response
+            const filtered = old.filter((r) => r.id !== newRecipe.id)
+            return [...filtered, newRecipe].sort((a, b) => {
+              const nameA = a.name || ""
+              const nameB = b.name || ""
+              return nameA.localeCompare(nameB)
+            })
+          }
+          // For single recipe queries, update if it matches
+          if (old && typeof old === 'object' && 'id' in old && (old as Recipe).id === newRecipe.id) {
+            return newRecipe
+          }
+          return old
         }
       )
       // Invalidate tags queries to refresh tag lists
