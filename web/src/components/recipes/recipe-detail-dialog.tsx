@@ -68,9 +68,11 @@ export function RecipeDetailDialog({
 
           {/* Meta info: Tags and servings in a more spacious layout */}
           <div className="flex items-center gap-3 flex-wrap">
-            <span className={cn("capitalize text-sm font-medium px-2.5 py-1 rounded-md", getTagClassName(recipe.category, true))}>
-              {recipe.category}
-            </span>
+            {recipe.category && (
+              <span className={cn("capitalize text-sm font-medium px-2.5 py-1 rounded-md", getTagClassName(recipe.category, true))}>
+                {recipe.category}
+              </span>
+            )}
             {recipe.tags && recipe.tags.length > 0 && (
               <>
                 {recipe.tags.map((tag) => (

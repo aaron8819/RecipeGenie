@@ -282,17 +282,32 @@ export function isExcludedIngredient(
   itemName: string,
   excludedKeywords: string[]
 ): boolean {
+  return getExcludedKeyword(itemName, excludedKeywords) !== null
+}
+
+/**
+ * Get the excluded keyword that matches an ingredient, if any.
+ * Uses word boundaries to avoid false positives.
+ *
+ * @param itemName - The ingredient name to check
+ * @param excludedKeywords - List of keywords to exclude
+ * @returns The matching keyword, or null if no match
+ */
+export function getExcludedKeyword(
+  itemName: string,
+  excludedKeywords: string[]
+): string | null {
   const itemLower = itemName.toLowerCase()
 
   for (const keyword of excludedKeywords) {
     // Use word boundaries to match whole words only
     const pattern = new RegExp(`\\b${escapeRegex(keyword.toLowerCase())}\\b`)
     if (pattern.test(itemLower)) {
-      return true
+      return keyword
     }
   }
 
-  return false
+  return null
 }
 
 /**

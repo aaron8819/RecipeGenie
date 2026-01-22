@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
-import { Plus, Trash2, Package, Ban, Check, CheckCheck, Copy, GripVertical, X, Settings, Loader2 } from "lucide-react"
+import { Plus, Trash2, Package, Ban, Check, CheckCheck, Copy, GripVertical, X, Settings, Loader2, ChevronDown, ChevronUp } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -41,16 +41,20 @@ import {
   useUpdateItemCategory,
   useShoppingConfig,
   useUpdateShoppingConfig,
+  useAddToPantryAndRemove,
 } from "@/hooks/use-shopping"
 import { SHOPPING_CATEGORIES, getAllShoppingCategories, getCategoryByKey } from "@/lib/shopping-categories"
 import { getDefaultShoppingList } from "@/lib/guest-storage"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
-import type { ShoppingItem, ShoppingList } from "@/types/database"
+import type { ShoppingItem, ShoppingList, Recipe } from "@/types/database"
 import { toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
+import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
+import { RecipeDialog } from "@/components/recipes/recipe-dialog"
+import { useRecipe, useRecipes, useCategories } from "@/hooks/use-recipes"
 
 // Color palette for recipe source tags (excluding grey which is reserved for Manual)
 const RECIPE_COLORS = [
@@ -78,10 +82,14 @@ function getColorIndex(str: string): number {
 // Source tag component (for item rows) - with tap-to-expand for truncated names
 function SourceTag({
   recipeName,
-  colorIndex
+  recipeId,
+  colorIndex,
+  onClick
 }: {
   recipeName: string
+  recipeId?: string
   colorIndex?: number
+  onClick?: () => void
 }) {
   const isManual = recipeName === "Manual"
 
@@ -100,9 +108,14 @@ function SourceTag({
   const isTruncated = recipeName.length > 20
   const displayName = isTruncated ? recipeName.slice(0, 18) + "…" : recipeName
 
+  const baseClasses = `inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`
+  const clickableClasses = onClick ? "cursor-pointer hover:opacity-80 active:opacity-70 transition-opacity" : "cursor-default"
+
   const tagContent = (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border cursor-default ${colors.bg} ${colors.text} ${colors.border}`}
+      className={`${baseClasses} ${clickableClasses}`}
+      onClick={onClick}
+      title={onClick ? `Click to view ${recipeName}` : recipeName}
     >
       {displayName}
     </span>
@@ -118,14 +131,27 @@ function SourceTag({
     <Popover>
       <PopoverTrigger asChild>
         <span
-          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border cursor-pointer ${colors.bg} ${colors.text} ${colors.border}`}
+          className={`${baseClasses} cursor-pointer`}
           title={recipeName}
         >
           {displayName}
         </span>
       </PopoverTrigger>
       <PopoverContent side="top" className="text-sm p-2 w-auto max-w-[200px]">
-        {recipeName}
+        <div className="flex items-center gap-2">
+          <span>{recipeName}</span>
+          {onClick && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onClick()
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              View recipe
+            </button>
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   )
@@ -173,8 +199,11 @@ function SwipeableItem({
   item,
   onCheckOff,
   onRemove,
+  onAddToPantry,
+  onRecipeTagClick,
   isCheckingOff,
   isRemoving,
+  isAddingToPantry,
   recipeColorMap,
   dragHandleProps,
   dragStyle,
@@ -184,22 +213,26 @@ function SwipeableItem({
   item: ShoppingItem
   onCheckOff: () => void
   onRemove: () => void
+  onAddToPantry: () => void
+  onRecipeTagClick: (recipeId: string | undefined, recipeName: string) => void
   isCheckingOff: boolean
   isRemoving: boolean
+  isAddingToPantry: boolean
   recipeColorMap: Map<string, number>
   dragHandleProps?: any
   dragStyle?: React.CSSProperties
   isDragging?: boolean
   showSwipeHint?: boolean
 }) {
+  const isChecked = item.checked || false
   const [swipeOffset, setSwipeOffset] = useState(0)
   const [isSwiping, setIsSwiping] = useState(false)
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
   const touchStartTime = useRef<number | null>(null)
   const itemRef = useRef<HTMLDivElement>(null)
-  const SWIPE_THRESHOLD = 100 // Minimum swipe distance to reveal delete
-  const DELETE_THRESHOLD = 150 // Distance to trigger delete
+      const SWIPE_THRESHOLD = 100 // Minimum swipe distance to reveal buttons
+      const DELETE_THRESHOLD = 150 // Distance to trigger delete (not used with two buttons)
   const SWIPE_VELOCITY_THRESHOLD = 0.5 // Minimum velocity for quick swipe
   const MIN_SWIPE_DISTANCE = 20 // Minimum distance before tracking
   const MAX_VERTICAL_DEVIATION = 30 // Max vertical movement allowed
@@ -331,13 +364,10 @@ function SwipeableItem({
     const timeElapsed = Date.now() - touchStartTime.current
     const velocity = timeElapsed > 0 ? swipeOffset / timeElapsed : 0
 
-    // Trigger delete if swiped far enough or with enough velocity
-    if (swipeOffset >= DELETE_THRESHOLD || (swipeOffset >= SWIPE_THRESHOLD && velocity > SWIPE_VELOCITY_THRESHOLD)) {
-      onRemove()
-      setSwipeOffset(0)
-    } else if (swipeOffset >= SWIPE_THRESHOLD) {
-      // Reveal delete button
-      setSwipeOffset(100) // Slightly increased reveal distance
+    // Reveal buttons if swiped far enough
+    if (swipeOffset >= SWIPE_THRESHOLD) {
+      // Reveal action buttons (pantry + delete)
+      setSwipeOffset(160) // Reveal both buttons
     } else {
       // Snap back
       setSwipeOffset(0)
@@ -381,20 +411,33 @@ function SwipeableItem({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Delete button (revealed on swipe) */}
+      {/* Action buttons (revealed on swipe) - mobile only */}
       <div
-        className="absolute right-0 top-0 bottom-0 flex items-center bg-destructive px-4 transition-transform duration-200 ease-out md:hidden"
+        className="absolute right-0 top-0 bottom-0 flex items-center gap-2 px-2 transition-transform duration-200 ease-out md:hidden"
         style={{
           transform: `translateX(${swipeOffset > 0 ? 0 : 100}%)`,
-          width: '80px',
+          width: '160px',
           willChange: isSwiping ? 'transform' : 'auto',
         }}
       >
         <button
           type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onAddToPantry()
+            setSwipeOffset(0)
+          }}
+          disabled={isAddingToPantry}
+          className="h-11 w-11 rounded-full bg-sage-500/90 flex items-center justify-center text-white disabled:opacity-50"
+          aria-label="Add to pantry"
+        >
+          <Package className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
           onClick={handleDeleteClick}
           disabled={isRemoving}
-          className="h-11 w-11 rounded-full bg-white/20 flex items-center justify-center text-white disabled:opacity-50"
+          className="h-11 w-11 rounded-full bg-destructive/90 flex items-center justify-center text-white disabled:opacity-50"
           aria-label="Delete item"
         >
           <Trash2 className="h-5 w-5" />
@@ -435,20 +478,24 @@ function SwipeableItem({
             data-checkbox="true"
             onClick={onCheckOff}
             disabled={isCheckingOff}
-            className="w-6 h-6 md:w-5 md:h-5 rounded border-2 border-sage-300 flex items-center justify-center transition-all hover:border-sage-500 hover:bg-sage-100 active:bg-sage-200 active:scale-95 flex-shrink-0"
-            aria-label="Check off item"
+            className={`w-6 h-6 md:w-5 md:h-5 rounded border-2 flex items-center justify-center transition-all active:scale-95 flex-shrink-0 ${
+              isChecked
+                ? "border-sage-500 bg-sage-500 text-white"
+                : "border-sage-300 hover:border-sage-500 hover:bg-sage-100 active:bg-sage-200"
+            }`}
+            aria-label={isChecked ? "Uncheck item" : "Check off item"}
           >
-            <Check className="h-4 w-4 md:h-3 md:w-3 text-transparent hover:text-sage-500 active:text-sage-600" />
+            {isChecked && <Check className="h-4 w-4 md:h-3 md:w-3" />}
           </button>
           
-          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+          <div className={`flex items-center gap-2 min-w-0 flex-1 flex-wrap ${isChecked ? "opacity-60" : ""}`}>
             <div className="flex items-center gap-2 flex-wrap">
               {formatAmount(item) && (
-                <span className="text-sm font-medium text-gray-700">
+                <span className={`text-sm font-medium ${isChecked ? "text-gray-500 line-through" : "text-gray-700"}`}>
                   {formatAmount(item)}
                 </span>
               )}
-              <span className="text-sm text-gray-600">
+              <span className={`text-sm ${isChecked ? "text-gray-500 line-through" : "text-gray-600"}`}>
                 {item.item}
               </span>
               {uniqueSources.length > 0 && (
@@ -457,7 +504,9 @@ function SwipeableItem({
                     <SourceTag 
                       key={`${source.recipeName}-${idx}`} 
                       recipeName={source.recipeName}
+                      recipeId={source.recipeId}
                       colorIndex={recipeColorMap.get(source.recipeName)}
+                      onClick={() => onRecipeTagClick(source.recipeId, source.recipeName)}
                     />
                   ))}
                 </div>
@@ -466,16 +515,29 @@ function SwipeableItem({
           </div>
         </div>
         
-        {/* Desktop delete button */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="hidden md:flex h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-          onClick={onRemove}
-          disabled={isRemoving}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {/* Desktop action buttons */}
+        <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-sage-600 flex-shrink-0"
+            onClick={onAddToPantry}
+            disabled={isAddingToPantry}
+            title="Add to pantry"
+          >
+            <Package className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive flex-shrink-0"
+            onClick={onRemove}
+            disabled={isRemoving}
+            title="Remove from list"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   )
@@ -487,8 +549,11 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   itemIdx,
   onCheckOff,
   onRemove,
+  onAddToPantry,
+  onRecipeTagClick,
   isCheckingOff,
   isRemoving,
+  isAddingToPantry,
   recipeColorMap,
   showSwipeHint,
 }: {
@@ -496,8 +561,11 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   itemIdx: number
   onCheckOff: () => void
   onRemove: () => void
+  onAddToPantry: () => void
+  onRecipeTagClick: (recipeId: string | undefined, recipeName: string) => void
   isCheckingOff: boolean
   isRemoving: boolean
+  isAddingToPantry: boolean
   recipeColorMap: Map<string, number>
   showSwipeHint?: boolean
 }) {
@@ -521,8 +589,11 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
         item={item}
         onCheckOff={onCheckOff}
         onRemove={onRemove}
+        onAddToPantry={onAddToPantry}
+        onRecipeTagClick={onRecipeTagClick}
         isCheckingOff={isCheckingOff}
         isRemoving={isRemoving}
+        isAddingToPantry={isAddingToPantry}
         recipeColorMap={recipeColorMap}
         dragHandleProps={{ ...attributes, ...listeners }}
         dragStyle={dragStyle}
@@ -538,9 +609,12 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
+    prevProps.item.checked === nextProps.item.checked &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
     prevProps.isRemoving === nextProps.isRemoving &&
+    prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
     prevProps.showSwipeHint === nextProps.showSwipeHint &&
+    prevProps.onRecipeTagClick === nextProps.onRecipeTagClick &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 })
@@ -548,10 +622,12 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
 // Drag overlay item (shown while dragging)
 function DragOverlayItem({ 
   item, 
-  recipeColorMap 
+  recipeColorMap,
+  onRecipeTagClick
 }: { 
   item: ShoppingItem
   recipeColorMap: Map<string, number>
+  onRecipeTagClick: (recipeId: string | undefined, recipeName: string) => void
 }) {
   const formatAmount = (item: ShoppingItem) => {
     const parts: string[] = []
@@ -602,7 +678,9 @@ function DragOverlayItem({
               <SourceTag 
                 key={`${source.recipeName}-${idx}`} 
                 recipeName={source.recipeName}
+                recipeId={source.recipeId}
                 colorIndex={recipeColorMap.get(source.recipeName)}
+                onClick={() => onRecipeTagClick(source.recipeId, source.recipeName)}
               />
             ))}
           </div>
@@ -649,9 +727,20 @@ export function ShoppingListView() {
   const [pendingClearList, setPendingClearList] = useState(false)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
+  const [manuallyExpandedCategories, setManuallyExpandedCategories] = useState<Set<string>>(new Set())
+  const [viewingRecipeId, setViewingRecipeId] = useState<string | null>(null)
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const { showSwipeHint } = useSwipeHint()
 
   const { data: shoppingList, isLoading, isFetching } = useShoppingList()
+  
+  // Fetch recipe for viewing
+  const { data: viewingRecipe } = useRecipe(viewingRecipeId)
+  
+  // Fetch all recipes to find by name if ID is not available
+  const { data: allRecipes } = useRecipes()
+  const { data: categories } = useCategories()
   const { data: config } = useShoppingConfig()
   const updateConfig = useUpdateShoppingConfig()
 
@@ -666,7 +755,22 @@ export function ShoppingListView() {
   const reorderList = useReorderShoppingList()
   const saveCategoryOverride = useSaveCategoryOverride()
   const updateItemCategory = useUpdateItemCategory()
+  const addToPantryAndRemove = useAddToPantryAndRemove()
   const undoToast = useUndoToast()
+
+  // Handle clicking on a recipe tag
+  const handleRecipeTagClick = useCallback((recipeId: string | undefined, recipeName: string) => {
+    if (recipeId) {
+      // If we have the ID, use it directly
+      setViewingRecipeId(recipeId)
+    } else if (allRecipes) {
+      // Otherwise, find by name
+      const recipe = allRecipes.find(r => r.name === recipeName)
+      if (recipe) {
+        setViewingRecipeId(recipe.id)
+      }
+    }
+  }, [allRecipes])
 
   // Handle item removal with undo
   const handleRemoveItem = useCallback((itemName: string) => {
@@ -722,13 +826,47 @@ export function ShoppingListView() {
 
     // Show confirmation toast
     const message = items.length === 1
-      ? `Moved "${items[0].item}" to Got It`
-      : `Moved ${items.length} items to Got It`
+      ? `Checked "${items[0].item}"`
+      : `Checked ${items.length} items`
     undoToast.show({
       message,
       duration: 3000,
     })
   }, [bulkCheckOff, undoToast])
+
+  // Handle adding item to pantry
+  const handleAddToPantry = useCallback((item: ShoppingItem) => {
+    addToPantryAndRemove.mutate(item)
+    undoToast.show({
+      message: `"${item.item}" added to pantry`,
+      duration: 2000,
+    })
+  }, [addToPantryAndRemove, undoToast])
+
+  // Toggle category collapse
+  const toggleCategory = useCallback((categoryKey: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(categoryKey)) {
+        // Expanding - mark as manually expanded
+        next.delete(categoryKey)
+        setManuallyExpandedCategories(prevExpanded => {
+          const nextExpanded = new Set(prevExpanded)
+          nextExpanded.add(categoryKey)
+          return nextExpanded
+        })
+      } else {
+        // Collapsing - remove from manually expanded
+        next.add(categoryKey)
+        setManuallyExpandedCategories(prevExpanded => {
+          const nextExpanded = new Set(prevExpanded)
+          nextExpanded.delete(categoryKey)
+          return nextExpanded
+        })
+      }
+      return next
+    })
+  }, [])
 
   // Set up drag sensors with higher activation distance on mobile to avoid interfering with scrolling
   const sensors = useSensors(
@@ -838,6 +976,57 @@ export function ShoppingListView() {
       config?.category_order || null
     )
   }, [config?.custom_categories, config?.category_order])
+
+  // Check if all items are checked
+  const allItemsChecked = useMemo(() => {
+    if (!filteredItems || filteredItems.length === 0) return false
+    return filteredItems.every(item => item.checked === true)
+  }, [filteredItems])
+
+  // Auto-collapse categories when all items are checked (only if not manually expanded)
+  useEffect(() => {
+    if (allItemsChecked) {
+      const allCategoryKeys = new Set(filteredItems.map(item => item.categoryKey || "misc"))
+      setCollapsedCategories(prev => {
+        const next = new Set(prev)
+        allCategoryKeys.forEach(key => {
+          // Only auto-collapse if not manually expanded
+          if (!manuallyExpandedCategories.has(key)) {
+            next.add(key)
+          }
+        })
+        return next
+      })
+    }
+  }, [allItemsChecked, filteredItems, manuallyExpandedCategories])
+
+  // Auto-collapse category when all items in it are checked (only if not manually expanded)
+  useEffect(() => {
+    const newCollapsed = new Set(collapsedCategories)
+    let hasChanges = false
+    
+    orderedCategories.forEach(categoryData => {
+      const items = groupedItems[categoryData.key]
+      if (items && items.length > 0) {
+        const allChecked = items.every(item => item.checked === true)
+        if (allChecked && !manuallyExpandedCategories.has(categoryData.key)) {
+          // Only auto-collapse if not manually expanded
+          if (!newCollapsed.has(categoryData.key)) {
+            newCollapsed.add(categoryData.key)
+            hasChanges = true
+          }
+        } else if (!allChecked && newCollapsed.has(categoryData.key) && !manuallyExpandedCategories.has(categoryData.key)) {
+          // Auto-expand if items become unchecked (only if not manually collapsed)
+          newCollapsed.delete(categoryData.key)
+          hasChanges = true
+        }
+      }
+    })
+    
+    if (hasChanges) {
+      setCollapsedCategories(newCollapsed)
+    }
+  }, [filteredItems, groupedItems, orderedCategories, manuallyExpandedCategories])
 
   // Create a flat list of all item IDs for the sortable context
   // Use index-based IDs to ensure uniqueness while preserving drag-and-drop functionality
@@ -1210,6 +1399,9 @@ export function ShoppingListView() {
                     dragOverCategory === categoryData.key &&
                     activeItem.categoryKey !== categoryData.key
 
+                  const isCollapsed = collapsedCategories.has(categoryData.key)
+                  const checkedCount = items.filter(item => item.checked).length
+
                   return (
                     <Card
                       key={categoryData.key}
@@ -1217,7 +1409,10 @@ export function ShoppingListView() {
                         isDragTarget ? 'border-2 border-dashed border-primary bg-primary/5' : ''
                       }`}
                     >
-                      <CardHeader className="px-4 py-2.5 border-b border-sage-100 bg-transparent">
+                      <CardHeader 
+                        className="px-4 py-2.5 border-b border-sage-100 bg-transparent cursor-pointer hover:bg-sage-50/50 transition-colors"
+                        onClick={() => toggleCategory(categoryData.key)}
+                      >
                         <CardTitle className="text-xs font-semibold text-sage-600 uppercase tracking-wide flex items-center gap-2">
                           <Package className="h-3.5 w-3.5" />
                           {categoryData.name}
@@ -1229,7 +1424,10 @@ export function ShoppingListView() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleBulkCheckOff(items, categoryData.name)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleBulkCheckOff(items, categoryData.name)
+                                }}
                                 disabled={bulkCheckOff.isPending}
                                 className="h-6 px-2 text-[10px] text-sage-500 hover:text-sage-700 hover:bg-sage-100"
                                 title={`Check all items in ${categoryData.name}`}
@@ -1238,13 +1436,31 @@ export function ShoppingListView() {
                                 <span className="hidden sm:inline">All</span>
                               </Button>
                             )}
-                            <span className="text-xs font-normal text-sage-400">({items.length})</span>
+                            <span className="text-xs font-normal text-sage-400">
+                              ({checkedCount}/{items.length})
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleCategory(categoryData.key)
+                              }}
+                              className="ml-1 p-1 hover:bg-sage-100 rounded transition-colors"
+                              aria-label={isCollapsed ? "Expand category" : "Collapse category"}
+                            >
+                              {isCollapsed ? (
+                                <ChevronDown className="h-4 w-4 text-sage-500" />
+                              ) : (
+                                <ChevronUp className="h-4 w-4 text-sage-500" />
+                              )}
+                            </button>
                           </div>
                         </CardTitle>
                       </CardHeader>
-                      <CardContent className="p-0">
-                        <ul className="divide-y divide-sage-50" style={{ contain: 'layout style paint' }}>
-                          {items.map((item, itemIdx) => {
+                      {!isCollapsed && (
+                        <CardContent className="p-0">
+                          <ul className="divide-y divide-sage-50" style={{ contain: 'layout style paint' }}>
+                            {items.map((item, itemIdx) => {
                             const showHintForThisItem = isFirstItem && showSwipeHint
                             if (isFirstItem) isFirstItem = false
                             // Get global index from map, or use counter as fallback
@@ -1263,8 +1479,11 @@ export function ShoppingListView() {
                                 itemIdx={globalIndex}
                                 onCheckOff={() => checkOffItem.mutate(item)}
                                 onRemove={() => handleRemoveItem(item.item)}
+                                onAddToPantry={() => handleAddToPantry(item)}
+                                onRecipeTagClick={handleRecipeTagClick}
                                 isCheckingOff={checkOffItem.isPending}
                                 isRemoving={false}
+                                isAddingToPantry={addToPantryAndRemove.isPending}
                                 recipeColorMap={recipeColorMap}
                                 showSwipeHint={showHintForThisItem}
                               />
@@ -1272,6 +1491,7 @@ export function ShoppingListView() {
                           })}
                         </ul>
                       </CardContent>
+                      )}
                     </Card>
                   )
                 })
@@ -1279,21 +1499,21 @@ export function ShoppingListView() {
             </SortableContext>
 
             <DragOverlay>
-              {activeItem ? <DragOverlayItem item={activeItem} recipeColorMap={recipeColorMap} /> : null}
+              {activeItem ? <DragOverlayItem item={activeItem} recipeColorMap={recipeColorMap} onRecipeTagClick={handleRecipeTagClick} /> : null}
             </DragOverlay>
           </DndContext>
 
-          {/* Completed State - All items checked */}
-          {filteredItems.length === 0 && displayShoppingList?.already_have && displayShoppingList.already_have.length > 0 && (
+          {/* Complete Shopping Button - appears when all items are checked */}
+          {allItemsChecked && filteredItems.length > 0 && (
             <Card className="animate-fade-in border-primary/20 bg-primary/5">
               <CardContent className="pt-6 pb-4 px-4">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <div className="flex items-center gap-2 text-primary">
                     <CheckCheck className="h-5 w-5" />
-                    <p className="text-sm font-semibold">Shopping complete!</p>
+                    <p className="text-sm font-semibold">All items checked!</p>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    All items have been checked off. Start a new list when you're ready.
+                    Ready to complete your shopping trip?
                   </p>
                   <Button
                     variant="default"
@@ -1301,20 +1521,20 @@ export function ShoppingListView() {
                     onClick={handleClearListWithUndo}
                     className="mt-1"
                   >
-                    Start New List
+                    Complete Shopping
                   </Button>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Got It Section */}
+          {/* Pantry Section */}
           {mergedAlreadyHave && mergedAlreadyHave.length > 0 && (
             <Card className="animate-fade-in">
               <CardHeader className="px-4 py-2.5 border-b border-sage-100 bg-transparent">
                 <CardTitle className="text-xs font-semibold text-sage-600 uppercase tracking-wide flex items-center gap-2">
                   <Package className="h-3.5 w-3.5" />
-                  Got It
+                  Pantry
                   <span className="text-xs font-normal text-sage-400 ml-auto">({mergedAlreadyHave.length})</span>
                 </CardTitle>
               </CardHeader>
@@ -1349,7 +1569,9 @@ export function ShoppingListView() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-3 px-4 pb-4">
-                <p className="text-xs text-muted-foreground mb-2">Click to add back to list</p>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Items excluded by your keywords. Click to add back to list.
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {displayShoppingList.excluded.map((item, index) => (
                     <button
@@ -1357,10 +1579,15 @@ export function ShoppingListView() {
                       type="button"
                       onClick={() => moveExcludedToList.mutate(item)}
                       disabled={moveExcludedToList.isPending}
-                      className="px-3 py-2 md:px-2.5 md:py-1 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in hover:bg-terracotta-200 active:bg-terracotta-300 transition-colors cursor-pointer min-h-[44px] md:min-h-0"
+                      className="px-3 py-2 md:px-2.5 md:py-1 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in hover:bg-terracotta-200 active:bg-terracotta-300 transition-colors cursor-pointer min-h-[44px] md:min-h-0 flex items-center gap-1.5"
                       style={{ animationDelay: `${index * 20}ms` }}
                     >
-                      {item.item}
+                      <span>{item.item}</span>
+                      {item.excludedBy && (
+                        <span className="text-[10px] text-terracotta-500 font-normal opacity-75">
+                          ({item.excludedBy})
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -1381,6 +1608,31 @@ export function ShoppingListView() {
           await updateConfig.mutateAsync(updates)
         }}
         isUpdating={updateConfig.isPending}
+      />
+
+      {/* Recipe Detail Dialog */}
+      {viewingRecipeId && (
+        <RecipeDetailDialog
+          open={!!viewingRecipe}
+          onOpenChange={(open) => {
+            if (!open) {
+              setViewingRecipeId(null)
+            }
+          }}
+          recipe={viewingRecipe || null}
+          onEdit={(r) => {
+            setViewingRecipeId(null)
+            setEditingRecipe(r)
+          }}
+        />
+      )}
+
+      {/* Edit Recipe Dialog */}
+      <RecipeDialog
+        open={!!editingRecipe}
+        onOpenChange={(open) => !open && setEditingRecipe(null)}
+        recipe={editingRecipe || undefined}
+        categories={categories || []}
       />
     </div>
   )

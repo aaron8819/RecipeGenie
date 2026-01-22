@@ -4,6 +4,97 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.7.0] - 2026-01-23
+
+**Summary:** Enhanced shopping list workflow with checked states, pantry integration, recipe tag navigation, and bug fixes
+
+### Added
+
+- **Shopping List Checked States**:
+  - Items can be checked off while remaining in the shopping list (toggleable checked state)
+  - Checked items display with strikethrough and muted styling
+  - Checked state persists across page refreshes
+  - Resets only on "Complete Shopping" or "Clear" actions
+  - Checked state stored in database (`checked` boolean field on `ShoppingItem`)
+
+- **Category Auto-Collapse**:
+  - Categories automatically collapse when all items are checked off
+  - Manual expand/collapse toggle for categories (click category header)
+  - User-expanded categories are preserved even when auto-collapse would trigger
+  - Visual indicators show checked count per category (e.g., "Produce (3/5)")
+
+- **Complete Shopping Button**:
+  - Appears when all items in the shopping list are checked off
+  - Clears the entire shopping list for a clean slate
+  - All categories auto-collapse when complete shopping is triggered
+  - Includes undo support for accidental clears
+
+- **Pantry Integration**:
+  - "Got it" section renamed to "Pantry" for clarity
+  - Pantry section shows items that were attempted to be added but already exist in pantry
+  - Pantry items are clickable to add them back to the shopping list
+  - New "Add to Pantry" button next to trash button (desktop) and in swipe area (mobile)
+  - Adding item to pantry removes it from shopping list with undo support
+
+- **Recipe Tag Navigation**:
+  - Recipe source tags in shopping list are now clickable
+  - Clicking a recipe tag opens the recipe detail modal
+  - Works for both recipe ID-based and name-based lookups
+  - Recipe modal includes full edit functionality (Edit Recipe button)
+  - Consistent recipe modal experience across all views (shopping list, recipe list, meal planner)
+
+- **Excluded Items Clarity**:
+  - Excluded items now display the matching keyword (e.g., "matched: garlic")
+  - Improved descriptions in both shopping and pantry views
+  - Better visibility into why items were excluded
+
+### Changed
+
+- **Shopping List UI**:
+  - Checkbox replaces "check off" action (items stay in list when checked)
+  - Category headers are clickable for expand/collapse
+  - Chevron icons indicate collapse state
+  - Improved mobile swipe gestures for pantry actions
+  - Better visual feedback for checked states
+
+- **Recipe Detail Dialog**:
+  - Now accessible from shopping list recipe tags
+  - Includes Edit Recipe button when opened from shopping list
+  - Handles null/undefined recipe categories gracefully
+  - Improved error handling for missing recipe data
+
+### Fixed
+
+- **Tag Color Errors**:
+  - Fixed `Cannot read properties of undefined (reading 'toLowerCase')` error
+  - `getTagColor()` and `getTagClassName()` now handle null/undefined tags
+  - Category tags only render when category exists
+
+- **Recipe Save Errors**:
+  - Fixed `old.map is not a function` error when saving recipes
+  - `setQueriesData` now handles both array queries (`useRecipes()`) and single recipe queries (`useRecipe(id)`)
+  - Added `updateRecipeQuery()` helper function for safe query updates
+  - All recipe mutations (update, delete, toggle favorite) now work correctly
+
+- **React Warnings**:
+  - Fixed "Cannot update a component while rendering" warning
+  - Recipe detail dialog only mounts when recipe ID is set
+  - Improved component lifecycle management
+
+### Technical Notes
+
+- New database field: `ShoppingItem.checked` (boolean, optional)
+- New database field: `ShoppingItem.excludedBy` (string, optional) - stores matching keyword
+- New hook: `useAddToPantryAndRemove()` - adds item to pantry and removes from shopping list
+- Updated hooks: `useCheckOffItem()`, `useBulkCheckOff()` - now toggle checked state instead of moving items
+- Updated hook: `useClearShoppingList()` - resets checked states
+- New helper: `getExcludedKeyword()` in `shopping-categories.ts` - returns matching keyword
+- New helper: `updateRecipeQuery()` in `use-recipes.ts` - safely updates both array and single recipe queries
+- Component updates: `shopping-list.tsx`, `recipe-detail-dialog.tsx`, `pantry-list.tsx`
+- Type updates: `database.ts` - added `checked` and `excludedBy` fields
+
+---
+
 ## [2.6.1] - 2026-01-22
 
 **Summary:** Refined recipe card design in planner views with improved button layout and visual consistency

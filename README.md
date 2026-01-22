@@ -174,19 +174,24 @@ The app includes an auth callback route at `/auth/callback` that handles email c
 
 After generating a meal plan, the shopping list shows:
 - **Items to Buy**: Ingredients needed that aren't in your pantry
-- **Already Have**: Ingredients from your pantry used in selected recipes
-- **Excluded**: Items matching your excluded keywords (staples)
+- **Pantry**: Items that were attempted to be added but already exist in your pantry (clickable to add back)
+- **Excluded**: Items matching your excluded keywords (staples) - shows matching keyword for clarity
 
 **Shopping List Features:**
+- **Check off items**: Toggle checked state while shopping (items stay in list, show as checked with strikethrough)
+- **Category auto-collapse**: Categories automatically collapse when all items are checked
+- **Complete Shopping**: Button appears when all items are checked - clears list for clean slate
+- **Pantry integration**: Add items to pantry directly from shopping list (removes from list)
+- **Recipe tag navigation**: Click recipe source tags to view recipe details and edit recipes
 - Drag and drop to reorder items manually
 - Add items manually to your list
-- Check off items as you shop (moves to "Already Have")
 - Add meal plan ingredients to existing lists (merges quantities)
 - Category-based organization with custom category overrides
 - **Custom shopping categories**: Create your own categories (e.g., "Asian Market", "Specialty Store")
 - **Category ordering**: Drag-and-drop reordering to match your store layout
 - **Shopping settings modal**: Manage categories, ordering, and overrides in one place
 - Copy shopping list to clipboard
+- Checked states persist across page refreshes
 
 ## Project Structure
 

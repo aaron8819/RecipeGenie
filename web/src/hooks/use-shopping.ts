@@ -662,10 +662,8 @@ export function useAddToShoppingList() {
 }
 
 /**
- * Hook to check off a shopping item
- */
-/**
- * Hook to check off an item (move from items to already_have)
+ * Hook to toggle checked state of a shopping item
+ * Items stay in the list but are marked as checked/unchecked
  * Implements optimistic updates for instant UI feedback
  */
 export function useCheckOffItem() {
@@ -678,55 +676,42 @@ export function useCheckOffItem() {
 
       if (isGuest) {
         const current = getGuestList(queryClient)
-        const updatedItems = current.items.filter((i) => i.item.toLowerCase() !== normalizedItem)
-        const updatedAlreadyHave = current.already_have.some((i) => i.item.toLowerCase() === normalizedItem)
-          ? current.already_have
-          : [...current.already_have, item]
-        
-        // Auto-clear source_recipes when all items are checked
-        let updatedSourceRecipes = current.source_recipes || []
-        if (updatedItems.length === 0 && updatedAlreadyHave.length > 0) {
-          updatedSourceRecipes = []
-        }
+        const updatedItems = current.items.map((i) =>
+          i.item.toLowerCase() === normalizedItem
+            ? { ...i, checked: !i.checked }
+            : i
+        )
         
         setGuestList(queryClient, {
           items: updatedItems,
-          already_have: updatedAlreadyHave,
-          source_recipes: updatedSourceRecipes,
         })
-        return item
+        return { ...item, checked: !item.checked }
       }
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
-        .select("items, already_have, source_recipes")
+        .select("items")
         .single()
 
       if (fetchError) throw fetchError
 
       const currentItems = (currentList?.items as ShoppingItem[]) || []
-      const alreadyHave = (currentList?.already_have as ShoppingItem[]) || []
-      const updatedItems = currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem)
-      const updatedAlreadyHave = alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem) ? alreadyHave : [...alreadyHave, item]
-
-      // Auto-clear source_recipes when all items are checked
-      let updatedSourceRecipes = currentList?.source_recipes || []
-      if (updatedItems.length === 0 && updatedAlreadyHave.length > 0) {
-        updatedSourceRecipes = []
-      }
+      const updatedItems = currentItems.map((i) =>
+        i.item.toLowerCase() === normalizedItem
+          ? { ...i, checked: !i.checked }
+          : i
+      )
 
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({
           items: updatedItems,
-          already_have: updatedAlreadyHave,
-          source_recipes: updatedSourceRecipes,
         })
         .eq("user_id", user?.id)
 
       if (saveError) throw saveError
-      return item
+      return updatedItems.find((i) => i.item.toLowerCase() === normalizedItem) || item
     },
     // Optimistic update
     onMutate: async (item) => {
@@ -744,23 +729,15 @@ export function useCheckOffItem() {
         (old) => {
           if (!old) return old
           const currentItems = old.items || []
-          const alreadyHave = old.already_have || []
-          const updatedItems = currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem)
-          const updatedAlreadyHave = alreadyHave.some((i) => i.item.toLowerCase() === normalizedItem)
-            ? alreadyHave
-            : [...alreadyHave, item]
-          
-          // Auto-clear source_recipes when all items are checked
-          let updatedSourceRecipes = old.source_recipes || []
-          if (updatedItems.length === 0 && updatedAlreadyHave.length > 0) {
-            updatedSourceRecipes = []
-          }
+          const updatedItems = currentItems.map((i) =>
+            i.item.toLowerCase() === normalizedItem
+              ? { ...i, checked: !i.checked }
+              : i
+          )
           
           return {
             ...old,
             items: updatedItems,
-            already_have: updatedAlreadyHave,
-            source_recipes: updatedSourceRecipes,
           }
         }
       )
@@ -1225,8 +1202,8 @@ export function useUpdateShoppingConfig() {
 }
 
 /**
- * Hook to check off multiple items at once (move from items to already_have)
- * Used for "Check All" in a category
+ * Hook to check off multiple items at once (toggle checked state)
+ * Used for "Check All" in a category - checks all items in the category
  */
 export function useBulkCheckOff() {
   const queryClient = useQueryClient()
@@ -1238,25 +1215,15 @@ export function useBulkCheckOff() {
 
       if (isGuest) {
         const current = getGuestList(queryClient)
-        // Remove items from items array
-        const remainingItems = current.items.filter(i => !itemNames.has(i.item.toLowerCase().trim()))
-        // Add items to already_have (avoid duplicates)
-        const existingAlreadyHave = new Set(current.already_have.map(i => i.item.toLowerCase().trim()))
-        const newAlreadyHave = [
-          ...current.already_have,
-          ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
-        ]
-        
-        // Auto-clear source_recipes when all items are checked
-        let updatedSourceRecipes = current.source_recipes || []
-        if (remainingItems.length === 0 && newAlreadyHave.length > 0) {
-          updatedSourceRecipes = []
-        }
+        // Check all items (set checked to true)
+        const updatedItems = current.items.map(i =>
+          itemNames.has(i.item.toLowerCase().trim())
+            ? { ...i, checked: true }
+            : i
+        )
         
         setGuestList(queryClient, {
-          items: remainingItems,
-          already_have: newAlreadyHave,
-          source_recipes: updatedSourceRecipes,
+          items: updatedItems,
         })
         return { count: itemsToCheck.length }
       }
@@ -1264,36 +1231,24 @@ export function useBulkCheckOff() {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
-        .select("items, already_have, source_recipes")
+        .select("items")
         .single()
 
       if (fetchError) throw fetchError
 
       const currentItems = (currentList?.items as ShoppingItem[]) || []
-      const alreadyHave = (currentList?.already_have as ShoppingItem[]) || []
 
-      // Remove items from items array
-      const remainingItems = currentItems.filter(i => !itemNames.has(i.item.toLowerCase().trim()))
-
-      // Add items to already_have (avoid duplicates)
-      const existingAlreadyHave = new Set(alreadyHave.map(i => i.item.toLowerCase().trim()))
-      const newAlreadyHave = [
-        ...alreadyHave,
-        ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
-      ]
-
-      // Auto-clear source_recipes when all items are checked
-      let updatedSourceRecipes = (currentList?.source_recipes as string[]) || []
-      if (remainingItems.length === 0 && newAlreadyHave.length > 0) {
-        updatedSourceRecipes = []
-      }
+      // Check all items (set checked to true)
+      const updatedItems = currentItems.map(i =>
+        itemNames.has(i.item.toLowerCase().trim())
+          ? { ...i, checked: true }
+          : i
+      )
 
       const { error: saveError } = await supabase
         .from("shopping_list")
         .update({
-          items: remainingItems,
-          already_have: newAlreadyHave,
-          source_recipes: updatedSourceRecipes,
+          items: updatedItems,
         })
         .eq("user_id", user?.id)
 
@@ -1316,26 +1271,16 @@ export function useBulkCheckOff() {
         (old) => {
           if (!old) return old
           const currentItems = old.items || []
-          const alreadyHave = old.already_have || []
 
-          const remainingItems = currentItems.filter(i => !itemNames.has(i.item.toLowerCase().trim()))
-          const existingAlreadyHave = new Set(alreadyHave.map(i => i.item.toLowerCase().trim()))
-          const newAlreadyHave = [
-            ...alreadyHave,
-            ...itemsToCheck.filter(i => !existingAlreadyHave.has(i.item.toLowerCase().trim()))
-          ]
-
-          // Auto-clear source_recipes when all items are checked
-          let updatedSourceRecipes = old.source_recipes || []
-          if (remainingItems.length === 0 && newAlreadyHave.length > 0) {
-            updatedSourceRecipes = []
-          }
+          const updatedItems = currentItems.map(i =>
+            itemNames.has(i.item.toLowerCase().trim())
+              ? { ...i, checked: true }
+              : i
+          )
 
           return {
             ...old,
-            items: remainingItems,
-            already_have: newAlreadyHave,
-            source_recipes: updatedSourceRecipes,
+            items: updatedItems,
           }
         }
       )
@@ -1351,6 +1296,123 @@ export function useBulkCheckOff() {
     onSuccess: () => {
       // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+    },
+  })
+}
+
+/**
+ * Hook to add an item to pantry and remove it from shopping list
+ * Implements optimistic updates for instant UI feedback
+ */
+export function useAddToPantryAndRemove() {
+  const queryClient = useQueryClient()
+  const { isGuest, user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async (item: ShoppingItem) => {
+      const normalizedItem = item.item.toLowerCase().trim()
+
+      if (isGuest) {
+        const current = getGuestList(queryClient)
+        // Remove from shopping list
+        const updatedItems = current.items.filter((i) => i.item.toLowerCase() !== normalizedItem)
+        setGuestList(queryClient, { items: updatedItems })
+        // Note: In guest mode, pantry items aren't persisted, so we just remove from list
+        return { itemName: normalizedItem }
+      }
+
+      const supabase = getSupabase()
+      
+      // Add to pantry
+      const { error: pantryError } = await supabase
+        .from("pantry_items")
+        .insert({ user_id: user?.id, item: normalizedItem })
+        .select()
+        .single()
+
+      // If item already exists in pantry, that's okay - just continue
+      if (pantryError && pantryError.code !== "23505") { // 23505 is unique violation
+        throw pantryError
+      }
+
+      // Remove from shopping list
+      const { data: currentList, error: fetchError } = await supabase
+        .from("shopping_list")
+        .select("items")
+        .single()
+
+      if (fetchError) throw fetchError
+
+      const currentItems = (currentList?.items as ShoppingItem[]) || []
+      const updatedItems = currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem)
+
+      const { error: saveError } = await supabase
+        .from("shopping_list")
+        .update({
+          items: updatedItems,
+        })
+        .eq("user_id", user?.id)
+
+      if (saveError) throw saveError
+      return { itemName: normalizedItem }
+    },
+    // Optimistic update
+    onMutate: async (item) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
+      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
+
+      // Snapshot previous values for rollback
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+      const previousPantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY, isGuest])
+
+      const normalizedItem = item.item.toLowerCase().trim()
+
+      // Optimistically remove from shopping list
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY, isGuest],
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            items: old.items.filter((i) => i.item.toLowerCase() !== normalizedItem),
+          }
+        }
+      )
+
+      // Optimistically add to pantry (if not guest)
+      if (!isGuest) {
+        const now = new Date().toISOString()
+        const optimisticItem: PantryItem = {
+          user_id: user?.id || "",
+          item: normalizedItem,
+          created_at: now,
+        }
+        queryClient.setQueryData<PantryItem[]>(
+          [...PANTRY_KEY, isGuest],
+          (old) => {
+            if (!old) return [optimisticItem]
+            if (old.some((p) => p.item === normalizedItem)) return old
+            return [...old, optimisticItem].sort((a, b) => a.item.localeCompare(b.item))
+          }
+        )
+      }
+
+      return { previousList, previousPantry }
+    },
+    onError: (err, item, context) => {
+      // Rollback on error
+      if (context?.previousList) {
+        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+      }
+      if (context?.previousPantry) {
+        queryClient.setQueryData([...PANTRY_KEY, isGuest], context.previousPantry)
+      }
+    },
+    onSuccess: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
     },
   })
 }

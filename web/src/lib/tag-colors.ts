@@ -64,9 +64,17 @@ function hashString(str: string): number {
  * @returns Object with bg and text className strings
  */
 export function getTagColor(
-  tag: string,
+  tag: string | null | undefined,
   isCategory: boolean = false
 ): { bg: string; text: string } {
+  // Handle null/undefined tags
+  if (!tag) {
+    return {
+      bg: "bg-gray-100",
+      text: "text-gray-700",
+    }
+  }
+  
   const normalizedTag = tag.toLowerCase().trim()
 
   // Check if it's a category tag
@@ -92,7 +100,7 @@ export function getTagColor(
  * @returns Combined className string
  */
 export function getTagClassName(
-  tag: string,
+  tag: string | null | undefined,
   isCategory: boolean = false
 ): string {
   const colors = getTagColor(tag, isCategory)

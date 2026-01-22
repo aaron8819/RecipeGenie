@@ -5,7 +5,7 @@
  */
 
 import type { Recipe, ShoppingItem, PantryItem } from "@/types/database"
-import { categorizeIngredient, isExcludedIngredient } from "./shopping-categories"
+import { categorizeIngredient, getExcludedKeyword } from "./shopping-categories"
 import { normalizeItemName, normalizeUnit } from "./shopping-list-normalization"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 
@@ -134,10 +134,16 @@ export function generateShoppingList(
 
     if (pantrySet.has(ingredient.item)) {
       alreadyHave.push(shoppingItem)
-    } else if (isExcludedIngredient(ingredient.item, excludedKeywords)) {
-      excluded.push(shoppingItem)
     } else {
-      shoppingList.push(shoppingItem)
+      const matchingKeyword = getExcludedKeyword(ingredient.item, excludedKeywords)
+      if (matchingKeyword) {
+        excluded.push({
+          ...shoppingItem,
+          excludedBy: matchingKeyword,
+        })
+      } else {
+        shoppingList.push(shoppingItem)
+      }
     }
   }
 

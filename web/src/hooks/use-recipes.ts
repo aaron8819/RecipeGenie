@@ -9,6 +9,22 @@ import { useUpdateUserConfig } from "@/hooks/use-planner"
 
 const RECIPES_KEY = ["recipes"]
 
+/**
+ * Helper to safely update recipe queries that may be arrays or single recipes
+ */
+function updateRecipeQuery(
+  old: Recipe[] | Recipe | null | undefined,
+  updater: (recipe: Recipe) => Recipe
+): Recipe[] | Recipe | null | undefined {
+  if (Array.isArray(old)) {
+    return old.map(updater)
+  }
+  if (old && typeof old === 'object' && 'id' in old) {
+    return updater(old as Recipe)
+  }
+  return old
+}
+
 function getSupabase() {
   return createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -283,10 +299,11 @@ export function useUpdateRecipe() {
       }
 
       // Optimistically update all recipe queries
-      queryClient.setQueriesData<Recipe[]>(
+      queryClient.setQueriesData<Recipe[] | Recipe | null>(
         { queryKey: RECIPES_KEY },
-        (old) => old?.map((r) => 
-          r.id === id 
+        (old) => updateRecipeQuery(
+          old as Recipe[] | Recipe | null | undefined,
+          (r) => r.id === id 
             ? { ...r, ...normalizedUpdates, updated_at: new Date().toISOString() }
             : r
         )
@@ -304,9 +321,12 @@ export function useUpdateRecipe() {
     },
     onSuccess: (updated) => {
       // Update with server response
-      queryClient.setQueriesData<Recipe[]>(
+      queryClient.setQueriesData<Recipe[] | Recipe | null>(
         { queryKey: RECIPES_KEY },
-        (old) => old?.map((r) => (r.id === updated.id ? updated : r))
+        (old) => updateRecipeQuery(
+          old as Recipe[] | Recipe | null | undefined,
+          (r) => r.id === updated.id ? updated : r
+        )
       )
       // Invalidate tags queries to refresh tag lists
       queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
@@ -347,9 +367,18 @@ export function useDeleteRecipe() {
       const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
 
       // Optimistically remove from all recipe queries
-      queryClient.setQueriesData<Recipe[]>(
+      queryClient.setQueriesData<Recipe[] | Recipe | null>(
         { queryKey: RECIPES_KEY },
-        (old) => old?.filter((r) => r.id !== id)
+        (old) => {
+          if (Array.isArray(old)) {
+            return old.filter((r) => r.id !== id)
+          }
+          // For single recipe queries, if it matches the ID, return null
+          if (old && typeof old === 'object' && 'id' in old && (old as Recipe).id === id) {
+            return null
+          }
+          return old
+        }
       )
 
       return { previousQueries }
@@ -412,9 +441,12 @@ export function useToggleFavorite() {
       const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
 
       // Optimistically update all recipe queries
-      queryClient.setQueriesData<Recipe[]>(
+      queryClient.setQueriesData<Recipe[] | Recipe | null>(
         { queryKey: RECIPES_KEY },
-        (old) => old?.map((r) => (r.id === id ? { ...r, favorite: !favorite } : r))
+        (old) => updateRecipeQuery(
+          old as Recipe[] | Recipe | null | undefined,
+          (r) => r.id === id ? { ...r, favorite: !favorite } : r
+        )
       )
 
       return { previousQueries }
@@ -429,9 +461,12 @@ export function useToggleFavorite() {
     },
     onSuccess: (updated) => {
       // Update with server response
-      queryClient.setQueriesData<Recipe[]>(
+      queryClient.setQueriesData<Recipe[] | Recipe | null>(
         { queryKey: RECIPES_KEY },
-        (old) => old?.map((r) => (r.id === updated.id ? updated : r))
+        (old) => updateRecipeQuery(
+          old as Recipe[] | Recipe | null | undefined,
+          (r) => r.id === updated.id ? updated : r
+        )
       )
     },
     onSettled: () => {

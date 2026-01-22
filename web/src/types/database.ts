@@ -232,6 +232,10 @@ export interface ShoppingItem {
   shoppingCategory?: string
   // Additional amounts when units can't be converted (e.g., "1/3 cup + 4 oz")
   additionalAmounts?: { amount: number; unit: string }[]
+  // Checked state - persists across page refreshes, resets on "Complete Shopping" or "Clear"
+  checked?: boolean
+  // Keyword that caused this item to be excluded (only present for excluded items)
+  excludedBy?: string
 }
 
 export type Recipe = Database["public"]["Tables"]["recipes"]["Row"]
