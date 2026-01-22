@@ -618,12 +618,34 @@ export function useAddToShoppingList() {
       const addedCount = updatedItems.length - existingCount
       const mergedCount = Math.max(0, existingCount - (updatedItems.length - result.items.length))
 
+      // Merge already_have arrays (preserve items from previous recipes)
+      const mergedAlreadyHave = mergeShoppingItems(
+        currentList.already_have || [],
+        result.alreadyHave,
+        {
+          preserveUserOverrides: true,
+          preserveCustomOrder: false, // already_have doesn't need custom order
+          userCategoryOverrides: categoryOverrides,
+        }
+      )
+
+      // Merge excluded arrays (preserve items from previous recipes)
+      const mergedExcluded = mergeShoppingItems(
+        currentList.excluded || [],
+        result.excluded,
+        {
+          preserveUserOverrides: true,
+          preserveCustomOrder: false, // excluded doesn't need custom order
+          userCategoryOverrides: categoryOverrides,
+        }
+      )
+
       const mergedSourceRecipes = [...new Set([...currentList.source_recipes, ...recipeIds])]
 
       const shoppingListData: Partial<ShoppingList> = {
         items: updatedItems,
-        already_have: result.alreadyHave,
-        excluded: result.excluded,
+        already_have: mergedAlreadyHave,
+        excluded: mergedExcluded,
         source_recipes: mergedSourceRecipes,
         scale,
         total_servings: (currentList.total_servings || 0) + result.totalServings,

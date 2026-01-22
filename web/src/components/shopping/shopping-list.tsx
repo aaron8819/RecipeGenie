@@ -1056,11 +1056,12 @@ export function ShoppingListView() {
     return Array.from(recipeSet).sort()
   }, [shoppingList?.items, pendingRecipeDeletion, pendingClearList])
 
-  // Create a color mapping that assigns unique colors sequentially to recipes
+  // Create a color mapping that assigns consistent colors to recipes based on their name
+  // Uses hash-based assignment so colors remain stable regardless of recipe order
   const recipeColorMap = useMemo(() => {
     const map = new Map<string, number>()
-    uniqueRecipes.forEach((recipeName, index) => {
-      map.set(recipeName, index)
+    uniqueRecipes.forEach((recipeName) => {
+      map.set(recipeName, getColorIndex(recipeName))
     })
     return map
   }, [uniqueRecipes])
