@@ -91,6 +91,36 @@ function getLastMadeMap(history: RecipeHistory[] | undefined): Map<string, strin
 }
 
 /**
+ * Recipe stats interface
+ */
+interface RecipeStats {
+  lastMade: string | null
+  timesMade: number
+}
+
+/**
+ * Get stats (last made date + times made count) for each recipe from history
+ */
+function getRecipeStatsMap(history: RecipeHistory[] | undefined): Map<string, RecipeStats> {
+  const statsMap = new Map<string, RecipeStats>()
+  if (!history) return statsMap
+
+  // History is already sorted by date_made DESC, so first occurrence is most recent
+  for (const entry of history) {
+    const existing = statsMap.get(entry.recipe_id)
+    if (existing) {
+      existing.timesMade += 1
+    } else {
+      statsMap.set(entry.recipe_id, {
+        lastMade: entry.date_made,
+        timesMade: 1,
+      })
+    }
+  }
+  return statsMap
+}
+
+/**
  * Check if a date falls within a week's date range
  * @param dateStr - Date string to check (ISO format)
  * @param weekStartDate - Start date of the week (ISO format)
@@ -732,6 +762,9 @@ export function MealPlanner() {
 
   // Build a map of recipe_id -> last made date
   const lastMadeMap = getLastMadeMap(history)
+  
+  // Build a map of recipe_id -> stats (last made + times made)
+  const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
 
   // Initialize current week on mount
   useEffect(() => {
@@ -1592,6 +1625,8 @@ export function MealPlanner() {
           setViewingRecipe(null)
           setEditingRecipe(r)
         }}
+        lastMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.lastMade ?? null : null}
+        timesMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.timesMade ?? 0 : 0}
       />
 
       {/* Edit Recipe Dialog */}

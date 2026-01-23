@@ -173,6 +173,7 @@ export function useCreateRecipe() {
           tags: recipe.tags ?? [],
           ingredients: recipe.ingredients ?? [],
           instructions: recipe.instructions ?? [],
+          image_url: recipe.image_url ?? null,
           created_at: now,
           updated_at: now,
         }
@@ -210,6 +211,7 @@ export function useCreateRecipe() {
         tags: recipe.tags ?? [],
         ingredients: recipe.ingredients ?? [],
         instructions: recipe.instructions ?? [],
+        image_url: recipe.image_url ?? null,
         created_at: now,
         updated_at: now,
       }

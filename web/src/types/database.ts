@@ -20,6 +20,7 @@ export interface Database {
           tags: string[]
           ingredients: Ingredient[]
           instructions: string[]
+          image_url: string | null
           created_at: string
           updated_at: string
         }
@@ -33,6 +34,7 @@ export interface Database {
           tags?: string[]
           ingredients?: Ingredient[]
           instructions?: string[]
+          image_url?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -46,6 +48,7 @@ export interface Database {
           tags?: string[]
           ingredients?: Ingredient[]
           instructions?: string[]
+          image_url?: string | null
           created_at?: string
           updated_at?: string
         }

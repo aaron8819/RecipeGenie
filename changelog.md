@@ -4,6 +4,38 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.9.0] - 2026-01-27
+
+**Summary:** Recipe image support with Supabase Storage integration
+
+### Added
+
+- **Recipe Image Support**:
+  - Upload images when creating or editing recipes
+  - Images displayed on recipe cards in both grid and list views
+  - Large image display in recipe detail dialog
+  - Automatic image compression/resizing (max 2000px width, 85% quality)
+  - Graceful placeholder (🍳 emoji) for recipes without images
+  - Support for JPG, PNG, and WebP formats (max 5MB)
+  - Images stored in Supabase Storage with user-specific folders
+  - Row Level Security (RLS) policies for secure image access
+
+### Changed
+
+- Recipe cards now show images at the top (grid view) or left side (list view)
+- Recipe detail dialog displays large recipe image at the top
+- Recipe dialog includes image upload/removal functionality
+
+### Technical Notes
+
+- New database column: `recipes.image_url` (TEXT, nullable)
+- New Supabase Storage bucket: `recipe-images` (public read, authenticated write)
+- Storage helper functions in `web/src/lib/supabase/storage.ts`
+- Images organized by user ID: `{user_id}/{recipe_id}.{ext}`
+- Automatic cleanup of old images when recipes are updated/deleted
+
+---
+
 ## [2.8.1] - 2026-01-26
 
 **Summary:** Recipe ingredient drag-and-drop reordering and UI improvements

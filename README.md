@@ -7,6 +7,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 - **Recipe Management**: Store and organize your recipes by protein category
   - Manual entry or import from plain text with automatic parsing
   - Supports Unicode fractions, ranges, and various recipe formats
+  - Upload and display recipe images (JPG, PNG, WebP, max 5MB)
 - **Meal Planning**: Randomly generate weekly meal plans based on your preferences
 - **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering, custom categories, and category ordering to match your store layout
 - **Pantry Tracking**: Mark items you have on hand to get only what you need to buy
@@ -43,7 +44,10 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
    - `supabase/migrations/007_custom_categories.sql`
    - `supabase/migrations/008_add_day_assignments.sql`
    - `supabase/migrations/009_planner_settings.sql`
+   - `supabase/migrations/010_add_recipe_images.sql`
+   - `supabase/migrations/011_create_recipe_images_bucket.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
+5. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
 
 ### 2. Configure Environment
 

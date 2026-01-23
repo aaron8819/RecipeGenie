@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { Heart, Trash2, Clock, CalendarPlus, Loader2, ChevronRight, ShoppingCart, Check } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -67,6 +68,24 @@ export function RecipeCard({
               )}
             />
           </Button>
+
+          {/* Recipe Image - List View */}
+          <div className="w-20 h-20 flex-shrink-0 rounded-md overflow-hidden bg-gradient-to-br from-amber-50 to-amber-100/50">
+            {recipe.image_url ? (
+              <Image
+                src={recipe.image_url}
+                alt={recipe.name}
+                width={80}
+                height={80}
+                className="w-full h-full object-cover"
+                unoptimized={!recipe.image_url.includes('supabase.co')}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-2xl opacity-30">
+                🍳
+              </div>
+            )}
+          </div>
 
           {/* Content */}
           <div className="flex-1 min-w-0 overflow-hidden">
@@ -187,33 +206,30 @@ export function RecipeCard({
       )}
       onClick={() => onClick?.(recipe)}
     >
-      <CardHeader className="pb-3 p-4 sm:p-6">
+      {/* Recipe Image - Grid View */}
+      <div className="w-full h-40 sm:h-44 overflow-hidden bg-gradient-to-br from-amber-50 to-amber-100/50 relative">
+        {recipe.image_url ? (
+          <Image
+            src={recipe.image_url}
+            alt={recipe.name}
+            fill
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            unoptimized={!recipe.image_url.includes('supabase.co')}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-4xl sm:text-5xl opacity-30">
+            🍳
+          </div>
+        )}
+      </div>
+      <CardHeader className="pb-1 p-3 sm:p-4">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-lg line-clamp-2 pr-8 font-bold leading-tight min-w-0 flex-1">
-            {recipe.name}
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2 h-9 w-9 rounded-full transition-all hover:bg-red-50 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleFavorite?.(recipe)
-            }}
-          >
-            <Heart
-              className={cn(
-                "h-5 w-5 transition-colors",
-                recipe.favorite
-                  ? "fill-red-500 text-red-500"
-                  : "text-muted-foreground hover:text-red-400"
-              )}
-            />
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="p-4 sm:p-6 pt-0">
-            <div className="flex items-center gap-2 flex-wrap mb-4">
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-lg line-clamp-2 pr-8 font-bold leading-tight min-w-0">
+              {recipe.name}
+            </CardTitle>
+            <div className="flex items-center gap-2 flex-wrap mt-1">
               <span className={cn("capitalize text-sm font-semibold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg whitespace-nowrap", getTagClassName(recipe.category, true))}>
                 {recipe.category}
               </span>
@@ -240,9 +256,30 @@ export function RecipeCard({
                 </>
               )}
             </div>
-
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 h-9 w-9 rounded-full transition-all hover:bg-red-50 flex-shrink-0"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleFavorite?.(recipe)
+            }}
+          >
+            <Heart
+              className={cn(
+                "h-5 w-5 transition-colors",
+                recipe.favorite
+                  ? "fill-red-500 text-red-500"
+                  : "text-muted-foreground hover:text-red-400"
+              )}
+            />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="p-3 sm:p-4 pt-0 -mt-1">
             {timesMade > 0 && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4 sm:mb-6">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                 <Clock className="h-4 w-4 flex-shrink-0" />
                 <span className="min-w-0 break-words">
                   Made {timesMade} time{timesMade !== 1 ? "s" : ""}
@@ -268,7 +305,10 @@ export function RecipeCard({
                   {isMarkingAsMade ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Check className="h-3.5 w-3.5" />
+                    <>
+                      <Check className="h-3.5 w-3.5 sm:mr-1.5" />
+                      <span className="hidden sm:inline">Made</span>
+                    </>
                   )}
                 </Button>
               )}
@@ -286,7 +326,10 @@ export function RecipeCard({
                 {isAddingToShoppingList ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <ShoppingCart className="h-3.5 w-3.5" />
+                  <>
+                    <ShoppingCart className="h-3.5 w-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Shopping</span>
+                  </>
                 )}
               </Button>
               <Button
@@ -303,7 +346,10 @@ export function RecipeCard({
                 {isAddingToPlan ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <CalendarPlus className="h-3.5 w-3.5" />
+                  <>
+                    <CalendarPlus className="h-3.5 w-3.5 sm:mr-1.5" />
+                    <span className="hidden sm:inline">Plan</span>
+                  </>
                 )}
               </Button>
             </div>

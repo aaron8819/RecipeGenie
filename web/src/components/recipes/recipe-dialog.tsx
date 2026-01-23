@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical } from "lucide-react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import Image from "next/image"
+import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical, Upload, X } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -47,6 +48,7 @@ import {
 import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from "@/hooks/use-recipes"
 import { parseRecipeText, type ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
+import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
 import type { Recipe, Ingredient } from "@/types/database"
 
 interface RecipeDialogProps {
@@ -74,6 +76,13 @@ export function RecipeDialog({
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [instructions, setInstructions] = useState("")
   
+  // Image state
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
   // Import state
   const [importText, setImportText] = useState("")
   const [parseError, setParseError] = useState<string | null>(null)
@@ -92,6 +101,9 @@ export function RecipeDialog({
       setTags(recipe.tags || [])
       setIngredients(recipe.ingredients || [])
       setInstructions((recipe.instructions || []).join("\n"))
+      setImageUrl(recipe.image_url || null)
+      setImageFile(null)
+      setImagePreview(null)
       setMode("manual")
       setImportText("")
       setParseError(null)
@@ -104,6 +116,9 @@ export function RecipeDialog({
       setTags([])
       setIngredients([{ item: "", amount: null, unit: "" }])
       setInstructions("")
+      setImageUrl(null)
+      setImageFile(null)
+      setImagePreview(null)
       setMode("manual")
       setImportText("")
       setParseError(null)
@@ -194,6 +209,39 @@ export function RecipeDialog({
     setParsedPreview(null)
   }
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB')
+      return
+    }
+
+    setImageFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    setImageUrl(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = async () => {
     // Filter out empty ingredients
     const validIngredients = ingredients.filter((i) => i.item.trim())
@@ -204,16 +252,44 @@ export function RecipeDialog({
       .map((line) => line.trim())
       .filter((line) => line)
 
-    const recipeData = {
-      name: name.trim(),
-      category,
-      servings,
-      tags: tags || [], // Ensure tags is always an array, never null/undefined
-      ingredients: validIngredients,
-      instructions: instructionLines,
-    }
-
     try {
+      let finalImageUrl = imageUrl
+
+      // Upload new image if one was selected
+      if (imageFile) {
+        setIsUploadingImage(true)
+        try {
+          const recipeId = isEditing ? recipe.id : name.toLowerCase().replace(/\s+/g, "-")
+          finalImageUrl = await uploadRecipeImage(recipeId, imageFile)
+        } catch (error) {
+          console.error("Failed to upload image:", error)
+          alert("Failed to upload image. Recipe will be saved without image.")
+          finalImageUrl = imageUrl // Keep existing image if upload fails
+        } finally {
+          setIsUploadingImage(false)
+        }
+      }
+
+      // Delete old image if it was removed
+      if (isEditing && recipe.image_url && !imageFile && !imageUrl) {
+        try {
+          await deleteRecipeImage(recipe.image_url)
+        } catch (error) {
+          console.error("Failed to delete old image:", error)
+          // Continue anyway - image deletion failure shouldn't block recipe save
+        }
+      }
+
+      const recipeData = {
+        name: name.trim(),
+        category,
+        servings,
+        tags: tags || [], // Ensure tags is always an array, never null/undefined
+        ingredients: validIngredients,
+        instructions: instructionLines,
+        image_url: finalImageUrl,
+      }
+
       if (isEditing) {
         await updateRecipe.mutateAsync({
           id: recipe.id,
@@ -228,13 +304,12 @@ export function RecipeDialog({
     }
   }
 
-  const isSubmitting = createRecipe.isPending || updateRecipe.isPending
+  const isSubmitting = createRecipe.isPending || updateRecipe.isPending || isUploadingImage
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
         className="max-w-2xl max-h-[90vh] overflow-y-auto"
-        aria-describedby={undefined}
       >
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Recipe" : "Add Recipe"}</DialogTitle>
@@ -414,6 +489,11 @@ Instructions:
                 onIngredientChange={handleIngredientChange}
                 isEditing={false}
                 onReorderIngredients={handleReorderIngredients}
+                imagePreview={imagePreview}
+                imageUrl={imageUrl}
+                onImageSelect={handleImageSelect}
+                onRemoveImage={handleRemoveImage}
+                fileInputRef={fileInputRef}
               />
             </TabsContent>
           </Tabs>
@@ -440,6 +520,11 @@ Instructions:
             onIngredientChange={handleIngredientChange}
             isEditing={true}
             onReorderIngredients={handleReorderIngredients}
+            imagePreview={imagePreview}
+            imageUrl={imageUrl}
+            onImageSelect={handleImageSelect}
+            onRemoveImage={handleRemoveImage}
+            fileInputRef={fileInputRef}
           />
         )}
 
@@ -451,7 +536,7 @@ Instructions:
             onClick={handleSubmit}
             disabled={!name.trim() || !category || isSubmitting}
           >
-            {isSubmitting ? "Saving..." : isEditing ? "Save Changes" : "Add Recipe"}
+            {isSubmitting ? (isUploadingImage ? "Uploading image..." : "Saving...") : isEditing ? "Save Changes" : "Add Recipe"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -593,6 +678,14 @@ function IngredientDragOverlay({ ingredient }: { ingredient: Ingredient }) {
   )
 }
 
+interface RecipeFormContentPropsWithImage extends RecipeFormContentProps {
+  imagePreview?: string | null
+  imageUrl?: string | null
+  onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onRemoveImage?: () => void
+  fileInputRef?: React.RefObject<HTMLInputElement>
+}
+
 function RecipeFormContent({
   name,
   setName,
@@ -613,7 +706,12 @@ function RecipeFormContent({
   onIngredientChange,
   isEditing,
   onReorderIngredients,
-}: RecipeFormContentProps) {
+  imagePreview,
+  imageUrl,
+  onImageSelect,
+  onRemoveImage,
+  fileInputRef,
+}: RecipeFormContentPropsWithImage) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -638,6 +736,58 @@ function RecipeFormContent({
   const ingredientIds = ingredients.map((_, i) => i.toString())
   return (
     <div className="space-y-6 py-4">
+      {/* Recipe Image */}
+      <div className="space-y-2">
+        <Label>Recipe Image</Label>
+        <div className="space-y-3">
+          {(imagePreview || imageUrl) && (
+            <div className="relative w-full h-48 rounded-lg overflow-hidden border-2 border-border bg-muted">
+              <Image
+                src={imagePreview || imageUrl || ''}
+                alt="Recipe preview"
+                fill
+                className="object-cover"
+                unoptimized={imageUrl ? !imageUrl.includes('supabase.co') : false}
+              />
+              {onRemoveImage && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2"
+                  onClick={onRemoveImage}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          )}
+          {fileInputRef && onImageSelect && (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                {imagePreview || imageUrl ? 'Change Image' : 'Upload Image'}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                onChange={onImageSelect}
+                className="hidden"
+              />
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Supported formats: JPG, PNG, WebP. Max size: 5MB
+          </p>
+        </div>
+      </div>
+
       {/* Name */}
       <div className="space-y-2">
         <Label htmlFor="name">Recipe Name</Label>

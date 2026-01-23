@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { Heart, Pencil, Clock, Trash2 } from "lucide-react"
 import {
   Dialog,
@@ -58,9 +59,21 @@ export function RecipeDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
-        {/* Fixed Header */}
-        <DialogHeader className="space-y-4 p-6 pb-4 flex-shrink-0 border-b">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        {/* Recipe Image */}
+        {recipe.image_url && (
+          <div className="relative w-full h-64 sm:h-80 rounded-lg overflow-hidden border-2 border-border bg-muted mb-4">
+            <Image
+              src={recipe.image_url}
+              alt={recipe.name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 672px"
+              unoptimized={!recipe.image_url.includes('supabase.co')}
+            />
+          </div>
+        )}
+        <DialogHeader className="space-y-4 pb-4 border-b">
           {/* Top row: Title and action buttons */}
           <div className="flex items-start justify-between gap-4 pr-8">
             <DialogTitle className="text-2xl font-bold leading-tight flex-1">
@@ -123,10 +136,7 @@ export function RecipeDetailDialog({
           )}
         </DialogHeader>
 
-        {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin">
-          <div className="space-y-6">
-
+        <div className="space-y-6 pt-4">
           {/* Ingredients */}
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -167,7 +177,7 @@ export function RecipeDetailDialog({
             </ol>
           </div>
 
-          {/* Delete Button - Only visible when scrolled to bottom */}
+          {/* Delete Button */}
           {onDelete && (
             <div className="pt-6 border-t flex justify-end">
               <Button
@@ -180,7 +190,6 @@ export function RecipeDetailDialog({
               </Button>
             </div>
           )}
-          </div>
         </div>
       </DialogContent>
 

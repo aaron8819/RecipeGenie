@@ -8,8 +8,7 @@ import { RecipeCard } from "./recipe-card"
 import { RecipeDialog } from "./recipe-dialog"
 import { RecipeDetailDialog } from "./recipe-detail-dialog"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
-import { RecipeCategorySettingsModal } from "./recipe-category-settings-modal"
-import { TagManagementModal } from "./tag-management-modal"
+import { RecipeSettingsModal } from "./recipe-settings-modal"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   useRecipes,
@@ -125,8 +124,7 @@ export function RecipeList() {
   const [addingToShoppingListId, setAddingToShoppingListId] = useState<string | null>(null)
   const [markingAsMadeId, setMarkingAsMadeId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const [isCategorySettingsOpen, setIsCategorySettingsOpen] = useState(false)
-  const [isTagManagementOpen, setIsTagManagementOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   const { data: recipes, isLoading, isFetching } = useRecipes({
     category,
@@ -390,22 +388,12 @@ export function RecipeList() {
         <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
           <Button
             variant="outline"
-            onClick={() => setIsCategorySettingsOpen(true)}
+            onClick={() => setIsSettingsOpen(true)}
             className="w-full sm:w-auto"
           >
             <Settings className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Categories</span>
+            <span className="hidden sm:inline">Settings</span>
           </Button>
-          {allTags.length > 0 && (
-            <Button
-              variant="outline"
-              onClick={() => setIsTagManagementOpen(true)}
-              className="w-full sm:w-auto"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Tags</span>
-            </Button>
-          )}
           <Button onClick={() => setIsAddDialogOpen(true)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Add Recipe
@@ -557,16 +545,10 @@ export function RecipeList() {
         recipe={addToPlanRecipe}
       />
 
-      {/* Category Settings Modal */}
-      <RecipeCategorySettingsModal
-        open={isCategorySettingsOpen}
-        onOpenChange={setIsCategorySettingsOpen}
-      />
-
-      {/* Tag Management Modal */}
-      <TagManagementModal
-        open={isTagManagementOpen}
-        onOpenChange={setIsTagManagementOpen}
+      {/* Recipe Settings Modal */}
+      <RecipeSettingsModal
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
       />
     </div>
   )

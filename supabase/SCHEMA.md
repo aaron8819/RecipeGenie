@@ -12,6 +12,8 @@ This document describes the complete database schema for the Recipe Genie applic
   - [recipe_history](#recipe_history)
   - [weekly_plans](#weekly_plans)
   - [shopping_list](#shopping_list)
+- [Storage Buckets](#storage-buckets)
+  - [recipe-images](#recipe-images)
 - [Indexes](#indexes)
 - [Row Level Security (RLS)](#row-level-security-rls)
 - [Functions](#functions)
@@ -23,12 +25,13 @@ This document describes the complete database schema for the Recipe Genie applic
 The Recipe Genie database is designed for multi-user support with complete data isolation between users. All tables include a `user_id` column that references `auth.users(id)`, and Row Level Security (RLS) policies ensure users can only access their own data.
 
 The schema supports:
-- Recipe storage with ingredients and instructions
+- Recipe storage with ingredients, instructions, and images
 - Pantry item management
 - User configuration and preferences
 - Recipe history tracking
 - Weekly meal planning
 - Shopping list generation
+- Image storage via Supabase Storage
 
 ## Tables
 
@@ -47,6 +50,7 @@ Stores all recipe information including ingredients, instructions, and metadata.
 | `tags` | TEXT[] | DEFAULT '{}' | Array of tags for the recipe |
 | `ingredients` | JSONB | NOT NULL, DEFAULT '[]' | Array of ingredient objects with `item`, `unit`, and `amount` |
 | `instructions` | TEXT[] | NOT NULL, DEFAULT '{}' | Array of instruction steps |
+| `image_url` | TEXT | NULL | URL or path to recipe image (Supabase Storage path or external URL) |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was created |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was last updated |
 
@@ -179,12 +183,37 @@ Stores the user's shopping list state.
 | `custom_order` | BOOLEAN | DEFAULT FALSE | Whether the list has been manually reordered (disables auto-sorting) |
 | `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when list was generated |
 
+## Storage Buckets
+
+### recipe-images
+
+Public storage bucket for recipe images. Images are organized by user ID in folders.
+
+**Bucket ID:** `recipe-images`
+
+**Public Access:** Yes (read-only for public, full access for authenticated users)
+
+**File Structure:** `{user_id}/{recipe_id}.{ext}`
+
+**RLS Policies:**
+- **Upload**: Users can only upload images to their own folder (`{user_id}/`)
+- **View**: Users can view their own images; public read access is also enabled
+- **Update**: Users can update their own images
+- **Delete**: Users can delete their own images
+
+**Supported Formats:** JPEG, JPG, PNG, WebP
+
+**Max File Size:** 5MB (enforced client-side)
+
+**Image Optimization:** Images are automatically compressed/resized to max 2000px width on upload if they exceed 1MB.
+
 ## Indexes
 
 ### recipes
 - `idx_recipes_category` - Index on `category` for filtering by category
 - `idx_recipes_favorite` - Partial index on `favorite` WHERE `favorite = TRUE` for quick favorite queries
 - `idx_recipes_user_id` - Index on `user_id` for user-specific queries
+- `idx_recipes_has_image` - Partial index on `image_url` WHERE `image_url IS NOT NULL` for recipes with images
 
 ### pantry_items
 - `idx_pantry_items_user_id` - Index on `user_id` for user-specific queries
@@ -332,6 +361,8 @@ The schema has evolved through the following migrations:
 7. **007_custom_categories.sql** - Added `custom_categories` and `category_order` to `user_config` for user-defined shopping categories and custom category ordering
 8. **008_add_day_assignments.sql** - Added `day_assignments` JSONB column to `weekly_plans` to store recipe-to-day mappings for calendar view (enables cross-device persistence)
 9. **009_planner_settings.sql** - Added `excluded_days`, `preferred_days`, and `auto_assign_days` to `user_config` for planner day placement rules and automatic day assignment
+10. **010_add_recipe_images.sql** - Added `image_url` column to `recipes` table for storing recipe image URLs (Supabase Storage paths or external URLs)
+11. **011_create_recipe_images_bucket.sql** - Created `recipe-images` storage bucket with RLS policies for secure user-specific image storage
 
 ## Query Examples
 
