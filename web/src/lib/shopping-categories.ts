@@ -265,14 +265,12 @@ export function categorizeIngredient(
 }
 
 /**
- * Check if an ingredient matches any excluded keyword using word boundaries.
+ * Check if an ingredient matches any excluded keyword using exact match.
  * Ported from app.py:214-229
  *
- * Uses regex word boundaries to avoid false positives like:
- * - "rice" matching "rice vinegar" (now only matches standalone "rice")
- * - "oil" matching "foil" (now only matches "oil" as a word)
- *
- * Multi-word keywords like "garlic powder" match as a phrase.
+ * Uses exact string matching (case-insensitive) to avoid false positives:
+ * - "pepper" only matches "pepper", not "poblano pepper" or "black pepper"
+ * - "oil" only matches "oil", not "olive oil" or "vegetable oil"
  *
  * @param itemName - The ingredient name to check
  * @param excludedKeywords - List of keywords to exclude
@@ -287,7 +285,7 @@ export function isExcludedIngredient(
 
 /**
  * Get the excluded keyword that matches an ingredient, if any.
- * Uses word boundaries to avoid false positives.
+ * Uses exact string matching (case-insensitive) to avoid false positives.
  *
  * @param itemName - The ingredient name to check
  * @param excludedKeywords - List of keywords to exclude
@@ -297,12 +295,11 @@ export function getExcludedKeyword(
   itemName: string,
   excludedKeywords: string[]
 ): string | null {
-  const itemLower = itemName.toLowerCase()
+  const itemLower = itemName.toLowerCase().trim()
 
   for (const keyword of excludedKeywords) {
-    // Use word boundaries to match whole words only
-    const pattern = new RegExp(`\\b${escapeRegex(keyword.toLowerCase())}\\b`)
-    if (pattern.test(itemLower)) {
+    // Use exact match (case-insensitive) - keyword must match ingredient name exactly
+    if (itemLower === keyword.toLowerCase().trim()) {
       return keyword
     }
   }

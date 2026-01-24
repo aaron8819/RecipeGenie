@@ -117,33 +117,33 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ## ADR-005: Keyword-Based Ingredient Exclusion
 
-**Status:** Accepted (updated 2026-01-09)
+**Status:** Accepted (updated 2026-01-24)
 
 **Context:** Shopping lists should exclude common pantry staples the user always has.
 
-**Decision:** Use configurable keyword matching with word boundaries to auto-exclude ingredients (e.g., "oil", "salt", "garlic").
+**Decision:** Use configurable keyword matching with exact string matching (case-insensitive) to auto-exclude ingredients (e.g., "oil", "salt", "pepper").
 
 **Rationale:**
-- More flexible than exact-match pantry items
-- "oil" matches "olive oil", "vegetable oil", "sesame oil"
-- Reduces manual pantry management burden
-- Word boundaries prevent false positives like "oil" matching "foil"
+- Precise control over what gets excluded
+- "pepper" only matches "pepper", not "poblano pepper" or "black pepper"
+- Prevents false positives from partial matches
+- Users can add specific variants to the exclusion list if needed (e.g., "black pepper", "white pepper")
 
 **Implementation:**
-- Uses regex `\b` word boundaries for matching
-- Keywords must appear as complete words
-- Multi-word keywords (e.g., "garlic powder") match as phrases
+- Uses exact string matching (case-insensitive, trimmed)
+- Keyword must match ingredient name exactly
+- Example: "pepper" matches "pepper" but not "poblano pepper"
 
 **Tradeoffs:**
-- (+) Catches ingredient variants automatically
+- (+) Precise matching prevents unexpected exclusions
 - (+) Configurable per-user preferences
-- (+) Word boundaries prevent most false positives
-- (-) Compound nouns still match (e.g., "rice" matches "rice vinegar" since "rice" is a complete word)
+- (+) Clear, predictable behavior
+- (-) Users must add multiple variants if they want to exclude them (e.g., "black pepper", "white pepper" separately)
 
 **Risks:**
-- Users may be confused when items unexpectedly disappear from shopping lists
+- Users may need to add more keywords to cover variants
 - Solution: UI shows "excluded" items separately (already implemented)
-- Users can adjust keywords if compound noun matching is undesired
+- Users can add specific variants to the exclusion list as needed
 
 ---
 

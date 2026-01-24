@@ -201,7 +201,7 @@ export function PantryList() {
             Excluded Keywords
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Keywords that exclude matching ingredients. Items containing these words (e.g., &quot;garlic&quot; matches &quot;black bean garlic sauce&quot;) are automatically excluded from shopping lists.
+            Keywords that exclude matching ingredients. Only exact matches are excluded (e.g., &quot;pepper&quot; matches &quot;pepper&quot; but not &quot;poblano pepper&quot;).
           </p>
         </CardHeader>
         <CardContent>

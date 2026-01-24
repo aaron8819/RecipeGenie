@@ -159,7 +159,7 @@ describe('generateShoppingList', () => {
     expect(result.alreadyHave[0].item).toBe('salt')
   })
 
-  it('should exclude items matching excluded keywords', () => {
+  it('should exclude items matching excluded keywords (exact match only)', () => {
     const recipes: Recipe[] = [
       {
         id: 'recipe-1',
@@ -172,6 +172,8 @@ describe('generateShoppingList', () => {
         ingredients: [
           { item: 'flour', amount: 2, unit: 'cup' },
           { item: 'garlic powder', amount: 1, unit: 'tsp' },
+          { item: 'pepper', amount: 1, unit: 'tsp' },
+          { item: 'poblano pepper', amount: 2, unit: '' },
         ],
         instructions: [],
         created_at: new Date().toISOString(),
@@ -179,11 +181,13 @@ describe('generateShoppingList', () => {
       },
     ]
 
-    const result = generateShoppingList(recipes, [], ['garlic'], 1.0)
+    const result = generateShoppingList(recipes, [], ['pepper'], 1.0)
 
-    expect(result.items).toHaveLength(1)
-    expect(result.items[0].item).toBe('flour')
+    expect(result.items).toHaveLength(3) // flour, garlic powder, poblano pepper
+    expect(result.items.find(i => i.item === 'flour')).toBeDefined()
+    expect(result.items.find(i => i.item === 'garlic powder')).toBeDefined()
+    expect(result.items.find(i => i.item === 'poblano pepper')).toBeDefined()
     expect(result.excluded).toHaveLength(1)
-    expect(result.excluded[0].item).toBe('garlic powder')
+    expect(result.excluded[0].item).toBe('pepper') // Only exact match
   })
 })
