@@ -102,8 +102,10 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | `components/pantry/` | `pantry-list.tsx` | Pantry items, excluded keywords |
 | `components/shopping/` | `shopping-list.tsx`, `shopping-settings-modal.tsx` | Shopping list display, scaling, drag-and-drop reordering, category management |
 | `components/ui/` | Various | Radix UI primitives (button, dialog, tabs, etc.) |
-| `hooks/` | `use-recipes.ts`, `use-planner.ts`, etc. | TanStack Query hooks for Supabase |
-| `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization |
+| `components/` | `error-boundary.tsx` | Error boundary component for application resilience |
+| `hooks/` | `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts` | TanStack Query hooks for Supabase |
+| `hooks/shopping/` | Domain-focused modules | Shopping hooks split by domain (list, items, recipes, categories, config, pantry) |
+| `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization (singleton pattern) |
 | `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation with normalization, category management, recipe text parsing) |
 | `lib/__tests__/` | Test files | Comprehensive test suite for shopping list functionality |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
@@ -253,18 +255,34 @@ For UI changes:
 | Understand meal plan generation | `src/lib/meal-planner.ts` |
 | Understand shopping list logic | `src/lib/shopping-list.ts` |
 | Understand shopping categories | `src/lib/shopping-categories.ts` |
+| Modify shopping hooks | `src/hooks/shopping/` (domain-focused modules) |
 | Modify recipe form | `src/components/recipes/recipe-dialog.tsx` |
 | Understand recipe parsing | `src/lib/recipe-parser.ts` |
 | Change tab navigation | `src/app/page.tsx` |
 | Add Supabase query | Create hook in `src/hooks/` |
+| Get Supabase client | `src/lib/supabase/client.ts` (singleton) |
 | Debug query state | React Query DevTools in browser |
 | Check database schema | `supabase/migrations/001_initial_schema.sql` |
 
 ---
 
-*Last updated: 2026-01-26 (v2.8.1)*
+*Last updated: 2026-01-24 (v2.10.0)*
 
-## Recent Updates (v2.8.1)
+## Recent Updates (v2.10.0)
+
+### Codebase Improvements
+- **Error Boundary**: Application-level error boundary prevents crashes and provides recovery UI
+- **Shopping Hooks Refactor**: Split monolithic `use-shopping.ts` into domain-focused modules for better maintainability
+- **Supabase Client Consolidation**: Single source of truth for Supabase client eliminates duplicate code
+
+## Previous Updates (v2.9.1)
+
+### TypeScript Build Fixes
+- Resolved Supabase type inference issues with workarounds
+- Added explicit type assertions for query results
+- Build now completes successfully with all type checks passing
+
+## Previous Updates (v2.8.1)
 
 ### Recipe Ingredient Reordering
 - **Drag-and-Drop Ingredients**: Reorder ingredients in recipe dialog using drag-and-drop

@@ -4,6 +4,94 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.10.0] - 2026-01-24
+
+**Summary:** Codebase improvements based on comprehensive analysis - error boundary, shopping hooks refactor, and Supabase client consolidation
+
+### Added
+
+- **Error Boundary with Recovery UI**:
+  - New `ErrorBoundary` component that catches JavaScript errors in child components
+  - Displays user-friendly error screen instead of blank crash
+  - "Try again" button to reset error state without page reload
+  - "Reload page" button for full page refresh
+  - Error details shown in development mode for debugging
+  - Integrated at app root level in `providers.tsx` to catch all errors
+  - Prevents entire app crash from single component errors
+
+- **Shopping Hooks Modularization**:
+  - Split monolithic `use-shopping.ts` (1,470 lines) into domain-focused modules
+  - New structure: `hooks/shopping/` directory with specialized files:
+    - `use-shopping-list.ts` - Core list operations (fetch, generate, save, clear)
+    - `use-shopping-items.ts` - Item operations (add, remove, check, reorder, bulk)
+    - `use-shopping-recipes.ts` - Recipe-related operations (add/remove recipe items)
+    - `use-shopping-categories.ts` - Category override operations
+    - `use-shopping-config.ts` - Shopping configuration operations
+    - `use-shopping-pantry.ts` - Pantry integration operations
+    - `shared.ts` - Shared constants and guest mode helpers
+    - `index.ts` - Barrel export for backward compatibility
+  - Backward compatible: existing imports from `@/hooks/use-shopping` continue to work
+  - Each module is focused, testable, and easier to maintain
+
+### Changed
+
+- **Supabase Client Consolidation**:
+  - Consolidated duplicate `getSupabase()` functions from 6 files into single source
+  - All hooks now import from `@/lib/supabase/client.ts`
+  - Singleton pattern ensures single client instance (better connection pooling)
+  - Eliminates maintenance burden of updating multiple files for client changes
+  - Updated files: `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts`, `auth-context.tsx`, `page.tsx`, and all shopping hooks
+
+### Technical Notes
+
+- Error boundary uses React class component (required for error boundaries)
+- Shopping hooks refactor maintains 100% backward compatibility via barrel export
+- Supabase client singleton pattern improves performance and maintainability
+- All three improvements address top recommendations from codebase analysis
+- No breaking changes - all improvements are additive or internal refactoring
+
+---
+
+## [2.9.1] - 2026-01-24
+
+**Summary:** Fixed TypeScript compilation errors related to Supabase type inference
+
+### Fixed
+
+- **TypeScript Build Errors**:
+  - Resolved compilation failures caused by Supabase type inference issues
+  - TypeScript incorrectly inferred parameter types as `never` for `.update()` and `.insert()` operations
+  - Added `@ts-expect-error` comments with explanatory notes to affected Supabase operations
+  - Fixed type assertions for Supabase query results across all hooks
+
+- **Type Safety Improvements**:
+  - Added explicit type assertions for `currentList`, `config`, `plan`, `recipe`, and other Supabase query results
+  - Changed patterns from `data?.property` to `(data as Type | null)?.property` for better type safety
+  - Fixed `user?.id` to `user!.id` in all Supabase queries where user is guaranteed to exist (non-guest mode)
+
+### Changed
+
+- **Affected Files**:
+  - `use-shopping-categories.ts` - Fixed category override updates
+  - `use-shopping-config.ts` - Fixed config updates and inserts
+  - `use-shopping-items.ts` - Fixed item updates and type assertions
+  - `use-shopping-list.ts` - Fixed shopping list updates and inserts
+  - `use-shopping-pantry.ts` - Fixed pantry-related updates
+  - `use-shopping-recipes.ts` - Fixed recipe-related shopping list operations
+  - `use-pantry.ts` - Fixed pantry item operations and config queries
+  - `use-planner.ts` - Fixed meal plan updates and inserts
+  - `use-recipes.ts` - Fixed recipe CRUD operations
+
+### Technical Notes
+
+- This is a known limitation with Supabase TypeScript type inference in certain contexts
+- The `@ts-expect-error` comments document that these are type system limitations, not runtime errors
+- All operations are type-safe at runtime; the workarounds are purely for TypeScript compilation
+- Build now completes successfully with all type checks passing
+- See ADR-016 for detailed explanation of the issue and workaround
+
+---
+
 ## [2.9.0] - 2026-01-27
 
 **Summary:** Recipe image support with Supabase Storage integration

@@ -527,3 +527,191 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - Could allow users to save multiple category orderings for different stores
 - Could add category icons or colors for visual organization
 - Could support category-based shopping list filtering
+
+---
+
+## ADR-016: Supabase TypeScript Type Inference Workarounds
+
+**Status:** Accepted (2026-01-24)
+
+**Context:** During TypeScript compilation, Supabase client operations (`.update()`, `.insert()`) were incorrectly inferring parameter types as `never` in certain contexts, causing build failures. This occurred despite the database types being correctly defined and the operations working correctly at runtime.
+
+**Decision:** Use `@ts-expect-error` comments with explanatory notes to suppress TypeScript errors for Supabase operations where type inference fails, while maintaining type safety through explicit type assertions for query results.
+
+**Rationale:**
+- The errors are false positives from TypeScript's type inference system, not actual runtime issues
+- All operations are type-safe at runtime due to Supabase's runtime validation
+- Explicit type assertions for query results (`data as Type | null`) provide type safety where needed
+- `@ts-expect-error` is more explicit than `@ts-ignore` and will fail if the error is actually fixed
+- This is a known limitation with Supabase's TypeScript integration in complex query chains
+
+**Implementation:**
+- Added `@ts-expect-error` comments before all `.update()` and `.insert()` calls that trigger type errors
+- Each comment includes: `// @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'`
+- Added explicit type assertions for Supabase query results:
+  - `const typedList = currentList as { items?: ShoppingItem[] } | null`
+  - `const typedConfig = config as { excluded_keywords?: string[] } | null`
+- Changed `user?.id` to `user!.id` in all non-guest operations where user is guaranteed to exist
+
+**Tradeoffs:**
+- (+) Build completes successfully
+- (+) Runtime type safety maintained through explicit assertions
+- (+) `@ts-expect-error` will fail if the underlying issue is fixed (better than `@ts-ignore`)
+- (-) Suppresses legitimate type checking for these operations
+- (-) Requires maintenance if Supabase types change
+- (-) May hide actual type errors if code changes
+
+**Risks:**
+- Future Supabase updates may change type inference behavior
+- **Mitigation**: `@ts-expect-error` will fail if the error is resolved, alerting us to remove the workaround
+- Type assertions may become incorrect if database schema changes
+- **Mitigation**: Database types are generated from schema, so changes will be reflected in types
+
+**Alternatives Considered:**
+- Using `as any` type assertions - rejected as too permissive and loses all type safety
+- Disabling TypeScript strict mode - rejected as it would reduce type safety across the entire codebase
+- Waiting for Supabase to fix the issue - rejected as it blocks development and deployment
+- Using different query patterns - rejected as current patterns are idiomatic and correct
+
+**Future Considerations:**
+- Monitor Supabase TypeScript library updates for fixes to type inference
+- Consider contributing to Supabase TypeScript definitions if a better solution is found
+- If Supabase fixes the issue, remove `@ts-expect-error` comments and verify build still passes
+
+---
+
+## ADR-017: Error Boundary for Application Resilience
+
+**Status:** Accepted (2026-01-24)
+
+**Context:** A single JavaScript error in any component would crash the entire application, leaving users with a blank screen and no recovery path. This creates a poor user experience and makes debugging difficult.
+
+**Decision:** Implement a React Error Boundary component at the application root level to catch errors in the component tree and display a recovery UI instead of crashing.
+
+**Rationale:**
+- Prevents entire app crash from single component errors
+- Provides user-friendly error messaging instead of blank screen
+- Enables recovery without full page reload ("Try again" button)
+- Shows error details in development mode for debugging
+- Industry best practice for production React applications
+- Low effort, high impact improvement
+
+**Implementation:**
+- Custom `ErrorBoundary` class component (React error boundaries must be class components)
+- Wrapped around entire app in `providers.tsx` at root level
+- Displays branded error screen with recovery options
+- Logs errors to console (can be extended to error reporting service)
+- Development mode shows error message for debugging
+
+**Tradeoffs:**
+- (+) Prevents app-wide crashes
+- (+) Better user experience during errors
+- (+) Enables graceful degradation
+- (+) Foundation for future error reporting integration
+- (-) Requires class component (React limitation)
+- (-) Only catches errors in render/componentDidCatch, not in event handlers or async code
+
+**Risks:**
+- Error boundary itself could have bugs
+- **Mitigation**: Simple, well-tested pattern; errors in boundary fall back to browser default
+- Some errors may not be caught (event handlers, async operations)
+- **Mitigation**: Documented limitation; future work can add try-catch in critical async paths
+
+**Future Considerations:**
+- Integrate with error reporting service (Sentry, LogRocket) in `componentDidCatch`
+- Add error boundary at component level for more granular error handling
+- Add retry logic for specific error types (network errors, etc.)
+
+---
+
+## ADR-018: Shopping Hooks Modularization
+
+**Status:** Accepted (2026-01-24)
+
+**Context:** The `use-shopping.ts` file had grown to 1,470 lines with 18+ exported hooks covering multiple domains (list operations, item operations, recipe operations, category operations, config operations, pantry operations). This monolithic structure made the codebase harder to maintain, test, and reason about.
+
+**Decision:** Split `use-shopping.ts` into domain-focused modules within a `hooks/shopping/` directory, maintaining backward compatibility through a barrel export.
+
+**Rationale:**
+- Improves maintainability by separating concerns
+- Makes each module easier to understand and test in isolation
+- Reduces cognitive load when working on specific shopping features
+- Enables parallel development on different shopping domains
+- Follows single responsibility principle
+- Backward compatibility ensures no breaking changes
+
+**Implementation:**
+- Created `hooks/shopping/` directory with domain-focused files:
+  - `use-shopping-list.ts` - Core list operations (fetch, generate, save, clear)
+  - `use-shopping-items.ts` - Item operations (add, remove, check, reorder, bulk)
+  - `use-shopping-recipes.ts` - Recipe-related operations (add/remove recipe items)
+  - `use-shopping-categories.ts` - Category override operations
+  - `use-shopping-config.ts` - Shopping configuration operations
+  - `use-shopping-pantry.ts` - Pantry integration operations
+  - `shared.ts` - Shared constants (SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY) and guest mode helpers
+  - `index.ts` - Barrel export re-exporting all hooks
+- Maintained `use-shopping.ts` as backward-compatible barrel export
+- All existing imports continue to work without changes
+
+**Tradeoffs:**
+- (+) Much easier to navigate and understand specific functionality
+- (+) Each module can be tested independently
+- (+) Reduces merge conflicts when multiple developers work on shopping features
+- (+) Better code organization follows domain boundaries
+- (+) Backward compatible - no breaking changes
+- (-) More files to manage (mitigated by clear organization)
+- (-) Some shared logic requires careful placement (handled via `shared.ts`)
+
+**Risks:**
+- Breaking changes if barrel export not maintained correctly
+- **Mitigation**: Comprehensive barrel export in `index.ts`; all hooks re-exported
+- Circular dependencies if not careful
+- **Mitigation**: Shared constants and helpers in dedicated `shared.ts` file
+
+**Future Considerations:**
+- Remove `use-shopping.ts` barrel export after all consumers updated (clean break)
+- Further split if any module grows too large (>500 lines)
+- Consider extracting business logic from hooks into separate utility files
+
+---
+
+## ADR-019: Supabase Client Consolidation
+
+**Status:** Accepted (2026-01-24)
+
+**Context:** The `getSupabase()` function was duplicated across 6 files (`use-shopping.ts`, `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts`, `page.tsx`, `auth-context.tsx`). This created a maintenance burden: any changes to client initialization, error handling, or configuration required updates in multiple places.
+
+**Decision:** Consolidate `getSupabase()` to a single source in `lib/supabase/client.ts` with singleton pattern, and update all files to import from this central location.
+
+**Rationale:**
+- Single source of truth for Supabase client initialization
+- Eliminates maintenance burden of updating multiple files
+- Singleton pattern ensures single client instance (better connection pooling)
+- Enables centralized error handling, logging, or configuration changes
+- Follows DRY (Don't Repeat Yourself) principle
+- Low effort, high value refactoring
+
+**Implementation:**
+- Updated `lib/supabase/client.ts` to export `getSupabase()` function with singleton pattern
+- Maintained backward compatibility by also exporting `createClient` alias
+- Updated all 6 files to import: `import { getSupabase } from "@/lib/supabase/client"`
+- Removed duplicate function definitions from all hook files
+
+**Tradeoffs:**
+- (+) Single source of truth for client initialization
+- (+) Easier to add request logging, error handling, or configuration
+- (+) Singleton pattern improves connection pooling
+- (+) Reduces code duplication
+- (+) No breaking changes - same function signature
+- (-) None significant
+
+**Risks:**
+- Breaking changes if import path incorrect
+- **Mitigation**: All imports verified; TypeScript will catch import errors
+- Singleton pattern may cause issues in test environments
+- **Mitigation**: Can be addressed with dependency injection if needed in future
+
+**Future Considerations:**
+- Add request logging or error tracking in `getSupabase()` if needed
+- Consider adding retry logic for network failures
+- Could add request/response interceptors for debugging

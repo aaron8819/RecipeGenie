@@ -10,14 +10,7 @@ import { AuthForm } from "@/components/auth/auth-form"
 import { Header, BottomNav, FirstRunOnboarding } from "@/components/layout"
 import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
-import { createBrowserClient } from "@supabase/ssr"
-
-function getSupabase() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
+import { getSupabase } from "@/lib/supabase/client"
 
 const VALID_TABS = ["recipes", "planner", "pantry", "shopping"] as const
 const STORAGE_KEY = "recipe-genie-active-tab"

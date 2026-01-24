@@ -1,7 +1,6 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react"
-import { createBrowserClient } from "@supabase/ssr"
 import { useQueryClient } from "@tanstack/react-query"
 import type { User, Session } from "@supabase/supabase-js"
 import {
@@ -11,6 +10,7 @@ import {
   getDefaultConfig,
   getDefaultShoppingList,
 } from "@/lib/guest-storage"
+import { getSupabase } from "@/lib/supabase/client"
 
 interface AuthContextType {
   user: User | null
@@ -26,13 +26,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-function getSupabase() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
