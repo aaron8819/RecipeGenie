@@ -662,7 +662,7 @@ function SortableIngredientRow({
         placeholder="Modifier (e.g., rinsed)"
         value={ingredient.modifier || ""}
         onChange={(e) =>
-          onIngredientChange(index, "modifier", e.target.value || undefined)
+          onIngredientChange(index, "modifier", e.target.value || null)
         }
       />
       <Button
@@ -935,7 +935,7 @@ function RecipeFormContent({
                   placeholder="Modifier (e.g., rinsed)"
                   value={ingredient.modifier || ""}
                   onChange={(e) =>
-                    onIngredientChange(index, "modifier", e.target.value || undefined)
+                    onIngredientChange(index, "modifier", e.target.value || null)
                   }
                 />
                 <Button
