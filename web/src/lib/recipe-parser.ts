@@ -273,18 +273,25 @@ function parseIngredientLine(line: string): Ingredient {
     // Everything remaining is the item name (preserves commas, parentheses, etc.)
     item = remaining
 
+    // Extract modifier if present (e.g., "lentils, rinsed" -> item: "lentils", modifier: "rinsed")
+    const { item: baseItem, modifier } = extractModifier(item)
+
     return {
-      item: item || cleaned,
+      item: baseItem || cleaned,
       amount: amount,
       unit: unit,
+      modifier: modifier || undefined,
     }
   }
 
   // No amount found, treat entire line as ingredient name
+  // Still check for modifiers
+  const { item: baseItem, modifier } = extractModifier(cleaned)
   return {
-    item: cleaned,
+    item: baseItem,
     amount: null,
     unit: "",
+    modifier: modifier || undefined,
   }
 }
 
@@ -386,6 +393,60 @@ function matchUnit(text: string): { unit: string; endIndex: number } | null {
   }
   
   return null
+}
+
+/**
+ * Extract modifier from ingredient item name
+ * Detects preparation instructions after commas
+ * Examples:
+ * - "lentils, rinsed" -> item: "lentils", modifier: "rinsed"
+ * - "onion, diced" -> item: "onion", modifier: "diced"
+ * - "garlic, minced" -> item: "garlic", modifier: "minced"
+ * - "bell pepper, diced (optional)" -> item: "bell pepper", modifier: "diced (optional)"
+ * - "lentils, rinsed and drained" -> item: "lentils", modifier: "rinsed and drained"
+ */
+function extractModifier(item: string): { item: string; modifier: string | null } {
+  if (!item) return { item: "", modifier: null }
+
+  // Find the last comma that's not inside parentheses
+  // This handles cases like "1 (28 oz) can crushed tomatoes" where comma is in parentheses
+  let lastCommaIndex = -1
+  let parenDepth = 0
+  
+  for (let i = item.length - 1; i >= 0; i--) {
+    if (item[i] === ')') parenDepth++
+    else if (item[i] === '(') parenDepth--
+    else if (item[i] === ',' && parenDepth === 0) {
+      lastCommaIndex = i
+      break
+    }
+  }
+
+  // If no comma found, no modifier
+  if (lastCommaIndex === -1) {
+    return { item, modifier: null }
+  }
+
+  // Extract base item and potential modifier
+  const baseItem = item.substring(0, lastCommaIndex).trim()
+  const potentialModifier = item.substring(lastCommaIndex + 1).trim()
+
+  // Only treat as modifier if it's reasonably short (likely a prep instruction)
+  // Common modifiers are usually 1-30 characters
+  // Also check for common modifier keywords to avoid false positives
+  const isLikelyModifier = 
+    potentialModifier.length > 0 &&
+    potentialModifier.length < 60 && // Reasonable length for a modifier
+    !potentialModifier.match(/^\d+/) && // Doesn't start with a number (likely not a modifier)
+    (potentialModifier.length < 25 || // Short enough to likely be a modifier
+     /(rinsed|chopped|minced|diced|sliced|peeled|grated|shredded|crushed|mashed|optional|drained|dried|toasted|roasted|fresh|frozen|thawed|cooked|uncooked|raw|whole|halved|quartered|cubed|julienned|spiralized|zested|juiced|pitted|seeded|stemmed|trimmed|cleaned|washed|blanched|parboiled|steamed|boiled|fried|sautéed|grilled|baked|broiled|smoked|cured|marinated|brined|seasoned|salted|peppered|floured|breaded|battered|glazed|frosted|garnished|to taste|as needed)/i.test(potentialModifier))
+
+  if (isLikelyModifier && baseItem.length > 0) {
+    return { item: baseItem, modifier: potentialModifier }
+  }
+
+  // No modifier detected
+  return { item, modifier: null }
 }
 
 /**

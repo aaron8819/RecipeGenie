@@ -435,7 +435,12 @@ Instructions:
                               <span className="text-muted-foreground">
                                 {ing.amount ? `${ing.amount} ${ing.unit || ""}`.trim() : "—"}
                               </span>
-                              <span>{ing.item}</span>
+                              <span>
+                                {ing.item}
+                                {ing.modifier && (
+                                  <span className="text-muted-foreground">, {ing.modifier}</span>
+                                )}
+                              </span>
                             </li>
                           ))}
                         </ul>
@@ -652,6 +657,14 @@ function SortableIngredientRow({
           onIngredientChange(index, "unit", e.target.value)
         }
       />
+      <Input
+        className="w-32"
+        placeholder="Modifier (e.g., rinsed)"
+        value={ingredient.modifier || ""}
+        onChange={(e) =>
+          onIngredientChange(index, "modifier", e.target.value || undefined)
+        }
+      />
       <Button
         variant="ghost"
         size="icon"
@@ -671,8 +684,8 @@ function IngredientDragOverlay({ ingredient }: { ingredient: Ingredient }) {
       <GripVertical className="h-4 w-4 text-muted-foreground" />
       <span className="flex-1 text-sm">
         {ingredient.amount && ingredient.unit
-          ? `${ingredient.amount} ${ingredient.unit} ${ingredient.item}`
-          : ingredient.item || "Ingredient"}
+          ? `${ingredient.amount} ${ingredient.unit} ${ingredient.item}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`
+          : `${ingredient.item || "Ingredient"}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`}
       </span>
     </div>
   )
@@ -915,6 +928,14 @@ function RecipeFormContent({
                   value={ingredient.unit}
                   onChange={(e) =>
                     onIngredientChange(index, "unit", e.target.value)
+                  }
+                />
+                <Input
+                  className="w-32"
+                  placeholder="Modifier (e.g., rinsed)"
+                  value={ingredient.modifier || ""}
+                  onChange={(e) =>
+                    onIngredientChange(index, "modifier", e.target.value || undefined)
                   }
                 />
                 <Button

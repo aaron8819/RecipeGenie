@@ -156,6 +156,9 @@ export function RecipeDetailDialog({
                       </span>
                     )}
                     {ingredient.item}
+                    {ingredient.modifier && (
+                      <span className="text-muted-foreground">, {ingredient.modifier}</span>
+                    )}
                   </span>
                 </li>
               ))}

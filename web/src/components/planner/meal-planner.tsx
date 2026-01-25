@@ -741,6 +741,11 @@ export function MealPlanner() {
     return {}
   }, [weeklyPlan?.day_assignments, currentWeekDate])
 
+  // Get week days for calendar view (needed early for handleMarkMade)
+  const weekDays = useMemo(() => {
+    return getWeekDays(currentWeekDate, config?.week_start_day || 1)
+  }, [currentWeekDate, config?.week_start_day])
+
   // Persist view state to localStorage
   useEffect(() => {
     localStorage.setItem(PLANNER_VIEW_KEY, view)
@@ -852,10 +857,23 @@ export function MealPlanner() {
     const recipe = recipes?.find(r => r.id === recipeId)
     const recipeName = recipe?.name || "Recipe"
 
+    // Calculate the date to use: if recipe is assigned to a day, use that day's date
+    // Otherwise, use today's date (for recipes marked from recipe view or unassigned recipes)
+    let dateMade: string | undefined
+    const assignedDayIndex = recipeDayAssignments[recipeId]
+    if (assignedDayIndex !== undefined && weekDays[assignedDayIndex]) {
+      // Recipe is assigned to a specific day - use that day's date
+      const assignedDate = new Date(weekDays[assignedDayIndex].date)
+      // Set time to start of day to avoid timezone issues
+      assignedDate.setHours(0, 0, 0, 0)
+      dateMade = assignedDate.toISOString()
+    }
+    // If no day assignment, dateMade will be undefined and the hook will use today's date
+
     setMarkingRecipeId(recipeId)
     try {
       // Execute the mutation immediately
-      await markMade.mutateAsync({ recipeId, weekDate: currentWeekDate, isMadeForWeek })
+      await markMade.mutateAsync({ recipeId, weekDate: currentWeekDate, isMadeForWeek, dateMade })
 
       // Show undo toast after mutation succeeds
       undoToast.show({
@@ -868,6 +886,7 @@ export function MealPlanner() {
             recipeId,
             weekDate: currentWeekDate,
             isMadeForWeek: !isMadeForWeek, // Toggle back
+            dateMade, // Preserve the same date on undo
           })
         },
         onExpire: () => {
@@ -877,7 +896,7 @@ export function MealPlanner() {
     } finally {
       setMarkingRecipeId(null)
     }
-  }, [currentWeekDate, recipes, markMade, undoToast])
+  }, [currentWeekDate, recipes, markMade, undoToast, recipeDayAssignments, weekDays])
 
   const handleRemoveFromPlan = useCallback((recipe: Recipe) => {
     if (!currentWeekDate) return
@@ -994,11 +1013,6 @@ export function MealPlanner() {
       percentage: displayedRecipes.length > 0 ? Math.round((madeCount / displayedRecipes.length) * 100) : 0,
     }
   }, [displayedRecipes, weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
-
-  // Get week days for calendar view
-  const weekDays = useMemo(() => {
-    return getWeekDays(currentWeekDate, config?.week_start_day || 1)
-  }, [currentWeekDate, config?.week_start_day])
 
   // Group recipes by category for category view
   const recipesByCategory = useMemo(() => {

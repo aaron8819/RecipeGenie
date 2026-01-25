@@ -4,6 +4,45 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.10.1] - 2026-01-25
+
+**Summary:** Ingredient modifier support and date-based recipe history tracking
+
+### Added
+
+- **Ingredient Modifier Support**:
+  - Ingredients can now include preparation modifiers (e.g., "lentils, rinsed" → item: "lentils", modifier: "rinsed")
+  - Recipe parser automatically extracts modifiers from ingredient lines when importing from text
+  - Modifiers displayed in recipe detail view and recipe cards with muted styling
+  - Modifier input field added to recipe editing forms for manual entry
+  - Supports common preparation instructions: rinsed, diced, minced, chopped, etc.
+  - Smart detection: only treats text after comma as modifier if it's reasonably short and matches common modifier patterns
+  - Handles edge cases: ignores commas inside parentheses (e.g., "1 (28 oz) can crushed tomatoes")
+
+- **Date-Based Recipe History**:
+  - When marking a recipe as "made" from the meal planner, uses the assigned day's date instead of today's date
+  - Recipes assigned to specific days in the meal plan use that day's date for history tracking
+  - Unassigned recipes or recipes marked from other views still use today's date
+  - Date preserved on undo operations for accurate history tracking
+  - Improves accuracy of history exclusion when generating future meal plans
+
+### Changed
+
+- Recipe parser now extracts and stores ingredient modifiers separately from item names
+- `useMarkRecipeMade` hook now accepts optional `dateMade` parameter for custom date tracking
+- Recipe detail dialog displays modifiers with muted text styling for visual distinction
+- Recipe dialog forms include modifier input field alongside amount and unit fields
+
+### Technical Notes
+
+- New `modifier` field added to `Ingredient` interface (optional string)
+- `extractModifier()` function in `recipe-parser.ts` handles smart modifier detection
+- Modifier detection uses heuristics: length check, keyword matching, and avoids false positives
+- Date calculation in meal planner uses assigned day's date with timezone-safe handling
+- Backward compatible: existing recipes without modifiers continue to work normally
+
+---
+
 ## [2.10.0] - 2026-01-24
 
 **Summary:** Codebase improvements based on comprehensive analysis - error boundary, shopping hooks refactor, and Supabase client consolidation

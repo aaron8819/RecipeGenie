@@ -808,9 +808,12 @@ export function useMarkRecipeMade() {
   const { isGuest, user } = useAuthContext()
 
   return useMutation({
-    mutationFn: async ({ recipeId, weekDate, isMadeForWeek }: {
-      recipeId: string; weekDate: string; isMadeForWeek: boolean
+    mutationFn: async ({ recipeId, weekDate, isMadeForWeek, dateMade }: {
+      recipeId: string; weekDate: string; isMadeForWeek: boolean; dateMade?: string
     }) => {
+      // Use provided dateMade or default to current date/time
+      const dateToUse = dateMade || new Date().toISOString()
+      
       if (isGuest) {
         const plan = getGuestPlan(queryClient, weekDate)
         if (!plan) throw new Error("Plan not found")
@@ -833,7 +836,7 @@ export function useMarkRecipeMade() {
           const history = queryClient.getQueryData<RecipeHistory[]>([...HISTORY_KEY, true]) || []
           queryClient.setQueryData([...HISTORY_KEY, true], [
             ...history,
-            { id: Date.now(), user_id: "guest", recipe_id: recipeId, date_made: new Date().toISOString() }
+            { id: Date.now(), user_id: "guest", recipe_id: recipeId, date_made: dateToUse }
           ])
           return { action: "marked", recipeId, weekDate }
         }
@@ -885,7 +888,7 @@ export function useMarkRecipeMade() {
         const { error: insertError } = await supabase
           .from("recipe_history")
           // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-        .insert({ user_id: user!.id, recipe_id: recipeId, date_made: new Date().toISOString() })
+        .insert({ user_id: user!.id, recipe_id: recipeId, date_made: dateToUse })
 
         if (insertError) throw insertError
 
@@ -898,6 +901,7 @@ export function useMarkRecipeMade() {
 
         if (planError) throw planError
 
+        const typedPlan = plan as { made_recipe_ids?: string[] } | null
         const { error: updateError } = await supabase
           .from("weekly_plans")
           // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'

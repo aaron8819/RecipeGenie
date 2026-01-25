@@ -97,7 +97,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | Directory | Files | Responsibility |
 |-----------|-------|----------------|
 | `app/` | `layout.tsx`, `page.tsx` | Next.js App Router entry points, providers setup |
-| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx` | Recipe CRUD UI with text import parser |
+| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx` | Recipe CRUD UI with text import parser and ingredient modifier support |
 | `components/planner/` | `meal-planner.tsx` | Week navigation, plan generation, history |
 | `components/pantry/` | `pantry-list.tsx` | Pantry items, excluded keywords |
 | `components/shopping/` | `shopping-list.tsx`, `shopping-settings-modal.tsx` | Shopping list display, scaling, drag-and-drop reordering, category management |
@@ -106,7 +106,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | `hooks/` | `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts` | TanStack Query hooks for Supabase |
 | `hooks/shopping/` | Domain-focused modules | Shopping hooks split by domain (list, items, recipes, categories, config, pantry) |
 | `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization (singleton pattern) |
-| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation with normalization, category management, recipe text parsing) |
+| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation with normalization, category management, recipe text parsing with modifier extraction) |
 | `lib/__tests__/` | Test files | Comprehensive test suite for shopping list functionality |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
 
@@ -126,7 +126,7 @@ One-time import of legacy `data/*.json` files into Supabase. Uses service role k
 
 | Table | Schema | Purpose |
 |-------|--------|---------|
-| `recipes` | `id, user_id, name, category, servings, ingredients (JSONB), instructions, favorite, created_at, updated_at` | Recipe collection |
+| `recipes` | `id, user_id, name, category, servings, ingredients (JSONB with modifier support), instructions, favorite, created_at, updated_at` | Recipe collection |
 | `pantry_items` | `user_id, item (PK), created_at` | Items user has on hand |
 | `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, category_overrides, custom_categories[], category_order[], excluded_days[], preferred_days[], auto_assign_days` | User preferences |
 | `recipe_history` | `id, user_id, recipe_id (FK), date_made` | When recipes were cooked |
@@ -266,9 +266,17 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-24 (v2.10.0)*
+*Last updated: 2026-01-25 (v2.10.1)*
 
-## Recent Updates (v2.10.0)
+## Recent Updates (v2.10.1)
+
+### Ingredient Modifier Support & Date-Based History
+- **Ingredient Modifiers**: Recipe parser now extracts preparation instructions (e.g., "rinsed", "diced") as separate modifier fields
+- **Smart Detection**: Automatically identifies modifiers when importing recipes from text
+- **Date-Based History**: Recipes marked as "made" from meal planner use assigned day's date for accurate history tracking
+- **Visual Display**: Modifiers shown with muted styling in recipe views for clear distinction
+
+## Previous Updates (v2.10.0)
 
 ### Codebase Improvements
 - **Error Boundary**: Application-level error boundary prevents crashes and provides recovery UI
