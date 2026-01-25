@@ -29,9 +29,10 @@ export function useRemoveRecipeItems() {
         const current = getGuestList(queryClient)
         const filteredActiveItems = filterItems(current.items)
         const filteredAlreadyHave = filterItems(current.already_have)
+        const filteredExcluded = filterItems(current.excluded || [])
 
         // Check if any items (checked or unchecked) still reference this recipe
-        const allItems = [...filteredActiveItems, ...filteredAlreadyHave]
+        const allItems = [...filteredActiveItems, ...filteredAlreadyHave, ...filteredExcluded]
         const hasRecipeItems = allItems.some((item) =>
           item.sources?.some((s) => s.recipeName === recipeName)
         )
@@ -52,6 +53,7 @@ export function useRemoveRecipeItems() {
         setGuestList(queryClient, {
           items: filteredActiveItems,
           already_have: filteredAlreadyHave,
+          excluded: filteredExcluded,
           source_recipes: updatedSourceRecipes,
         })
         return { recipeName, removedCount: 0 }
@@ -60,17 +62,18 @@ export function useRemoveRecipeItems() {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
-        .select("items, already_have, source_recipes")
+        .select("items, already_have, excluded, source_recipes")
         .single()
 
       if (fetchError) throw fetchError
 
-      const typedList = currentList as { items?: ShoppingItem[]; already_have?: ShoppingItem[]; source_recipes?: string[] } | null
+      const typedList = currentList as { items?: ShoppingItem[]; already_have?: ShoppingItem[]; excluded?: ShoppingItem[]; source_recipes?: string[] } | null
       const filteredActiveItems = filterItems(typedList?.items || [])
       const filteredAlreadyHave = filterItems(typedList?.already_have || [])
+      const filteredExcluded = filterItems(typedList?.excluded || [])
 
       // Check if any items (checked or unchecked) still reference this recipe
-      const allItems = [...filteredActiveItems, ...filteredAlreadyHave]
+      const allItems = [...filteredActiveItems, ...filteredAlreadyHave, ...filteredExcluded]
       const hasRecipeItems = allItems.some((item) =>
         item.sources?.some((s) => s.recipeName === recipeName)
       )
@@ -98,6 +101,7 @@ export function useRemoveRecipeItems() {
         .update({
           items: filteredActiveItems,
           already_have: filteredAlreadyHave,
+          excluded: filteredExcluded,
           source_recipes: updatedSourceRecipes,
         })
         .eq("user_id", user!.id)

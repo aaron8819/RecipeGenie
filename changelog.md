@@ -4,6 +4,25 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.10.2] - 2026-01-25
+
+**Summary:** Bug fix for excluded items not being removed when recipe is removed from shopping list
+
+### Fixed
+
+- **Shopping List Recipe Removal**:
+  - Fixed bug where excluded items (items matching excluded keywords) were not removed when a recipe was removed from the shopping list
+  - Now properly filters excluded items array when removing recipe items, matching behavior of regular items and "already have" items
+  - Applies to both guest mode and authenticated users
+
+### Technical Notes
+
+- Updated `useRemoveRecipeItems` hook to include `excluded` array in filtering and database operations
+- Excluded items are now properly removed from shopping list when their source recipe is removed
+- Maintains consistency across all three shopping list arrays: `items`, `already_have`, and `excluded`
+
+---
+
 ## [2.10.1] - 2026-01-25
 
 **Summary:** Ingredient modifier support and date-based recipe history tracking
