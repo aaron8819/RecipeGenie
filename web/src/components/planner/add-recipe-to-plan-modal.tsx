@@ -29,12 +29,15 @@ interface AddRecipeToPlanModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   weekDate: string
+  /** When adding from a specific day's "Add Meal", pass that day index (0–6). Omit when adding from the generic "Add recipe" button. */
+  targetDayIndex?: number | null
 }
 
 export function AddRecipeToPlanModal({
   open,
   onOpenChange,
   weekDate,
+  targetDayIndex = null,
 }: AddRecipeToPlanModalProps) {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
@@ -64,6 +67,7 @@ export function AddRecipeToPlanModal({
       await addToPlan.mutateAsync({
         weekDate,
         recipeId: selectedRecipeId,
+        dayIndex: targetDayIndex != null ? targetDayIndex : undefined,
       })
       handleOpenChange(false)
     } catch (error) {

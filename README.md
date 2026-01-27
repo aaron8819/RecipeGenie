@@ -13,6 +13,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 - **Pantry Tracking**: Mark items you have on hand to get only what you need to buy
 - **Multi-User Support**: Each user has their own private data via Supabase Auth
 - **Guest Mode**: Try the app without signing up (data stored in browser session)
+- **Responsive UI**: Desktop header with tab navigation; mobile bottom nav; Stitch design (Outfit, Playfair, sage/terracotta palette)
 - **Cloud Deployment**: Host on Vercel for access from anywhere
 
 ## Tech Stack

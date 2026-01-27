@@ -153,12 +153,14 @@ export default function Home() {
 
   // Show main app if authenticated or in guest mode
   return (
-    <main className="min-h-screen bg-background pb-20 smooth-scroll">
+    <main className="min-h-screen bg-background pb-20 md:pb-6 md:pt-[65px] smooth-scroll">
       <Header
         userEmail={isGuest ? "Guest" : user?.email}
         onSignOut={handleSignOut}
         isGuest={isGuest}
         onSignUpClick={handleSignUpClick}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
       />
 
       <div className="container mx-auto px-4 py-4 max-w-full overflow-x-hidden">

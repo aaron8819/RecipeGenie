@@ -266,9 +266,20 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-25 (v2.10.1)*
+*Last updated: 2026-01-27 (v2.11.0)*
 
-## Recent Updates (v2.10.1)
+## Recent Updates (v2.11.0)
+
+### Stitch Visual Redesign & Desktop Navigation
+- **Typography**: Outfit (body) and Playfair Display (headings)
+- **Color palette**: Deep farm green primary, sage secondary, terracotta accent; design tokens: `card-cream`, `border-muted`, `accent-peach`, `accent-mint`, `accent-lavender`, `accent-rose`, `accent-green`
+- **Desktop header**: Fixed header with centered nav tabs (Planner, Recipes, Shopping, Pantry); avatar with initials; Help icon for onboarding
+- **Responsive nav**: Bottom nav on mobile only (`md:hidden`); desktop uses header tabs
+- **Planner cooked cards**: Grayscale and reduced opacity on images for “made” recipes (desktop and mobile)
+- **Recipe cards & dialogs**: Category accent colors, `card-cream` placeholders, `font-display` titles; custom recipe-dialog scrollbar on desktop
+- **Auth callback**: `dynamic = "force-dynamic"` for OAuth
+
+## Previous Updates (v2.10.1)
 
 ### Ingredient Modifier Support & Date-Based History
 - **Ingredient Modifiers**: Recipe parser now extracts preparation instructions (e.g., "rinsed", "diced") as separate modifier fields

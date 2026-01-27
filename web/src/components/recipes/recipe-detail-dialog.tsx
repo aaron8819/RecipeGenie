@@ -1,11 +1,11 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, Pencil, Clock, Trash2 } from "lucide-react"
+import { Heart, Pencil, Trash2, X, History, UtensilsCrossed } from "lucide-react"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
+  DialogClose,
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
@@ -59,130 +59,160 @@ export function RecipeDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        {/* Recipe Image */}
-        {recipe.image_url && (
-          <div className="relative w-full h-64 sm:h-80 rounded-lg overflow-hidden border-2 border-border bg-muted mb-4">
-            <Image
-              src={recipe.image_url}
-              alt={recipe.name}
-              fill
-              className="object-cover"
-              sizes="(max-width: 768px) 100vw, 672px"
-              unoptimized={!recipe.image_url.includes('supabase.co')}
-            />
-          </div>
-        )}
-        <DialogHeader className="space-y-4 pb-4 border-b">
-          {/* Top row: Title and action buttons */}
-          <div className="flex items-start justify-between gap-4 pr-8">
-            <DialogTitle className="text-2xl font-bold leading-tight flex-1">
-              {recipe.name}
-            </DialogTitle>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9"
-                onClick={() =>
-                  toggleFavorite.mutate({ id: recipe.id, favorite: recipe.favorite })
-                }
-              >
-                <Heart
-                  className={cn(
-                    "h-5 w-5",
-                    recipe.favorite
-                      ? "fill-terracotta-500 text-terracotta-500"
-                      : "text-muted-foreground hover:text-terracotta-400"
-                  )}
+      <DialogContent
+        hideCloseButton
+        className="max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto scrollbar-recipe-dialog"
+      >
+        {/* Custom close — recipemodal_redesign */}
+        <DialogTitle className="sr-only">{recipe.name}</DialogTitle>
+        <DialogClose asChild>
+          <button
+            type="button"
+            className="absolute top-6 right-6 z-10 bg-white/80 dark:bg-black/40 backdrop-blur-md p-2 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </DialogClose>
+
+        <div>
+          {/* Image — aspect 16/10, rounded-3xl; placeholder when no image */}
+          <div className="p-6 pb-0">
+            <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-card-cream dark:bg-zinc-800">
+              {recipe.image_url ? (
+                <Image
+                  src={recipe.image_url}
+                  alt={recipe.name}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 672px"
+                  unoptimized={!recipe.image_url.includes("supabase.co")}
                 />
-              </Button>
-              {onEdit && (
-                <Button variant="outline" size="sm" onClick={() => onEdit(recipe)}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit Recipe
-                </Button>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <UtensilsCrossed className="h-16 w-16 text-stone-300 dark:text-zinc-600 opacity-40" />
+                </div>
               )}
             </div>
           </div>
 
-          {/* Meta info: Tags */}
-          <div className="flex items-center gap-3 flex-wrap">
-            {recipe.category && (
-              <span className={cn("capitalize text-sm font-medium px-2.5 py-1 rounded-md", getTagClassName(recipe.category, true))}>
-                {recipe.category}
-              </span>
-            )}
-            {recipe.tags && recipe.tags.length > 0 && (
-              <>
-                {recipe.tags.map((tag) => (
-                  <span key={tag} className={cn("text-sm font-medium px-2.5 py-1 rounded-md", getTagClassName(tag, false))}>
-                    {tag}
-                  </span>
-                ))}
-              </>
-            )}
-          </div>
-
-          {/* Last made date and times made */}
-          {timesMade > 0 && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>
-                Made {timesMade} time{timesMade !== 1 ? "s" : ""}
-                {lastMade && ` · Last: ${new Date(lastMade).toLocaleDateString()}`}
-              </span>
-            </div>
-          )}
-        </DialogHeader>
-
-        <div className="space-y-6 pt-4">
-          {/* Ingredients */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold">Ingredients</h3>
-              <span className="text-sm text-muted-foreground">
-                {recipe.servings} {recipe.servings === 1 ? 'serving' : 'servings'}
-              </span>
-            </div>
-            <ul className="space-y-2">
-              {recipe.ingredients?.map((ingredient, index) => (
-                <li key={index} className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-primary/50" />
-                  <span>
-                    {ingredient.amount && (
-                      <span className="font-medium">
-                        {toFraction(ingredient.amount)} {ingredient.unit}{" "}
+          {/* Header: title, category, history, heart, Edit — recipemodal_redesign */}
+          <div className="px-8 pt-8 pb-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-3xl md:text-4xl font-display font-bold text-primary dark:text-stone-100 mb-2">
+                  {recipe.name}
+                </h1>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {recipe.category && (
+                    <span
+                      className={cn(
+                        "px-3 py-1 text-sm font-semibold rounded-full capitalize",
+                        getTagClassName(recipe.category, true)
+                      )}
+                    >
+                      {recipe.category}
+                    </span>
+                  )}
+                  {recipe.tags && recipe.tags.length > 0 && (
+                    recipe.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className={cn(
+                          "px-3 py-1 text-sm font-medium rounded-full",
+                          getTagClassName(tag, false)
+                        )}
+                      >
+                        {tag}
                       </span>
+                    ))
+                  )}
+                  {timesMade > 0 && (
+                    <div className="flex items-center text-stone-500 dark:text-stone-400 text-sm">
+                      <History className="h-4 w-4 mr-1 shrink-0" />
+                      Made {timesMade} time{timesMade !== 1 ? "s" : ""}
+                      {lastMade && ` • Last: ${new Date(lastMade).toLocaleDateString()}`}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    toggleFavorite.mutate({ id: recipe.id, favorite: recipe.favorite })
+                  }
+                  className="p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  aria-label={recipe.favorite ? "Remove from favorites" : "Add to favorites"}
+                >
+                  <Heart
+                    className={cn(
+                      "h-6 w-6",
+                      recipe.favorite
+                        ? "fill-terracotta-500 text-terracotta-500"
+                        : "text-stone-400 dark:text-zinc-500"
                     )}
-                    {ingredient.item}
-                    {ingredient.modifier && (
-                      <span className="text-muted-foreground">, {ingredient.modifier}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                  />
+                </button>
+                {onEdit && (
+                  <Button
+                    variant="outline"
+                    onClick={() => onEdit(recipe)}
+                    className="flex items-center gap-2 border-2 border-primary dark:border-stone-700 text-primary dark:text-stone-300 font-semibold rounded-full hover:bg-primary hover:text-primary-foreground dark:hover:bg-stone-700 dark:hover:text-stone-100 transition-all px-6 py-2.5"
+                  >
+                    <Pencil className="h-5 w-5" />
+                    Edit Recipe
+                  </Button>
+                )}
+              </div>
+            </div>
+            <hr className="mt-8 border-stone-200 dark:border-stone-800" />
           </div>
 
-          {/* Instructions */}
-          <div>
-            <h3 className="font-semibold mb-3">Instructions</h3>
-            <ol className="space-y-3">
-              {recipe.instructions?.map((step, index) => (
-                <li key={index} className="flex gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-                    {index + 1}
-                  </span>
-                  <span className="pt-0.5">{step}</span>
-                </li>
-              ))}
-            </ol>
+          {/* Ingredients | Instructions — 2-col grid, recipemodal_redesign */}
+          <div className="px-8 pb-12 grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12">
+            <div className="md:col-span-4">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-primary dark:text-stone-200">Ingredients</h2>
+                <span className="text-stone-500 dark:text-stone-400 text-sm">
+                  {recipe.servings} {recipe.servings === 1 ? "serving" : "servings"}
+                </span>
+              </div>
+              <ul className="space-y-4">
+                {recipe.ingredients?.map((ingredient, index) => (
+                  <li key={index} className="flex items-start gap-3 text-stone-700 dark:text-stone-300">
+                    <span className="w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-600 mt-2 flex-shrink-0" />
+                    <span className="font-medium">
+                      {ingredient.amount != null && (
+                        <>{toFraction(ingredient.amount)} {ingredient.unit}{" "}</>
+                      )}
+                      {ingredient.item}
+                      {ingredient.modifier && (
+                        <span className="text-stone-500 dark:text-stone-400 font-normal">, {ingredient.modifier}</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="md:col-span-8">
+              <h2 className="text-xl font-bold text-primary dark:text-stone-200 mb-6">Instructions</h2>
+              <div className="space-y-8">
+                {recipe.instructions?.map((step, index) => (
+                  <div key={index} className="flex gap-4">
+                    <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm">
+                      {index + 1}
+                    </span>
+                    <p className="text-stone-700 dark:text-stone-300 leading-relaxed pt-1">{step}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Delete Button */}
+          {/* Delete */}
           {onDelete && (
-            <div className="pt-6 border-t flex justify-end">
+            <div className="px-8 pb-8 pt-2 border-t border-stone-200 dark:border-stone-800 flex justify-end">
               <Button
                 variant="outline"
                 onClick={() => setShowDeleteConfirm(true)}
@@ -202,7 +232,7 @@ export function RecipeDetailDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Recipe</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{recipe.name}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{recipe.name}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

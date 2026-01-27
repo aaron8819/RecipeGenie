@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Plus, Search, Heart, Filter, Grid3x3, List, X, Settings, Loader2 } from "lucide-react"
+import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
@@ -108,7 +108,6 @@ import {
 } from "@/components/ui/select"
 import { MultiSelect } from "@/components/ui/multi-select"
 import { cn } from "@/lib/utils"
-import { getTagClassName } from "@/lib/tag-colors"
 
 export function RecipeList() {
   const [search, setSearch] = useState("")
@@ -116,8 +115,7 @@ export function RecipeList() {
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
-  const [sortBy, setSortBy] = useState<SortOption>("timesMade")
-  const [showFilters, setShowFilters] = useState(false)
+  const [sortBy, setSortBy] = useState<SortOption>("lastMade")
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
   const [addToPlanRecipe, setAddToPlanRecipe] = useState<Recipe | null>(null)
@@ -157,11 +155,6 @@ export function RecipeList() {
   
   // Only show skeleton on initial load with no cached data
   const showSkeleton = isLoading && !displayRecipes.length
-
-  // Count active filters
-  const activeFilterCount = useMemo(() => {
-    return (category ? 1 : 0) + selectedTags.length + (favoritesOnly ? 1 : 0)
-  }, [category, selectedTags.length, favoritesOnly])
 
   const handleDelete = async (recipe: Recipe) => {
     if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
@@ -223,93 +216,28 @@ export function RecipeList() {
   }
 
 
+  const filterBtnClass =
+    "flex items-center gap-2 bg-white dark:bg-zinc-900 px-4 py-2.5 rounded-lg border border-stone-200 dark:border-zinc-800 text-sm font-medium hover:border-primary transition-colors"
+
   return (
-    <div className="space-y-4 w-full min-w-0 overflow-x-hidden">
-      {/* Sticky Search Bar Only */}
-      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b pb-3 mb-4 w-full">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search recipes..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 text-base sm:text-sm"
-          />
-        </div>
-        
-        {/* Active Filter Chips - inside sticky bar but below search */}
-        {activeFilterCount > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {category && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                <span className="capitalize">{category}</span>
-                <button
-                  onClick={() => setCategory(null)}
-                  className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-            {selectedTags.map((tag) => {
-              const tagColors = getTagClassName(tag, false)
-              return (
-                <div
-                  key={tag}
-                  className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium", tagColors)}
-                >
-                  {tag}
-                  <button
-                    onClick={() => setSelectedTags((prev) => prev.filter((t) => t !== tag))}
-                    className="hover:opacity-70 rounded-full p-0.5 transition-opacity"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )
-            })}
-            {favoritesOnly && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                Favorites
-                <button
-                  onClick={() => setFavoritesOnly(false)}
-                  className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+    <div className="space-y-0 w-full min-w-0 overflow-x-hidden">
+      {/* Search — Stitch recipes_redesign; p-1 prevents focus ring from being clipped by overflow-x-hidden ancestors */}
+      <div className="relative mb-8 p-1">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400 dark:text-zinc-500" />
+        <Input
+          placeholder="Search recipes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full h-auto py-4 pl-12 pr-4 text-lg bg-white dark:bg-zinc-900 border-0 shadow-sm ring-1 ring-stone-200 dark:ring-zinc-800 focus:ring-2 focus:ring-primary rounded-xl outline-none transition-all"
+        />
       </div>
 
-      {/* Filters and Add Recipe - NOT sticky */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start">
-        {/* Mobile: Filter Toggle */}
-        <Button
-          variant="outline"
-          onClick={() => setShowFilters(!showFilters)}
-          className="sm:hidden w-full"
-        >
-          <Filter className="h-4 w-4 mr-2" />
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="ml-2 h-5 w-5 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
-
-        {/* Desktop Filters / Mobile Collapsible */}
-        <div className={cn("transition-all duration-200 w-full", showFilters ? "block" : "hidden sm:block")}>
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Category Filter */}
-          <Select
-            value={category || "all"}
-            onValueChange={(v) => setCategory(v === "all" ? null : v)}
-          >
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <Filter className="h-4 w-4 mr-2" />
+      {/* Filters and Add Recipe — Stitch recipes_redesign */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={category || "all"} onValueChange={(v) => setCategory(v === "all" ? null : v)}>
+            <SelectTrigger className={cn(filterBtnClass, "w-auto min-w-[160px] h-auto")}>
+              <Filter className="h-5 w-5 shrink-0" />
               <SelectValue placeholder="All categories" />
             </SelectTrigger>
             <SelectContent>
@@ -322,36 +250,28 @@ export function RecipeList() {
             </SelectContent>
           </Select>
 
-          {/* Tags Filter */}
           {allTags.length > 0 && (
             <MultiSelect
               options={allTags}
               value={selectedTags}
               onChange={setSelectedTags}
               placeholder="Filter by tags..."
-              className="w-full sm:w-[180px]"
+              className="w-auto min-w-[160px]"
               tagCounts={tagCounts}
             />
           )}
 
-          {/* Favorites Toggle */}
           <Button
-            variant={favoritesOnly ? "default" : "outline"}
+            variant="ghost"
             onClick={() => setFavoritesOnly(!favoritesOnly)}
-            className="w-full sm:w-auto"
+            className={cn(filterBtnClass, favoritesOnly && "text-red-500")}
           >
-            <Heart
-              className={cn(
-                "h-4 w-4 mr-2",
-                favoritesOnly && "fill-current"
-              )}
-            />
+            <Heart className={cn("h-5 w-5", favoritesOnly && "fill-current")} />
             Favorites
           </Button>
 
-          {/* Sort */}
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-            <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectTrigger className={cn(filterBtnClass, "w-auto min-w-[140px] h-auto")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -362,50 +282,57 @@ export function RecipeList() {
             </SelectContent>
           </Select>
 
-          {/* View Toggle */}
-          <div className="flex gap-1 border rounded-lg p-1 bg-background">
-            <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
-              size="sm"
+          <div className="flex items-center rounded-lg border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1">
+            <button
+              type="button"
               onClick={() => setViewMode("grid")}
-              className="flex-1"
+              className={cn(
+                "p-1.5 rounded-md transition-colors",
+                viewMode === "grid"
+                  ? "bg-stone-100 dark:bg-zinc-800 text-primary"
+                  : "text-stone-400 hover:text-primary"
+              )}
+              aria-label="Grid view"
             >
-              <Grid3x3 className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "default" : "ghost"}
-              size="sm"
+              <Grid3x3 className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
               onClick={() => setViewMode("list")}
-              className="flex-1"
+              className={cn(
+                "p-1.5 rounded-md transition-colors",
+                viewMode === "list"
+                  ? "bg-stone-100 dark:bg-zinc-800 text-primary"
+                  : "text-stone-400 hover:text-primary"
+              )}
+              aria-label="List view"
             >
-              <List className="h-4 w-4" />
-            </Button>
+              <List className="h-5 w-5" />
+            </button>
           </div>
         </div>
-        </div>
 
-        {/* Add Recipe and Settings Buttons - NOT sticky */}
-        <div className="flex gap-2 w-full sm:w-auto sm:ml-auto">
-          <Button
-            variant="outline"
-            onClick={() => setIsSettingsOpen(true)}
-            className="w-full sm:w-auto"
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Settings</span>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => setIsSettingsOpen(true)} className={filterBtnClass}>
+            <Settings className="h-5 w-5" />
+            Settings
           </Button>
-          <Button onClick={() => setIsAddDialogOpen(true)} className="w-full sm:w-auto">
-            <Plus className="h-4 w-4 mr-2" />
+          <Button
+            onClick={() => setIsAddDialogOpen(true)}
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-semibold hover:opacity-90 transition-opacity shadow-sm shadow-primary/20"
+          >
+            <Plus className="h-5 w-5" />
             Add Recipe
           </Button>
         </div>
       </div>
 
-      {/* Recipe Grid/List */}
+      {/* Recipe Grid/List — Stitch: gap-8; pt-10 = gap below filter row (padding to avoid margin collapse) */}
+      <div className="pt-10">
       {showSkeleton ? (
         <div className={cn(
           viewMode === "grid"
-            ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            ? "grid gap-8 sm:grid-cols-2 lg:grid-cols-3"
             : "space-y-3"
         )}>
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -469,7 +396,7 @@ export function RecipeList() {
           <div
             className={cn(
               viewMode === "grid"
-                ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 w-full"
+                ? "grid gap-8 sm:grid-cols-2 lg:grid-cols-3 w-full"
                 : "space-y-3 w-full"
             )}
           >
@@ -508,6 +435,17 @@ export function RecipeList() {
           </div>
         </div>
       )}
+      </div>
+
+      {/* FAB Add Recipe — mobile only, Stitch recipes_redesign */}
+      <button
+        type="button"
+        onClick={() => setIsAddDialogOpen(true)}
+        className="fixed bottom-24 right-6 lg:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-lg shadow-primary/40 hover:opacity-90 transition-opacity z-30"
+        aria-label="Add Recipe"
+      >
+        <Plus className="h-6 w-6" />
+      </button>
 
       {/* Add Dialog */}
       <RecipeDialog

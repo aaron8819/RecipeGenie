@@ -1,9 +1,18 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Outfit, Playfair_Display } from "next/font/google"
 import "./globals.css"
 import { Providers } from "@/components/providers"
+import { cn } from "@/lib/utils"
 
-const inter = Inter({ subsets: ["latin"] })
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+})
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  weight: "700",
+  variable: "--font-playfair",
+})
 
 export const metadata: Metadata = {
   title: "Recipe Genie",
@@ -16,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className={cn(outfit.variable, playfair.variable)}>
+      <body className={outfit.className}>
         <Providers>{children}</Providers>
       </body>
     </html>

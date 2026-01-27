@@ -53,3 +53,4 @@ coverage/
 # Project-specific
 supabase/migrations/
 images/
+reference/

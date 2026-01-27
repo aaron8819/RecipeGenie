@@ -4,6 +4,52 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.11.0] - 2026-01-27
+
+**Summary:** Stitch visual redesign, desktop header navigation, and auth callback fix
+
+### Added
+
+- **Stitch Visual Redesign**:
+  - **Typography**: Outfit for body text, Playfair Display for headings (`font-display`)
+  - **Color palette**: Deep farm green primary (`--primary`), sage secondary, terracotta accent; new design tokens: `card-cream`, `border-muted`, `accent-peach`, `accent-mint`, `accent-lavender`, `accent-rose`, `accent-green`
+  - **Border radius**: Base radius 0.5rem → 0.75rem
+  - **Recipe cards**: Category-based accent backgrounds (e.g. `accent-mint` for chicken, `accent-peach` for lamb); `card-cream` image placeholder
+  - **Planner "cooked" cards**: Desktop and mobile styling for made recipes — grayscale and reduced opacity on card images (`planner-desktop-card-done`, `planner-mobile-card-done`, `.meal-image`)
+  - **Recipe detail dialog**: Large image with `card-cream` fallback; `font-display` for title; custom desktop scrollbar (`.scrollbar-recipe-dialog`)
+  - **Shopping list**: `font-display` for section headings
+
+- **Desktop Header & Navigation**:
+  - **Desktop (md+)**: Fixed header with centered nav tabs (Planner, Recipes, Shopping, Pantry); active tab underline
+  - **Avatar**: User initials in circular badge (or "G" for guest) instead of email
+  - **Onboarding**: Help icon (HelpCircle) as trigger; UtensilsCrossed in primary box as logo
+  - **Bottom nav**: Shown only on mobile (`md:hidden`); desktop uses header tabs
+  - **Layout**: Main content `md:pt-[65px]` for fixed header; `md:pb-6` on desktop (no bottom nav padding)
+
+- **Auth callback**: `export const dynamic = "force-dynamic"` on `/auth/callback` route for correct OAuth code-exchange behavior
+
+### Changed
+
+- **Layout**: `app/layout.tsx` — Inter replaced by Outfit + Playfair; CSS variables applied via `cn(outfit.variable, playfair.variable)`
+- **Header**: Accepts `activeTab` and `onTabChange`; desktop nav; avatar with `getInitials()`
+- **Page**: Passes `activeTab` / `setActiveTab` to `Header`; main `md:pt-[65px] md:pb-6`
+- **Bottom nav**: `md:hidden` so it only appears on mobile
+- **Tailwind**: New `fontFamily.display`, `fontFamily.sans`, `borderRadius.xl`; `card-cream`, `border-muted`, `accent-*` in `theme.extend`
+- **globals.css**: Updated `:root` CSS variables for Stitch palette; `.scrollbar-recipe-dialog`; `.planner-desktop-card-done` / `.planner-mobile-card-done` image filters
+- **Meal planner, recipe (card, detail, dialog, list), shopping list, add-recipe-to-plan modal, use-planner**: Styling and layout updates for new design tokens and responsive behavior
+
+### Other
+
+- **.gitignore**: `reference/` folder added (design reference HTML/CSS)
+
+### Technical Notes
+
+- Design references in `reference/` (e.g. `planner_mobile_redesign`, `shoppinglist_mobile_redesign`) inform token names and layout; `reference/` is gitignored
+- `getInitials()` supports guest ("G"), email-based 2-letter initials, or "?" as fallback
+- Planner cooked state uses CSS classes + `globals.css` for image effects to keep component markup simpler
+
+---
+
 ## [2.10.2] - 2026-01-25
 
 **Summary:** Bug fix for excluded items not being removed when recipe is removed from shopping list

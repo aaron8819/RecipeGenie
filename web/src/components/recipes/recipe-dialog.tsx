@@ -24,9 +24,9 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -306,18 +306,28 @@ export function RecipeDialog({
 
   const isSubmitting = createRecipe.isPending || updateRecipe.isPending || isUploadingImage
 
+  const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent 
-        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+      <DialogContent
+        hideCloseButton
+        className="max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto"
       >
-        <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Recipe" : "Add Recipe"}</DialogTitle>
-        </DialogHeader>
+        <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+        <DialogClose asChild>
+          <button
+            type="button"
+            className="absolute top-6 right-6 z-10 bg-white/80 dark:bg-black/40 backdrop-blur-md p-2 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </DialogClose>
 
         {!isEditing && (
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "manual" | "import")}>
-            <TabsList className="grid w-full grid-cols-2">
+          <Tabs value={mode} onValueChange={(v) => setMode(v as "manual" | "import")} className="pt-8">
+            <TabsList className="grid w-full grid-cols-2 mx-8">
               <TabsTrigger value="manual">
                 <PenTool className="h-4 w-4 mr-2" />
                 Manual Entry
@@ -328,7 +338,7 @@ export function RecipeDialog({
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="import" className="space-y-4 mt-4">
+            <TabsContent value="import" className="space-y-4 mt-4 pb-8 px-8">
               {importStep === 'input' ? (
                 <>
                   <div className="space-y-2">
@@ -533,7 +543,7 @@ Instructions:
           />
         )}
 
-        <DialogFooter>
+        <DialogFooter className="px-8 pb-8 pt-6 border-t border-stone-200 dark:border-stone-800 flex justify-end gap-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -747,231 +757,254 @@ function RecipeFormContent({
     : null
 
   const ingredientIds = ingredients.map((_, i) => i.toString())
+  const hasImage = !!(imagePreview || imageUrl)
+
   return (
-    <div className="space-y-6 py-4">
-      {/* Recipe Image */}
-      <div className="space-y-2">
-        <Label>Recipe Image</Label>
-        <div className="space-y-3">
-          {(imagePreview || imageUrl) && (
-            <div className="relative w-full h-48 rounded-lg overflow-hidden border-2 border-border bg-muted">
-              <Image
-                src={imagePreview || imageUrl || ''}
-                alt="Recipe preview"
-                fill
-                className="object-cover"
-                unoptimized={imageUrl ? !imageUrl.includes('supabase.co') : false}
-              />
-              {onRemoveImage && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-2 right-2"
-                  onClick={onRemoveImage}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          )}
-          {fileInputRef && onImageSelect && (
-            <div className="flex gap-2">
+    <>
+      {/* Image — recipemodal_redesign: aspect 16/10, rounded-[24px]; dashed upload when empty */}
+      <div className="p-6 pb-0">
+        {hasImage ? (
+          <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-muted">
+            <Image
+              src={imagePreview || imageUrl || ""}
+              alt="Recipe"
+              fill
+              className="object-cover"
+              unoptimized={imageUrl ? !imageUrl.includes("supabase.co") : false}
+            />
+            {onRemoveImage && (
               <Button
                 type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1"
+                variant="destructive"
+                size="icon"
+                className="absolute top-2 right-2"
+                onClick={onRemoveImage}
               >
-                <Upload className="h-4 w-4 mr-2" />
-                {imagePreview || imageUrl ? 'Change Image' : 'Upload Image'}
+                <X className="h-4 w-4" />
               </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
-                onChange={onImageSelect}
-                className="hidden"
-              />
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Supported formats: JPG, PNG, WebP. Max size: 5MB
-          </p>
-        </div>
-      </div>
-
-      {/* Name */}
-      <div className="space-y-2">
-        <Label htmlFor="name">Recipe Name</Label>
-        <Input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter recipe name"
-        />
-      </div>
-
-      {/* Category & Servings */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="category">Category</Label>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((cat) => (
-                <SelectItem key={cat} value={cat} className="capitalize">
-                  {cat}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="servings">Servings</Label>
-          <Input
-            id="servings"
-            type="number"
-            min={1}
-            value={servings}
-            onChange={(e) => setServings(parseInt(e.target.value) || 4)}
-          />
-        </div>
-      </div>
-
-      {/* Tags */}
-      <div className="space-y-2">
-        <Label htmlFor="tags">Tags</Label>
-        <TagInput
-          value={tags}
-          onChange={setTags}
-          suggestions={allTags}
-          tagCounts={tagCounts}
-          placeholder="Add tags..."
-        />
-      </div>
-
-      {/* Ingredients */}
-      <div className="space-y-2">
-        <Label>Ingredients</Label>
-        {isEditing ? (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+            )}
+          </div>
+        ) : fileInputRef && onImageSelect ? (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full aspect-[16/10] rounded-[24px] border-2 border-dashed border-stone-200 dark:border-stone-700 flex flex-col items-center justify-center gap-2 text-stone-500 dark:text-stone-400 hover:border-primary hover:text-primary transition-colors"
           >
-            <SortableContext
-              items={ingredientIds}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-2">
-                {ingredients.map((ingredient, index) => (
-                  <SortableIngredientRow
-                    key={index}
-                    ingredient={ingredient}
-                    index={index}
-                    onRemoveIngredient={onRemoveIngredient}
-                    onIngredientChange={onIngredientChange}
-                    ingredients={ingredients}
-                    isEditing={isEditing}
-                  />
-                ))}
+            <Upload className="h-10 w-10" />
+            <span className="text-sm font-medium">Upload Image</span>
+          </button>
+        ) : null}
+        {fileInputRef && onImageSelect && (
+          <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              onChange={onImageSelect}
+              className="hidden"
+            />
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {hasImage && (
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
-                  onClick={onAddIngredient}
-                  className="w-full"
+                  onClick={() => fileInputRef.current?.click()}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Ingredient
+                  <Upload className="h-4 w-4 mr-2" />
+                  Change Image
                 </Button>
-              </div>
-            </SortableContext>
-            <DragOverlay>
-              {activeIngredient ? (
-                <IngredientDragOverlay ingredient={activeIngredient} />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        ) : (
-          <div className="space-y-2">
-            {ingredients.map((ingredient, index) => (
-              <div key={index} className="flex gap-2">
-                <Input
-                  className="flex-1"
-                  placeholder="Ingredient"
-                  value={ingredient.item}
-                  onChange={(e) =>
-                    onIngredientChange(index, "item", e.target.value)
-                  }
-                />
-                <Input
-                  className="w-20"
-                  type="number"
-                  step="0.25"
-                  placeholder="Amt"
-                  value={ingredient.amount ?? ""}
-                  onChange={(e) =>
-                    onIngredientChange(
-                      index,
-                      "amount",
-                      e.target.value ? parseFloat(e.target.value) : null
-                    )
-                  }
-                />
-                <Input
-                  className="w-24"
-                  placeholder="Unit"
-                  value={ingredient.unit}
-                  onChange={(e) =>
-                    onIngredientChange(index, "unit", e.target.value)
-                  }
-                />
-                <Input
-                  className="w-32"
-                  placeholder="Modifier (e.g., rinsed)"
-                  value={ingredient.modifier || ""}
-                  onChange={(e) =>
-                    onIngredientChange(index, "modifier", e.target.value || null)
-                  }
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onRemoveIngredient(index)}
-                  disabled={ingredients.length === 1}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onAddIngredient}
-              className="w-full"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Ingredient
-            </Button>
-          </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                JPG, PNG, WebP. Max 5MB
+              </p>
+            </div>
+          </>
         )}
       </div>
 
-      {/* Instructions */}
-      <div className="space-y-2">
-        <Label htmlFor="instructions">Instructions (one step per line)</Label>
-        <Textarea
-          id="instructions"
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          placeholder="Enter each instruction step on a new line"
-          rows={6}
-        />
+      {/* Name, Category, Servings, Tags — recipemodal_redesign */}
+      <div className="px-8 pt-8">
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="name" className="text-primary dark:text-stone-200">Recipe Name</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter recipe name"
+              className="mt-1.5"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="category" className="text-primary dark:text-stone-200">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="mt-1.5">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat} value={cat} className="capitalize">
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="servings" className="text-primary dark:text-stone-200">Servings</Label>
+              <Input
+                id="servings"
+                type="number"
+                min={1}
+                value={servings}
+                onChange={(e) => setServings(parseInt(e.target.value) || 4)}
+                className="mt-1.5"
+              />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="tags" className="text-primary dark:text-stone-200">Tags</Label>
+            <TagInput
+              value={tags}
+              onChange={setTags}
+              suggestions={allTags}
+              tagCounts={tagCounts}
+              placeholder="Add tags..."
+              className="mt-1.5"
+            />
+          </div>
+        </div>
+        <hr className="mt-8 border-stone-200 dark:border-stone-800" />
       </div>
-    </div>
+
+      {/* Ingredients | Instructions — 2-col grid, recipemodal_redesign */}
+      <div className="px-8 pt-8 pb-8 grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12">
+        <div className="md:col-span-4">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-primary dark:text-stone-200">Ingredients</h2>
+            <span className="text-stone-500 dark:text-stone-400 text-sm">
+              {servings} {servings === 1 ? "serving" : "servings"}
+            </span>
+          </div>
+          {isEditing ? (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={ingredientIds}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {ingredients.map((ingredient, index) => (
+                    <SortableIngredientRow
+                      key={index}
+                      ingredient={ingredient}
+                      index={index}
+                      onRemoveIngredient={onRemoveIngredient}
+                      onIngredientChange={onIngredientChange}
+                      ingredients={ingredients}
+                      isEditing={isEditing}
+                    />
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onAddIngredient}
+                    className="w-full"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Ingredient
+                  </Button>
+                </div>
+              </SortableContext>
+              <DragOverlay>
+                {activeIngredient ? (
+                  <IngredientDragOverlay ingredient={activeIngredient} />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          ) : (
+            <div className="space-y-2">
+              {ingredients.map((ingredient, index) => (
+                <div key={index} className="flex gap-2 flex-wrap">
+                  <Input
+                    className="flex-1 min-w-[120px]"
+                    placeholder="Ingredient"
+                    value={ingredient.item}
+                    onChange={(e) =>
+                      onIngredientChange(index, "item", e.target.value)
+                    }
+                  />
+                  <Input
+                    className="w-20"
+                    type="number"
+                    step="0.25"
+                    placeholder="Amt"
+                    value={ingredient.amount ?? ""}
+                    onChange={(e) =>
+                      onIngredientChange(
+                        index,
+                        "amount",
+                        e.target.value ? parseFloat(e.target.value) : null
+                      )
+                    }
+                  />
+                  <Input
+                    className="w-24"
+                    placeholder="Unit"
+                    value={ingredient.unit}
+                    onChange={(e) =>
+                      onIngredientChange(index, "unit", e.target.value)
+                    }
+                  />
+                  <Input
+                    className="w-28"
+                    placeholder="Modifier"
+                    value={ingredient.modifier || ""}
+                    onChange={(e) =>
+                      onIngredientChange(index, "modifier", e.target.value || null)
+                    }
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onRemoveIngredient(index)}
+                    disabled={ingredients.length === 1}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onAddIngredient}
+                className="w-full"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Ingredient
+              </Button>
+            </div>
+          )}
+        </div>
+        <div className="md:col-span-8">
+          <h2 className="text-xl font-bold text-primary dark:text-stone-200 mb-4">Instructions</h2>
+          <Label htmlFor="instructions" className="sr-only">One step per line</Label>
+          <Textarea
+            id="instructions"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="Enter each instruction step on a new line"
+            rows={8}
+            className="resize-y"
+          />
+        </div>
+      </div>
+    </>
   )
 }

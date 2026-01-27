@@ -494,26 +494,31 @@ export function useSaveWeeklyPlan() {
 }
 
 /**
- * Hook to add a recipe to an existing (or new) weekly plan
+ * Hook to add a recipe to an existing (or new) weekly plan.
+ * @param dayIndex - Optional 0–6: assign the new recipe to this day. If omitted, the recipe is unassigned and placed by the unassigned-distribution logic.
  */
 export function useAddRecipeToPlan() {
   const queryClient = useQueryClient()
   const { isGuest, user } = useAuthContext()
 
   return useMutation({
-    mutationFn: async ({ weekDate, recipeId }: { weekDate: string; recipeId: string }) => {
+    mutationFn: async ({ weekDate, recipeId, dayIndex }: { weekDate: string; recipeId: string; dayIndex?: number }) => {
       if (isGuest) {
         const existing = getGuestPlan(queryClient, weekDate)
         const currentIds = existing?.recipe_ids || []
         if (currentIds.includes(recipeId)) {
           throw new Error("Recipe is already in this week's meal plan")
         }
+        const mergedDayAssignments = {
+          ...(existing?.day_assignments || {}),
+          ...(dayIndex !== undefined ? { [recipeId]: dayIndex } : {}),
+        }
         const plan: WeeklyPlan = {
           user_id: "guest",
           week_date: weekDate,
           recipe_ids: [...currentIds, recipeId],
           made_recipe_ids: existing?.made_recipe_ids || [],
-          day_assignments: existing?.day_assignments || null,
+          day_assignments: Object.keys(mergedDayAssignments).length > 0 ? mergedDayAssignments : (existing?.day_assignments || null),
           scale: existing?.scale || 1.0,
           generated_at: new Date().toISOString(),
         }
@@ -529,10 +534,15 @@ export function useAddRecipeToPlan() {
         .eq("week_date", weekDate)
         .maybeSingle()
 
-      const typedPlan = existingPlan as { recipe_ids?: string[] } | null
+      const typedPlan = existingPlan as { recipe_ids?: string[]; day_assignments?: Record<string, number> | null } | null
       const currentIds = typedPlan?.recipe_ids || []
       if (currentIds.includes(recipeId)) {
         throw new Error("Recipe is already in this week's meal plan")
+      }
+
+      const mergedDayAssignments = {
+        ...(typedPlan?.day_assignments || {}),
+        ...(dayIndex !== undefined ? { [recipeId]: dayIndex } : {}),
       }
 
       // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
@@ -543,6 +553,7 @@ export function useAddRecipeToPlan() {
           // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
           .update({
             recipe_ids: [...currentIds, recipeId],
+            day_assignments: mergedDayAssignments,
             scale: (existingPlan as WeeklyPlan).scale || 1.0,
             made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
             generated_at: new Date().toISOString(),
@@ -557,6 +568,7 @@ export function useAddRecipeToPlan() {
           user_id: user!.id,
           week_date: weekDate,
           recipe_ids: [...currentIds, recipeId],
+          day_assignments: Object.keys(mergedDayAssignments).length > 0 ? mergedDayAssignments : null,
           scale: 1.0,
           generated_at: new Date().toISOString(),
         })

@@ -77,6 +77,16 @@ const config: Config = {
           800: "hsl(10, 75%, 22%)",
           900: "hsl(8, 70%, 15%)",
         },
+        // Mobile redesign (planner_mobile_redesign ref)
+        "card-cream": "#F8F6F0",
+        "border-muted": "#E2E0D5",
+        // Recipes Stitch redesign (recipes_redesign ref)
+        "accent-peach": "#fbe7d1",
+        "accent-mint": "#dcf4e9",
+        "accent-lavender": "#e8e1f5",
+        "accent-rose": "#fce4e4",
+        // Shopping list Stitch redesign (shoppinglist_redesign ref)
+        "accent-green": "#A3B18A",
         // Extended Sage palette
         sage: {
           50: "hsl(100, 25%, 97%)",
@@ -95,6 +105,11 @@ const config: Config = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        xl: "1.25rem",
+      },
+      fontFamily: {
+        display: ["var(--font-playfair)", "serif"],
+        sans: ["var(--font-outfit)", "sans-serif"],
       },
       keyframes: {
         "fade-in": {

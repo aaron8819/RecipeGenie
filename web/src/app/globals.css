@@ -4,27 +4,27 @@
 
 @layer base {
   :root {
-    /* Warm & Organic - Terracotta & Sage palette */
-    --background: 40 30% 99%;
+    /* Stitch redesign: Deep Farm Green, Sage, Terracotta, Cream */
+    --background: 40 33% 98%;
     --foreground: 20 25% 15%;
     --card: 40 25% 98%;
     --card-foreground: 20 25% 15%;
     --popover: 40 25% 98%;
     --popover-foreground: 20 25% 15%;
-    --primary: 16 65% 45%;
+    --primary: 102 26% 28%;
     --primary-foreground: 40 40% 98%;
-    --secondary: 100 20% 92%;
-    --secondary-foreground: 20 20% 25%;
+    --secondary: 95 18% 57%;
+    --secondary-foreground: 40 40% 98%;
     --muted: 35 15% 95%;
     --muted-foreground: 20 10% 50%;
-    --accent: 100 25% 85%;
-    --accent-foreground: 20 20% 25%;
+    --accent: 10 72% 65%;
+    --accent-foreground: 40 40% 98%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 30 20% 88%;
     --input: 30 20% 88%;
-    --ring: 16 65% 45%;
-    --radius: 0.5rem;
+    --ring: 102 26% 28%;
+    --radius: 0.75rem;
   }
 }
 
@@ -80,7 +80,33 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: hsl(var(--muted-foreground) / 0.3);
   }
-  
+
+  /* Recipe modal / dialog scrollbar — desktop only, matches app (primary/sage) */
+  @media (min-width: 768px) {
+    .scrollbar-recipe-dialog {
+      scrollbar-width: thin;
+      scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+    }
+    .scrollbar-recipe-dialog::-webkit-scrollbar {
+      width: 10px;
+    }
+    .scrollbar-recipe-dialog::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .scrollbar-recipe-dialog::-webkit-scrollbar-thumb {
+      background: hsl(var(--primary) / 0.3);
+      border-radius: 9999px;
+      border: 3px solid transparent;
+      background-clip: padding-box;
+    }
+    .scrollbar-recipe-dialog::-webkit-scrollbar-thumb:hover {
+      background: hsl(var(--primary) / 0.5);
+    }
+    .scrollbar-recipe-dialog::-webkit-scrollbar-thumb:active {
+      background: hsl(var(--primary) / 0.6);
+    }
+  }
+
   /* Mobile scrolling optimizations */
   .smooth-scroll {
     -webkit-overflow-scrolling: touch; /* iOS momentum scrolling */
@@ -117,5 +143,16 @@
 
   .animate-swipe-hint {
     animation: swipeHint 1.5s ease-in-out;
+  }
+
+  /* Desktop planner: cooked recipe card image (reference/calendarview_redesign_desktop) */
+  .planner-desktop-card-done .planner-desktop-card-image {
+    filter: grayscale(40%) opacity(0.8);
+  }
+
+  /* Mobile planner: cooked recipe card image (reference/calendarview_redesign_mobile) */
+  .planner-mobile-card-done .meal-image {
+    filter: grayscale(80%) blur(1px);
+    opacity: 0.7;
   }
 }
