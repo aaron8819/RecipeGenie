@@ -50,6 +50,32 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.12.0] - 2026-01-27
+
+**Summary:** Edit Recipe modal redesign per `reference/recipemodal_editmode_redesign` — 2-col layout, refined ingredient rows, and mobile-friendly behavior
+
+### Added
+
+- **Edit Recipe modal layout** (edit mode only; Add Recipe unchanged):
+  - **Header**: "Edit Recipe" title, subtitle "Update your culinary masterpiece details.", and close button; `max-w-6xl`, `h-[90vh]`, `rounded-3xl`, flex column with scroll in body only
+  - **Two-column grid** (stacks on mobile): Left — Recipe Image (label, `aspect-video`, dashed upload with "Upload Image" / "JPG, PNG, WebP. Max 5MB"), Recipe Name, Category and Servings (2-col), Tags with add-icon input; Right — Ingredients (label + "+ ADD INGREDIENT" text button, scrollable list) and Instructions (label, `rounded-2xl` textarea, placeholder "Step by step process...")
+  - **Ingredient rows (edit mode)**: Drag handle | amount | unit | item | modifier (hidden on mobile) | delete; delete on row hover (desktop), always visible on mobile; scrollable list `max-h-[280px]` (mobile) / `max-h-[350px]` (desktop)
+  - **Footer**: `bg-muted/50`, `border-t`; Cancel and Save Changes unchanged
+- **TagInput**: Optional `showAddIconInInput` prop — when true, add icon on the right of the input to add the current value on click; used in Edit Recipe tags with placeholder "Add another tag..."
+
+### Changed
+
+- **recipe-dialog.tsx**: Edit-mode branch returns early with new 2-col layout; `SortableIngredientRow` supports `editModeLayout` (amount|unit|item order, compact inputs, delete-on-hover); edit shell uses dedicated header and footer styling; Add Recipe (manual/import) unchanged
+- **tag-input.tsx**: `showAddIconInInput` and add-icon button; input `pr-10` when add icon shown
+
+### Technical Notes
+
+- Design reference: `reference/recipemodal_editmode_redesign` (code.html, screen.png)
+- `editModeLayout` on `SortableIngredientRow`: modifier column `hidden sm:block` on mobile to avoid overflow; delete uses `opacity-100 sm:opacity-0 sm:group-hover:opacity-100` so it is always visible on touch
+- Edit dialog uses `scrollbar-recipe-dialog` on the scrollable body
+
+---
+
 ## [2.10.2] - 2026-01-25
 
 **Summary:** Bug fix for excluded items not being removed when recipe is removed from shopping list

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { X } from "lucide-react"
+import { X, Plus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -14,6 +14,8 @@ interface TagInputProps {
   tagCounts?: Array<{ tag: string; count: number }>
   placeholder?: string
   className?: string
+  /** When true, shows an add icon on the right of the input that adds the current value on click (edit-mode redesign) */
+  showAddIconInInput?: boolean
 }
 
 export function TagInput({
@@ -23,6 +25,7 @@ export function TagInput({
   tagCounts,
   placeholder = "Add tags...",
   className,
+  showAddIconInInput = false,
 }: TagInputProps) {
   const [inputValue, setInputValue] = useState("")
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -150,8 +153,18 @@ export function TagInput({
             setShowAllTags(true)
           }}
           placeholder={value.length === 0 ? placeholder : "Add another tag..."}
-          className="pr-8"
+          className={showAddIconInInput ? "pr-10" : "pr-8"}
         />
+        {showAddIconInInput && (
+          <button
+            type="button"
+            onClick={() => inputValue.trim() && handleAddTag(inputValue)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+            aria-label="Add tag"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
 
         {/* Suggestions Dropdown */}
         {showSuggestions && (filteredSuggestions.length > 0 || showAllTags) && (

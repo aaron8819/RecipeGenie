@@ -312,18 +312,42 @@ export function RecipeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
-        className="max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto"
+        className={
+          isEditing
+            ? "max-w-6xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-3xl overflow-hidden bg-card h-[90vh] max-h-[90vh] flex flex-col"
+            : "max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto"
+        }
       >
         <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
-        <DialogClose asChild>
-          <button
-            type="button"
-            className="absolute top-6 right-6 z-10 bg-white/80 dark:bg-black/40 backdrop-blur-md p-2 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </DialogClose>
+        {!isEditing && (
+          <DialogClose asChild>
+            <button
+              type="button"
+              className="absolute top-6 right-6 z-10 bg-white/80 dark:bg-black/40 backdrop-blur-md p-2 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogClose>
+        )}
+
+        {isEditing && (
+          <div className="px-6 sm:px-8 py-4 sm:py-6 flex justify-between items-center border-b border-stone-200 dark:border-zinc-800 flex-shrink-0">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-primary">Edit Recipe</h1>
+              <p className="text-sm text-muted-foreground">Update your culinary masterpiece details.</p>
+            </div>
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </DialogClose>
+          </div>
+        )}
 
         {!isEditing && (
           <Tabs value={mode} onValueChange={(v) => setMode(v as "manual" | "import")} className="pt-8">
@@ -515,6 +539,7 @@ Instructions:
         )}
 
         {isEditing && (
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8 scrollbar-recipe-dialog">
           <RecipeFormContent
             name={name}
             setName={setName}
@@ -541,9 +566,16 @@ Instructions:
             onRemoveImage={handleRemoveImage}
             fileInputRef={fileInputRef}
           />
+        </div>
         )}
 
-        <DialogFooter className="px-8 pb-8 pt-6 border-t border-stone-200 dark:border-stone-800 flex justify-end gap-3">
+        <DialogFooter
+          className={
+            isEditing
+              ? "px-4 sm:px-8 py-4 sm:py-6 bg-muted/50 dark:bg-zinc-900/50 border-t border-stone-200 dark:border-zinc-800 flex justify-end gap-3 flex-shrink-0"
+              : "px-8 pb-8 pt-6 border-t border-stone-200 dark:border-stone-800 flex justify-end gap-3"
+          }
+        >
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -594,6 +626,7 @@ function SortableIngredientRow({
   onIngredientChange,
   ingredients,
   isEditing,
+  editModeLayout,
 }: {
   ingredient: Ingredient
   index: number
@@ -605,6 +638,7 @@ function SortableIngredientRow({
   ) => void
   ingredients: Ingredient[]
   isEditing: boolean
+  editModeLayout?: boolean
 }) {
   const {
     attributes,
@@ -621,68 +655,104 @@ function SortableIngredientRow({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  const dragHandle = isEditing ? (
+    <button
+      type="button"
+      className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="h-4 w-4" />
+    </button>
+  ) : null
+
+  const amountInput = (
+    <Input
+      className={editModeLayout ? "w-14 sm:w-16 text-center text-sm py-2" : "w-20"}
+      type="number"
+      step="0.25"
+      placeholder="Amt"
+      value={ingredient.amount ?? ""}
+      onChange={(e) =>
+        onIngredientChange(
+          index,
+          "amount",
+          e.target.value ? parseFloat(e.target.value) : null
+        )
+      }
+    />
+  )
+  const unitInput = (
+    <Input
+      className={editModeLayout ? "w-20 sm:w-24 text-sm py-2 px-3" : "w-24"}
+      placeholder="Unit"
+      value={ingredient.unit}
+      onChange={(e) =>
+        onIngredientChange(index, "unit", e.target.value)
+      }
+    />
+  )
+  const itemInput = (
+    <Input
+      className={editModeLayout ? "flex-1 min-w-0 text-sm py-2 px-3" : "flex-1"}
+      placeholder="Ingredient"
+      value={ingredient.item}
+      onChange={(e) =>
+        onIngredientChange(index, "item", e.target.value)
+      }
+    />
+  )
+  const modifierInput = (
+    <Input
+      className={editModeLayout ? "w-20 sm:w-24 text-sm py-2 px-3 hidden sm:block" : "w-32"}
+      placeholder="Modifier"
+      value={ingredient.modifier || ""}
+      onChange={(e) =>
+        onIngredientChange(index, "modifier", e.target.value || null)
+      }
+    />
+  )
+  const deleteButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => onRemoveIngredient(index)}
+      disabled={ingredients.length === 1}
+      className={editModeLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 h-8 w-8" : ""}
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  )
+
+  if (editModeLayout) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={`flex gap-2 items-center group ${isDragging ? "z-50" : ""}`}
+      >
+        {dragHandle}
+        {amountInput}
+        {unitInput}
+        {itemInput}
+        {modifierInput}
+        {deleteButton}
+      </div>
+    )
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`flex gap-2 items-center ${isDragging ? "z-50" : ""}`}
     >
-      {isEditing && (
-        <button
-          type="button"
-          className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-      )}
-      <Input
-        className="flex-1"
-        placeholder="Ingredient"
-        value={ingredient.item}
-        onChange={(e) =>
-          onIngredientChange(index, "item", e.target.value)
-        }
-      />
-      <Input
-        className="w-20"
-        type="number"
-        step="0.25"
-        placeholder="Amt"
-        value={ingredient.amount ?? ""}
-        onChange={(e) =>
-          onIngredientChange(
-            index,
-            "amount",
-            e.target.value ? parseFloat(e.target.value) : null
-          )
-        }
-      />
-      <Input
-        className="w-24"
-        placeholder="Unit"
-        value={ingredient.unit}
-        onChange={(e) =>
-          onIngredientChange(index, "unit", e.target.value)
-        }
-      />
-      <Input
-        className="w-32"
-        placeholder="Modifier (e.g., rinsed)"
-        value={ingredient.modifier || ""}
-        onChange={(e) =>
-          onIngredientChange(index, "modifier", e.target.value || null)
-        }
-      />
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => onRemoveIngredient(index)}
-        disabled={ingredients.length === 1}
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
+      {dragHandle}
+      {itemInput}
+      {amountInput}
+      {unitInput}
+      {modifierInput}
+      {deleteButton}
     </div>
   )
 }
@@ -758,6 +828,172 @@ function RecipeFormContent({
 
   const ingredientIds = ingredients.map((_, i) => i.toString())
   const hasImage = !!(imagePreview || imageUrl)
+
+  // Edit-mode layout: 2-col grid per reference/recipemodal_editmode_redesign
+  if (isEditing) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
+        {/* Left: Image, Name, Category, Servings, Tags */}
+        <div className="space-y-6 sm:space-y-8">
+          <div className="relative">
+            <Label className="block text-sm font-semibold text-primary mb-2">Recipe Image</Label>
+            {hasImage ? (
+              <div className="relative aspect-video overflow-hidden rounded-2xl bg-muted">
+                <Image
+                  src={imagePreview || imageUrl || ""}
+                  alt="Recipe"
+                  fill
+                  className="object-cover"
+                  unoptimized={imageUrl ? !imageUrl.includes("supabase.co") : false}
+                />
+                {onRemoveImage && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2"
+                    onClick={onRemoveImage}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ) : fileInputRef && onImageSelect ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full aspect-video rounded-2xl border-2 border-dashed border-stone-200 dark:border-zinc-700 flex flex-col items-center justify-center bg-muted/50 dark:bg-zinc-900/50 hover:bg-muted dark:hover:bg-zinc-900 transition-colors text-muted-foreground hover:text-primary group/up"
+              >
+                <Upload className="h-12 w-12 sm:h-14 sm:w-14 text-stone-300 dark:text-zinc-600 group-hover/up:text-primary transition-colors" />
+                <span className="mt-2 text-sm font-medium">Upload Image</span>
+                <span className="text-xs uppercase tracking-wider mt-1">JPG, PNG, WebP. Max 5MB</span>
+              </button>
+            ) : null}
+            {fileInputRef && onImageSelect && (
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                onChange={onImageSelect}
+                className="hidden"
+              />
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="name-edit" className="block text-sm font-semibold text-primary mb-2">Recipe Name</Label>
+              <Input
+                id="name-edit"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter recipe name"
+                className="bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary focus:border-primary"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="block text-sm font-semibold text-primary mb-2">Category</Label>
+                <Select value={category} onValueChange={setCategory}>
+                  <SelectTrigger className="bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat} value={cat} className="capitalize">
+                        {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="block text-sm font-semibold text-primary mb-2">Servings</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={servings}
+                  onChange={(e) => setServings(parseInt(e.target.value) || 4)}
+                  className="bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <Label className="block text-sm font-semibold text-primary mb-2">Tags</Label>
+            <TagInput
+              value={tags}
+              onChange={setTags}
+              suggestions={allTags}
+              tagCounts={tagCounts}
+              placeholder="Add another tag..."
+              showAddIconInInput
+            />
+          </div>
+        </div>
+
+        {/* Right: Ingredients, Instructions */}
+        <div className="space-y-6 sm:space-y-8 flex flex-col min-h-0">
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <Label className="text-sm font-semibold text-primary">Ingredients</Label>
+              <button
+                type="button"
+                onClick={onAddIngredient}
+                className="text-xs font-bold text-primary flex items-center hover:opacity-80 transition-opacity"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                ADD INGREDIENT
+              </button>
+            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={ingredientIds}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2 max-h-[280px] sm:max-h-[350px] overflow-y-auto pr-1 scrollbar-thin">
+                  {ingredients.map((ingredient, index) => (
+                    <SortableIngredientRow
+                      key={index}
+                      ingredient={ingredient}
+                      index={index}
+                      onRemoveIngredient={onRemoveIngredient}
+                      onIngredientChange={onIngredientChange}
+                      ingredients={ingredients}
+                      isEditing={true}
+                      editModeLayout
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+              <DragOverlay>
+                {activeIngredient ? (
+                  <IngredientDragOverlay ingredient={activeIngredient} />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          </div>
+
+          <div className="flex-1 flex flex-col min-h-0">
+            <Label htmlFor="instructions-edit" className="block text-sm font-semibold text-primary mb-2">Instructions</Label>
+            <Textarea
+              id="instructions-edit"
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              placeholder="Step by step process..."
+              className="flex-1 min-h-[180px] sm:min-h-[200px] w-full rounded-2xl focus:ring-primary focus:border-primary resize-none"
+            />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
