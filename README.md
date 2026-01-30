@@ -89,6 +89,11 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+## Testing
+
+- **Unit tests (Vitest):** `npm run test` or `npm run test:watch`. Tests live in `src/hooks/__tests__/` and similar.
+- **E2E tests (Playwright):** `npm run test:e2e`. Requires the dev server (`npm run dev`). Optional: run global setup once to persist auth state for authenticated E2E tests (`playwright/.auth/`). Other scripts: `test:e2e:ui`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:report`, `test:e2e:codegen`.
+
 ## Deployment to Vercel
 
 ### 1. Push to GitHub
@@ -236,4 +241,5 @@ web/
 - `project_overview.md` - Architecture and 10-min orientation
 - `changelog.md` - Version history
 - `decisions.md` - Architectural decision records (ADRs)
+- `.cursor/plans/comprehensive_testing_prompt.md` - UI/UX testing checklist
 - `.cursor/plans/comprehensive_testing_results.md` - Testing review (2026-01-30), fixes applied, and remaining issues

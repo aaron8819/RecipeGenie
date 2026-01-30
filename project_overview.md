@@ -28,7 +28,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - Category ordering: drag-and-drop reordering of categories to match store layout
 - **Unit normalization**: All units normalized to lowercase canonical form for consistent merging (e.g., "TBSP" → "tbsp")
 - **Smart merging**: Compatible units automatically merged (e.g., cups + fl oz), incompatible units use `additionalAmounts`
-- **Comprehensive testing**: 28 tests ensure deterministic behavior and catch regressions
+- **Testing**: Playwright E2E for UI flows; Vitest for unit tests (e.g. shopping list checked state)
 - Day assignments: assign recipes to specific days of the week in the calendar view (persists across devices)
 - **Planner settings**: Configure default category breakdown, excluded days, preferred days, and automatic day assignment for meal plan generation
   - Default category breakdown persists across sessions
@@ -107,8 +107,9 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | `hooks/shopping/` | Domain-focused modules | Shopping hooks split by domain (list, items, recipes, categories, config, pantry) |
 | `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization (singleton pattern) |
 | `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation with normalization, category management, recipe text parsing with modifier extraction) |
-| `lib/__tests__/` | Test files | Comprehensive test suite for shopping list functionality |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
+
+**Testing:** E2E tests in `web/tests/` (Playwright); unit tests in `hooks/__tests__/` (Vitest). See README Testing section.
 
 ### Middleware (`src/middleware.ts`)
 
@@ -262,13 +263,22 @@ For UI changes:
 | Add Supabase query | Create hook in `src/hooks/` |
 | Get Supabase client | `src/lib/supabase/client.ts` (singleton) |
 | Debug query state | React Query DevTools in browser |
+| Run unit tests | `npm run test` (Vitest) |
+| Run E2E tests | `npm run test:e2e` (Playwright; dev server required) |
 | Check database schema | `supabase/migrations/001_initial_schema.sql` |
 
 ---
 
-*Last updated: 2026-01-30 (v2.12.1)*
+*Last updated: 2026-01-30 (v2.12.2)*
 
-## Recent Updates (v2.12.1)
+## Recent Updates (v2.12.2)
+
+### Playwright E2E & Test Cleanup (2026-01-30)
+- **Playwright**: E2E test framework added (`playwright.config.ts`, `test:e2e` scripts); tests in `web/tests/`, auth state in `playwright/.auth/`.
+- **Unit tests**: Removed lib shopping-list generation/merging/normalization tests; Vitest retained for hooks unit tests.
+- **.gitignore**: Test artifacts (coverage, playwright-report, test-results, web/tests, etc.) excluded from repo.
+
+## Previous Updates (v2.12.1)
 
 ### Comprehensive Testing Review Fixes (2026-01-30)
 - **Auth context**: Added `.catch()` to `getSession()` so loading state exits on failure; auth listener now exits guest mode only on `SIGNED_IN`/`SIGNED_OUT` (not token refresh).

@@ -172,11 +172,10 @@ export function PantryList() {
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                {displayedPantryItems.map((item, index) => (
+                {displayedPantryItems.map((item) => (
                   <div
                     key={item.item}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sage-100 text-sage-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-sage-200"
-                    style={{ animationDelay: `${index * 30}ms` }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sage-100 text-sage-700 rounded-full text-sm font-medium transition-colors duration-200 hover:bg-sage-200"
                   >
                     <span>{item.item}</span>
                     <button
@@ -234,11 +233,10 @@ export function PantryList() {
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                {displayedKeywords.map((keyword: string, index: number) => (
+                {displayedKeywords.map((keyword: string) => (
                   <div
                     key={keyword}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium animate-fade-in transition-all duration-200 hover:bg-terracotta-200"
-                    style={{ animationDelay: `${index * 30}ms` }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium transition-colors duration-200 hover:bg-terracotta-200"
                   >
                     <span>{keyword}</span>
                     <button

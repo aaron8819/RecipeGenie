@@ -4,6 +4,38 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.12.2] - 2026-01-30
+
+**Summary:** Playwright E2E testing setup, removal of shopping-list lib unit tests, and test artifact gitignore
+
+### Added
+
+- **Playwright E2E testing**:
+  - `playwright.config.ts` with global setup for authenticated state
+  - Scripts: `test:e2e`, `test:e2e:ui`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:report`, `test:e2e:codegen`
+  - Dev dependency: `@playwright/test`
+  - Tests live in `web/tests/` (gitignored; add tests as needed)
+  - Reuses auth state from `playwright/.auth/user.json` (gitignored)
+
+### Removed
+
+- **Shopping list lib unit tests** (moved coverage to E2E / manual verification):
+  - `web/src/lib/__tests__/shopping-list-generation.test.ts`
+  - `web/src/lib/__tests__/shopping-list-merging.test.ts`
+  - `web/src/lib/__tests__/shopping-list-normalization.test.ts`
+
+### Changed
+
+- **.gitignore**: Added test artifacts — `coverage/`, `playwright-report/`, `playwright/.auth/`, `test-results/`, `web/test-results/`, `web/tests/`, `blob-report/`
+- Vitest remains for unit tests (e.g. `hooks/__tests__/shopping-list-checked-state.test.ts`)
+
+### Technical Notes
+
+- Run E2E: `npm run test:e2e` (requires dev server; use global setup for auth)
+- Run unit tests: `npm run test` or `npm run test:watch`
+
+---
+
 ## [2.12.1] - 2026-01-30
 
 **Summary:** Comprehensive testing review fixes — auth, shopping merging, auth callback security, accessibility, and validation

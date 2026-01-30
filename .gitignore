@@ -49,6 +49,13 @@ next-env.d.ts
 
 # Testing
 coverage/
+playwright-report/
+playwright/.auth/
+web/playwright/.auth/
+test-results/
+web/test-results/
+web/tests/
+blob-report/
 
 # Project-specific
 supabase/migrations/
