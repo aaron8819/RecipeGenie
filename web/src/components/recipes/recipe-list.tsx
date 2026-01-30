@@ -107,7 +107,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { MultiSelect } from "@/components/ui/multi-select"
-import { cn } from "@/lib/utils"
+import { cn, getErrorMessage } from "@/lib/utils"
 
 export function RecipeList() {
   const [search, setSearch] = useState("")
@@ -176,7 +176,7 @@ export function RecipeList() {
       })
     } catch (error) {
       showToast({
-        message: error instanceof Error ? error.message : "Failed to add ingredients to shopping list",
+        message: getErrorMessage(error, "Failed to add ingredients to shopping list"),
       })
     } finally {
       setAddingToShoppingListId(null)
@@ -201,7 +201,7 @@ export function RecipeList() {
       })
     } catch (error) {
       showToast({
-        message: error instanceof Error ? error.message : "Failed to mark recipe as made",
+        message: getErrorMessage(error, "Failed to mark recipe as made"),
       })
     } finally {
       setMarkingAsMadeId(null)

@@ -65,19 +65,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
+      })
+      .catch((error) => {
+        console.error("Failed to fetch session:", error)
+        // Still exit loading state to prevent app freeze
+        setLoading(false)
+      })
 
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // Handle session expiry: if we had a session but now don't, and it's not a sign out
+      const hadSession = !!user
+      const hasSession = !!session
+
       setSession(session)
       setUser(session?.user ?? null)
-      setIsGuest(false)
+
+      // Only exit guest mode on actual authentication events, not token refresh
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        setIsGuest(false)
+      }
+
+      // Handle token refresh failure (session expired and couldn't be refreshed)
+      // This happens when TOKEN_REFRESHED fires but session is null, or when
+      // the session simply disappears without a SIGNED_OUT event
+      if (hadSession && !hasSession && event !== 'SIGNED_OUT') {
+        console.warn('Session expired or token refresh failed')
+        // The middleware will redirect to login on next navigation
+        // Clear any stale queries to prevent showing outdated data
+        queryClient.clear()
+      }
+
       setLoading(false)
     })
 

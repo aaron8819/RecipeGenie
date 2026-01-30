@@ -25,6 +25,10 @@
     --input: 30 20% 88%;
     --ring: 102 26% 28%;
     --radius: 0.75rem;
+
+    /* Layout dimensions */
+    --header-height: 65px;
+    --bottom-nav-height: 64px;
   }
 }
 

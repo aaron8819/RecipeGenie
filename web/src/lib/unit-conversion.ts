@@ -229,13 +229,20 @@ export function mergeAmounts(
 
 /**
  * Round a number to a reasonable precision for display
+ * Ensures non-zero values don't round to 0
  */
 export function roundForDisplay(value: number): number {
-  if (value >= 10) {
+  if (value === 0) {
+    return 0
+  } else if (value >= 10) {
     return Math.round(value)
   } else if (value >= 1) {
     return Math.round(value * 4) / 4 // Round to nearest 0.25
-  } else {
+  } else if (value >= 0.125) {
     return Math.round(value * 8) / 8 // Round to nearest 0.125
+  } else {
+    // For very small values, round up to minimum displayable (1/8)
+    // This prevents quantities like 0.05 from showing as 0
+    return 0.125
   }
 }

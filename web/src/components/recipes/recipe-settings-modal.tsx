@@ -53,11 +53,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useUpdateCategories, useBulkUpdateRecipeCategories, useRecipes, useAllTags, useTagsWithCounts, useRenameTag, useMergeTags, useDeleteTag } from "@/hooks/use-recipes"
+import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useUserConfig, useUpdateUserConfig } from "@/hooks/use-planner"
 import { getDefaultConfig } from "@/lib/guest-storage"
 import { useAuthContext } from "@/lib/auth-context"
 import { getTagClassName } from "@/lib/tag-colors"
-import { cn } from "@/lib/utils"
+import { cn, getErrorMessage } from "@/lib/utils"
 
 interface RecipeSettingsModalProps {
   open: boolean
@@ -188,6 +189,7 @@ export function RecipeSettingsModal({
   const updateCategories = useUpdateCategories()
   const bulkUpdate = useBulkUpdateRecipeCategories()
   const updateConfig = useUpdateUserConfig()
+  const undoToast = useUndoToast()
 
   // Category state
   const [editingCategory, setEditingCategory] = useState<string | null>(null)
@@ -279,7 +281,7 @@ export function RecipeSettingsModal({
     // Check for duplicates (case-insensitive)
     const lowerName = name.toLowerCase()
     if (categories.some((c) => c.toLowerCase() === lowerName)) {
-      alert("A category with this name already exists")
+      undoToast.show({ message: "A category with this name already exists", duration: 4000 })
       return
     }
 
@@ -290,7 +292,7 @@ export function RecipeSettingsModal({
       setNewCategoryName("")
     } catch (error) {
       console.error("Failed to add category:", error)
-      alert(error instanceof Error ? error.message : "Failed to add category")
+      undoToast.show({ message: getErrorMessage(error, "Failed to add category"), duration: 4000 })
     }
   }, [newCategoryName, categories, updateCategories])
 
@@ -310,7 +312,7 @@ export function RecipeSettingsModal({
     // Check for duplicates (case-insensitive, excluding current)
     const lowerName = newName.toLowerCase()
     if (categories.some((c) => c !== editingCategory && c.toLowerCase() === lowerName)) {
-      alert("A category with this name already exists")
+      undoToast.show({ message: "A category with this name already exists", duration: 4000 })
       return
     }
 
@@ -323,7 +325,7 @@ export function RecipeSettingsModal({
         })
       } catch (error) {
         console.error("Failed to update recipes:", error)
-        alert("Failed to update recipes with new category name")
+        undoToast.show({ message: "Failed to update recipes with new category name", duration: 4000 })
         return
       }
 
@@ -354,7 +356,7 @@ export function RecipeSettingsModal({
       setEditCategoryName("")
     } catch (error) {
       console.error("Failed to update category:", error)
-      alert(error instanceof Error ? error.message : "Failed to update category")
+      undoToast.show({ message: getErrorMessage(error, "Failed to update category"), duration: 4000 })
     }
   }, [editingCategory, editCategoryName, categories, updateCategories, bulkUpdate, config?.default_selection, updateConfig])
 
@@ -391,7 +393,7 @@ export function RecipeSettingsModal({
         }
       } catch (error) {
         console.error("Failed to delete category:", error)
-        alert(error instanceof Error ? error.message : "Failed to delete category")
+        undoToast.show({ message: getErrorMessage(error, "Failed to delete category"), duration: 4000 })
       }
     },
     [categories, categoryRecipeCounts, updateCategories, config?.default_selection, updateConfig]
@@ -440,7 +442,7 @@ export function RecipeSettingsModal({
       setTargetCategory("")
     } catch (error) {
       console.error("Failed to reassign and delete:", error)
-      alert("Failed to reassign recipes and delete category")
+      undoToast.show({ message: "Failed to reassign recipes and delete category", duration: 4000 })
     }
   }, [categoryToDelete, targetCategory, categories, bulkUpdate, updateCategories, config?.default_selection, updateConfig])
 
@@ -508,7 +510,7 @@ export function RecipeSettingsModal({
       setEditTagName("")
     } catch (error) {
       console.error("Failed to rename tag:", error)
-      alert(error instanceof Error ? error.message : "Failed to rename tag")
+      undoToast.show({ message: getErrorMessage(error, "Failed to rename tag"), duration: 4000 })
     }
   }
 
@@ -540,7 +542,7 @@ export function RecipeSettingsModal({
 
     // Don't allow merging if target is in sources
     if (mergeSources.includes(mergeTarget)) {
-      alert("Target tag cannot be one of the source tags")
+      undoToast.show({ message: "Target tag cannot be one of the source tags", duration: 4000 })
       return
     }
 
@@ -555,7 +557,7 @@ export function RecipeSettingsModal({
       setMergeTarget("")
     } catch (error) {
       console.error("Failed to merge tags:", error)
-      alert(error instanceof Error ? error.message : "Failed to merge tags")
+      undoToast.show({ message: getErrorMessage(error, "Failed to merge tags"), duration: 4000 })
     }
   }
 
@@ -573,7 +575,7 @@ export function RecipeSettingsModal({
       setTagToManage(null)
     } catch (error) {
       console.error("Failed to delete tag:", error)
-      alert(error instanceof Error ? error.message : "Failed to delete tag")
+      undoToast.show({ message: getErrorMessage(error, "Failed to delete tag"), duration: 4000 })
     }
   }
 

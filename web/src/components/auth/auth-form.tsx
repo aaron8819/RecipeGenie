@@ -144,7 +144,7 @@ export function AuthForm({ onGuestMode, initialError, initialMode = 'signin' }: 
             Try as Guest
           </Button>
           <p className="text-xs text-muted-foreground text-center mt-3">
-            Explore the app without signing up. Your data will be saved locally in this browser.
+            Explore the app without signing up. Data is temporary and may be lost.
           </p>
         </div>
       </CardContent>

@@ -253,6 +253,9 @@ export function useAddToPantryAndRemove() {
 
       const supabase = getSupabase()
 
+      // Track whether we added a new pantry item (vs duplicate)
+      let addedToPantry = false
+
       // Add to pantry
       const { error: pantryError } = await supabase
         .from("pantry_items")
@@ -265,6 +268,7 @@ export function useAddToPantryAndRemove() {
       if (pantryError && pantryError.code !== "23505") { // 23505 is unique violation
         throw pantryError
       }
+      addedToPantry = !pantryError // True if insert succeeded (no error)
 
       // Remove from shopping list items and add to already_have
       const { data: currentList, error: fetchError } = await supabase
@@ -272,7 +276,13 @@ export function useAddToPantryAndRemove() {
         .select("items, already_have")
         .single()
 
-      if (fetchError) throw fetchError
+      if (fetchError) {
+        // Rollback pantry add if we just added it
+        if (addedToPantry) {
+          await supabase.from("pantry_items").delete().eq("user_id", user!.id).eq("item", normalizedItem)
+        }
+        throw fetchError
+      }
 
       const typedList = currentList as { items?: ShoppingItem[]; already_have?: ShoppingItem[] } | null
       const currentItems = typedList?.items || []
@@ -297,7 +307,13 @@ export function useAddToPantryAndRemove() {
         })
         .eq("user_id", user!.id)
 
-      if (saveError) throw saveError
+      if (saveError) {
+        // Rollback pantry add if we just added it
+        if (addedToPantry) {
+          await supabase.from("pantry_items").delete().eq("user_id", user!.id).eq("item", normalizedItem)
+        }
+        throw saveError
+      }
       return { itemName: normalizedItem }
     },
     // Optimistic update

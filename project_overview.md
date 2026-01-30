@@ -266,9 +266,22 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-27 (v2.11.0)*
+*Last updated: 2026-01-30 (v2.12.1)*
 
-## Recent Updates (v2.11.0)
+## Recent Updates (v2.12.1)
+
+### Comprehensive Testing Review Fixes (2026-01-30)
+- **Auth context**: Added `.catch()` to `getSession()` so loading state exits on failure; auth listener now exits guest mode only on `SIGNED_IN`/`SIGNED_OUT` (not token refresh).
+- **Shopping list merging**: Replaced dynamic `require()` in `shopping-list-merging.ts` with ES module import so category overrides work at runtime.
+- **Auth callback**: Error logging for failed exchanges; sanitized error messages in URLs (opaque codes); redirect path validation to prevent open redirects.
+- **Meal planner**: History exclusion boundary fixed (`>` → `>=`) so recipes made exactly N days ago are excluded.
+- **Navigation**: Bottom nav padding corrected (`pb-20` → `pb-16`) to match 64px nav height.
+- **Accessibility**: Tag input has `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-haspopup`, `aria-autocomplete`; recipe dialog delete/drag handles have aria-labels.
+- **Recipe validation**: At least one ingredient required before save.
+- **Tests**: Shopping list generation test fixtures updated with `image_url` property.
+- **Reference**: Full review and remaining issues documented in `.cursor/plans/comprehensive_testing_results.md`.
+
+## Previous Updates (v2.11.0)
 
 ### Stitch Visual Redesign & Desktop Navigation
 - **Typography**: Outfit (body) and Playfair Display (headings)
@@ -278,6 +291,11 @@ For UI changes:
 - **Planner cooked cards**: Grayscale and reduced opacity on images for “made” recipes (desktop and mobile)
 - **Recipe cards & dialogs**: Category accent colors, `card-cream` placeholders, `font-display` titles; custom recipe-dialog scrollbar on desktop
 - **Auth callback**: `dynamic = "force-dynamic"` for OAuth
+
+## Previous Updates (v2.10.2)
+
+### Bug fix: Excluded items on recipe removal
+- Excluded items are now removed from the shopping list when their source recipe is removed (guest and authenticated).
 
 ## Previous Updates (v2.10.1)
 

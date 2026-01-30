@@ -4,6 +4,33 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.12.1] - 2026-01-30
+
+**Summary:** Comprehensive testing review fixes — auth, shopping merging, auth callback security, accessibility, and validation
+
+### Fixed
+
+- **Auth context**:
+  - Added `.catch()` to `getSession()` so loading state exits on failure (no infinite loading on network error)
+  - Auth state listener now exits guest mode only on `SIGNED_IN` or `SIGNED_OUT` (not on token refresh)
+- **Shopping list merging**: Replaced dynamic `require()` in `shopping-list-merging.ts` with ES module import so category overrides work at runtime
+- **Auth callback**:
+  - Error logging for failed authentication exchanges
+  - Sanitized error messages in redirect URLs (opaque codes instead of raw Supabase messages)
+  - Redirect path validation to prevent open redirects
+- **Meal planner**: History exclusion boundary fixed (`>` → `>=`) so recipes made exactly N days ago are excluded
+- **Navigation**: Bottom nav padding corrected (`pb-20` → `pb-16`) to match 64px nav height
+- **Tag input**: Added `role="combobox"`, `aria-expanded`, `aria-controls`, `aria-haspopup`, `aria-autocomplete` for accessibility
+- **Recipe dialog**: Aria-labels on ingredient delete buttons and drag handles; validation requires at least one ingredient before save
+- **Tests**: Shopping list generation test fixtures updated with `image_url` property
+
+### Technical Notes
+
+- Full review and remaining issues documented in `.cursor/plans/comprehensive_testing_results.md`
+- P0 critical and selected P1/P2 fixes applied; remaining items tracked in that plan for future work
+
+---
+
 ## [2.11.0] - 2026-01-27
 
 **Summary:** Stitch visual redesign, desktop header navigation, and auth callback fix

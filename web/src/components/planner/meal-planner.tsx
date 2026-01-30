@@ -154,6 +154,20 @@ function isDateInWeekRange(dateStr: string, weekStartDate: string): boolean {
 const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
 
 /**
+ * Stable hash function for distributing recipes to days
+ * Uses recipe ID to produce a consistent day index
+ */
+function stableRecipeHash(recipeId: string): number {
+  let hash = 0
+  for (let i = 0; i < recipeId.length; i++) {
+    const char = recipeId.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return Math.abs(hash)
+}
+
+/**
  * Hex colors for category pills (for inline styles)
  */
 const CATEGORY_HEX_COLORS: Record<string, string> = {
@@ -931,6 +945,17 @@ export function MealPlanner() {
     return weekDays
   }, [weekDays, mobileWeekTab])
 
+  // Compute effective tab based on currentWeekDate to keep visual indicator in sync
+  // This prevents tab/date desync when using chevron navigation beyond this/next week
+  const effectiveTab = useMemo((): MobileWeekTab | null => {
+    if (mobileWeekTab === "today") return "today"
+    const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
+    const nextWeekStart = navigateWeek(thisWeekStart, "next")
+    if (currentWeekDate === thisWeekStart) return "thisWeek"
+    if (currentWeekDate === nextWeekStart) return "nextWeek"
+    return null // No tab matches (viewing a different week)
+  }, [currentWeekDate, mobileWeekTab, config?.week_start_day])
+
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecipeHistory()
   const { data: allCategories } = useCategories()
@@ -1180,11 +1205,11 @@ export function MealPlanner() {
       recipe => recipeDayAssignments[recipe.id] === undefined
     )
     
-    // Distribute unassigned recipes evenly across days (original behavior)
-    // We need to maintain the original order, so we filter by the index in the full displayedRecipes array
-    const unassignedForThisDay = displayedRecipes.filter((recipe, idx) => {
-      // Only include if it's unassigned AND would fall on this day in the original distribution
-      return recipeDayAssignments[recipe.id] === undefined && (idx % 7 === dayIndex)
+    // Distribute unassigned recipes evenly across days using stable ID-based hash
+    // This ensures recipes don't shift days when other recipes are added/removed
+    const unassignedForThisDay = displayedRecipes.filter((recipe) => {
+      // Only include if it's unassigned AND the stable hash maps to this day
+      return recipeDayAssignments[recipe.id] === undefined && (stableRecipeHash(recipe.id) % 7 === dayIndex)
     })
     
     // Combine assigned recipes with unassigned recipes for this day
@@ -1440,7 +1465,7 @@ export function MealPlanner() {
               onClick={() => handleMobileWeekTab(tab)}
               className={cn(
                 "flex-1 py-3 text-xs font-bold border-b-2 transition-colors",
-                mobileWeekTab === tab
+                effectiveTab === tab
                   ? "text-primary border-primary"
                   : "text-primary/60 border-transparent"
               )}

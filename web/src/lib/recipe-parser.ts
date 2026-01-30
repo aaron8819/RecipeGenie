@@ -24,7 +24,7 @@ export function parseRecipeText(text: string): ParsedRecipe {
       name: "",
       ingredients: [],
       instructions: [],
-      warnings: ["No text to parse"],
+      warnings: ["No text to parse — paste recipe text above"],
     }
   }
 
@@ -106,11 +106,11 @@ export function parseRecipeText(text: string): ParsedRecipe {
 
   // Generate warnings for potential parsing issues
   if (!name || name === "Untitled Recipe") {
-    warnings.push("No recipe name found - using placeholder")
+    warnings.push("No recipe name found — using \"Untitled Recipe\"")
   }
 
   if (ingredients.length === 0) {
-    warnings.push("No ingredients found")
+    warnings.push("No ingredients found — add an \"Ingredients\" section")
   } else {
     // Check for ingredients without amounts
     const noAmountIngredients = ingredients.filter(i => i.amount === null && i.item.length > 0)
@@ -126,7 +126,7 @@ export function parseRecipeText(text: string): ParsedRecipe {
   }
 
   if (instructions.length === 0) {
-    warnings.push("No instructions found")
+    warnings.push("No instructions found — add a \"Directions\" or \"Instructions\" section")
   }
 
   return {

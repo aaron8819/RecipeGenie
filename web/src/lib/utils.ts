@@ -6,6 +6,24 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
+ * Extract error message from an unknown error.
+ * Useful for catch blocks where error type is unknown.
+ *
+ * @param error - The caught error
+ * @param fallback - Fallback message if error has no message
+ * @returns The error message string
+ */
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (typeof error === "string") {
+    return error
+  }
+  return fallback
+}
+
+/**
  * Common fraction mappings from decimal to Unicode fraction characters.
  * Uses actual mathematical fractions for precise matching.
  */

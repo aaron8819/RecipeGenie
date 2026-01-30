@@ -46,6 +46,7 @@ import {
   TabsContent,
 } from "@/components/ui/tabs"
 import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from "@/hooks/use-recipes"
+import { useUndoToast } from "@/hooks/use-undo-toast"
 import { parseRecipeText, type ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
 import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
@@ -67,6 +68,7 @@ export function RecipeDialog({
   const isEditing = !!recipe
   const createRecipe = useCreateRecipe()
   const updateRecipe = useUpdateRecipe()
+  const undoToast = useUndoToast()
 
   const [mode, setMode] = useState<"manual" | "import">("manual")
   const [name, setName] = useState("")
@@ -215,13 +217,13 @@ export function RecipeDialog({
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
+      undoToast.show({ message: 'Please select an image file', duration: 4000 })
       return
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image size must be less than 5MB')
+      undoToast.show({ message: 'Image size must be less than 5MB', duration: 4000 })
       return
     }
 
@@ -263,7 +265,7 @@ export function RecipeDialog({
           finalImageUrl = await uploadRecipeImage(recipeId, imageFile)
         } catch (error) {
           console.error("Failed to upload image:", error)
-          alert("Failed to upload image. Recipe will be saved without image.")
+          undoToast.show({ message: "Failed to upload image. Recipe will be saved without image.", duration: 5000 })
           finalImageUrl = imageUrl // Keep existing image if upload fails
         } finally {
           setIsUploadingImage(false)
@@ -305,6 +307,9 @@ export function RecipeDialog({
   }
 
   const isSubmitting = createRecipe.isPending || updateRecipe.isPending || isUploadingImage
+
+  // Check if there's at least one valid ingredient
+  const hasValidIngredients = ingredients.some((i) => i.item.trim())
 
   const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
 
@@ -399,7 +404,7 @@ Instructions:
                       className="font-mono text-sm"
                     />
                     {parseError && (
-                      <p className="text-sm text-destructive">{parseError}</p>
+                      <p className="text-sm text-destructive" role="alert" aria-live="assertive">{parseError}</p>
                     )}
                     <div className="text-xs text-muted-foreground space-y-1">
                       <p>Tips for best results:</p>
@@ -431,9 +436,13 @@ Instructions:
 
                   {/* Warnings */}
                   {parsedPreview?.warnings && parsedPreview.warnings.length > 0 && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <div
+                      className="bg-amber-50 border border-amber-200 rounded-lg p-3"
+                      role="alert"
+                      aria-live="polite"
+                    >
                       <div className="flex items-center gap-2 text-amber-800 text-sm font-medium mb-2">
-                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                         Parsing Notes
                       </div>
                       <ul className="text-sm text-amber-700 space-y-1">
@@ -581,7 +590,8 @@ Instructions:
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={!name.trim() || !category || isSubmitting}
+            disabled={!name.trim() || !category || !hasValidIngredients || isSubmitting}
+            title={!hasValidIngredients ? "Please add at least one ingredient" : undefined}
           >
             {isSubmitting ? (isUploadingImage ? "Uploading image..." : "Saving...") : isEditing ? "Save Changes" : "Add Recipe"}
           </Button>
@@ -659,6 +669,7 @@ function SortableIngredientRow({
     <button
       type="button"
       className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
+      aria-label={`Reorder ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
       {...attributes}
       {...listeners}
     >
@@ -719,6 +730,7 @@ function SortableIngredientRow({
       onClick={() => onRemoveIngredient(index)}
       disabled={ingredients.length === 1}
       className={editModeLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0 h-8 w-8" : ""}
+      aria-label={`Delete ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
     >
       <Trash2 className="h-4 w-4" />
     </Button>
@@ -912,8 +924,13 @@ function RecipeFormContent({
                 <Input
                   type="number"
                   min={1}
+                  max={100}
                   value={servings}
-                  onChange={(e) => setServings(parseInt(e.target.value) || 4)}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value)
+                    if (isNaN(val)) setServings(1)
+                    else setServings(Math.min(100, Math.max(1, val)))
+                  }}
                   className="bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary"
                 />
               </div>
@@ -1094,8 +1111,13 @@ function RecipeFormContent({
                 id="servings"
                 type="number"
                 min={1}
+                max={100}
                 value={servings}
-                onChange={(e) => setServings(parseInt(e.target.value) || 4)}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value)
+                  if (isNaN(val)) setServings(1)
+                  else setServings(Math.min(100, Math.max(1, val)))
+                }}
                 className="mt-1.5"
               />
             </div>

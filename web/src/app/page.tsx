@@ -153,7 +153,7 @@ export default function Home() {
 
   // Show main app if authenticated or in guest mode
   return (
-    <main className="min-h-screen bg-background pb-20 md:pb-6 md:pt-[65px] smooth-scroll">
+    <main className="min-h-screen bg-background pb-[var(--bottom-nav-height)] md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
       <Header
         userEmail={isGuest ? "Guest" : user?.email}
         onSignOut={handleSignOut}

@@ -18,6 +18,9 @@ interface TagInputProps {
   showAddIconInInput?: boolean
 }
 
+// Generate a unique ID for accessibility linking
+let tagInputIdCounter = 0
+
 export function TagInput({
   value,
   onChange,
@@ -32,6 +35,7 @@ export function TagInput({
   const [showAllTags, setShowAllTags] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [listboxId] = useState(() => `tag-input-listbox-${++tagInputIdCounter}`)
 
   // Get available tags (from tagCounts if available, otherwise from suggestions)
   // Filter out any undefined/null/non-string values
@@ -154,6 +158,11 @@ export function TagInput({
           }}
           placeholder={value.length === 0 ? placeholder : "Add another tag..."}
           className={showAddIconInInput ? "pr-10" : "pr-8"}
+          role="combobox"
+          aria-expanded={showSuggestions && (filteredSuggestions.length > 0 || showAllTags)}
+          aria-haspopup="listbox"
+          aria-controls={listboxId}
+          aria-autocomplete="list"
         />
         {showAddIconInInput && (
           <button
@@ -168,7 +177,12 @@ export function TagInput({
 
         {/* Suggestions Dropdown */}
         {showSuggestions && (filteredSuggestions.length > 0 || showAllTags) && (
-          <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-64 overflow-auto">
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label="Tag suggestions"
+            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-64 overflow-auto"
+          >
             {inputValue.length === 0 && showAllTags && unselectedTags.length > 0 ? (
               // Show all available tags as clickable chips when input is empty
               <div className="p-3">

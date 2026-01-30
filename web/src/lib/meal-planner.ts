@@ -33,7 +33,7 @@ export function generateMealPlan(
   for (const h of history) {
     try {
       const dateMade = new Date(h.date_made)
-      if (dateMade > cutoffDate) {
+      if (dateMade >= cutoffDate) {
         recentIds.add(h.recipe_id)
       }
     } catch {

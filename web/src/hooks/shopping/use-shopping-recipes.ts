@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/database"
 import { generateShoppingList } from "@/lib/shopping-list"
 import { mergeShoppingItems, removeRecipeByNameFromItems } from "@/lib/shopping-list-merging"
+import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getDefaultRecipes, getDefaultShoppingList, getDefaultConfig } from "@/lib/guest-storage"
 import { getSupabase } from "@/lib/supabase/client"
@@ -127,6 +128,7 @@ export function useAddToShoppingList() {
       let recipes: Recipe[]
       let pantryItems: PantryItem[]
       let excludedKeywords: string[]
+      let categoryOverrides: Record<string, string> = {}
       let currentList: ShoppingList
       let listExists = false
 
@@ -141,7 +143,7 @@ export function useAddToShoppingList() {
         const [recipesRes, pantryRes, configRes, listRes] = await Promise.all([
           supabase.from("recipes").select("*").in("id", recipeIds),
           supabase.from("pantry_items").select("*"),
-          supabase.from("user_config").select("excluded_keywords").single(),
+          supabase.from("user_config").select("excluded_keywords, category_overrides").single(),
           supabase.from("shopping_list").select("*").maybeSingle(),
         ])
 
@@ -150,24 +152,20 @@ export function useAddToShoppingList() {
 
         recipes = recipesRes.data as Recipe[]
         pantryItems = pantryRes.data as PantryItem[]
-        const typedConfig = configRes.data as { excluded_keywords?: string[] } | null
+        const typedConfig = configRes.data as { excluded_keywords?: string[]; category_overrides?: Record<string, string> } | null
         excludedKeywords = typedConfig?.excluded_keywords || []
+        categoryOverrides = typedConfig?.category_overrides || {}
         currentList = (listRes.data as ShoppingList | null) || (getDefaultShoppingList() as ShoppingList)
         listExists = !!listRes.data
       }
 
-      const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale)
-
-      // Get user category overrides for merging (already fetched above for excluded keywords)
-      let categoryOverrides: Record<string, string> = {}
+      // Get user category overrides for generation and merging
+      // For guest mode, we need to fetch from config; for authenticated, already fetched above
       if (isGuest) {
         categoryOverrides = getDefaultConfig().category_overrides || {}
-      } else {
-        // Reuse configRes from above if available, otherwise fetch
-        const configRes = await getSupabase().from("user_config").select("category_overrides").single()
-        const typedConfigRes = configRes.data as { category_overrides?: Record<string, string> } | null
-        categoryOverrides = typedConfigRes?.category_overrides || {}
       }
+
+      const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale, categoryOverrides)
 
       // Merge items using unified merging function
       const existingCount = currentList.items.length
@@ -247,9 +245,16 @@ export function useAddToShoppingList() {
         }
       )
 
-      // Merge excluded arrays (preserve items from previous recipes)
+      // Check if any items in result.items were previously excluded
+      // If so, restore them by removing from excluded list (they'll be added to items via merge above)
+      const newItemNames = new Set(result.items.map(item => normalizeItemName(item.item)))
+      const excludedToKeep = (currentList.excluded || []).filter(
+        excluded => !newItemNames.has(normalizeItemName(excluded.item))
+      )
+
+      // Merge excluded arrays (preserve items from previous recipes, excluding restored items)
       const mergedExcluded = mergeShoppingItems(
-        currentList.excluded || [],
+        excludedToKeep,
         result.excluded,
         {
           preserveUserOverrides: true,

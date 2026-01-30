@@ -7,6 +7,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/database"
 import { generateShoppingList } from "@/lib/shopping-list"
+import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getDefaultRecipes, getDefaultShoppingList } from "@/lib/guest-storage"
 import { getSupabase } from "@/lib/supabase/client"
@@ -55,13 +56,33 @@ export function useGenerateShoppingList() {
         const recipes = allRecipes.filter((r) => recipeIds.includes(r.id))
         const pantryItems = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY, true]) || []
         const excludedKeywords = queryClient.getQueryData<string[]>([...CONFIG_KEY, "excluded_keywords", true]) || []
+        const guestConfig = queryClient.getQueryData<{ category_overrides?: Record<string, string> }>([...CONFIG_KEY, true])
+        const categoryOverrides = guestConfig?.category_overrides || null
 
-        const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale)
+        // Get current checked items to preserve
+        const currentList = getGuestList(queryClient)
+        const checkedItemNames = new Set(
+          (currentList.already_have || []).map(item => normalizeItemName(item.item))
+        )
+
+        const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale, categoryOverrides)
+
+        // Preserve checked states: move items that were previously checked to already_have
+        const preservedItems: ShoppingItem[] = []
+        const preservedAlreadyHave: ShoppingItem[] = [...result.alreadyHave]
+
+        for (const item of result.items) {
+          if (checkedItemNames.has(normalizeItemName(item.item))) {
+            preservedAlreadyHave.push(item)
+          } else {
+            preservedItems.push(item)
+          }
+        }
 
         const list: ShoppingList = {
           user_id: "guest",
-          items: result.items,
-          already_have: result.alreadyHave,
+          items: preservedItems,
+          already_have: preservedAlreadyHave,
           excluded: result.excluded,
           source_recipes: recipeIds,
           scale: result.scale,
@@ -75,34 +96,51 @@ export function useGenerateShoppingList() {
 
       const supabase = getSupabase()
 
-      const { data: recipes, error: recipesError } = await supabase
-        .from("recipes")
-        .select("*")
-        .in("id", recipeIds)
-      if (recipesError) throw recipesError
+      // Fetch current list, recipes, pantry, and config in parallel
+      const [recipesRes, pantryRes, configRes, currentListRes] = await Promise.all([
+        supabase.from("recipes").select("*").in("id", recipeIds),
+        supabase.from("pantry_items").select("*"),
+        supabase.from("user_config").select("excluded_keywords, category_overrides").single(),
+        supabase.from("shopping_list").select("already_have").maybeSingle(),
+      ])
 
-      const { data: pantryItems, error: pantryError } = await supabase
-        .from("pantry_items")
-        .select("*")
-      if (pantryError) throw pantryError
+      if (recipesRes.error) throw recipesRes.error
+      if (pantryRes.error) throw pantryRes.error
 
-      const { data: config } = await supabase
-        .from("user_config")
-        .select("excluded_keywords")
-        .single()
+      const recipes = recipesRes.data as Recipe[]
+      const pantryItems = pantryRes.data as PantryItem[]
+      const typedConfig = configRes.data as { excluded_keywords?: string[]; category_overrides?: Record<string, string> } | null
+      const currentList = currentListRes.data as { already_have?: ShoppingItem[] } | null
 
-      const typedConfig = config as { excluded_keywords?: string[] } | null
-      const result = generateShoppingList(
-        recipes as Recipe[],
-        pantryItems as PantryItem[],
-        typedConfig?.excluded_keywords || [],
-        scale
+      // Get currently checked item names to preserve
+      const checkedItemNames = new Set(
+        (currentList?.already_have || []).map(item => normalizeItemName(item.item))
       )
+
+      const result = generateShoppingList(
+        recipes,
+        pantryItems,
+        typedConfig?.excluded_keywords || [],
+        scale,
+        typedConfig?.category_overrides || null
+      )
+
+      // Preserve checked states: move items that were previously checked to already_have
+      const preservedItems: ShoppingItem[] = []
+      const preservedAlreadyHave: ShoppingItem[] = [...result.alreadyHave]
+
+      for (const item of result.items) {
+        if (checkedItemNames.has(normalizeItemName(item.item))) {
+          preservedAlreadyHave.push(item)
+        } else {
+          preservedItems.push(item)
+        }
+      }
 
       const shoppingListData = {
         user_id: user!.id,
-        items: result.items,
-        already_have: result.alreadyHave,
+        items: preservedItems,
+        already_have: preservedAlreadyHave,
         excluded: result.excluded,
         source_recipes: recipeIds,
         scale: result.scale,
@@ -111,11 +149,8 @@ export function useGenerateShoppingList() {
         generated_at: new Date().toISOString(),
       }
 
-      // Check if list exists first
-      const { data: existingList } = await supabase
-        .from("shopping_list")
-        .select("user_id")
-        .maybeSingle()
+      // Check if list exists first (we already fetched it above)
+      const existingList = currentList
 
       let saveError
       if (existingList) {

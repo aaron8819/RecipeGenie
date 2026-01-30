@@ -7,6 +7,7 @@ import type { ShoppingItem } from "@/types/database"
 import { normalizeItemName, normalizeUnit } from "./shopping-list-normalization"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { ensureCategoryInfo } from "./shopping-list"
+import { categorizeIngredient } from "./shopping-categories"
 
 export interface MergeOptions {
   preserveUserOverrides?: boolean
@@ -158,7 +159,6 @@ function mergeTwoItems(
     const override = userCategoryOverrides[normalized1.item]
     if (override) {
       // Get category order from shopping-categories
-      const { categorizeIngredient } = require("./shopping-categories")
       const [catKey, catOrder] = categorizeIngredient(normalized1.item, override, userCategoryOverrides)
       categoryKey = catKey
       categoryOrder = catOrder

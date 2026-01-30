@@ -11,6 +11,9 @@ const WEEKLY_PLANS_KEY = ["weekly_plans"]
 const HISTORY_KEY = ["recipe_history"]
 const CONFIG_KEY = ["user_config"]
 const RECIPES_KEY = ["recipes"]
+const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
+
+type WeekAssignments = Record<string, Record<string, number>> // week_date -> { recipe_id -> dayIndex }
 
 // Guest mode cache helpers
 function getGuestPlan(queryClient: ReturnType<typeof useQueryClient>, weekDate: string): WeeklyPlan | null {
@@ -599,6 +602,8 @@ export function useRemoveRecipeFromPlan() {
         setGuestPlan(queryClient, weekDate, {
           ...existing,
           recipe_ids: existing.recipe_ids.filter((id) => id !== recipeId),
+          // Also remove from made_recipe_ids if present
+          made_recipe_ids: (existing.made_recipe_ids || []).filter((id) => id !== recipeId),
         })
         return { weekDate, recipeId }
       }
@@ -606,17 +611,22 @@ export function useRemoveRecipeFromPlan() {
       const supabase = getSupabase()
       const { data: existingPlan, error: fetchError } = await supabase
         .from("weekly_plans")
-        .select("recipe_ids")
+        .select("recipe_ids, made_recipe_ids")
         .eq("user_id", user!.id)
         .eq("week_date", weekDate)
         .single()
 
       if (fetchError) throw fetchError
 
+      const typedPlan = existingPlan as { recipe_ids: string[]; made_recipe_ids?: string[] }
       const { error } = await supabase
         .from("weekly_plans")
         // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update({ recipe_ids: (existingPlan.recipe_ids as string[]).filter((id) => id !== recipeId) })
+        .update({
+          recipe_ids: typedPlan.recipe_ids.filter((id) => id !== recipeId),
+          // Also remove from made_recipe_ids if present
+          made_recipe_ids: (typedPlan.made_recipe_ids || []).filter((id) => id !== recipeId),
+        })
         .eq("user_id", user!.id)
         .eq("week_date", weekDate)
 
@@ -646,6 +656,8 @@ export function useRemoveRecipeFromPlan() {
           return {
             ...old,
             recipe_ids: old.recipe_ids.filter((id) => id !== recipeId),
+            // Also remove from made_recipe_ids if present
+            made_recipe_ids: (old.made_recipe_ids || []).filter((id) => id !== recipeId),
           }
         }
       )
@@ -995,6 +1007,19 @@ export function useSaveDayAssignments() {
           generated_at: existing?.generated_at || new Date().toISOString(),
         }
         setGuestPlan(queryClient, weekDate, plan)
+
+        // Also persist to localStorage for guest mode to survive page reloads
+        if (typeof window !== "undefined") {
+          try {
+            const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
+            const allAssignments: WeekAssignments = stored ? JSON.parse(stored) : {}
+            allAssignments[weekDate] = dayAssignments
+            localStorage.setItem(RECIPE_DAY_ASSIGNMENTS_KEY, JSON.stringify(allAssignments))
+          } catch {
+            // Ignore localStorage errors
+          }
+        }
+
         return { weekDate, dayAssignments }
       }
 

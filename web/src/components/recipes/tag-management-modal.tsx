@@ -35,8 +35,9 @@ import {
   useMergeTags,
   useDeleteTag,
 } from "@/hooks/use-recipes"
+import { useUndoToast } from "@/hooks/use-undo-toast"
 import { getTagClassName } from "@/lib/tag-colors"
-import { cn } from "@/lib/utils"
+import { cn, getErrorMessage } from "@/lib/utils"
 
 interface TagManagementModalProps {
   open: boolean
@@ -48,6 +49,7 @@ export function TagManagementModal({ open, onOpenChange }: TagManagementModalPro
   const { data: tagCounts = [] } = useTagsWithCounts()
   const renameTag = useRenameTag()
   const mergeTags = useMergeTags()
+  const undoToast = useUndoToast()
   const deleteTag = useDeleteTag()
 
   const [editingTag, setEditingTag] = useState<string | null>(null)
@@ -90,7 +92,7 @@ export function TagManagementModal({ open, onOpenChange }: TagManagementModalPro
       setEditName("")
     } catch (error) {
       console.error("Failed to rename tag:", error)
-      alert(error instanceof Error ? error.message : "Failed to rename tag")
+      undoToast.show({ message: getErrorMessage(error, "Failed to rename tag"), duration: 4000 })
     }
   }
 
@@ -122,7 +124,7 @@ export function TagManagementModal({ open, onOpenChange }: TagManagementModalPro
 
     // Don't allow merging if target is in sources
     if (mergeSources.includes(mergeTarget)) {
-      alert("Target tag cannot be one of the source tags")
+      undoToast.show({ message: "Target tag cannot be one of the source tags", duration: 4000 })
       return
     }
 
@@ -137,7 +139,7 @@ export function TagManagementModal({ open, onOpenChange }: TagManagementModalPro
       setMergeTarget("")
     } catch (error) {
       console.error("Failed to merge tags:", error)
-      alert(error instanceof Error ? error.message : "Failed to merge tags")
+      undoToast.show({ message: getErrorMessage(error, "Failed to merge tags"), duration: 4000 })
     }
   }
 
@@ -155,7 +157,7 @@ export function TagManagementModal({ open, onOpenChange }: TagManagementModalPro
       setTagToManage(null)
     } catch (error) {
       console.error("Failed to delete tag:", error)
-      alert(error instanceof Error ? error.message : "Failed to delete tag")
+      undoToast.show({ message: getErrorMessage(error, "Failed to delete tag"), duration: 4000 })
     }
   }
 

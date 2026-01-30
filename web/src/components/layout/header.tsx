@@ -113,7 +113,7 @@ export function Header({
             <div className="flex items-center gap-2 text-amber-800 text-sm">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
               <span>
-                <strong>Guest Mode</strong> — Your data is temporary and will be lost when you close this tab.
+                <strong>Guest Mode</strong> — Your data is stored locally and may be lost if you close this tab, refresh, or clear browser data.
               </span>
             </div>
             <Button

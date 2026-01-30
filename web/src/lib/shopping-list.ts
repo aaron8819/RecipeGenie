@@ -24,12 +24,14 @@ export interface ShoppingListResult {
  * @param pantryItems - Items already in the pantry
  * @param excludedKeywords - Keywords for items to auto-exclude
  * @param scale - Multiplier for servings (default 1.0)
+ * @param userCategoryOverrides - Optional user category overrides (item name -> category key)
  */
 export function generateShoppingList(
   recipes: Recipe[],
   pantryItems: PantryItem[],
   excludedKeywords: string[],
-  scale: number = 1.0
+  scale: number = 1.0,
+  userCategoryOverrides?: Record<string, string> | null
 ): ShoppingListResult {
   // Get pantry items as a set for quick lookup
   const pantrySet = new Set(
@@ -112,10 +114,11 @@ export function generateShoppingList(
   const excluded: ShoppingItem[] = []
 
   for (const ingredient of ingredientMap.values()) {
-    // Categorize the ingredient for sorting
+    // Categorize the ingredient for sorting (apply user overrides)
     const [catKey, catOrder] = categorizeIngredient(
       ingredient.item,
-      ingredient.shoppingCategory
+      ingredient.shoppingCategory,
+      userCategoryOverrides
     )
 
     const shoppingItem: ShoppingItem = {
