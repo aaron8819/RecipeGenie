@@ -365,9 +365,18 @@ export function useSwapRecipe() {
         const plan = getGuestPlan(queryClient, weekDate)
         if (!plan) throw new Error("Plan not found")
 
-        const typedPlan = plan as { recipe_ids?: string[] } | null
+        const typedPlan = plan as { recipe_ids?: string[]; day_assignments?: Record<string, number> | null } | null
         const newRecipeIds = (typedPlan?.recipe_ids || []).map((id) => id === oldRecipeId ? newRecipe.id : id)
-        setGuestPlan(queryClient, weekDate, { ...plan, recipe_ids: newRecipeIds })
+        const prevAssignments = typedPlan?.day_assignments || {}
+        const dayIndex = prevAssignments[oldRecipeId]
+        const { [oldRecipeId]: _, ...rest } = prevAssignments
+        const newDayAssignments =
+          dayIndex !== undefined ? { ...rest, [newRecipe.id]: dayIndex } : rest
+        setGuestPlan(queryClient, weekDate, {
+          ...plan,
+          recipe_ids: newRecipeIds,
+          day_assignments: Object.keys(newDayAssignments).length > 0 ? newDayAssignments : null,
+        })
         return { newRecipe, oldRecipeId, weekDate }
       }
 
@@ -383,20 +392,28 @@ export function useSwapRecipe() {
 
       const { data: plan, error: planError } = await supabase
         .from("weekly_plans")
-        .select("recipe_ids")
+        .select("recipe_ids, day_assignments")
         .eq("user_id", user!.id)
         .eq("week_date", weekDate)
         .single()
 
       if (planError) throw planError
 
-      const typedPlan = plan as { recipe_ids?: string[] } | null
+      const typedPlan = plan as { recipe_ids?: string[]; day_assignments?: Record<string, number> | null } | null
       const newRecipeIds = (typedPlan?.recipe_ids || []).map((id) => id === oldRecipeId ? newRecipe.id : id)
+      const prevAssignments = typedPlan?.day_assignments || {}
+      const dayIndex = prevAssignments[oldRecipeId]
+      const { [oldRecipeId]: _removed, ...rest } = prevAssignments
+      const newDayAssignments =
+        dayIndex !== undefined ? { ...rest, [newRecipe.id]: dayIndex } : rest
 
       const { error: saveError } = await supabase
         .from("weekly_plans")
         // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update({ recipe_ids: newRecipeIds })
+        .update({
+          recipe_ids: newRecipeIds,
+          day_assignments: Object.keys(newDayAssignments).length > 0 ? newDayAssignments : null,
+        })
         .eq("user_id", user!.id)
         .eq("week_date", weekDate)
 
@@ -405,17 +422,32 @@ export function useSwapRecipe() {
     },
 
     onSuccess: (result, variables) => {
-      // Immediately update the cache with the new recipe
-      queryClient.setQueryData<WeeklyPlan>(
-        [...WEEKLY_PLANS_KEY, variables.weekDate, isGuest],
-        (old) => {
-          if (!old) return old
-          const newRecipeIds = old.recipe_ids.map((id) =>
-            id === variables.oldRecipeId ? result.newRecipe.id : id
-          )
-          return { ...old, recipe_ids: newRecipeIds }
-        }
+      const oldPlan = queryClient.getQueryData<WeeklyPlan>([...WEEKLY_PLANS_KEY, variables.weekDate, isGuest])
+      if (!oldPlan) return
+      const oldRecipeIds = oldPlan.recipe_ids
+      const newRecipeIds = oldRecipeIds.map((id) =>
+        id === variables.oldRecipeId ? result.newRecipe.id : id
       )
+      const prevAssignments = oldPlan.day_assignments || {}
+      const dayIndex = prevAssignments[variables.oldRecipeId]
+      const { [variables.oldRecipeId]: _removed, ...rest } = prevAssignments
+      const newDayAssignments =
+        dayIndex !== undefined ? { ...rest, [result.newRecipe.id]: dayIndex } : rest
+
+      // Update weekly plan cache so recipe_ids and day_assignments are new
+      queryClient.setQueryData<WeeklyPlan>([...WEEKLY_PLANS_KEY, variables.weekDate, isGuest], {
+        ...oldPlan,
+        recipe_ids: newRecipeIds,
+        day_assignments: Object.keys(newDayAssignments).length > 0 ? newDayAssignments : null,
+      })
+
+      // Optimistically set recipes cache for the NEW recipe_ids so useWeeklyPlanRecipes
+      // has data immediately and the calendar does not unmount (enables flip animation)
+      const previousRecipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, "weekly", oldRecipeIds, isGuest])
+      const newRecipes = previousRecipes
+        ? previousRecipes.map((r) => (r.id === variables.oldRecipeId ? result.newRecipe : r))
+        : [result.newRecipe]
+      queryClient.setQueryData<Recipe[]>([...RECIPES_KEY, "weekly", newRecipeIds, isGuest], newRecipes)
 
       // Then invalidate to ensure full consistency
       queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })

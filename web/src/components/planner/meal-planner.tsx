@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   ChevronLeft,
   ChevronRight,
@@ -307,6 +307,61 @@ function EmptySlot({ onAdd, desktop }: { onAdd: () => void; desktop?: boolean })
 /**
  * Day column component (Desktop) — Stitch redesign
  */
+/**
+ * Wraps a recipe card and runs a flip animation when the recipe in this slot changes (e.g. after swap).
+ * Uses stable slot key so only the swapped card flips; other cards are unaffected.
+ */
+function FlipRecipeCard({
+  recipe,
+  slotKey,
+  children,
+}: {
+  recipe: Recipe
+  slotKey: string
+  children: (displayedRecipe: Recipe) => React.ReactNode
+}) {
+  const [displayedRecipe, setDisplayedRecipe] = useState(recipe)
+  const [phase, setPhase] = useState<"idle" | "out" | "in">("idle")
+  const prevIdRef = useRef(recipe.id)
+  const timeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  useEffect(() => {
+    if (recipe.id === prevIdRef.current) {
+      setDisplayedRecipe(recipe)
+      return
+    }
+    setPhase("out")
+    const t1 = setTimeout(() => {
+      setDisplayedRecipe(recipe)
+      setPhase("in")
+      const t2 = setTimeout(() => {
+        setPhase("idle")
+        prevIdRef.current = recipe.id
+      }, 200)
+      timeoutsRef.current.push(t2)
+    }, 200)
+    timeoutsRef.current.push(t1)
+    return () => {
+      timeoutsRef.current.forEach(clearTimeout)
+      timeoutsRef.current = []
+    }
+  }, [recipe])
+
+  return (
+    <div className="perspective-[1000px]">
+      <div
+        className={cn(
+          "flip-recipe-card-inner",
+          phase === "out" && "flip-out",
+          phase === "in" && "flip-in"
+        )}
+      >
+        {children(displayedRecipe)}
+      </div>
+    </div>
+  )
+}
+
 function DayColumn({
   day,
   dayIndex,
@@ -369,42 +424,49 @@ function DayColumn({
       </div>
       {mainRecipe ? (
         <div className="space-y-2">
-          <StitchRecipeCard
-            compact={false}
-            recipe={mainRecipe}
-            isMade={isRecipeMade(mainRecipe)}
-            isMarkingThis={markingRecipeId === mainRecipe.id}
-            isAddingToCart={addingToCartRecipeId === mainRecipe.id}
-            isSwapping={swappingRecipeId === mainRecipe.id}
-            isToday={isToday}
-            onView={() => onViewRecipe(mainRecipe)}
-            onSwap={() => onSwapRecipe(mainRecipe)}
-            onMarkMade={() => onMarkMade(mainRecipe.id, isRecipeMade(mainRecipe))}
-            onAddToCart={() => onAddToCart(mainRecipe.id)}
-            onRemove={() => onRemoveRecipe(mainRecipe)}
-            onMoveToDay={(dayIdx) => onMoveToDay(mainRecipe.id, dayIdx)}
-            weekDays={weekDays}
-            currentDayIndex={currentDayIndex}
-          />
-          {extraRecipes.map((r) => (
-            <StitchRecipeCard
-              key={r.id}
-              compact
-              recipe={r}
-              isMade={isRecipeMade(r)}
-              isMarkingThis={markingRecipeId === r.id}
-              isAddingToCart={addingToCartRecipeId === r.id}
-              isSwapping={swappingRecipeId === r.id}
-              isToday={false}
-              onView={() => onViewRecipe(r)}
-              onSwap={() => onSwapRecipe(r)}
-              onMarkMade={() => onMarkMade(r.id, isRecipeMade(r))}
-              onAddToCart={() => onAddToCart(r.id)}
-              onRemove={() => onRemoveRecipe(r)}
-              onMoveToDay={(dayIdx) => onMoveToDay(r.id, dayIdx)}
-              weekDays={weekDays}
-              currentDayIndex={currentDayIndex}
-            />
+          <FlipRecipeCard key={`day-${dayIndex}-slot-0`} recipe={mainRecipe} slotKey={`day-${dayIndex}-slot-0`}>
+            {(displayedRecipe) => (
+              <StitchRecipeCard
+                compact={false}
+                recipe={displayedRecipe}
+                isMade={isRecipeMade(displayedRecipe)}
+                isMarkingThis={markingRecipeId === mainRecipe.id}
+                isAddingToCart={addingToCartRecipeId === mainRecipe.id}
+                isSwapping={swappingRecipeId === mainRecipe.id}
+                isToday={isToday}
+                onView={() => onViewRecipe(mainRecipe)}
+                onSwap={() => onSwapRecipe(mainRecipe)}
+                onMarkMade={() => onMarkMade(mainRecipe.id, isRecipeMade(mainRecipe))}
+                onAddToCart={() => onAddToCart(mainRecipe.id)}
+                onRemove={() => onRemoveRecipe(mainRecipe)}
+                onMoveToDay={(dayIdx) => onMoveToDay(mainRecipe.id, dayIdx)}
+                weekDays={weekDays}
+                currentDayIndex={currentDayIndex}
+              />
+            )}
+          </FlipRecipeCard>
+          {extraRecipes.map((r, slotIdx) => (
+            <FlipRecipeCard key={`day-${dayIndex}-slot-${slotIdx + 1}`} recipe={r} slotKey={`day-${dayIndex}-slot-${slotIdx + 1}`}>
+              {(displayedRecipe) => (
+                <StitchRecipeCard
+                  compact
+                  recipe={displayedRecipe}
+                  isMade={isRecipeMade(displayedRecipe)}
+                  isMarkingThis={markingRecipeId === r.id}
+                  isAddingToCart={addingToCartRecipeId === r.id}
+                  isSwapping={swappingRecipeId === r.id}
+                  isToday={false}
+                  onView={() => onViewRecipe(r)}
+                  onSwap={() => onSwapRecipe(r)}
+                  onMarkMade={() => onMarkMade(r.id, isRecipeMade(r))}
+                  onAddToCart={() => onAddToCart(r.id)}
+                  onRemove={() => onRemoveRecipe(r)}
+                  onMoveToDay={(dayIdx) => onMoveToDay(r.id, dayIdx)}
+                  weekDays={weekDays}
+                  currentDayIndex={currentDayIndex}
+                />
+              )}
+            </FlipRecipeCard>
           ))}
         </div>
       ) : (
@@ -473,23 +535,30 @@ function MobileDayColumn({
         </h2>
       </div>
       {dayRecipes.length > 0 ? (
-        dayRecipes.map((recipe) => (
-          <MobileRecipeCard
-            key={recipe.id}
+        dayRecipes.map((recipe, slotIdx) => (
+          <FlipRecipeCard
+            key={`mobile-day-${dayIndex}-slot-${slotIdx}`}
             recipe={recipe}
-            isMade={isRecipeMade(recipe)}
-            isMarkingThis={markingRecipeId === recipe.id}
-            isSwapping={swappingRecipeId === recipe.id}
-            isToday={isToday}
-            onView={() => onViewRecipe(recipe)}
-            onSwap={() => onSwapRecipe(recipe)}
-            onMarkMade={() => onMarkMade(recipe.id, isRecipeMade(recipe))}
-            onAddToCart={() => onAddToCart(recipe.id)}
-            onRemove={() => onRemoveRecipe(recipe)}
-            onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
-            weekDays={weekDays}
-            currentDayIndex={currentDayIndex}
-          />
+            slotKey={`mobile-day-${dayIndex}-slot-${slotIdx}`}
+          >
+            {(displayedRecipe) => (
+              <MobileRecipeCard
+                recipe={displayedRecipe}
+                isMade={isRecipeMade(displayedRecipe)}
+                isMarkingThis={markingRecipeId === recipe.id}
+                isSwapping={swappingRecipeId === recipe.id}
+                isToday={isToday}
+                onView={() => onViewRecipe(recipe)}
+                onSwap={() => onSwapRecipe(recipe)}
+                onMarkMade={() => onMarkMade(recipe.id, isRecipeMade(recipe))}
+                onAddToCart={() => onAddToCart(recipe.id)}
+                onRemove={() => onRemoveRecipe(recipe)}
+                onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
+                weekDays={weekDays}
+                currentDayIndex={currentDayIndex}
+              />
+            )}
+          </FlipRecipeCard>
         ))
       ) : (
         <EmptySlot onAdd={() => onAddMeal(dayIndex)} />

@@ -4,6 +4,30 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.12.4] - 2026-02-01
+
+**Summary:** Meal planner swap UX — preserve day assignment on swap, flip animation when recipe changes in slot
+
+### Added
+
+- **Planner swap behavior**:
+  - **Day assignment preserved**: When swapping a recipe in the meal planner, the new recipe keeps the same day slot (day_assignments updated for both guest and authenticated users)
+  - **Flip animation**: Recipe cards in calendar view now play a flip-out/flip-in animation when the recipe in that slot changes (e.g. after swap)
+  - **Stable slot keys**: Only the swapped card flips; other cards are unaffected
+
+### Changed
+
+- **use-planner.ts**: `useSwapRecipe` now reads/updates `day_assignments` when swapping; optimistically sets recipes cache for new recipe IDs so the calendar does not unmount and the flip animation runs smoothly
+- **meal-planner.tsx**: New `FlipRecipeCard` wrapper runs flip phases (idle → out → in → idle) when `recipe.id` changes in a slot; used for desktop day columns and mobile day stack
+- **globals.css**: Added `.flip-recipe-card-inner`, `.flip-out`, `.flip-in` for 3D flip effect (perspective, rotateY)
+
+### Technical Notes
+
+- Flip uses 200ms out + 200ms in; cleanup on unmount clears timeouts
+- Optimistic cache update: `setQueryData` for `[...RECIPES_KEY, "weekly", newRecipeIds, isGuest]` so `useWeeklyPlanRecipes` has data immediately after swap
+
+---
+
 ## [2.12.3] - 2026-02-01
 
 **Summary:** Guest mode banner, recipe list/card refinements (sort, view toggle, stats, undo for mark-as-made)

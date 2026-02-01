@@ -269,9 +269,16 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-02-01 (v2.12.3)*
+*Last updated: 2026-02-01 (v2.12.4)*
 
-## Recent Updates (v2.12.3)
+## Recent Updates (v2.12.4)
+
+### Meal Planner Swap UX (2026-02-01)
+- **Swap preserves day**: When you swap a recipe in the planner, the new recipe keeps the same day slot (day_assignments updated)
+- **Flip animation**: Recipe cards play a flip-out/flip-in animation when the recipe in that slot changes (e.g. after swap); only the swapped card animates
+- **Optimistic cache**: use-planner optimistically updates recipes cache on swap so the calendar does not unmount and the animation runs smoothly
+
+## Previous Updates (v2.12.3)
 
 ### Guest Banner, Recipe List/Card Refinements (2026-02-01)
 - **Header**: Guest mode warning banner (amber) with "Sign up to save your data" CTA; Help icon opens OnboardingDialog
