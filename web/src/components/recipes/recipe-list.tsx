@@ -216,28 +216,36 @@ export function RecipeList() {
   }
 
 
-  const filterBtnClass =
-    "flex items-center gap-2 bg-white dark:bg-zinc-900 px-4 py-2.5 rounded-lg border border-stone-200 dark:border-zinc-800 text-sm font-medium hover:border-primary transition-colors"
+  const pillOutline =
+    "flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-full font-medium transition-all text-sm hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
 
   return (
-    <div className="space-y-0 w-full min-w-0 overflow-x-hidden">
-      {/* Search — Stitch recipes_redesign; p-1 prevents focus ring from being clipped by overflow-x-hidden ancestors */}
+    <div className="w-full min-w-0 overflow-x-hidden">
+      {/* Search — full width, generous spacing below */}
       <div className="relative mb-8 p-1">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-stone-400 dark:text-zinc-500" />
+        <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-slate-500 pointer-events-none" />
         <Input
-          placeholder="Search recipes..."
+          placeholder="Search recipes by name, ingredient, or cuisine..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-auto py-4 pl-12 pr-4 text-lg bg-white dark:bg-zinc-900 border-0 shadow-sm ring-1 ring-stone-200 dark:ring-zinc-800 focus:ring-2 focus:ring-primary rounded-xl outline-none transition-all"
+          className="w-full h-auto py-5 pl-12 pr-5 text-base bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary rounded-2xl placeholder:text-slate-400 outline-none transition-all"
         />
       </div>
 
-      {/* Filters and Add Recipe — Stitch recipes_redesign */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Single row spanning full width: filters left, Settings + Add Recipe right */}
+      <div className="flex flex-nowrap items-center justify-between gap-4 md:gap-6 mb-10 w-full min-w-0 overflow-x-auto pb-1 scrollbar-thin">
+        {/* Left: All categories, Filter by tags, Favorites, Recently Made, divider, view toggle */}
+        <div className="flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
           <Select value={category || "all"} onValueChange={(v) => setCategory(v === "all" ? null : v)}>
-            <SelectTrigger className={cn(filterBtnClass, "w-auto min-w-[160px] h-auto")}>
-              <Filter className="h-5 w-5 shrink-0" />
+            <SelectTrigger
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm h-auto w-auto min-w-0 shrink-0 transition-all",
+                !category
+                  ? "bg-primary text-primary-foreground border-0 shadow-md shadow-primary/20 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 hover:brightness-105"
+                  : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+              )}
+            >
+              <Filter className="h-4 w-4 shrink-0" />
               <SelectValue placeholder="All categories" />
             </SelectTrigger>
             <SelectContent>
@@ -251,27 +259,34 @@ export function RecipeList() {
           </Select>
 
           {allTags.length > 0 && (
-            <MultiSelect
-              options={allTags}
-              value={selectedTags}
-              onChange={setSelectedTags}
-              placeholder="Filter by tags..."
-              className="w-auto min-w-[160px]"
-              tagCounts={tagCounts}
-            />
+            <div className="shrink-0">
+              <MultiSelect
+                options={allTags}
+                value={selectedTags}
+                onChange={setSelectedTags}
+                placeholder="Filter by tags"
+                className="w-auto [&>button]:rounded-full [&>button]:px-4 [&>button]:py-2.5 [&>button]:text-sm [&>button]:border-slate-200 [&>button]:dark:border-slate-700 [&>button]:text-slate-600 [&>button]:dark:text-slate-300 [&>button]:whitespace-nowrap [&>button]:transition-all [&>button]:hover:bg-slate-100 [&>button]:dark:hover:bg-slate-600 [&>button]:hover:border-slate-300 [&>button]:dark:hover:border-slate-500 [&>button]:hover:text-slate-800 [&>button]:dark:hover:text-slate-100"
+                tagCounts={tagCounts}
+              />
+            </div>
           )}
 
           <Button
             variant="ghost"
             onClick={() => setFavoritesOnly(!favoritesOnly)}
-            className={cn(filterBtnClass, favoritesOnly && "text-red-500")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-full font-medium transition-all text-sm shrink-0 border border-slate-200 dark:border-slate-700",
+              favoritesOnly
+                ? "text-red-600 dark:text-red-400 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-200 dark:hover:border-red-800 hover:text-red-700 dark:hover:text-red-300"
+                : pillOutline
+            )}
           >
-            <Heart className={cn("h-5 w-5", favoritesOnly && "fill-current")} />
+            <Heart className={cn("h-4 w-4 shrink-0", favoritesOnly && "fill-current")} />
             Favorites
           </Button>
 
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-            <SelectTrigger className={cn(filterBtnClass, "w-auto min-w-[140px] h-auto")}>
+            <SelectTrigger className={cn(pillOutline, "min-w-0 w-auto shrink-0 h-auto")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -282,15 +297,17 @@ export function RecipeList() {
             </SelectContent>
           </Select>
 
-          <div className="flex items-center rounded-lg border border-stone-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-1">
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-600 shrink-0 mx-1" aria-hidden />
+
+          <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
             <button
               type="button"
               onClick={() => setViewMode("grid")}
               className={cn(
-                "p-1.5 rounded-md transition-colors",
+                "p-1.5 rounded-md transition-all",
                 viewMode === "grid"
-                  ? "bg-stone-100 dark:bg-zinc-800 text-primary"
-                  : "text-stone-400 hover:text-primary"
+                  ? "bg-white dark:bg-slate-700 shadow-sm text-primary border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 hover:ring-2 hover:ring-primary/20"
+                  : "opacity-60 text-slate-600 dark:text-slate-400 hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-600 hover:text-slate-800 dark:hover:text-slate-200"
               )}
               aria-label="Grid view"
             >
@@ -300,10 +317,10 @@ export function RecipeList() {
               type="button"
               onClick={() => setViewMode("list")}
               className={cn(
-                "p-1.5 rounded-md transition-colors",
+                "p-1.5 rounded-md transition-all",
                 viewMode === "list"
-                  ? "bg-stone-100 dark:bg-zinc-800 text-primary"
-                  : "text-stone-400 hover:text-primary"
+                  ? "bg-white dark:bg-slate-700 shadow-sm text-primary border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 hover:ring-2 hover:ring-primary/20"
+                  : "opacity-60 text-slate-600 dark:text-slate-400 hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-600 hover:text-slate-800 dark:hover:text-slate-200"
               )}
               aria-label="List view"
             >
@@ -312,23 +329,29 @@ export function RecipeList() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => setIsSettingsOpen(true)} className={filterBtnClass}>
-            <Settings className="h-5 w-5" />
+        {/* Right: Settings, Add Recipe */}
+        <div className="flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => setIsSettingsOpen(true)}
+            className={cn(pillOutline, "shrink-0")}
+          >
+            <Settings className="h-4 w-4 shrink-0" />
             Settings
           </Button>
+
           <Button
             onClick={() => setIsAddDialogOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-semibold hover:opacity-90 transition-opacity shadow-sm shadow-primary/20"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-bold shadow-md shadow-primary/20 transition-all shrink-0 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 hover:brightness-105 active:scale-[0.98]"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4 shrink-0" />
             Add Recipe
           </Button>
         </div>
       </div>
 
-      {/* Recipe Grid/List — Stitch: gap-8; pt-10 = gap below filter row (padding to avoid margin collapse) */}
-      <div className="pt-10">
+      {/* Recipe Grid/List */}
+      <div>
       {showSkeleton ? (
         <div className={cn(
           viewMode === "grid"
@@ -397,7 +420,7 @@ export function RecipeList() {
             className={cn(
               viewMode === "grid"
                 ? "grid gap-8 sm:grid-cols-2 lg:grid-cols-3 w-full"
-                : "space-y-3 w-full"
+                : "space-y-4 w-full"
             )}
           >
             {sortedRecipes.map((recipe, index) => {
@@ -437,7 +460,7 @@ export function RecipeList() {
       )}
       </div>
 
-      {/* FAB Add Recipe — mobile only, Stitch recipes_redesign */}
+      {/* FAB Add Recipe — mobile only */}
       <button
         type="button"
         onClick={() => setIsAddDialogOpen(true)}

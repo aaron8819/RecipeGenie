@@ -97,9 +97,10 @@ export function Header({
             <button
               type="button"
               onClick={onSignOut}
+              aria-label={isGuest ? "Exit" : "Sign out"}
               className="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1 transition-colors flex-shrink-0"
             >
-              {isGuest ? "Exit" : "Sign Out"}
+              <span className="hidden md:inline">{isGuest ? "Exit" : "Sign Out"}</span>
               <LogOut className="h-4 w-4" />
             </button>
           </div>

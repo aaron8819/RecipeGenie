@@ -269,9 +269,16 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-01-30 (v2.12.2)*
+*Last updated: 2026-02-01 (v2.12.3)*
 
-## Recent Updates (v2.12.2)
+## Recent Updates (v2.12.3)
+
+### Guest Banner, Recipe List/Card Refinements (2026-02-01)
+- **Header**: Guest mode warning banner (amber) with "Sign up to save your data" CTA; Help icon opens OnboardingDialog
+- **Recipe list**: Sort (Most Made, Recently Made, Name, Newest), grid/list view toggle, recipe stats from history ("Made X times", "Last: date"), mark-as-made with undo toast
+- **Recipe card**: List view (horizontal card, actions row), grid view (category pills, history row, desktop 3-button / mobile 3-dot actions), tag click to filter
+
+## Previous Updates (v2.12.2)
 
 ### Playwright E2E & Test Cleanup (2026-01-30)
 - **Playwright**: E2E test framework added (`playwright.config.ts`, `test:e2e` scripts); tests in `web/tests/`, auth state in `playwright/.auth/`.

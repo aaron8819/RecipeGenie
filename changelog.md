@@ -4,6 +4,39 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.12.3] - 2026-02-01
+
+**Summary:** Guest mode banner, recipe list/card refinements (sort, view toggle, stats, undo for mark-as-made)
+
+### Added
+
+- **Header**:
+  - **Guest mode warning banner**: Amber banner below header when in guest mode with "Sign up to save your data" CTA
+  - **Onboarding**: Help icon opens OnboardingDialog (replaces inline help)
+- **Recipe list**:
+  - **Sort options**: Most Made, Recently Made, Name (A–Z), Newest First (driven by recipe history)
+  - **View toggle**: Grid vs list view for recipe cards
+  - **Recipe stats**: "Made X times" and "Last: date" from recipe history on cards
+  - **Mark as made with undo**: Toast with undo after marking a recipe as made
+- **Recipe card**:
+  - **List view**: Horizontal card with image, favorite overlay, category/tag pills, history line, action icons (Mark as Made, Shop, Plan, Chevron)
+  - **Grid view**: Rounded cards, category pills, history row, desktop 3-button row (Made, Shop, Plan), mobile 3-dot actions menu
+  - **Tag click**: Clicking a tag adds it to the active filter
+
+### Changed
+
+- **Header**: Uses OnboardingDialog for help; guest banner uses AlertTriangle icon and outline CTA button
+- **Recipe list**: Settings and Add Recipe in filter row; skeleton only on initial load (stale-while-revalidate for refetch); sort applied to displayed recipes
+- **Recipe card**: Category pill colors for grid (REF_CATEGORY_PILL); list view uses getTagColor; mobile grid uses dropdown for actions
+
+### Technical Notes
+
+- Recipe stats derived from `recipe_history` via `getRecipeStatsMap` in recipe-list
+- Sort options: `timesMade`, `lastMade`, `name`, `newest`
+- List view layout: image 128×128, title/tags/history, then action icons
+
+---
+
 ## [2.12.2] - 2026-01-30
 
 **Summary:** Playwright E2E testing setup, removal of shopping-list lib unit tests, and test artifact gitignore

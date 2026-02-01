@@ -1,9 +1,15 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, History, UtensilsCrossed, CalendarPlus, Loader2, ChevronRight, ShoppingCart, Check } from "lucide-react"
+import { Heart, History, UtensilsCrossed, CalendarPlus, Loader2, ChevronRight, ShoppingCart, Check, MoreVertical } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import type { Recipe } from "@/types/database"
 import { cn } from "@/lib/utils"
 import { getTagClassName, getTagColor } from "@/lib/tag-colors"
@@ -50,155 +56,176 @@ export function RecipeCard({
   isAddingToShoppingList = false,
   isMarkingAsMade = false,
 }: RecipeCardProps) {
-  // List view
+  // List view — match reference: horizontal card, image + favorite overlay, pills, icon actions
   if (viewMode === "list") {
+    const categoryColor = getTagColor(recipe.category, true)
     return (
-      <Card
-        className="group cursor-pointer hover:shadow-md transition-shadow animate-fade-in overflow-hidden w-full"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onClick?.(recipe)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            onClick?.(recipe)
+          }
+        }}
+        className="recipe-card group flex items-center justify-between p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 animate-fade-in cursor-pointer w-full"
       >
-        <div className="flex items-center gap-2 sm:gap-4 p-3 sm:p-4">
-          {/* Favorite Button - Always Visible */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleFavorite?.(recipe)
-            }}
-          >
-            <Heart
+        <div className="flex items-center gap-6 min-w-0 flex-1">
+          {/* Image with favorite overlay — reference: w-32 h-32 rounded-2xl, heart top-left */}
+          <div className="relative flex-shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleFavorite?.(recipe)
+              }}
               className={cn(
-                "h-4 w-4",
-                recipe.favorite
-                  ? "fill-terracotta-500 text-terracotta-500"
-                  : "text-muted-foreground"
+                "absolute top-2 left-2 p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur rounded-full z-10 transition-opacity",
+                recipe.favorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
               )}
-            />
-          </Button>
-
-          {/* Recipe Image - List View */}
-          <div className="w-20 h-20 flex-shrink-0 rounded-md overflow-hidden bg-gradient-to-br from-amber-50 to-amber-100/50">
-            {recipe.image_url ? (
-              <Image
-                src={recipe.image_url}
-                alt={recipe.name}
-                width={80}
-                height={80}
-                className="w-full h-full object-cover"
-                unoptimized={!recipe.image_url.includes('supabase.co')}
+              aria-label={recipe.favorite ? "Remove from favorites" : "Add to favorites"}
+            >
+              <Heart
+                className={cn(
+                  "h-4 w-4 text-red-500",
+                  recipe.favorite && "fill-red-500"
+                )}
               />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-2xl opacity-30">
-                🍳
-              </div>
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 min-w-0 overflow-hidden">
-            <h3 className="font-semibold text-base line-clamp-1 mb-1">{recipe.name}</h3>
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs">
-              <span className={cn("capitalize whitespace-nowrap", getTagClassName(recipe.category, true))}>
-                {recipe.category}
-              </span>
-              {recipe.tags?.slice(0, 2).map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onTagClick?.(tag)
-                  }}
-                  className={cn(
-                    "whitespace-nowrap",
-                    getTagClassName(tag, false),
-                    onTagClick && "cursor-pointer hover:opacity-80 transition-opacity"
-                  )}
-                  title={onTagClick ? "Click to filter by this tag" : undefined}
-                >
-                  {tag}
-                </button>
-              ))}
-              {timesMade > 0 && (
-                <span className="text-muted-foreground whitespace-nowrap">
-                  Made {timesMade}x
-                  {lastMade && ` · Last: ${new Date(lastMade).toLocaleDateString()}`}
-                </span>
+            </button>
+            <div className="w-32 h-32 rounded-2xl overflow-hidden bg-stone-100 dark:bg-slate-700 shadow-inner">
+              {recipe.image_url ? (
+                <Image
+                  src={recipe.image_url}
+                  alt={recipe.name}
+                  width={128}
+                  height={128}
+                  className="w-full h-full object-cover"
+                  unoptimized={!recipe.image_url.includes("supabase.co")}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">
+                  🍳
+                </div>
               )}
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-            {onMarkAsMade && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onMarkAsMade?.(recipe)
-                }}
-                disabled={isMarkingAsMade}
-                className="text-green-700 hover:text-green-800 hover:bg-green-50 p-2"
-                title="Mark as Made"
-              >
-                {isMarkingAsMade ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Check className="h-4 w-4" />
-                )}
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onAddToShoppingList?.(recipe)
-              }}
-              disabled={isAddingToShoppingList}
-              className="text-blue-700 hover:text-blue-800 hover:bg-blue-50 p-2"
-              title="Add to Shopping List"
-            >
-              {isAddingToShoppingList ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ShoppingCart className="h-4 w-4" />
+          {/* Title, tags, history */}
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-2xl font-semibold mb-2 text-slate-900 dark:text-white line-clamp-2">
+              {recipe.name}
+            </h3>
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              {recipe.category && (
+                <span
+                  className={cn(
+                    "px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider",
+                    categoryColor.bg,
+                    categoryColor.text
+                  )}
+                >
+                  {recipe.category}
+                </span>
               )}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onAddToPlan?.(recipe)
-              }}
-              disabled={isAddingToPlan}
-              className="text-sage-700 hover:text-sage-800 hover:bg-sage-50 p-2"
-              title="Add to Meal Plan"
-            >
-              {isAddingToPlan ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CalendarPlus className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation()
-                onClick?.(recipe)
-              }}
-              className="h-8 w-8"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+              {recipe.tags?.slice(0, 3).map((tag) => {
+                const tagColor = getTagColor(tag, false)
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onTagClick?.(tag)
+                    }}
+                    className={cn(
+                      "px-3 py-1 text-xs font-medium rounded-full",
+                      tagColor.bg,
+                      tagColor.text,
+                      onTagClick && "cursor-pointer hover:opacity-80 transition-opacity"
+                    )}
+                    title={onTagClick ? "Filter by this tag" : undefined}
+                  >
+                    {tag}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">
+              {timesMade > 0
+                ? `Made ${timesMade}x${lastMade ? ` • Last: ${new Date(lastMade).toLocaleDateString()}` : ""}`
+                : "Not made yet"}
+            </p>
           </div>
         </div>
-      </Card>
+
+        {/* Action icons — reference: check_circle, shopping_cart, calendar_today, divider, chevron_right */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {onMarkAsMade && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMarkAsMade?.(recipe)
+              }}
+              disabled={isMarkingAsMade}
+              className="p-3 text-slate-400 hover:text-primary dark:hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-all"
+              title="Mark as Done"
+            >
+              {isMarkingAsMade ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Check className="h-5 w-5" />
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAddToShoppingList?.(recipe)
+            }}
+            disabled={isAddingToShoppingList}
+            className="p-3 text-slate-400 hover:text-primary dark:hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-all"
+            title="Add to Shopping List"
+          >
+            {isAddingToShoppingList ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <ShoppingCart className="h-5 w-5" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAddToPlan?.(recipe)
+            }}
+            disabled={isAddingToPlan}
+            className="p-3 text-slate-400 hover:text-primary dark:hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-all"
+            title="Plan Meal"
+          >
+            {isAddingToPlan ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <CalendarPlus className="h-5 w-5" />
+            )}
+          </button>
+          <div className="w-px h-8 bg-slate-100 dark:bg-slate-700 mx-2" aria-hidden />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onClick?.(recipe)
+            }}
+            className="p-3 text-slate-400 group-hover:text-primary dark:group-hover:text-white transition-all"
+            aria-label="View recipe"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
     )
   }
 
@@ -277,17 +304,133 @@ export function RecipeCard({
             )
           })}
         </div>
-        {(timesMade > 0 || lastMade) && (
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-            <div className="flex items-center gap-1.5">
-              <History className="h-4 w-4" />
-              Made {timesMade} time{timesMade !== 1 ? "s" : ""}
-            </div>
-            {lastMade && (
-              <div className="flex items-center gap-1.5">Last: {new Date(lastMade).toLocaleDateString()}</div>
+        {/* History row: inline with mobile 3-dot to avoid extra bottom space */}
+        <div className="flex items-center justify-between gap-2 mb-2 md:mb-6">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium min-h-5 flex-1 min-w-0">
+            {(timesMade > 0 || lastMade) ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <History className="h-4 w-4 flex-shrink-0" />
+                  Made {timesMade} time{timesMade !== 1 ? "s" : ""}
+                </div>
+                {lastMade && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">Last: {new Date(lastMade).toLocaleDateString()}</div>
+                )}
+              </>
+            ) : (
+              <span className="md:hidden" aria-hidden />
             )}
           </div>
-        )}
+          <div className="flex-shrink-0 md:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 rounded-xl"
+                  onClick={(e) => e.stopPropagation()}
+                  title="Actions"
+                >
+                  <MoreVertical className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+                  <span className="sr-only">Actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {onMarkAsMade && (
+                  <DropdownMenuItem
+                    onClick={() => onMarkAsMade?.(recipe)}
+                    disabled={isMarkingAsMade}
+                    className="text-slate-700 dark:text-slate-300"
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    Mark as Made
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  onClick={() => onAddToShoppingList?.(recipe)}
+                  disabled={isAddingToShoppingList}
+                  className="text-slate-700 dark:text-slate-300"
+                >
+                  <ShoppingCart className="h-4 w-4 mr-2" />
+                  Add to Shopping List
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onAddToPlan?.(recipe)}
+                  disabled={isAddingToPlan}
+                  className="text-slate-700 dark:text-slate-300"
+                >
+                  <CalendarPlus className="h-4 w-4 mr-2" />
+                  Add to Meal Plan
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        {/* Desktop: 3-button grid. Mobile: no separate action row */}
+        <div className="hidden md:grid grid-cols-3 gap-2">
+          {onMarkAsMade && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                onMarkAsMade?.(recipe)
+              }}
+              disabled={isMarkingAsMade}
+              className="flex items-center justify-center gap-1.5 py-2 px-1 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 hover:border-slate-300 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-100 transition-colors"
+              title="Mark as Made"
+            >
+              {isMarkingAsMade ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Check className="h-[18px] w-[18px]" />
+                  Made
+                </>
+              )}
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAddToShoppingList?.(recipe)
+            }}
+            disabled={isAddingToShoppingList}
+            className="flex items-center justify-center gap-1.5 py-2 px-1 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 hover:border-slate-300 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-100 transition-colors"
+            title="Add to Shopping List"
+          >
+            {isAddingToShoppingList ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <ShoppingCart className="h-[18px] w-[18px]" />
+                Shop
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              onAddToPlan?.(recipe)
+            }}
+            disabled={isAddingToPlan}
+            className="flex items-center justify-center gap-1.5 py-2 px-1 bg-primary text-white rounded-xl text-xs font-semibold hover:bg-primary/90 hover:ring-2 hover:ring-primary/30 transition-colors"
+            title="Add to Meal Plan"
+          >
+            {isAddingToPlan ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <CalendarPlus className="h-[18px] w-[18px]" />
+                Plan
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </Card>
   )
