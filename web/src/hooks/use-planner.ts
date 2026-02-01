@@ -1148,17 +1148,32 @@ export function useSaveDayAssignments() {
   })
 }
 
+/**
+ * Format a Date as local calendar date YYYY-MM-DD (avoids UTC shift from toISOString).
+ */
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+
+/**
+ * Get the week-start date (YYYY-MM-DD) for the week containing the given date,
+ * using the client's local calendar. weekStartDay: 0 = Sunday, 1 = Monday, etc.
+ */
 export function getWeekStartDate(date: Date, weekStartDay: number = 1): string {
   const d = new Date(date)
   const day = d.getDay()
   const diff = (day < weekStartDay ? 7 : 0) + day - weekStartDay
   d.setDate(d.getDate() - diff)
   d.setHours(0, 0, 0, 0)
-  return d.toISOString().split("T")[0]
+  return toLocalDateString(d)
 }
 
 export function navigateWeek(currentWeekDate: string, direction: "prev" | "next"): string {
-  const date = new Date(currentWeekDate)
+  const [y, m, day] = currentWeekDate.split("-").map(Number)
+  const date = new Date(y, m - 1, day)
   date.setDate(date.getDate() + (direction === "next" ? 7 : -7))
-  return date.toISOString().split("T")[0]
+  return toLocalDateString(date)
 }

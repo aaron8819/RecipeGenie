@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -123,6 +123,7 @@ export function RecipeList() {
   const [markingAsMadeId, setMarkingAsMadeId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [skeletonDelayed, setSkeletonDelayed] = useState(false)
 
   const { data: recipes, isLoading, isFetching } = useRecipes({
     category,
@@ -153,8 +154,17 @@ export function RecipeList() {
     return sortRecipes(displayRecipes, statsMap, sortBy)
   }, [displayRecipes, statsMap, sortBy])
   
-  // Only show skeleton on initial load with no cached data
-  const showSkeleton = isLoading && !displayRecipes.length
+  // Only show skeleton on initial load with no cached data, and only after a short delay to avoid flash on fast/cached loads
+  const isLoadingWithNoData = isLoading && !displayRecipes.length
+  useEffect(() => {
+    if (isLoadingWithNoData) {
+      const t = setTimeout(() => setSkeletonDelayed(true), 150)
+      return () => clearTimeout(t)
+    }
+    setSkeletonDelayed(false)
+    return undefined
+  }, [isLoadingWithNoData])
+  const showSkeleton = isLoadingWithNoData && skeletonDelayed
 
   const handleDelete = async (recipe: Recipe) => {
     if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
@@ -381,33 +391,35 @@ export function RecipeList() {
           ))}
         </div>
       ) : displayRecipes.length === 0 ? (
-        <EmptyState
-          icon={Search}
-          title={
-            search || category || selectedTags.length > 0 || favoritesOnly
-              ? "No recipes match your filters"
-              : "No recipes yet"
-          }
-          description={
-            search || category || selectedTags.length > 0 || favoritesOnly
-              ? "Try adjusting your search or filters to find what you're looking for."
-              : "Start building your recipe collection by adding your first recipe!"
-          }
-          action={
-            !search && !category && selectedTags.length === 0 && !favoritesOnly
-              ? {
-                  label: "Add Recipe",
-                  onClick: () => setIsAddDialogOpen(true),
-                }
-              : {
-                  label: "Clear Filters",
-                  onClick: clearAllFilters,
-                  variant: "outline",
-                }
-          }
-        />
+        <div className="animate-fade-in">
+          <EmptyState
+            icon={Search}
+            title={
+              search || category || selectedTags.length > 0 || favoritesOnly
+                ? "No recipes match your filters"
+                : "No recipes yet"
+            }
+            description={
+              search || category || selectedTags.length > 0 || favoritesOnly
+                ? "Try adjusting your search or filters to find what you're looking for."
+                : "Start building your recipe collection by adding your first recipe!"
+            }
+            action={
+              !search && !category && selectedTags.length === 0 && !favoritesOnly
+                ? {
+                    label: "Add Recipe",
+                    onClick: () => setIsAddDialogOpen(true),
+                  }
+                : {
+                    label: "Clear Filters",
+                    onClick: clearAllFilters,
+                    variant: "outline",
+                  }
+            }
+          />
+        </div>
       ) : (
-        <div className="relative w-full overflow-hidden">
+        <div className="animate-fade-in relative w-full overflow-hidden">
           {/* Subtle loading indicator for background refetch */}
           {isFetching && !isLoading && (
             <div className="absolute top-0 right-0 z-10 p-2">

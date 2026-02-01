@@ -725,7 +725,7 @@ function SortableIngredientRow({
   )
   const modifierInput = (
     <Input
-      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "w-32"}
+      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800 flex-shrink-0" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "w-32"}
       placeholder="Modifier"
       value={ingredient.modifier || ""}
       onChange={(e) =>
@@ -774,6 +774,7 @@ function SortableIngredientRow({
         {amountInput}
         {unitInput}
         {itemInput}
+        {modifierInput}
         {deleteButton}
       </div>
     )

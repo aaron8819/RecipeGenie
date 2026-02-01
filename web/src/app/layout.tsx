@@ -26,8 +26,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={cn(outfit.variable, playfair.variable)}>
-      <body className={outfit.className}>
-        <Providers>{children}</Providers>
+      <body className={cn(outfit.className, "min-h-0 flex flex-col overflow-hidden")}>
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+          <Providers>{children}</Providers>
+        </div>
       </body>
     </html>
   )

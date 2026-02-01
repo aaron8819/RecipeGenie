@@ -117,7 +117,7 @@ export function RecipeCard({
             <h3 className="font-display text-2xl font-semibold mb-2 text-slate-900 dark:text-white line-clamp-2">
               {recipe.name}
             </h3>
-            <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
               {recipe.category && (
                 <span
                   className={cn(
@@ -152,7 +152,7 @@ export function RecipeCard({
                 )
               })}
             </div>
-            <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">
+            <p className="-mt-0.5 text-sm text-slate-400 dark:text-slate-500 font-medium">
               {timesMade > 0
                 ? `Made ${timesMade}x${lastMade ? ` • Last: ${new Date(lastMade).toLocaleDateString()}` : ""}`
                 : "Not made yet"}
@@ -271,7 +271,7 @@ export function RecipeCard({
       {/* Body */}
       <div className="p-6">
         <h3 className="text-xl font-bold mb-3 dark:text-white line-clamp-2">{recipe.name}</h3>
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-3">
           <span
             className={cn(
               "px-3 py-1 text-xs font-semibold rounded-full capitalize",
@@ -306,15 +306,16 @@ export function RecipeCard({
         </div>
         {/* History row: inline with mobile 3-dot to avoid extra bottom space */}
         <div className="flex items-center justify-between gap-2 mb-2 md:mb-6">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium min-h-5 flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium min-h-5 flex-1 min-w-0">
             {(timesMade > 0 || lastMade) ? (
               <>
-                <div className="flex items-center gap-1.5">
-                  <History className="h-4 w-4 flex-shrink-0" />
-                  Made {timesMade} time{timesMade !== 1 ? "s" : ""}
-                </div>
+                <History className="h-4 w-4 flex-shrink-0" />
+                Made {timesMade} time{timesMade !== 1 ? "s" : ""}
                 {lastMade && (
-                  <div className="flex items-center gap-1.5 flex-shrink-0">Last: {new Date(lastMade).toLocaleDateString()}</div>
+                  <>
+                    <span className="text-slate-300 dark:text-slate-600 mx-1" aria-hidden>·</span>
+                    <span>Last: {new Date(lastMade).toLocaleDateString()}</span>
+                  </>
                 )}
               </>
             ) : (

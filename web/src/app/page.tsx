@@ -153,7 +153,7 @@ export default function Home() {
 
   // Show main app if authenticated or in guest mode
   return (
-    <main className="min-h-screen bg-background pb-[var(--bottom-nav-height)] md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
+    <main className="flex-1 min-h-0 flex flex-col bg-background pb-[var(--bottom-nav-height)] md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
       <Header
         userEmail={isGuest ? "Guest" : user?.email}
         onSignOut={handleSignOut}
@@ -163,11 +163,47 @@ export default function Home() {
         onTabChange={setActiveTab}
       />
 
-      <div className="container mx-auto px-4 py-4 max-w-full overflow-x-hidden">
-        {activeTab === "recipes" && <RecipeList />}
-        {activeTab === "planner" && <MealPlanner />}
-        {activeTab === "pantry" && <PantryList />}
-        {activeTab === "shopping" && <ShoppingListView />}
+      <div className="container relative mx-auto flex-1 min-h-0 w-full max-w-full px-4 py-4 overflow-hidden flex flex-col">
+        <div
+          className={
+            activeTab === "recipes"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
+          }
+          aria-hidden={activeTab !== "recipes"}
+        >
+          <RecipeList />
+        </div>
+        <div
+          className={
+            activeTab === "planner"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
+          }
+          aria-hidden={activeTab !== "planner"}
+        >
+          <MealPlanner />
+        </div>
+        <div
+          className={
+            activeTab === "pantry"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
+          }
+          aria-hidden={activeTab !== "pantry"}
+        >
+          <PantryList />
+        </div>
+        <div
+          className={
+            activeTab === "shopping"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
+          }
+          aria-hidden={activeTab !== "shopping"}
+        >
+          <ShoppingListView />
+        </div>
       </div>
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />

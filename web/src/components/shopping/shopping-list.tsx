@@ -7,7 +7,8 @@ import {
   DragOverlay,
   closestCenter,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -447,15 +448,16 @@ function SwipeableItem({
           </div>
         )}
         <div className="flex items-start gap-3 flex-1 min-w-0">
-          {/* Drag handle — hidden on mobile (shoppinglist_mobile_redesign) */}
+          {/* Drag handle — visible on all breakpoints; long-press on mobile to drag (TouchSensor delay) */}
           <button
             type="button"
             data-drag-handle="true"
-            className="hidden md:flex touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
+            className="flex touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 md:p-1 items-center justify-center"
             style={{ touchAction: 'none' }}
+            aria-label="Drag to reorder"
             {...dragHandleProps}
           >
-            <GripVertical className="h-4 w-4" />
+            <GripVertical className="h-4 w-4 md:h-4 md:w-4" />
           </button>
           
           {/* Checkbox — pt-0.5 on mobile for align with first line */}
@@ -838,12 +840,14 @@ export function ShoppingListView() {
     })
   }, [collapsedCategories])
 
-  // Set up drag sensors with higher activation distance on mobile to avoid interfering with scrolling
+  // Sensors: TouchSensor (long-press) for mobile to avoid scroll conflicts;
+  // MouseSensor for desktop; KeyboardSensor for accessibility.
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: typeof window !== 'undefined' && window.innerWidth < 768 ? 15 : 8, // Higher threshold on mobile
-      },
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 250, tolerance: 5 },
+    }),
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 8 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -1025,13 +1029,22 @@ export function ShoppingListView() {
     return Array.from(recipeSet).sort()
   }, [shoppingList?.items, pendingRecipeDeletion, pendingClearList])
 
-  // Create a color mapping that assigns consistent colors to recipes based on their name
-  // Uses hash-based assignment so colors remain stable regardless of recipe order
+  // Create a color mapping that assigns a unique color per recipe when possible.
+  // Prefer hash-based index for stability; on collision use next available index.
+  // If there are more recipes than colors, later recipes may reuse colors.
   const recipeColorMap = useMemo(() => {
     const map = new Map<string, number>()
-    uniqueRecipes.forEach((recipeName) => {
-      map.set(recipeName, getColorIndex(recipeName))
-    })
+    const usedIndices = new Set<number>()
+    for (const recipeName of uniqueRecipes) {
+      let idx = getColorIndex(recipeName)
+      if (usedIndices.size < RECIPE_COLORS.length) {
+        while (usedIndices.has(idx)) {
+          idx = (idx + 1) % RECIPE_COLORS.length
+        }
+        usedIndices.add(idx)
+      }
+      map.set(recipeName, idx)
+    }
     return map
   }, [uniqueRecipes])
 
@@ -1221,7 +1234,7 @@ export function ShoppingListView() {
   }
 
   return (
-    <div className="space-y-0">
+    <div className="flex-1 min-h-0 flex flex-col">
       {/* Header — shoppinglist_redesign; mobile: shoppinglist_mobile_redesign (compact, icon-only Organize+Clear, no Copy) */}
       <header className="mb-6 md:mb-10">
         {/* Mobile: one row, title + icon Organize + icon Clear */}
@@ -1320,16 +1333,18 @@ export function ShoppingListView() {
       </header>
 
       {/* Shopping List — full width (sidebar removed) */}
-      <div className="space-y-6 w-full">
+      <div className="flex-1 min-h-0 flex flex-col">
       {/* Shopping List */}
       {showLoading ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
       ) : filteredItems.length === 0 ? (
-        <EmptyState
-          icon={ShoppingCart}
-          title="No shopping list yet"
-          description="Add items manually above, or generate a meal plan and add it to your shopping list."
-        />
+        <div className="flex-1 flex items-center justify-center">
+          <EmptyState
+            icon={ShoppingCart}
+            title="No shopping list yet"
+            description="Add items manually above, or generate a meal plan and add it to your shopping list."
+          />
+        </div>
       ) : (
         <div className="relative">
           {/* Subtle loading indicator for background refetch */}
@@ -1415,10 +1430,11 @@ export function ShoppingListView() {
                                   handleBulkCheckOff(items, categoryData.name)
                                 }}
                                 disabled={bulkCheckOff.isPending}
-                                className="hidden md:flex h-6 px-2 text-[10px] text-primary hover:bg-primary/10"
+                                className="flex h-8 min-w-[36px] md:h-6 md:min-w-0 px-2 text-[10px] text-primary hover:bg-primary/10 touch-manipulation"
                                 title={`Check all items in ${categoryData.name}`}
+                                aria-label={`Check all items in ${categoryData.name}`}
                               >
-                                <CheckCheck className="h-3 w-3 mr-1" />
+                                <CheckCheck className="h-4 w-4 md:h-3 md:w-3 mr-1 shrink-0" />
                                 <span className="hidden sm:inline">All</span>
                               </Button>
                             )}
@@ -1509,7 +1525,7 @@ export function ShoppingListView() {
             </Card>
           )}
 
-          {/* In Pantry — mobile: p-4, text-sm, hide helper, pill sizes (shoppinglist_mobile_redesign) */}
+          {/* In Pantry — mobile: single-row horizontal scroll carousel; desktop: wrap (shoppinglist_mobile_redesign) */}
           {mergedAlreadyHave && mergedAlreadyHave.length > 0 && (
             <div className="bg-white border border-stone-100 rounded-xl overflow-hidden shadow-sm p-4 md:p-6 animate-fade-in">
               <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
@@ -1518,14 +1534,14 @@ export function ShoppingListView() {
                 <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">{mergedAlreadyHave.length}</span>
               </div>
               <p className="hidden md:block text-xs text-muted-foreground mb-4">Click to add back to list</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
                 {mergedAlreadyHave.map((item, index) => (
                   <button
                     key={`already-have-${item.item}-${item.unit || ''}-${index}`}
                     type="button"
                     onClick={() => moveToList.mutate(item)}
                     disabled={moveToList.isPending}
-                    className="px-3 py-2 md:px-4 md:py-1.5 text-xs md:text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer min-h-[44px] md:min-h-0"
+                    className="shrink-0 px-3 py-2 md:px-4 md:py-1.5 text-xs md:text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer min-h-[44px] md:min-h-0"
                     style={{ animationDelay: `${index * 20}ms` }}
                   >
                     {item.item}
@@ -1535,7 +1551,7 @@ export function ShoppingListView() {
             </div>
           )}
 
-          {/* Excluded — mobile: p-4, text-sm, hide helper, pill sizes (shoppinglist_mobile_redesign) */}
+          {/* Excluded — mobile: single-row horizontal scroll carousel; desktop: wrap (shoppinglist_mobile_redesign) */}
           {displayShoppingList?.excluded && displayShoppingList.excluded.length > 0 && (
             <div className="bg-white border border-stone-100 rounded-xl overflow-hidden shadow-sm p-4 md:p-6 animate-fade-in">
               <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
@@ -1544,14 +1560,14 @@ export function ShoppingListView() {
                 <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">{displayShoppingList.excluded.length}</span>
               </div>
               <p className="hidden md:block text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
                 {displayShoppingList.excluded.map((item, index) => (
                   <button
                     key={`excluded-${item.item}-${item.unit || ''}-${index}`}
                     type="button"
                     onClick={() => moveExcludedToList.mutate(item)}
                     disabled={moveExcludedToList.isPending}
-                    className="px-3 py-2 md:px-4 md:py-1.5 text-xs md:text-sm font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer min-h-[44px] md:min-h-0 flex items-center gap-1.5"
+                    className="shrink-0 px-3 py-2 md:px-4 md:py-1.5 text-xs md:text-sm font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer min-h-[44px] md:min-h-0 flex items-center gap-1.5"
                     style={{ animationDelay: `${index * 20}ms` }}
                   >
                     <span>{item.item}</span>

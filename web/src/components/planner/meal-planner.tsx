@@ -9,6 +9,7 @@ import {
   Circle,
   ArrowLeftRight,
   Clock,
+  History,
   ShoppingCart,
   Loader2,
   Plus,
@@ -252,12 +253,20 @@ type RecipeDayAssignments = Record<string, number> // recipe_id -> dayIndex (0-6
 type WeekAssignments = Record<string, RecipeDayAssignments> // week_date -> RecipeDayAssignments
 
 /**
+ * Parse YYYY-MM-DD as local calendar date (avoid UTC shift from new Date(str)).
+ */
+function parseLocalDate(isoDate: string): Date {
+  const [y, m, d] = isoDate.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
+
+/**
  * Get array of day objects for a week
  */
 function getWeekDays(weekStartDate: string, weekStartDay: number = 1): Array<{ date: Date; dayName: string; dayNumber: number }> {
   if (!weekStartDate) return []
   
-  const startDate = new Date(weekStartDate)
+  const startDate = parseLocalDate(weekStartDate)
   const days: Array<{ date: Date; dayName: string; dayNumber: number }> = []
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   
@@ -380,6 +389,7 @@ function DayColumn({
   weekDays,
   currentDayIndex,
   isToday,
+  statsMap,
 }: {
   day: { date: Date; dayName: string; dayNumber: number }
   dayIndex: number
@@ -398,6 +408,7 @@ function DayColumn({
   weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
   currentDayIndex: Record<string, number> | undefined
   isToday?: boolean
+  statsMap: Map<string, RecipeStats>
 }) {
   const mainRecipe = dayRecipes[0]
   const extraRecipes = dayRecipes.slice(1)
@@ -442,6 +453,8 @@ function DayColumn({
                 onMoveToDay={(dayIdx) => onMoveToDay(mainRecipe.id, dayIdx)}
                 weekDays={weekDays}
                 currentDayIndex={currentDayIndex}
+                lastMade={statsMap.get(mainRecipe.id)?.lastMade ?? null}
+                timesMade={statsMap.get(mainRecipe.id)?.timesMade ?? 0}
               />
             )}
           </FlipRecipeCard>
@@ -464,6 +477,8 @@ function DayColumn({
                   onMoveToDay={(dayIdx) => onMoveToDay(r.id, dayIdx)}
                   weekDays={weekDays}
                   currentDayIndex={currentDayIndex}
+                  lastMade={statsMap.get(r.id)?.lastMade ?? null}
+                  timesMade={statsMap.get(r.id)?.timesMade ?? 0}
                 />
               )}
             </FlipRecipeCard>
@@ -496,6 +511,7 @@ function MobileDayColumn({
   onAddMeal,
   weekDays,
   currentDayIndex,
+  statsMap,
 }: {
   day: { date: Date; dayName: string; dayNumber: number }
   dayIndex: number
@@ -512,6 +528,7 @@ function MobileDayColumn({
   onAddMeal: (dayIndex?: number) => void
   weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
   currentDayIndex: Record<string, number> | undefined
+  statsMap: Map<string, RecipeStats>
 }) {
   const today = new Date()
   const isToday = day.date.toDateString() === today.toDateString()
@@ -556,6 +573,8 @@ function MobileDayColumn({
                 onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
                 weekDays={weekDays}
                 currentDayIndex={currentDayIndex}
+                lastMade={statsMap.get(recipe.id)?.lastMade ?? null}
+                timesMade={statsMap.get(recipe.id)?.timesMade ?? 0}
               />
             )}
           </FlipRecipeCard>
@@ -587,6 +606,8 @@ function StitchRecipeCard({
   weekDays,
   currentDayIndex,
   compact = false,
+  lastMade = null,
+  timesMade = 0,
 }: {
   recipe: Recipe
   isMade: boolean
@@ -603,6 +624,8 @@ function StitchRecipeCard({
   weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
   currentDayIndex: Record<string, number> | undefined
   compact?: boolean
+  lastMade?: string | null
+  timesMade?: number
 }) {
   const pillBg = getCategoryHexColor(recipe.category)
 
@@ -651,22 +674,25 @@ function StitchRecipeCard({
           </h4>
           <p className="text-[10px] text-slate-500 dark:text-slate-400">{recipe.servings} serves</p>
         </div>
+        {(timesMade > 0 || lastMade) && (
+          <p className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 mt-auto pt-1 pb-1">
+            <History className="h-3 w-3 flex-shrink-0" />
+            Made {timesMade} time{timesMade !== 1 ? "s" : ""}
+            {lastMade && (
+              <>
+                <span className="text-slate-300 dark:text-slate-600 mx-0.5" aria-hidden>·</span>
+                <span>Last: {new Date(lastMade).toLocaleDateString()}</span>
+              </>
+            )}
+          </p>
+        )}
         {isMade ? (
-          <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center justify-between gap-1 pt-2 border-t border-slate-100 dark:border-slate-700">
             <div className="bg-emerald-600 text-white px-2 py-1 rounded-lg flex items-center gap-1 text-[9px] font-bold">
               <CheckCircle className="h-3.5 w-3.5" />
               COOKED
             </div>
             <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-                disabled={isAddingToCart}
-                className="p-1 text-slate-400 hover:text-primary transition-colors"
-                title="Add to cart"
-              >
-                <ShoppingCart className="h-4 w-4" />
-              </button>
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onRemove() }}
@@ -702,70 +728,66 @@ function StitchRecipeCard({
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700">
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onSwap() }}
-                disabled={isSwapping}
-                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
-                title="Swap recipe"
-              >
-                {isSwapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onMarkMade() }}
-                disabled={isMarkingThis}
-                className="p-1 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded text-emerald-600 transition-colors"
-                title={isMade ? "Unmark as made" : "Mark as cooked"}
-              >
-                <CheckCircle className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-                disabled={isAddingToCart}
-                className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
-                title="Add to cart"
-              >
-                <ShoppingCart className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onRemove() }}
-                className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-400 hover:text-red-500 transition-colors"
-                title="Remove"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => e.stopPropagation()}
-                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
-                    title="Move to another day"
+          <div className="flex items-center gap-1 pt-2 border-t border-slate-100 dark:border-slate-700">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onMarkMade() }}
+              disabled={isMarkingThis}
+              className="p-1 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded text-emerald-600 transition-colors"
+              title={isMade ? "Unmark as made" : "Mark as cooked"}
+            >
+              <CheckCircle className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onSwap() }}
+              disabled={isSwapping}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
+              title="Swap recipe"
+            >
+              {isSwapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onAddToCart() }}
+              disabled={isAddingToCart}
+              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
+              title="Add to cart"
+            >
+              <ShoppingCart className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onRemove() }}
+              className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-400 hover:text-red-500 transition-colors"
+              title="Remove"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
+                  title="Move to another day"
+                >
+                  <CalendarIcon className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {weekDays.map((d, idx) => (
+                  <DropdownMenuItem
+                    key={idx}
+                    onClick={(e) => { e.stopPropagation(); onMoveToDay(idx) }}
+                    disabled={currentDayIndex?.[recipe.id] === idx}
                   >
-                    <CalendarIcon className="h-4 w-4" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {weekDays.map((d, idx) => (
-                    <DropdownMenuItem
-                      key={idx}
-                      onClick={(e) => { e.stopPropagation(); onMoveToDay(idx) }}
-                      disabled={currentDayIndex?.[recipe.id] === idx}
-                    >
-                      <CalendarIcon className="h-4 w-4 mr-2" />
-                      {d.dayName}, {d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                    <CalendarIcon className="h-4 w-4 mr-2" />
+                    {d.dayName}, {d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
@@ -793,6 +815,8 @@ function MobileRecipeCard({
   onMoveToDay,
   weekDays,
   currentDayIndex,
+  lastMade = null,
+  timesMade = 0,
 }: {
   recipe: Recipe
   isMade: boolean
@@ -807,6 +831,8 @@ function MobileRecipeCard({
   onMoveToDay: (dayIndex: number) => void
   weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
   currentDayIndex: Record<string, number> | undefined
+  lastMade?: string | null
+  timesMade?: number
 }) {
   const pillBg = getCategoryHexColor(recipe.category)
 
@@ -859,6 +885,18 @@ function MobileRecipeCard({
           <h3 className="font-bold text-lg mb-1 leading-tight">{recipe.name}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">{recipe.servings} serves</p>
         </div>
+        {(timesMade > 0 || lastMade) && (
+          <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-auto pt-1 pb-3">
+            <History className="h-3.5 w-3 flex-shrink-0" />
+            Made {timesMade} time{timesMade !== 1 ? "s" : ""}
+            {lastMade && (
+              <>
+                <span className="text-slate-300 dark:text-slate-600 mx-0.5" aria-hidden>·</span>
+                <span>Last: {new Date(lastMade).toLocaleDateString()}</span>
+              </>
+            )}
+          </p>
+        )}
         <div
           className={cn(
             "flex items-center justify-between pt-4",
@@ -868,28 +906,46 @@ function MobileRecipeCard({
           )}
         >
           <div className="flex items-center gap-6">
+            {!isMade ? (
+              <>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onMarkMade() }}
+                  disabled={isMarkingThis}
+                  className={cn(
+                    "flex flex-col items-center gap-1 transition-all shrink-0 w-10 h-10 rounded-full justify-center",
+                    isToday
+                      ? "bg-primary/10 dark:bg-emerald-500/10 text-primary dark:text-emerald-400 border border-primary/20 dark:border-emerald-500/20 shadow-sm"
+                      : "border border-slate-200 dark:border-slate-700 text-slate-300 hover:text-emerald-500 hover:border-emerald-500"
+                  )}
+                  title="Mark as cooked"
+                >
+                  {isMarkingThis ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onSwap() }}
+                  disabled={isSwapping}
+                  className={cn(
+                    "flex flex-col items-center gap-1 transition-colors",
+                    isToday ? "text-primary dark:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800" : "text-slate-400 hover:text-primary"
+                  )}
+                  title="Swap"
+                >
+                  {isSwapping ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowLeftRight className="h-5 w-5" />}
+                </button>
+              </>
+            ) : null}
             {!isMade && (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onSwap() }}
-                disabled={isSwapping}
-                className={cn(
-                  "flex flex-col items-center gap-1 transition-colors",
-                  isToday ? "text-primary dark:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800" : "text-slate-400 hover:text-primary"
-                )}
-                title="Swap"
+                onClick={(e) => { e.stopPropagation(); onAddToCart() }}
+                className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
+                title="Add to cart"
               >
-                {isSwapping ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowLeftRight className="h-5 w-5" />}
+                <ShoppingCart className="h-5 w-5" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-              className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
-              title="Add to cart"
-            >
-              <ShoppingCart className="h-5 w-5" />
-            </button>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onRemove() }}
@@ -927,22 +983,7 @@ function MobileRecipeCard({
             <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
               Recipe Cooked
             </span>
-          ) : (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onMarkMade() }}
-              disabled={isMarkingThis}
-              className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center transition-all shrink-0",
-                isToday
-                  ? "bg-primary/10 dark:bg-emerald-500/10 text-primary dark:text-emerald-400 border border-primary/20 dark:border-emerald-500/20 shadow-sm"
-                  : "border border-slate-200 dark:border-slate-700 text-slate-300 hover:text-emerald-500 hover:border-emerald-500"
-              )}
-              title="Mark as cooked"
-            >
-              {isMarkingThis ? <Loader2 className="h-5 w-5 animate-spin" /> : <CheckCircle className="h-5 w-5" />}
-            </button>
-          )}
+          ) : null}
         </div>
       </div>
     </div>
@@ -957,7 +998,10 @@ function getDayName(date: Date): string {
 }
 
 export function MealPlanner() {
-  const [currentWeekDate, setCurrentWeekDate] = useState<string>("")
+  // Default to current week (client local date); syncs to user's week_start_day when config loads
+  const [currentWeekDate, setCurrentWeekDate] = useState<string>(() =>
+    getWeekStartDate(new Date(), 1)
+  )
   const [selection, setSelection] = useState<Record<string, number>>({})
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
@@ -968,7 +1012,8 @@ export function MealPlanner() {
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
   const [addRecipeTargetDayIndex, setAddRecipeTargetDayIndex] = useState<number | null>(null)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
+  const [isDatePickerOpenMobile, setIsDatePickerOpenMobile] = useState(false)
+  const [isDatePickerOpenDesktop, setIsDatePickerOpenDesktop] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>("thisWeek")
 
@@ -1046,9 +1091,9 @@ export function MealPlanner() {
   // Build a map of recipe_id -> stats (last made + times made)
   const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
 
-  // Initialize current week on mount
+  // Sync to current week when config loads (user's week_start_day) so default view is always "this week"
   useEffect(() => {
-    const weekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
+    const weekStart = getWeekStartDate(new Date(), config?.week_start_day ?? 1)
     setCurrentWeekDate(weekStart)
   }, [config?.week_start_day])
 
@@ -1246,7 +1291,7 @@ export function MealPlanner() {
 
   const formatWeekLabel = (dateStr: string) => {
     if (!dateStr) return ""
-    const date = new Date(dateStr)
+    const date = parseLocalDate(dateStr)
     const endDate = new Date(date)
     endDate.setDate(endDate.getDate() + 6)
 
@@ -1316,7 +1361,7 @@ export function MealPlanner() {
   }, [weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
 
   return (
-    <div className="space-y-6 pb-20 sm:pb-6">
+    <div className="space-y-6 pb-6">
       {/* Mobile: compact schedule (planner_mobile_redesign) */}
       <div className="lg:hidden space-y-4">
         <div className="bg-card-cream rounded-xl p-4 shadow-sm border border-border-muted">
@@ -1340,24 +1385,25 @@ export function MealPlanner() {
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
-                <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                <Popover open={isDatePickerOpenMobile} onOpenChange={setIsDatePickerOpenMobile}>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
                       className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
-                      title="Jump to date"
+                      title="Pick a date to jump to that week"
+                      aria-label="Open calendar to pick a week"
                     >
                       <CalendarIcon className="h-4 w-4" />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="end">
                     <Calendar
-                      selected={currentWeekDate ? new Date(currentWeekDate) : undefined}
+                      selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                       onSelect={(date) => {
                         if (date) {
                           const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
                           setCurrentWeekDate(weekStart)
-                          setIsDatePickerOpen(false)
+                          setIsDatePickerOpenMobile(false)
                           const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
                           const nextWeekStart = navigateWeek(thisWeekStart, "next")
                           if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
@@ -1415,24 +1461,25 @@ export function MealPlanner() {
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
-              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+              <Popover open={isDatePickerOpenDesktop} onOpenChange={setIsDatePickerOpenDesktop}>
                 <PopoverTrigger asChild>
                   <button
                     type="button"
                     className="p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors"
-                    title="Jump to date"
+                    title="Pick a date to jump to that week"
+                    aria-label="Open calendar to pick a week"
                   >
                     <CalendarIcon className="h-4 w-4" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="end">
+                <PopoverContent className="w-auto p-0" align="end" side="bottom">
                   <Calendar
-                    selected={currentWeekDate ? new Date(currentWeekDate) : undefined}
+                    selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                     onSelect={(date) => {
                       if (date) {
                         const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
                         setCurrentWeekDate(weekStart)
-                        setIsDatePickerOpen(false)
+                        setIsDatePickerOpenDesktop(false)
                       }
                     }}
                   />
@@ -1496,16 +1543,6 @@ export function MealPlanner() {
             ))}
             <div className="flex items-center gap-2 ml-auto w-full sm:w-auto">
               <Button
-                onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
-                disabled={!hasAnyRecipes}
-                variant="outline"
-                size="sm"
-                className="sm:mr-2"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Add recipe
-              </Button>
-              <Button
                 onClick={handleGeneratePlan}
                 disabled={generatePlan.isPending || totalMeals === 0}
                 className="bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20"
@@ -1543,20 +1580,31 @@ export function MealPlanner() {
             </button>
           ))}
         </nav>
-        <Button
-          onClick={handleGenerateShoppingList}
-          disabled={addToShoppingList.isPending || !displayedRecipes?.length}
-          variant="outline"
-          size="default"
-          className="lg:ml-auto shrink-0 border-2 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary"
-        >
-          {addToShoppingList.isPending ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <ShoppingCart className="h-4 w-4 mr-2" />
-          )}
-          Add to Cart
-        </Button>
+        <div className="flex items-center gap-2 lg:ml-auto shrink-0">
+          <Button
+            onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
+            disabled={!hasAnyRecipes}
+            variant="outline"
+            size="default"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add recipe
+          </Button>
+          <Button
+            onClick={handleGenerateShoppingList}
+            disabled={addToShoppingList.isPending || !displayedRecipes?.length}
+            variant="outline"
+            size="default"
+            className="border-2 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary"
+          >
+            {addToShoppingList.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <ShoppingCart className="h-4 w-4 mr-2" />
+            )}
+            Add to Cart
+          </Button>
+        </div>
       </div>
 
       {planLoading ? (
@@ -1572,10 +1620,10 @@ export function MealPlanner() {
             <>
               {/* Mobile: category selection + Generate Plan when week has no meals */}
               <div className="lg:hidden flex flex-col items-center py-8 px-4">
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                  <CalendarDays className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold text-foreground mb-2">Plan your week</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
+                  <CalendarDays className="h-5 w-5 text-muted-foreground shrink-0" />
+                  Plan your week
+                </h3>
                 <p className="text-muted-foreground max-w-sm mb-6 text-center">
                   Select how many meals you want for each category, then generate a meal plan.
                 </p>
@@ -1624,13 +1672,53 @@ export function MealPlanner() {
                   </Button>
                 </div>
               </div>
-              {/* Desktop: simple empty state (Quick Meal Mix card already has CategoryPills + Generate) */}
-              <div className="hidden lg:block">
-                <EmptyState
-                  icon={CalendarDays}
-                  title="Plan your week"
-                  description="Select how many meals you want for each category, then generate a meal plan."
-                />
+              {/* Desktop: calendar week with Add meal on each day */}
+              <div className="hidden lg:flex items-start gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrevWeek}
+                  className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
+                  aria-label="Previous week"
+                >
+                  <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
+                </button>
+                <div className="flex-1 min-w-0 grid grid-cols-7 gap-4">
+                  {weekDays.map((day, dayIndex) => {
+                    const today = new Date()
+                    const isToday = day.date.toDateString() === today.toDateString()
+                    return (
+                      <DayColumn
+                        key={day.date.toISOString()}
+                        day={day}
+                        dayIndex={dayIndex}
+                        dayRecipes={[]}
+                        isRecipeMade={isRecipeMade}
+                        markingRecipeId={markingRecipeId}
+                        addingToCartRecipeId={addingToCartRecipeId}
+                        swappingRecipeId={swappingRecipeId}
+                        onViewRecipe={setViewingRecipe}
+                        onSwapRecipe={handleSwapRecipe}
+                        onMarkMade={handleMarkMade}
+                        onAddToCart={handleAddRecipeToCart}
+                        onRemoveRecipe={handleRemoveFromPlan}
+                        onMoveToDay={handleMoveToDay}
+                        onAddMeal={(d) => { setAddRecipeTargetDayIndex(d ?? null); setIsAddRecipeModalOpen(true); }}
+                        weekDays={weekDays}
+                        currentDayIndex={recipeDayAssignments}
+                        isToday={isToday}
+                        statsMap={statsMap}
+                      />
+                    )
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleNextWeek}
+                  className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
+                  aria-label="Next week"
+                >
+                  <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
+                </button>
               </div>
             </>
           )
@@ -1671,6 +1759,7 @@ export function MealPlanner() {
                       weekDays={weekDays}
                       currentDayIndex={recipeDayAssignments}
                       isToday={isToday}
+                      statsMap={statsMap}
                     />
                   )
                 })}
@@ -1727,6 +1816,7 @@ export function MealPlanner() {
                       onAddMeal={(dayIndex) => { setAddRecipeTargetDayIndex(dayIndex ?? null); setIsAddRecipeModalOpen(true); }}
                       weekDays={weekDays}
                       currentDayIndex={recipeDayAssignments}
+                      statsMap={statsMap}
                     />
                   )
                 })}

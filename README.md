@@ -223,6 +223,7 @@ web/
 │   │   └── page.tsx            # Main page with tabs
 │   ├── components/
 │   │   ├── ui/                 # Radix UI components
+│   │   ├── layout/             # Header, bottom nav, onboarding
 │   │   ├── recipes/            # Recipe views & dialogs
 │   │   ├── planner/            # Meal planner
 │   │   ├── pantry/             # Pantry management
@@ -241,5 +242,4 @@ web/
 - `project_overview.md` - Architecture and 10-min orientation
 - `changelog.md` - Version history
 - `decisions.md` - Architectural decision records (ADRs)
-- `.cursor/plans/comprehensive_testing_prompt.md` - UI/UX testing checklist
-- `.cursor/plans/comprehensive_testing_results.md` - Testing review (2026-01-30), fixes applied, and remaining issues
+- `supabase/SCHEMA.md` - Database schema reference

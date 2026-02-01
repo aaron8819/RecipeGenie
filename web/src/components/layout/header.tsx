@@ -41,14 +41,21 @@ export function Header({
     <>
       <header className="md:fixed md:top-0 md:left-0 md:right-0 z-50 bg-white/80 backdrop-blur-md border-b border-stone-200 px-4 sm:px-6 py-4">
         <div className="w-full flex items-center justify-between">
-          {/* Left: logo, app name, help — flush to left padding */}
+          {/* Left: logo, app name, help — flush to left padding; logo/text navigate to planner */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="bg-primary p-2 rounded-lg flex-shrink-0">
-              <UtensilsCrossed className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <h1 className="font-display text-xl sm:text-2xl text-primary flex-shrink-0">
-              Recipe Genie
-            </h1>
+            <button
+              type="button"
+              onClick={() => onTabChange?.("planner")}
+              className="flex items-center gap-2 flex-shrink-0 rounded-lg -m-1 p-1 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              aria-label="Go to Planner"
+            >
+              <div className="bg-primary p-2 rounded-lg flex-shrink-0">
+                <UtensilsCrossed className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <h1 className="font-display text-xl sm:text-2xl text-primary flex-shrink-0">
+                Recipe Genie
+              </h1>
+            </button>
             <OnboardingDialog
               trigger={
                 <button
