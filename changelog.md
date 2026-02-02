@@ -4,6 +4,36 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.12.5] - 2026-02-02
+
+**Summary:** Shopping list accessibility improvements and test infrastructure additions
+
+### Changed
+
+- **Shopping list checkbox touch targets**:
+  - Mobile checkboxes now meet WCAG 2.1 AA minimum touch target size (44x44px)
+  - Desktop checkboxes remain compact (24x24px) for optimal space usage
+  - Checkbox visual indicator wrapped in larger touch target container for better mobile UX
+  - Added proper ARIA labels for screen reader accessibility
+- **Shopping list header buttons**: Increased padding on Organize and Clear buttons for better touch accessibility (`p-2` → `p-3`)
+
+### Added
+
+- **Unit test infrastructure**:
+  - `shopping-categories.test.ts` - Tests for shopping category logic
+  - `shopping-list-merging.test.ts` - Tests for item merging behavior
+  - `shopping-list-normalization.test.ts` - Tests for unit and item normalization
+  - `shopping-list.test.ts` - General shopping list utility tests
+
+### Technical Notes
+
+- Touch target implementation uses nested span for visual checkbox inside larger button element
+- Negative margin (`-my-2`) on mobile maintains visual alignment while expanding touch area
+- `.gitignore` updated to exclude `web/docs/` directory from version control
+- Test files use Vitest framework and follow established testing patterns from hooks tests
+
+---
+
 ## [2.12.4] - 2026-02-01
 
 **Summary:** Meal planner swap UX — preserve day assignment on swap, flip animation when recipe changes in slot

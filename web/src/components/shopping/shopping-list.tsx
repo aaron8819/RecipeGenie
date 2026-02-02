@@ -460,20 +460,22 @@ function SwipeableItem({
             <GripVertical className="h-4 w-4 md:h-4 md:w-4" />
           </button>
           
-          {/* Checkbox — pt-0.5 on mobile for align with first line */}
+          {/* Checkbox — min 44px touch target on mobile for WCAG compliance */}
           <button
             type="button"
             data-checkbox="true"
             onClick={onCheckOff}
             disabled={isCheckingOff}
-            className={`pt-0.5 md:pt-0 w-6 h-6 md:w-5 md:h-5 rounded border-2 flex items-center justify-center transition-all active:scale-95 flex-shrink-0 ${
+            className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center flex-shrink-0 -my-2 md:my-0"
+            aria-label={isChecked ? "Uncheck item" : "Check off item"}
+          >
+            <span className={`w-6 h-6 md:w-5 md:h-5 rounded border-2 flex items-center justify-center transition-all active:scale-95 ${
               isChecked
                 ? "border-sage-500 bg-sage-500 text-white"
                 : "border-sage-300 hover:border-sage-500 hover:bg-sage-100 active:bg-sage-200"
-            }`}
-            aria-label={isChecked ? "Uncheck item" : "Check off item"}
-          >
-            {isChecked && <Check className="h-4 w-4 md:h-3 md:w-3" />}
+            }`}>
+              {isChecked && <Check className="h-4 w-4 md:h-3 md:w-3" />}
+            </span>
           </button>
           
           {/* Inline: amount, name, and source tags on one line (wraps together), same on mobile and desktop */}
@@ -1244,7 +1246,7 @@ export function ShoppingListView() {
             <button
               type="button"
               onClick={() => setShowSettings(true)}
-              className="p-2 text-slate-500 hover:text-primary transition-colors rounded-lg"
+              className="p-3 text-slate-500 hover:text-primary transition-colors rounded-lg"
               aria-label="Organize"
             >
               <Sparkles className="h-5 w-5" />
@@ -1252,7 +1254,7 @@ export function ShoppingListView() {
             <button
               type="button"
               onClick={handleClearListWithUndo}
-              className="p-2 text-red-600 hover:text-red-700 transition-colors rounded-lg"
+              className="p-3 text-red-600 hover:text-red-700 transition-colors rounded-lg"
               aria-label="Clear list"
             >
               <Trash2 className="h-5 w-5" />
