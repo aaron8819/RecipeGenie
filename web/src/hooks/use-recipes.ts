@@ -3,7 +3,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
-import { getDefaultRecipes, getDefaultConfig } from "@/lib/guest-storage"
 import { useUpdateUserConfig } from "@/hooks/use-planner"
 import { getSupabase } from "@/lib/supabase/client"
 
@@ -34,17 +33,9 @@ export function useRecipes(options?: {
   favoritesOnly?: boolean
   tags?: string[]
 }) {
-  const { isGuest } = useAuthContext()
-  const queryClient = useQueryClient()
-
   return useQuery({
-    queryKey: [...RECIPES_KEY, options, isGuest],
+    queryKey: [...RECIPES_KEY, options],
     queryFn: async () => {
-      if (isGuest) {
-        // Return from cache (initialized by auth context)
-        return [] as Recipe[]
-      }
-
       const supabase = getSupabase()
       let query = supabase
         .from("recipes")
@@ -79,35 +70,9 @@ export function useRecipes(options?: {
       
       return filteredData
     },
-    initialData: isGuest ? () => {
-      let recipes = getDefaultRecipes()
-      if (options?.category) {
-        recipes = recipes.filter((r) => r.category === options.category)
-      }
-      if (options?.search) {
-        const searchLower = options.search.toLowerCase()
-        recipes = recipes.filter((r) => r.name.toLowerCase().includes(searchLower))
-      }
-      if (options?.favoritesOnly) {
-        recipes = recipes.filter((r) => r.favorite)
-      }
-      if (options?.tags && options.tags.length > 0) {
-        recipes = recipes.filter((recipe) => {
-          if (!recipe.tags || recipe.tags.length === 0) return false
-          // Check if recipe has at least one of the selected tags
-          return options.tags!.some((tag) => recipe.tags!.includes(tag))
-        })
-      }
-      return recipes.sort((a, b) => {
-        const nameA = a.name || ""
-        const nameB = b.name || ""
-        return nameA.localeCompare(nameB)
-      })
-    } : undefined,
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000, // Consider data fresh for 30 seconds
-    enabled: !isGuest,
   })
 }
 
@@ -115,17 +80,12 @@ export function useRecipes(options?: {
  * Hook to fetch a single recipe by ID
  */
 export function useRecipe(id: string | null) {
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useQuery({
-    queryKey: [...RECIPES_KEY, id, isGuest],
+    queryKey: [...RECIPES_KEY, id],
     queryFn: async () => {
       if (!id) return null
-
-      if (isGuest) {
-        const recipes = getDefaultRecipes()
-        return recipes.find((r) => r.id === id) || null
-      }
 
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -148,30 +108,12 @@ export function useRecipe(id: string | null) {
  */
 export function useCreateRecipe() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (recipe: RecipeInsert) => {
       const id = recipe.id || recipe.name.toLowerCase().replace(/\s+/g, "-")
       const now = new Date().toISOString()
-
-      if (isGuest) {
-        const newRecipe: Recipe = {
-          id,
-          user_id: "guest",
-          name: recipe.name,
-          category: recipe.category,
-          servings: recipe.servings ?? 4,
-          favorite: recipe.favorite ?? false,
-          tags: recipe.tags ?? [],
-          ingredients: recipe.ingredients ?? [],
-          instructions: recipe.instructions ?? [],
-          image_url: recipe.image_url ?? null,
-          created_at: now,
-          updated_at: now,
-        }
-        return newRecipe
-      }
 
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -197,7 +139,7 @@ export function useCreateRecipe() {
       const now = new Date().toISOString()
       const optimisticRecipe: Recipe = {
         id,
-        user_id: isGuest ? "guest" : user?.id || "",
+        user_id: user?.id || "",
         name: recipe.name,
         category: recipe.category,
         servings: recipe.servings ?? 4,
@@ -274,7 +216,7 @@ export function useCreateRecipe() {
  */
 export function useUpdateRecipe() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: RecipeUpdate }) => {
@@ -282,14 +224,6 @@ export function useUpdateRecipe() {
       const normalizedUpdates = {
         ...updates,
         tags: updates.tags ?? [],
-      }
-
-      if (isGuest) {
-        // Get from cache and apply updates
-        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
-        const existing = recipes.find((r) => r.id === id)
-        if (!existing) throw new Error("Recipe not found")
-        return { ...existing, ...normalizedUpdates, updated_at: new Date().toISOString() } as Recipe
       }
 
       const supabase = getSupabase()
@@ -366,14 +300,10 @@ export function useUpdateRecipe() {
  */
 export function useDeleteRecipe() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (id: string) => {
-      if (isGuest) {
-        return id
-      }
-
       const supabase = getSupabase()
       const { error } = await supabase.from("recipes").delete().eq("id", id).eq("user_id", user!.id)
       if (error) throw error
@@ -430,17 +360,10 @@ export function useDeleteRecipe() {
  */
 export function useToggleFavorite() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ id, favorite }: { id: string; favorite: boolean }) => {
-      if (isGuest) {
-        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
-        const existing = recipes.find((r) => r.id === id)
-        if (!existing) throw new Error("Recipe not found")
-        return { ...existing, favorite: !favorite, updated_at: new Date().toISOString() } as Recipe
-      }
-
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
@@ -517,17 +440,9 @@ function sortDefaultCategories(categories: string[]): string[] {
  * Returns categories in the order they are stored (user's custom order)
  */
 export function useCategories() {
-  const { isGuest } = useAuthContext()
-
   return useQuery({
-    queryKey: ["user_config", "categories", isGuest],
+    queryKey: ["user_config", "categories"],
     queryFn: async () => {
-      if (isGuest) {
-        const guestConfig = getDefaultConfig()
-        // For guest mode, return in default order
-        return sortDefaultCategories(guestConfig.categories || [])
-      }
-
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("user_config")
@@ -553,23 +468,11 @@ export function useCategories() {
  * Hook to fetch all unique tags from all recipes with counts
  */
 export function useAllTags() {
-  const { isGuest, user } = useAuthContext()
-  const queryClient = useQueryClient()
+  const { user } = useAuthContext()
 
   return useQuery({
-    queryKey: ["recipes", "all-tags", isGuest],
+    queryKey: ["recipes", "all-tags"],
     queryFn: async () => {
-      if (isGuest) {
-        const recipes = getDefaultRecipes()
-        const allTags = new Set<string>()
-        recipes.forEach((recipe) => {
-          if (recipe.tags) {
-            recipe.tags.forEach((tag) => allTags.add(tag))
-          }
-        })
-        return Array.from(allTags).sort()
-      }
-
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
@@ -595,27 +498,12 @@ export function useAllTags() {
  * Hook to fetch tags with usage counts
  */
 export function useTagsWithCounts() {
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
   const { data: recipes } = useRecipes()
 
   return useQuery({
-    queryKey: ["recipes", "tags-with-counts", isGuest, recipes?.length],
+    queryKey: ["recipes", "tags-with-counts", recipes?.length],
     queryFn: async () => {
-      if (isGuest) {
-        const recipeList = recipes || getDefaultRecipes()
-        const tagCounts = new Map<string, number>()
-        recipeList.forEach((recipe) => {
-          if (recipe.tags && Array.isArray(recipe.tags)) {
-            recipe.tags.forEach((tag) => {
-              tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1)
-            })
-          }
-        })
-        return Array.from(tagCounts.entries())
-          .map(([tag, count]) => ({ tag, count }))
-          .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
-      }
-
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
@@ -637,7 +525,7 @@ export function useTagsWithCounts() {
         .map(([tag, count]) => ({ tag, count }))
         .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
     },
-    enabled: isGuest || !!user,
+    enabled: !!user,
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 }
@@ -655,7 +543,6 @@ export function useCategoryHasRecipes(categoryName: string | null) {
  */
 export function useUpdateCategories() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
   const updateConfig = useUpdateUserConfig()
 
   return useMutation({
@@ -685,7 +572,7 @@ export function useUpdateCategories() {
  */
 export function useBulkUpdateRecipeCategories() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({
@@ -695,21 +582,6 @@ export function useBulkUpdateRecipeCategories() {
       oldCategory: string
       newCategory: string
     }) => {
-      if (isGuest) {
-        // For guest mode, update cache
-        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
-        let count = 0
-        const updated = recipes.map((r) => {
-          if (r.category === oldCategory) {
-            count++
-            return { ...r, category: newCategory, updated_at: new Date().toISOString() }
-          }
-          return r
-        })
-        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
-        return count
-      }
-
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
@@ -734,26 +606,10 @@ export function useBulkUpdateRecipeCategories() {
  */
 export function useRenameTag() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ oldTag, newTag }: { oldTag: string; newTag: string }) => {
-      if (isGuest) {
-        // For guest mode, update cache
-        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
-        let count = 0
-        const updated = recipes.map((r) => {
-          if (r.tags && r.tags.includes(oldTag)) {
-            count++
-            const newTags = r.tags.map((t) => (t === oldTag ? newTag : t))
-            return { ...r, tags: newTags, updated_at: new Date().toISOString() }
-          }
-          return r
-        })
-        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
-        return count
-      }
-
       const supabase = getSupabase()
       // Fetch all recipes with the old tag
       const { data: recipes, error: fetchError } = await supabase
@@ -800,29 +656,10 @@ export function useRenameTag() {
  */
 export function useMergeTags() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ sourceTags, targetTag }: { sourceTags: string[]; targetTag: string }) => {
-      if (isGuest) {
-        // For guest mode, update cache
-        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
-        let count = 0
-        const updated = recipes.map((r) => {
-          if (r.tags && r.tags.some((t) => sourceTags.includes(t))) {
-            count++
-            // Remove source tags and add target tag if not already present
-            const newTags = r.tags
-              .filter((t) => !sourceTags.includes(t))
-              .concat(r.tags.includes(targetTag) ? [] : [targetTag])
-            return { ...r, tags: newTags, updated_at: new Date().toISOString() }
-          }
-          return r
-        })
-        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
-        return count
-      }
-
       const supabase = getSupabase()
       // Fetch all recipes for this user
       const { data: allRecipes, error: fetchError } = await supabase
@@ -881,26 +718,10 @@ export function useMergeTags() {
  */
 export function useDeleteTag() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (tag: string) => {
-      if (isGuest) {
-        // For guest mode, update cache
-        const recipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, null, true]) || []
-        let count = 0
-        const updated = recipes.map((r) => {
-          if (r.tags && r.tags.includes(tag)) {
-            count++
-            const newTags = r.tags.filter((t) => t !== tag)
-            return { ...r, tags: newTags, updated_at: new Date().toISOString() }
-          }
-          return r
-        })
-        queryClient.setQueriesData<Recipe[]>({ queryKey: RECIPES_KEY }, updated)
-        return count
-      }
-
       const supabase = getSupabase()
       // Fetch all recipes with the tag
       const { data: recipes, error: fetchError } = await supabase

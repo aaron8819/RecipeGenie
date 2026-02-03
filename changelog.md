@@ -41,7 +41,6 @@ All notable changes to Recipe Genie are documented here.
 ### Added
 
 - **Planner swap behavior**:
-  - **Day assignment preserved**: When swapping a recipe in the meal planner, the new recipe keeps the same day slot (day_assignments updated for both guest and authenticated users)
   - **Flip animation**: Recipe cards in calendar view now play a flip-out/flip-in animation when the recipe in that slot changes (e.g. after swap)
   - **Stable slot keys**: Only the swapped card flips; other cards are unaffected
 
@@ -54,18 +53,15 @@ All notable changes to Recipe Genie are documented here.
 ### Technical Notes
 
 - Flip uses 200ms out + 200ms in; cleanup on unmount clears timeouts
-- Optimistic cache update: `setQueryData` for `[...RECIPES_KEY, "weekly", newRecipeIds, isGuest]` so `useWeeklyPlanRecipes` has data immediately after swap
 
 ---
 
 ## [2.12.3] - 2026-02-01
 
-**Summary:** Guest mode banner, recipe list/card refinements (sort, view toggle, stats, undo for mark-as-made)
 
 ### Added
 
 - **Header**:
-  - **Guest mode warning banner**: Amber banner below header when in guest mode with "Sign up to save your data" CTA
   - **Onboarding**: Help icon opens OnboardingDialog (replaces inline help)
 - **Recipe list**:
   - **Sort options**: Most Made, Recently Made, Name (A–Z), Newest First (driven by recipe history)
@@ -79,7 +75,6 @@ All notable changes to Recipe Genie are documented here.
 
 ### Changed
 
-- **Header**: Uses OnboardingDialog for help; guest banner uses AlertTriangle icon and outline CTA button
 - **Recipe list**: Settings and Add Recipe in filter row; skeleton only on initial load (stale-while-revalidate for refetch); sort applied to displayed recipes
 - **Recipe card**: Category pill colors for grid (REF_CATEGORY_PILL); list view uses getTagColor; mobile grid uses dropdown for actions
 
@@ -131,7 +126,6 @@ All notable changes to Recipe Genie are documented here.
 
 - **Auth context**:
   - Added `.catch()` to `getSession()` so loading state exits on failure (no infinite loading on network error)
-  - Auth state listener now exits guest mode only on `SIGNED_IN` or `SIGNED_OUT` (not on token refresh)
 - **Shopping list merging**: Replaced dynamic `require()` in `shopping-list-merging.ts` with ES module import so category overrides work at runtime
 - **Auth callback**:
   - Error logging for failed authentication exchanges
@@ -167,7 +161,6 @@ All notable changes to Recipe Genie are documented here.
 
 - **Desktop Header & Navigation**:
   - **Desktop (md+)**: Fixed header with centered nav tabs (Planner, Recipes, Shopping, Pantry); active tab underline
-  - **Avatar**: User initials in circular badge (or "G" for guest) instead of email
   - **Onboarding**: Help icon (HelpCircle) as trigger; UtensilsCrossed in primary box as logo
   - **Bottom nav**: Shown only on mobile (`md:hidden`); desktop uses header tabs
   - **Layout**: Main content `md:pt-[65px]` for fixed header; `md:pb-6` on desktop (no bottom nav padding)
@@ -191,7 +184,6 @@ All notable changes to Recipe Genie are documented here.
 ### Technical Notes
 
 - Design references in `reference/` (e.g. `planner_mobile_redesign`, `shoppinglist_mobile_redesign`) inform token names and layout; `reference/` is gitignored
-- `getInitials()` supports guest ("G"), email-based 2-letter initials, or "?" as fallback
 - Planner cooked state uses CSS classes + `globals.css` for image effects to keep component markup simpler
 
 ---
@@ -231,7 +223,6 @@ All notable changes to Recipe Genie are documented here.
 - **Shopping List Recipe Removal**:
   - Fixed bug where excluded items (items matching excluded keywords) were not removed when a recipe was removed from the shopping list
   - Now properly filters excluded items array when removing recipe items, matching behavior of regular items and "already have" items
-  - Applies to both guest mode and authenticated users
 
 ### Technical Notes
 
@@ -304,7 +295,6 @@ All notable changes to Recipe Genie are documented here.
     - `use-shopping-categories.ts` - Category override operations
     - `use-shopping-config.ts` - Shopping configuration operations
     - `use-shopping-pantry.ts` - Pantry integration operations
-    - `shared.ts` - Shared constants and guest mode helpers
     - `index.ts` - Barrel export for backward compatibility
   - Backward compatible: existing imports from `@/hooks/use-shopping` continue to work
   - Each module is focused, testable, and easier to maintain
@@ -343,7 +333,6 @@ All notable changes to Recipe Genie are documented here.
 - **Type Safety Improvements**:
   - Added explicit type assertions for `currentList`, `config`, `plan`, `recipe`, and other Supabase query results
   - Changed patterns from `data?.property` to `(data as Type | null)?.property` for better type safety
-  - Fixed `user?.id` to `user!.id` in all Supabase queries where user is guaranteed to exist (non-guest mode)
 
 ### Changed
 
@@ -471,7 +460,6 @@ All notable changes to Recipe Genie are documented here.
   - `auto_assign_days`: BOOLEAN - Whether to auto-assign days on generation (default: true)
 - `autoAssignDays()` function in `meal-planner.ts` handles intelligent day distribution
 - Settings persist in user configuration and apply to all future meal plan generations
-- Guest mode includes default settings (no excluded days, no preferred days, auto-assign enabled)
 
 ---
 
@@ -707,7 +695,6 @@ All notable changes to Recipe Genie are documented here.
   - `auto_assign_days`: BOOLEAN - Whether to auto-assign days on generation (default: true)
 - `autoAssignDays()` function handles day distribution logic with priority ordering
 - Settings are accessible via plan settings modal (⚙️ button in meal planner)
-- Guest mode includes default settings (no excluded days, no preferred days, auto-assign enabled)
 
 ---
 
@@ -801,7 +788,6 @@ All notable changes to Recipe Genie are documented here.
 - Uses `@dnd-kit` for drag-and-drop category reordering
 - Bulk category updates use optimized database queries
 - Category changes automatically sync with meal planner `default_selection` preferences
-- Guest mode supported with guest config fallback
 
 ---
 
@@ -829,7 +815,6 @@ All notable changes to Recipe Genie are documented here.
 - Migration `008_add_day_assignments.sql` adds `day_assignments` JSONB column to `weekly_plans` table
 - `day_assignments` format: `{"recipe-id": dayIndex}` where dayIndex is 0-6 (0 = Sunday, 6 = Saturday)
 - New hook `useSaveDayAssignments()` handles saving assignments to database
-- Guest mode uses query cache for day assignments (localStorage fallback)
 - Backward compatible: falls back to localStorage if database data unavailable
 - Added UI components: `alert-dialog`, `calendar`, `dropdown-menu`, `popover` (Radix UI primitives)
 - New dependencies: `@radix-ui/react-alert-dialog`, `@radix-ui/react-popover`
@@ -921,14 +906,11 @@ All notable changes to Recipe Genie are documented here.
 
 ## [2.1.0] - 2026-01-16
 
-**Summary:** Guest mode, shopping list enhancements, and category overrides
 
 ### Added
 
-- **Guest Mode**: Users can try the app without signing up
   - Data stored in React Query cache (session-only, lost on page refresh)
   - Pre-populated with 8 default recipes
-  - "Try as Guest" button on auth form
   - Seamless transition to authenticated account
 - **Shopping List Custom Ordering**: 
   - Drag-and-drop reordering of shopping list items
@@ -956,8 +938,6 @@ All notable changes to Recipe Genie are documented here.
 
 ### Technical Notes
 
-- Guest mode uses `sessionStorage` for persistence flag
-- All hooks support both authenticated and guest modes
 - Default recipes created automatically for new users via database trigger
 - Shopping list reordering uses `@dnd-kit` library
 

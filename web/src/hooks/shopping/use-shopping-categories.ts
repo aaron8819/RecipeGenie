@@ -9,23 +9,18 @@ import type { ShoppingItem, UserConfig } from "@/types/database"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, CONFIG_KEY, setGuestList, getGuestList } from "./shared"
+import { SHOPPING_KEY, CONFIG_KEY } from "./shared"
 
 /**
  * Hook to save a category override for an item
  */
 export function useSaveCategoryOverride() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ itemName, categoryKey }: { itemName: string; categoryKey: string }) => {
       const normalizedItem = itemName.toLowerCase().trim()
-
-      if (isGuest) {
-        // Guest mode doesn't persist category overrides
-        return { itemName: normalizedItem, categoryKey }
-      }
 
       const supabase = getSupabase()
       const { data, error: fetchError } = await supabase
@@ -83,7 +78,7 @@ export function useSaveCategoryOverride() {
  */
 export function useUpdateItemCategory() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ itemName, newCategoryKey, items }: {
@@ -97,11 +92,6 @@ export function useUpdateItemCategory() {
           ? { ...item, categoryKey: newCategoryKey, categoryOrder: categoryData?.order || 8 }
           : item
       )
-
-      if (isGuest) {
-        setGuestList(queryClient, { items: updatedItems, custom_order: true })
-        return updatedItems
-      }
 
       const supabase = getSupabase()
       const { error: saveError } = await supabase

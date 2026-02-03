@@ -9,9 +9,8 @@ import type { ShoppingList, ShoppingItem } from "@/types/database"
 import { ensureCategoryInfo } from "@/lib/shopping-list"
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
-import { getDefaultShoppingList, getDefaultConfig } from "@/lib/guest-storage"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, getGuestList, setGuestList } from "./shared"
+import { SHOPPING_KEY } from "./shared"
 
 /**
  * Hook to add a manual item to the shopping list
@@ -19,13 +18,12 @@ import { SHOPPING_KEY, getGuestList, setGuestList } from "./shared"
  */
 export function useAddShoppingItem() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ itemName, amount, unit }: { itemName: string; amount?: number; unit?: string }) => {
-      const categoryOverrides = isGuest
-        ? getDefaultConfig().category_overrides
-        : ((await getSupabase().from("user_config").select("category_overrides").single()).data as { category_overrides?: Record<string, string> } | null)?.category_overrides || {}
+      const categoryOverrides =
+        ((await getSupabase().from("user_config").select("category_overrides").single()).data as { category_overrides?: Record<string, string> } | null)?.category_overrides || {}
 
       const newItem = ensureCategoryInfo(
         {
@@ -38,19 +36,6 @@ export function useAddShoppingItem() {
         },
         categoryOverrides
       )
-
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-        if (current.items.some((i) => i.item.toLowerCase() === itemName.toLowerCase())) {
-          throw new Error("Item already in shopping list")
-        }
-        let updatedItems = [...current.items, newItem]
-        if (!current.custom_order) {
-          updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
-        }
-        setGuestList(queryClient, { items: updatedItems })
-        return newItem
-      }
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -86,12 +71,11 @@ export function useAddShoppingItem() {
       await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
 
       // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
 
       // Get category overrides for optimistic item creation
-      const categoryOverrides = isGuest
-        ? getDefaultConfig().category_overrides
-        : ((await getSupabase().from("user_config").select("category_overrides").single()).data as { category_overrides?: Record<string, string> } | null)?.category_overrides || {}
+      const categoryOverrides =
+        ((await getSupabase().from("user_config").select("category_overrides").single()).data as { category_overrides?: Record<string, string> } | null)?.category_overrides || {}
 
       const optimisticItem = ensureCategoryInfo(
         {
@@ -107,11 +91,20 @@ export function useAddShoppingItem() {
 
       // Optimistically update cache
       queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY, isGuest],
+        [...SHOPPING_KEY],
         (old) => {
           if (!old) {
-            const defaultList = getDefaultShoppingList() as ShoppingList
-            return { ...defaultList, items: [optimisticItem] }
+            return {
+              user_id: user?.id || "",
+              items: [optimisticItem],
+              already_have: [],
+              excluded: [],
+              source_recipes: [],
+              scale: 1.0,
+              total_servings: 0,
+              custom_order: false,
+              generated_at: new Date().toISOString(),
+            }
           }
           if (old.items.some((i) => i.item.toLowerCase() === itemName.toLowerCase())) {
             return old // Don't add duplicate
@@ -129,7 +122,7 @@ export function useAddShoppingItem() {
     onError: (err, variables, context) => {
       // Rollback on error
       if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
       }
     },
     onSuccess: () => {
@@ -145,18 +138,10 @@ export function useAddShoppingItem() {
  */
 export function useRemoveShoppingItem() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (itemName: string) => {
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-        setGuestList(queryClient, {
-          items: current.items.filter((i) => i.item.toLowerCase() !== itemName.toLowerCase()),
-        })
-        return itemName
-      }
-
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
@@ -185,11 +170,11 @@ export function useRemoveShoppingItem() {
       await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
 
       // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
 
       // Optimistically remove from cache
       queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY, isGuest],
+        [...SHOPPING_KEY],
         (old) => {
           if (!old) return old
           return {
@@ -204,7 +189,7 @@ export function useRemoveShoppingItem() {
     onError: (err, itemName, context) => {
       // Rollback on error
       if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
       }
     },
     onSuccess: () => {
@@ -221,25 +206,11 @@ export function useRemoveShoppingItem() {
  */
 export function useCheckOffItem() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
-
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-        const updatedItems = current.items.map((i) =>
-          i.item.toLowerCase() === normalizedItem
-            ? { ...i, checked: !i.checked }
-            : i
-        )
-
-        setGuestList(queryClient, {
-          items: updatedItems,
-        })
-        return { ...item, checked: !item.checked }
-      }
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -274,13 +245,13 @@ export function useCheckOffItem() {
       await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
 
       // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
 
       const normalizedItem = item.item.toLowerCase().trim()
 
       // Optimistically update cache
       queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY, isGuest],
+        [...SHOPPING_KEY],
         (old) => {
           if (!old) return old
           const currentItems = old.items || []
@@ -302,7 +273,7 @@ export function useCheckOffItem() {
     onError: (err, item, context) => {
       // Rollback on error
       if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
       }
     },
     onSuccess: () => {
@@ -318,26 +289,11 @@ export function useCheckOffItem() {
  */
 export function useBulkCheckOff() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (itemsToCheck: ShoppingItem[]) => {
       const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
-
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-        // Check all items (set checked to true)
-        const updatedItems = current.items.map(i =>
-          itemNames.has(i.item.toLowerCase().trim())
-            ? { ...i, checked: true }
-            : i
-        )
-
-        setGuestList(queryClient, {
-          items: updatedItems,
-        })
-        return { count: itemsToCheck.length }
-      }
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -374,13 +330,13 @@ export function useBulkCheckOff() {
       await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
 
       // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
 
       const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
 
       // Optimistically update cache
       queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY, isGuest],
+        [...SHOPPING_KEY],
         (old) => {
           if (!old) return old
           const currentItems = old.items || []
@@ -403,7 +359,7 @@ export function useBulkCheckOff() {
     onError: (err, itemsToCheck, context) => {
       // Rollback on error
       if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
       }
     },
     onSuccess: () => {
@@ -418,15 +374,10 @@ export function useBulkCheckOff() {
  */
 export function useReorderShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (newItems: ShoppingItem[]) => {
-      if (isGuest) {
-        setGuestList(queryClient, { items: newItems, custom_order: true })
-        return newItems
-      }
-
       const supabase = getSupabase()
       const { error: saveError } = await supabase
         .from("shopping_list")

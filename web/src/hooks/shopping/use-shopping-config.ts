@@ -7,7 +7,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { UserConfig } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
-import { getDefaultConfig } from "@/lib/guest-storage"
 import { getSupabase } from "@/lib/supabase/client"
 import { CONFIG_KEY } from "./shared"
 
@@ -15,15 +14,9 @@ import { CONFIG_KEY } from "./shared"
  * Hook to fetch user config for shopping settings
  */
 export function useShoppingConfig() {
-  const { isGuest } = useAuthContext()
-
   return useQuery({
-    queryKey: [...CONFIG_KEY, isGuest],
+    queryKey: [...CONFIG_KEY],
     queryFn: async () => {
-      if (isGuest) {
-        return getDefaultConfig() as UserConfig
-      }
-
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("user_config")
@@ -41,15 +34,10 @@ export function useShoppingConfig() {
  */
 export function useUpdateShoppingConfig() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (updates: Partial<UserConfig>) => {
-      if (isGuest) {
-        // Guest mode doesn't persist config changes
-        return updates
-      }
-
       const supabase = getSupabase()
 
       // Check if config exists

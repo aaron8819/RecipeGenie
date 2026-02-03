@@ -6,15 +6,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/hooks/use-auth"
-import { Loader2, ChefHat, UserCircle } from "lucide-react"
+import { Loader2, ChefHat } from "lucide-react"
 
 interface AuthFormProps {
-  onGuestMode?: () => void
   initialError?: string | null
   initialMode?: 'signin' | 'signup'
 }
 
-export function AuthForm({ onGuestMode, initialError, initialMode = 'signin' }: AuthFormProps) {
+export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps) {
   const [isSignUp, setIsSignUp] = useState(initialMode === 'signup')
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -50,12 +49,6 @@ export function AuthForm({ onGuestMode, initialError, initialMode = 'signin' }: 
       setError(errorMessage)
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleGuestMode = () => {
-    if (onGuestMode) {
-      onGuestMode()
     }
   }
 
@@ -132,21 +125,6 @@ export function AuthForm({ onGuestMode, initialError, initialMode = 'signin' }: 
           </button>
         </div>
 
-        {/* Guest Mode Button */}
-        <div className="mt-6 pt-6 border-t border-border">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full h-11"
-            onClick={handleGuestMode}
-          >
-            <UserCircle className="mr-2 h-4 w-4" />
-            Try as Guest
-          </Button>
-          <p className="text-xs text-muted-foreground text-center mt-3">
-            Explore the app without signing up. Data is temporary and may be lost.
-          </p>
-        </div>
       </CardContent>
     </Card>
   )

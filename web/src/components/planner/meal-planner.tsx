@@ -1030,7 +1030,7 @@ export function MealPlanner() {
     if (weeklyPlan?.day_assignments) {
       return weeklyPlan.day_assignments
     }
-    // Fallback to localStorage for backward compatibility and guest mode
+    // Fallback to localStorage for backward compatibility
     if (typeof window !== "undefined" && currentWeekDate) {
       try {
         const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
@@ -1270,7 +1270,7 @@ export function MealPlanner() {
       [recipeId]: dayIndex,
     }
     
-    // Save to database (or localStorage for guest mode)
+    // Save to database
     saveDayAssignments.mutate({
       weekDate: currentWeekDate,
       dayAssignments: updatedAssignments,

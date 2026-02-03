@@ -51,7 +51,6 @@ import {
   useAddToPantryAndRemove,
 } from "@/hooks/use-shopping"
 import { SHOPPING_CATEGORIES, getAllShoppingCategories, getCategoryByKey } from "@/lib/shopping-categories"
-import { getDefaultShoppingList } from "@/lib/guest-storage"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { ShoppingItem, ShoppingList, Recipe } from "@/types/database"
 import { toFraction, cn } from "@/lib/utils"
@@ -857,7 +856,17 @@ export function ShoppingListView() {
   )
 
   // Show cached data immediately even while fetching (stale-while-revalidate)
-  const displayShoppingList = shoppingList || getDefaultShoppingList() as ShoppingList
+  const displayShoppingList = shoppingList || {
+    user_id: "",
+    items: [],
+    already_have: [],
+    excluded: [],
+    source_recipes: [],
+    scale: 1.0,
+    total_servings: 0,
+    custom_order: false,
+    generated_at: new Date().toISOString(),
+  } as ShoppingList
   
   // Merge duplicate items in already_have by name (e.g., multiple "garlic" entries)
   const mergedAlreadyHave = useMemo(() => {

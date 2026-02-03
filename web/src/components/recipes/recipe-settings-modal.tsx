@@ -55,8 +55,6 @@ import {
 import { useUpdateCategories, useBulkUpdateRecipeCategories, useRecipes, useAllTags, useTagsWithCounts, useRenameTag, useMergeTags, useDeleteTag } from "@/hooks/use-recipes"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useUserConfig, useUpdateUserConfig } from "@/hooks/use-planner"
-import { getDefaultConfig } from "@/lib/guest-storage"
-import { useAuthContext } from "@/lib/auth-context"
 import { getTagClassName } from "@/lib/tag-colors"
 import { cn, getErrorMessage } from "@/lib/utils"
 
@@ -184,7 +182,6 @@ export function RecipeSettingsModal({
   open,
   onOpenChange,
 }: RecipeSettingsModalProps) {
-  const { isGuest } = useAuthContext()
   const { data: config, isLoading: configLoading } = useUserConfig()
   const updateCategories = useUpdateCategories()
   const bulkUpdate = useBulkUpdateRecipeCategories()
@@ -217,15 +214,11 @@ export function RecipeSettingsModal({
 
   // Get current categories
   const categories = useMemo(() => {
-    if (isGuest) {
-      const guestConfig = getDefaultConfig()
-      return guestConfig.categories || []
-    }
     if (configLoading) {
       return []
     }
     return (config?.categories as string[]) || []
-  }, [config?.categories, isGuest, configLoading])
+  }, [config?.categories, configLoading])
 
   // Get all recipes to count by category
   const { data: allRecipes } = useRecipes({})

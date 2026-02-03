@@ -21,7 +21,6 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 - Shopping lists can be scaled (0.5x to 3x) for batch cooking
 - Weekly plans persist per week-start date, enabling future planning
 - Multi-user support: each authenticated user has private data via Row Level Security
-- Guest mode: users can try the app without signing up (data stored in browser session only)
 - Shopping lists support drag-and-drop reordering and manual item addition
 - Category overrides allow custom categorization of shopping list items
 - Custom shopping categories: users can create their own categories (e.g., "Asian Market", "Specialty Store")
@@ -154,9 +153,7 @@ const deleteRecipe = useDeleteRecipe();
 ### Browser Storage
 
 - `localStorage`: None required for authenticated users (all state in Supabase)
-- `sessionStorage`: Guest mode flag (`recipe-genie-guest-mode`)
 - `cookies`: Supabase auth session tokens (managed by `@supabase/ssr`)
-- **Guest Mode**: Data stored in React Query cache only (lost on page refresh)
 
 ---
 
@@ -280,8 +277,6 @@ For UI changes:
 
 ## Previous Updates (v2.12.3)
 
-### Guest Banner, Recipe List/Card Refinements (2026-02-01)
-- **Header**: Guest mode warning banner (amber) with "Sign up to save your data" CTA; Help icon opens OnboardingDialog
 - **Recipe list**: Sort (Most Made, Recently Made, Name, Newest), grid/list view toggle, recipe stats from history ("Made X times", "Last: date"), mark-as-made with undo toast
 - **Recipe card**: List view (horizontal card, actions row), grid view (category pills, history row, desktop 3-button / mobile 3-dot actions), tag click to filter
 
@@ -295,7 +290,6 @@ For UI changes:
 ## Previous Updates (v2.12.1)
 
 ### Comprehensive Testing Review Fixes (2026-01-30)
-- **Auth context**: Added `.catch()` to `getSession()` so loading state exits on failure; auth listener now exits guest mode only on `SIGNED_IN`/`SIGNED_OUT` (not token refresh).
 - **Shopping list merging**: Replaced dynamic `require()` in `shopping-list-merging.ts` with ES module import so category overrides work at runtime.
 - **Auth callback**: Error logging for failed exchanges; sanitized error messages in URLs (opaque codes); redirect path validation to prevent open redirects.
 - **Meal planner**: History exclusion boundary fixed (`>` → `>=`) so recipes made exactly N days ago are excluded.
@@ -319,7 +313,6 @@ For UI changes:
 ## Previous Updates (v2.10.2)
 
 ### Bug fix: Excluded items on recipe removal
-- Excluded items are now removed from the shopping list when their source recipe is removed (guest and authenticated).
 
 ## Previous Updates (v2.10.1)
 

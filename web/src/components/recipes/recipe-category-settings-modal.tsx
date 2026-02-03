@@ -38,8 +38,6 @@ import {
 } from "@/components/ui/select"
 import { useUpdateCategories, useBulkUpdateRecipeCategories, useRecipes } from "@/hooks/use-recipes"
 import { useUserConfig, useUpdateUserConfig } from "@/hooks/use-planner"
-import { getDefaultConfig } from "@/lib/guest-storage"
-import { useAuthContext } from "@/lib/auth-context"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { getErrorMessage } from "@/lib/utils"
 
@@ -167,7 +165,6 @@ export function RecipeCategorySettingsModal({
   open,
   onOpenChange,
 }: RecipeCategorySettingsModalProps) {
-  const { isGuest } = useAuthContext()
   const { data: config, isLoading: configLoading } = useUserConfig()
   const updateCategories = useUpdateCategories()
   const bulkUpdate = useBulkUpdateRecipeCategories()
@@ -184,15 +181,11 @@ export function RecipeCategorySettingsModal({
 
   // Get current categories
   const categories = useMemo(() => {
-    if (isGuest) {
-      const guestConfig = getDefaultConfig()
-      return guestConfig.categories || []
-    }
     if (configLoading) {
       return []
     }
     return (config?.categories as string[]) || []
-  }, [config?.categories, isGuest, configLoading])
+  }, [config?.categories, configLoading])
 
   // Get all recipes to count by category
   const { data: allRecipes } = useRecipes({})

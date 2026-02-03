@@ -10,55 +10,20 @@ import { generateShoppingList } from "@/lib/shopping-list"
 import { mergeShoppingItems, removeRecipeByNameFromItems } from "@/lib/shopping-list-merging"
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
-import { getDefaultRecipes, getDefaultShoppingList, getDefaultConfig } from "@/lib/guest-storage"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY, getGuestList, setGuestList } from "./shared"
+import { SHOPPING_KEY } from "./shared"
 
 /**
  * Hook to remove all items associated with a specific recipe
  */
 export function useRemoveRecipeItems() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (recipeName: string) => {
       // Use the unified remove function
       const filterItems = (items: ShoppingItem[]) => removeRecipeByNameFromItems(items, recipeName)
-
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-        const filteredActiveItems = filterItems(current.items)
-        const filteredAlreadyHave = filterItems(current.already_have)
-        const filteredExcluded = filterItems(current.excluded || [])
-
-        // Check if any items (checked or unchecked) still reference this recipe
-        const allItems = [...filteredActiveItems, ...filteredAlreadyHave, ...filteredExcluded]
-        const hasRecipeItems = allItems.some((item) =>
-          item.sources?.some((s) => s.recipeName === recipeName)
-        )
-
-        // Remove recipe ID from source_recipes if no items remain
-        let updatedSourceRecipes = current.source_recipes || []
-        if (!hasRecipeItems) {
-          // For guest mode, we need to find recipe ID from name
-          // Since we don't have easy access, we'll clear all if we can't match
-          // In practice, this is fine since guest mode is temporary
-          const allRecipes = getDefaultRecipes()
-          const recipe = allRecipes.find((r) => r.name === recipeName)
-          if (recipe) {
-            updatedSourceRecipes = updatedSourceRecipes.filter((id) => id !== recipe.id)
-          }
-        }
-
-        setGuestList(queryClient, {
-          items: filteredActiveItems,
-          already_have: filteredAlreadyHave,
-          excluded: filteredExcluded,
-          source_recipes: updatedSourceRecipes,
-        })
-        return { recipeName, removedCount: 0 }
-      }
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -121,7 +86,7 @@ export function useRemoveRecipeItems() {
  */
 export function useAddToShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
@@ -132,38 +97,34 @@ export function useAddToShoppingList() {
       let currentList: ShoppingList
       let listExists = false
 
-      if (isGuest) {
-        const allRecipes = getDefaultRecipes()
-        recipes = allRecipes.filter((r) => recipeIds.includes(r.id))
-        pantryItems = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY, true]) || []
-        excludedKeywords = queryClient.getQueryData<string[]>([...CONFIG_KEY, "excluded_keywords", true]) || []
-        currentList = getGuestList(queryClient)
-      } else {
-        const supabase = getSupabase()
-        const [recipesRes, pantryRes, configRes, listRes] = await Promise.all([
-          supabase.from("recipes").select("*").in("id", recipeIds),
-          supabase.from("pantry_items").select("*"),
-          supabase.from("user_config").select("excluded_keywords, category_overrides").single(),
-          supabase.from("shopping_list").select("*").maybeSingle(),
-        ])
+      const supabase = getSupabase()
+      const [recipesRes, pantryRes, configRes, listRes] = await Promise.all([
+        supabase.from("recipes").select("*").in("id", recipeIds),
+        supabase.from("pantry_items").select("*"),
+        supabase.from("user_config").select("excluded_keywords, category_overrides").single(),
+        supabase.from("shopping_list").select("*").maybeSingle(),
+      ])
 
-        if (recipesRes.error) throw recipesRes.error
-        if (pantryRes.error) throw pantryRes.error
+      if (recipesRes.error) throw recipesRes.error
+      if (pantryRes.error) throw pantryRes.error
 
-        recipes = recipesRes.data as Recipe[]
-        pantryItems = pantryRes.data as PantryItem[]
-        const typedConfig = configRes.data as { excluded_keywords?: string[]; category_overrides?: Record<string, string> } | null
-        excludedKeywords = typedConfig?.excluded_keywords || []
-        categoryOverrides = typedConfig?.category_overrides || {}
-        currentList = (listRes.data as ShoppingList | null) || (getDefaultShoppingList() as ShoppingList)
-        listExists = !!listRes.data
-      }
-
-      // Get user category overrides for generation and merging
-      // For guest mode, we need to fetch from config; for authenticated, already fetched above
-      if (isGuest) {
-        categoryOverrides = getDefaultConfig().category_overrides || {}
-      }
+      recipes = recipesRes.data as Recipe[]
+      pantryItems = pantryRes.data as PantryItem[]
+      const typedConfig = configRes.data as { excluded_keywords?: string[]; category_overrides?: Record<string, string> } | null
+      excludedKeywords = typedConfig?.excluded_keywords || []
+      categoryOverrides = typedConfig?.category_overrides || {}
+      currentList = (listRes.data as ShoppingList | null) || ({
+        user_id: user?.id || "",
+        items: [],
+        already_have: [],
+        excluded: [],
+        source_recipes: [],
+        scale: 1.0,
+        total_servings: 0,
+        custom_order: false,
+        generated_at: new Date().toISOString(),
+      } as ShoppingList)
+      listExists = !!listRes.data
 
       const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale, categoryOverrides)
 
@@ -275,30 +236,25 @@ export function useAddToShoppingList() {
         custom_order: currentList.custom_order,
       }
 
-      if (isGuest) {
-        setGuestList(queryClient, shoppingListData)
+      const saveData = { ...shoppingListData, user_id: user!.id, generated_at: new Date().toISOString() }
+      let saveError
+      if (listExists) {
+        // Row exists, use update (RLS will filter by user_id, but PostgREST requires a WHERE clause)
+        const { error } = await supabase
+          .from("shopping_list")
+          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
+          .update(saveData)
+          .eq("user_id", user!.id)
+        saveError = error
       } else {
-        const supabase = getSupabase()
-        const saveData = { ...shoppingListData, user_id: user!.id, generated_at: new Date().toISOString() }
-        let saveError
-        if (listExists) {
-          // Row exists, use update (RLS will filter by user_id, but PostgREST requires a WHERE clause)
-          const { error } = await supabase
-            .from("shopping_list")
-            // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-            .update(saveData)
-            .eq("user_id", user!.id)
-          saveError = error
-        } else {
-          // Row doesn't exist, use insert
-          const { error } = await supabase
-            .from("shopping_list")
-            // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-            .insert(saveData)
-          saveError = error
-        }
-        if (saveError) throw saveError
+        // Row doesn't exist, use insert
+        const { error } = await supabase
+          .from("shopping_list")
+          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
+          .insert(saveData)
+        saveError = error
       }
+      if (saveError) throw saveError
 
       return { added: addedCount, merged: mergedCount, shoppingList: shoppingListData as ShoppingList }
     },

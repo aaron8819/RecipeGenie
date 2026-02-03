@@ -389,13 +389,11 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ---
 
-## ADR-013: Guest Mode for Onboarding
 
 **Status:** Accepted (2026-01-16)
 
 **Context:** Requiring users to sign up before trying the app creates friction and reduces conversion. Users want to explore the app's features before committing to creating an account.
 
-**Decision:** Implement a guest mode that allows users to use the app without authentication, with data stored only in the browser session.
 
 **Rationale:**
 - Reduces signup friction - users can try before committing
@@ -405,11 +403,6 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - Clear messaging that data is session-only (lost on refresh)
 
 **Implementation:**
-- Guest mode flag stored in `sessionStorage` (not `localStorage` to emphasize temporary nature)
-- All data hooks support both authenticated and guest modes
-- Default recipes, config, and shopping list provided via `guest-storage.ts`
-- Guest data stored in React Query cache with `true` flag in query keys
-- Seamless transition: users can sign up/sign in from guest mode
 
 **Tradeoffs:**
 - (+) Lowers barrier to entry
@@ -426,9 +419,6 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - **Mitigation**: Prompt to sign up when they try to persist data
 
 **Future Considerations:**
-- Could add localStorage persistence for guest mode (with clear warnings)
-- Could prompt users to sign up after X actions in guest mode
-- Could migrate guest data to authenticated account on signup
 
 ---
 
@@ -551,7 +541,6 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - Added explicit type assertions for Supabase query results:
   - `const typedList = currentList as { items?: ShoppingItem[] } | null`
   - `const typedConfig = config as { excluded_keywords?: string[] } | null`
-- Changed `user?.id` to `user!.id` in all non-guest operations where user is guaranteed to exist
 
 **Tradeoffs:**
 - (+) Build completes successfully
@@ -648,7 +637,6 @@ This document captures key architectural and design decisions for Recipe Genie, 
   - `use-shopping-categories.ts` - Category override operations
   - `use-shopping-config.ts` - Shopping configuration operations
   - `use-shopping-pantry.ts` - Pantry integration operations
-  - `shared.ts` - Shared constants (SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY) and guest mode helpers
   - `index.ts` - Barrel export re-exporting all hooks
 - Maintained `use-shopping.ts` as backward-compatible barrel export
 - All existing imports continue to work without changes

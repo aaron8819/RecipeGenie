@@ -1,7 +1,6 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { LogOut, UtensilsCrossed, HelpCircle, AlertTriangle } from "lucide-react"
+import { LogOut, UtensilsCrossed, HelpCircle } from "lucide-react"
 import { OnboardingDialog } from "./onboarding-dialog"
 import { cn } from "@/lib/utils"
 
@@ -12,8 +11,7 @@ const NAV_TABS = [
   { id: "pantry", label: "Pantry" },
 ] as const
 
-function getInitials(email: string | undefined, isGuest: boolean): string {
-  if (isGuest) return "G"
+function getInitials(email: string | undefined): string {
   if (!email) return "?"
   const local = email.split("@")[0] || ""
   if (local.length >= 2) return local.slice(0, 2).toUpperCase()
@@ -23,8 +21,6 @@ function getInitials(email: string | undefined, isGuest: boolean): string {
 interface HeaderProps {
   userEmail?: string
   onSignOut: () => void
-  isGuest?: boolean
-  onSignUpClick?: () => void
   activeTab?: string
   onTabChange?: (tab: string) => void
 }
@@ -32,8 +28,6 @@ interface HeaderProps {
 export function Header({
   userEmail,
   onSignOut,
-  isGuest,
-  onSignUpClick,
   activeTab,
   onTabChange,
 }: HeaderProps) {
@@ -97,44 +91,23 @@ export function Header({
           <div className="flex items-center gap-4 flex-shrink-0">
             <div
               className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground font-bold text-xs flex-shrink-0"
-              title={isGuest ? "Guest" : userEmail}
+              title={userEmail}
             >
-              {getInitials(userEmail, !!isGuest)}
+              {getInitials(userEmail)}
             </div>
             <button
               type="button"
               onClick={onSignOut}
-              aria-label={isGuest ? "Exit" : "Sign out"}
+              aria-label="Sign out"
               className="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1 transition-colors flex-shrink-0"
             >
-              <span className="hidden md:inline">{isGuest ? "Exit" : "Sign Out"}</span>
+              <span className="hidden md:inline">Sign Out</span>
               <LogOut className="h-4 w-4" />
             </button>
           </div>
         </div>
       </header>
-
-      {/* Guest Mode Warning Banner */}
-      {isGuest && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2">
-          <div className="container mx-auto flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-amber-800 text-sm">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span>
-                <strong>Guest Mode</strong> — Your data is stored locally and may be lost if you close this tab, refresh, or clear browser data.
-              </span>
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onSignUpClick}
-              className="flex-shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100 hover:text-amber-900"
-            >
-              Sign up to save your data
-            </Button>
-          </div>
-        </div>
-      )}
     </>
   )
 }
+

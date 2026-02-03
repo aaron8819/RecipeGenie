@@ -9,74 +9,18 @@ import type { ShoppingList, ShoppingItem, PantryItem } from "@/types/database"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, PANTRY_KEY, getGuestList, setGuestList } from "./shared"
+import { SHOPPING_KEY, PANTRY_KEY } from "./shared"
 
 /**
  * Hook to move an item from "already have" back to the shopping list
  */
 export function useMoveToShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
-
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-
-        // Find all items with the same name in already_have and merge them
-        const itemsToMerge = current.already_have.filter((i) => i.item.toLowerCase() === normalizedItem)
-        if (itemsToMerge.length === 0) return item
-
-        // Merge all items with the same name
-        let mergedItem = itemsToMerge[0]
-        for (let i = 1; i < itemsToMerge.length; i++) {
-          const nextItem = itemsToMerge[i]
-
-          // Merge sources
-          const existingSources = mergedItem.sources || []
-          const newSources = nextItem.sources || []
-          const sourceSet = new Set(existingSources.map((s) => s.recipeName))
-          const combinedSources = [...existingSources]
-          for (const source of newSources) {
-            if (!sourceSet.has(source.recipeName)) {
-              combinedSources.push(source)
-            }
-          }
-
-          // Merge amounts
-          const mergeResult = mergeAmounts(mergedItem.amount, mergedItem.unit, nextItem.amount, nextItem.unit)
-          if (mergeResult) {
-            mergedItem = {
-              ...mergedItem,
-              amount: roundForDisplay(mergeResult.amount),
-              unit: mergeResult.unit,
-              sources: combinedSources,
-            }
-          } else {
-            // Units incompatible, keep existing but combine sources
-            mergedItem = {
-              ...mergedItem,
-              sources: combinedSources,
-            }
-          }
-        }
-
-        let updatedItems = current.items
-        if (!current.items.some((i) => i.item.toLowerCase() === normalizedItem)) {
-          updatedItems = [...current.items, mergedItem]
-          if (!current.custom_order) {
-            updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
-          }
-        }
-
-        setGuestList(queryClient, {
-          items: updatedItems,
-          already_have: current.already_have.filter((i) => i.item.toLowerCase() !== normalizedItem),
-        })
-        return mergedItem
-      }
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -159,27 +103,11 @@ export function useMoveToShoppingList() {
  */
 export function useMoveExcludedToShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
-
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-        let updatedItems = current.items
-        if (!current.items.some((i) => i.item.toLowerCase() === normalizedItem)) {
-          updatedItems = [...current.items, item]
-          if (!current.custom_order) {
-            updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
-          }
-        }
-        setGuestList(queryClient, {
-          items: updatedItems,
-          excluded: current.excluded.filter((i) => i.item.toLowerCase() !== normalizedItem),
-        })
-        return item
-      }
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -225,31 +153,11 @@ export function useMoveExcludedToShoppingList() {
  */
 export function useAddToPantryAndRemove() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
-
-      if (isGuest) {
-        const current = getGuestList(queryClient)
-        // Remove from shopping list items
-        const updatedItems = current.items.filter((i) => i.item.toLowerCase() !== normalizedItem)
-        // Add to already_have (preserving all item properties)
-        const alreadyHave = current.already_have || []
-        // Check if item already exists in already_have
-        const existingInAlreadyHave = alreadyHave.find((i) => i.item.toLowerCase() === normalizedItem)
-        const updatedAlreadyHave = existingInAlreadyHave
-          ? alreadyHave // Item already in already_have, keep as is
-          : [...alreadyHave, item] // Add item to already_have
-
-        setGuestList(queryClient, {
-          items: updatedItems,
-          already_have: updatedAlreadyHave,
-        })
-        // Note: In guest mode, pantry items aren't persisted, so we just remove from list
-        return { itemName: normalizedItem }
-      }
 
       const supabase = getSupabase()
 
@@ -323,14 +231,14 @@ export function useAddToPantryAndRemove() {
       await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
 
       // Snapshot previous values for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY, isGuest])
-      const previousPantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY, isGuest])
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+      const previousPantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY])
 
       const normalizedItem = item.item.toLowerCase().trim()
 
       // Optimistically remove from shopping list items and add to already_have
       queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY, isGuest],
+        [...SHOPPING_KEY],
         (old) => {
           if (!old) return old
           const alreadyHave = old.already_have || []
@@ -348,33 +256,30 @@ export function useAddToPantryAndRemove() {
         }
       )
 
-      // Optimistically add to pantry (if not guest)
-      if (!isGuest) {
-        const now = new Date().toISOString()
-        const optimisticItem: PantryItem = {
-          user_id: user!.id,
-          item: normalizedItem,
-          created_at: now,
-        }
-        queryClient.setQueryData<PantryItem[]>(
-          [...PANTRY_KEY, isGuest],
-          (old) => {
-            if (!old) return [optimisticItem]
-            if (old.some((p) => p.item === normalizedItem)) return old
-            return [...old, optimisticItem].sort((a, b) => a.item.localeCompare(b.item))
-          }
-        )
+      const now = new Date().toISOString()
+      const optimisticItem: PantryItem = {
+        user_id: user!.id,
+        item: normalizedItem,
+        created_at: now,
       }
+      queryClient.setQueryData<PantryItem[]>(
+        [...PANTRY_KEY],
+        (old) => {
+          if (!old) return [optimisticItem]
+          if (old.some((p) => p.item === normalizedItem)) return old
+          return [...old, optimisticItem].sort((a, b) => a.item.localeCompare(b.item))
+        }
+      )
 
       return { previousList, previousPantry }
     },
     onError: (err, item, context) => {
       // Rollback on error
       if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY, isGuest], context.previousList)
+        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
       }
       if (context?.previousPantry) {
-        queryClient.setQueryData([...PANTRY_KEY, isGuest], context.previousPantry)
+        queryClient.setQueryData([...PANTRY_KEY], context.previousPantry)
       }
     },
     onSuccess: () => {

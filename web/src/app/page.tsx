@@ -24,20 +24,15 @@ function getInitialTab(): string {
 export default function Home() {
   const [activeTab, setActiveTab] = useState(getInitialTab)
   const [authError, setAuthError] = useState<string | null>(null)
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
-
   // Get auth context first so we can use isAuthenticated in useEffect
   const {
     user,
     loading,
     signOut,
     isAuthenticated,
-    isGuest,
-    enterGuestMode,
-    exitGuestMode
   } = useAuthContext()
 
-  // First-run onboarding (only for authenticated users, not guests)
+  // First-run onboarding (only for authenticated users)
   const { showOnboarding, completeOnboarding } = useFirstRunOnboarding()
 
   // Persist active tab to localStorage
@@ -127,38 +122,26 @@ export default function Home() {
     )
   }
 
-  // Show auth form if not authenticated and not in guest mode
-  if (!isAuthenticated && !isGuest) {
+  // Show auth form if not authenticated
+  if (!isAuthenticated) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center p-4">
-        <AuthForm onGuestMode={enterGuestMode} initialError={authError} initialMode={authMode} />
+        <AuthForm initialError={authError} />
       </main>
     )
   }
 
-  // Handle guest wanting to sign up
-  const handleSignUpClick = () => {
-    setAuthMode('signup')
-    exitGuestMode()
-  }
-
-  // Handle sign out - also handles guest mode exit
+  // Handle sign out
   const handleSignOut = async () => {
-    if (isGuest) {
-      exitGuestMode()
-    } else {
-      await signOut()
-    }
+    await signOut()
   }
 
-  // Show main app if authenticated or in guest mode
+  // Show main app
   return (
     <main className="flex-1 min-h-0 flex flex-col bg-background pb-[var(--bottom-nav-height)] md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
       <Header
-        userEmail={isGuest ? "Guest" : user?.email}
+        userEmail={user?.email}
         onSignOut={handleSignOut}
-        isGuest={isGuest}
-        onSignUpClick={handleSignUpClick}
         activeTab={activeTab}
         onTabChange={setActiveTab}
       />
@@ -209,7 +192,7 @@ export default function Home() {
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
 
       {/* First-run onboarding for authenticated users only */}
-      {isAuthenticated && !isGuest && (
+      {isAuthenticated && (
         <FirstRunOnboarding
           open={showOnboarding}
           onComplete={completeOnboarding}

@@ -9,24 +9,18 @@ import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/dat
 import { generateShoppingList } from "@/lib/shopping-list"
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
-import { getDefaultRecipes, getDefaultShoppingList } from "@/lib/guest-storage"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY, getGuestList, setGuestList } from "./shared"
+import { SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY } from "./shared"
 
 /**
  * Hook to fetch the shopping list
  */
 export function useShoppingList() {
-  const { isGuest } = useAuthContext()
-  const queryClient = useQueryClient()
+  const { user } = useAuthContext()
 
   return useQuery({
-    queryKey: [...SHOPPING_KEY, isGuest],
+    queryKey: [...SHOPPING_KEY],
     queryFn: async () => {
-      if (isGuest) {
-        return getGuestList(queryClient)
-      }
-
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("shopping_list")
@@ -34,11 +28,23 @@ export function useShoppingList() {
         .maybeSingle()
 
       if (error) throw error
-      return (data as ShoppingList | null) || (getDefaultShoppingList() as ShoppingList)
+      if (data) return data as ShoppingList
+      return {
+        user_id: user?.id || "",
+        items: [],
+        already_have: [],
+        excluded: [],
+        source_recipes: [],
+        scale: 1.0,
+        total_servings: 0,
+        custom_order: false,
+        generated_at: new Date().toISOString(),
+      } as ShoppingList
     },
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+    enabled: !!user,
   })
 }
 
@@ -47,53 +53,10 @@ export function useShoppingList() {
  */
 export function useGenerateShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
-      if (isGuest) {
-        const allRecipes = getDefaultRecipes()
-        const recipes = allRecipes.filter((r) => recipeIds.includes(r.id))
-        const pantryItems = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY, true]) || []
-        const excludedKeywords = queryClient.getQueryData<string[]>([...CONFIG_KEY, "excluded_keywords", true]) || []
-        const guestConfig = queryClient.getQueryData<{ category_overrides?: Record<string, string> }>([...CONFIG_KEY, true])
-        const categoryOverrides = guestConfig?.category_overrides || null
-
-        // Get current checked items to preserve
-        const currentList = getGuestList(queryClient)
-        const checkedItemNames = new Set(
-          (currentList.already_have || []).map(item => normalizeItemName(item.item))
-        )
-
-        const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale, categoryOverrides)
-
-        // Preserve checked states: move items that were previously checked to already_have
-        const preservedItems: ShoppingItem[] = []
-        const preservedAlreadyHave: ShoppingItem[] = [...result.alreadyHave]
-
-        for (const item of result.items) {
-          if (checkedItemNames.has(normalizeItemName(item.item))) {
-            preservedAlreadyHave.push(item)
-          } else {
-            preservedItems.push(item)
-          }
-        }
-
-        const list: ShoppingList = {
-          user_id: "guest",
-          items: preservedItems,
-          already_have: preservedAlreadyHave,
-          excluded: result.excluded,
-          source_recipes: recipeIds,
-          scale: result.scale,
-          total_servings: result.totalServings,
-          custom_order: false,
-          generated_at: new Date().toISOString(),
-        }
-        setGuestList(queryClient, list)
-        return list
-      }
-
       const supabase = getSupabase()
 
       // Fetch current list, recipes, pantry, and config in parallel
@@ -184,15 +147,10 @@ export function useGenerateShoppingList() {
  */
 export function useSaveShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (shoppingList: Partial<ShoppingList>) => {
-      if (isGuest) {
-        setGuestList(queryClient, shoppingList)
-        return shoppingList
-      }
-
       const supabase = getSupabase()
 
       // Check if list exists
@@ -232,7 +190,7 @@ export function useSaveShoppingList() {
  */
 export function useClearShoppingList() {
   const queryClient = useQueryClient()
-  const { isGuest, user } = useAuthContext()
+  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async () => {
@@ -244,11 +202,6 @@ export function useClearShoppingList() {
         scale: 1.0,
         total_servings: 0,
         custom_order: false,
-      }
-
-      if (isGuest) {
-        setGuestList(queryClient, emptyList)
-        return
       }
 
       const supabase = getSupabase()
