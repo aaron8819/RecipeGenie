@@ -4,6 +4,36 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.12.6] - 2026-02-04
+
+**Summary:** Planner refactor — shared lib modules, local-date handling, stale day-assignment pruning, and user-config error handling
+
+### Added
+
+- **Planner lib modules**:
+  - `lib/planner-colors.ts` — `CATEGORY_HEX_COLORS` and `getCategoryHexColor()` shared by meal-planner and plan-settings-modal (replaces duplicated category pill colors)
+  - `lib/planner-utils.ts` — `parseLocalDate`, `parseLocalCalendarDate`, `toLocalNoonISOString`, `dayIndexToDayOfWeek`, `dayOfWeekToDayIndex`, `stableRecipeHash` for local-date handling and day-index conversion
+  - `lib/user-config.ts` — `DEFAULT_USER_CONFIG` and `resolveUserConfig()` for centralized defaults and config fetch error handling
+- **Unit tests**:
+  - `lib/__tests__/meal-planner.test.ts` — meal planner generation and auto-assign logic
+  - `lib/__tests__/planner-colors.test.ts` — category hex color lookup
+  - `lib/__tests__/planner-utils.test.ts` — local date parsing, noon ISO string, day-index conversion
+  - `lib/__tests__/user-config.test.ts` — default config and resolveUserConfig behavior
+
+### Changed
+
+- **Local-date handling**: `isDateInWeekRange` in meal-planner now uses `parseLocalCalendarDate()` from planner-utils so YYYY-MM-DD and ISO strings are parsed in local time (avoids UTC boundary shifts). "Mark made" timestamps use `toLocalNoonISOString()` so stored dates do not shift across timezones.
+- **Stale day_assignments**: `autoAssignDays()` in `meal-planner.ts` now prunes assignments for recipes no longer in the plan; regenerating a plan no longer leaves orphaned keys in `day_assignments`.
+- **User config errors**: `useUserConfig()` uses `resolveUserConfig()`: PGRST116 (not found) returns default config; other errors are rethrown instead of masking backend issues.
+- **Planner UI**: Meal-planner and plan-settings-modal import category colors from `planner-colors` and date/day helpers from `planner-utils`; no behavior change, reduced duplication.
+
+### Technical Notes
+
+- Planner improvements align with `.cursor/plans/planner_improvements` (P0 local-date, P1 prune assignments, P2 shared colors, P3 config error specificity).
+- Unit tests use Vitest; run with `npm run test`.
+
+---
+
 ## [2.12.5] - 2026-02-02
 
 **Summary:** Shopping list accessibility improvements and test infrastructure additions

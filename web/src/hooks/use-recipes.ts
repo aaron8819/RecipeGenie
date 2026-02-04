@@ -32,6 +32,8 @@ export function useRecipes(options?: {
   search?: string | null
   favoritesOnly?: boolean
   tags?: string[]
+  select?: string
+  limit?: number
 }) {
   return useQuery({
     queryKey: [...RECIPES_KEY, options],
@@ -39,7 +41,7 @@ export function useRecipes(options?: {
       const supabase = getSupabase()
       let query = supabase
         .from("recipes")
-        .select("*")
+        .select(options?.select || "*")
         .order("name", { ascending: true })
 
       if (options?.category) {
@@ -52,6 +54,10 @@ export function useRecipes(options?: {
 
       if (options?.favoritesOnly) {
         query = query.eq("favorite", true)
+      }
+
+      if (options?.limit !== undefined) {
+        query = query.limit(options.limit)
       }
 
       const { data, error } = await query

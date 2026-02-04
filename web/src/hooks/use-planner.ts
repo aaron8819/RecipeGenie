@@ -5,6 +5,7 @@ import type { Recipe, RecipeHistory, WeeklyPlan, UserConfig } from "@/types/data
 import { generateMealPlan, getSwapRecipe, autoAssignDays } from "@/lib/meal-planner"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
+import { resolveUserConfig } from "@/lib/user-config"
 
 const WEEKLY_PLANS_KEY = ["weekly_plans"]
 const HISTORY_KEY = ["recipe_history"]
@@ -110,23 +111,7 @@ export function useUserConfig() {
         .select("*")
         .single()
 
-      if (error) {
-        return {
-          user_id: "",
-          categories: ["chicken", "turkey", "steak", "beef", "lamb", "vegetarian"],
-          default_selection: { chicken: 2, turkey: 1, steak: 1 },
-          excluded_keywords: [],
-          history_exclusion_days: 10,
-          week_start_day: 1,
-          category_overrides: {},
-          custom_categories: [],
-          category_order: null,
-          excluded_days: [],
-          preferred_days: null,
-          auto_assign_days: true,
-        } as UserConfig
-      }
-      return data as UserConfig
+      return resolveUserConfig(data as UserConfig | null, error)
     },
   })
 }
@@ -171,13 +156,13 @@ export function useGenerateMealPlan() {
 
       const { data: recipes, error: recipesError } = await supabase
         .from("recipes")
-        .select("*")
+        .select("id, category")
         .eq("user_id", user!.id)
       if (recipesError) throw recipesError
 
       const { data: history, error: historyError } = await supabase
         .from("recipe_history")
-        .select("*")
+        .select("recipe_id, date_made")
         .eq("user_id", user!.id)
       if (historyError) throw historyError
 
@@ -417,14 +402,15 @@ export function useSaveWeeklyPlan() {
 
 /**
  * Hook to add a recipe to an existing (or new) weekly plan.
- * @param dayIndex - Optional 0–6: assign the new recipe to this day. If omitted, the recipe is unassigned and placed by the unassigned-distribution logic.
+ * @param dayOfWeek - Optional 0–6 (0=Sunday): assign the new recipe to this day-of-week.
+ * If omitted, the recipe is unassigned and placed by the unassigned-distribution logic.
  */
 export function useAddRecipeToPlan() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
 
   return useMutation({
-    mutationFn: async ({ weekDate, recipeId, dayIndex }: { weekDate: string; recipeId: string; dayIndex?: number }) => {
+    mutationFn: async ({ weekDate, recipeId, dayOfWeek }: { weekDate: string; recipeId: string; dayOfWeek?: number }) => {
       const supabase = getSupabase()
       const { data: existingPlan } = await supabase
         .from("weekly_plans")
@@ -441,7 +427,7 @@ export function useAddRecipeToPlan() {
 
       const mergedDayAssignments = {
         ...(typedPlan?.day_assignments || {}),
-        ...(dayIndex !== undefined ? { [recipeId]: dayIndex } : {}),
+        ...(dayOfWeek !== undefined ? { [recipeId]: dayOfWeek } : {}),
       }
 
       // Use explicit update/insert pattern since unique index isn't auto-detected by upsert

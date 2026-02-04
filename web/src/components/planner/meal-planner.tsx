@@ -2,6 +2,20 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  DragStartEvent,
+  DragEndEvent,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core"
+import { snapCenterToCursor } from "@dnd-kit/modifiers"
+import { CSS } from "@dnd-kit/utilities"
+import {
   ChevronLeft,
   ChevronRight,
   Check,
@@ -53,6 +67,15 @@ import { useCategories, useToggleFavorite, useRecipes } from "@/hooks/use-recipe
 import { EmptyState } from "@/components/ui/empty-state"
 import { CalendarDays, BookOpen } from "lucide-react"
 import { getTagClassName, getTagColor } from "@/lib/tag-colors"
+import { getCategoryHexColor } from "@/lib/planner-colors"
+import {
+  parseLocalDate,
+  parseLocalCalendarDate,
+  toLocalNoonISOString,
+  dayIndexToDayOfWeek,
+  buildUnassignedDayPriority,
+  getUnassignedDayOfWeek,
+} from "@/lib/planner-utils"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -132,12 +155,8 @@ function getRecipeStatsMap(history: RecipeHistory[] | undefined): Map<string, Re
 function isDateInWeekRange(dateStr: string, weekStartDate: string): boolean {
   if (!dateStr || !weekStartDate) return false
 
-  // Parse dateStr as a local calendar date (avoid UTC interpretation of YYYY-MM-DD)
-  const d = new Date(dateStr)
-  const y = d.getFullYear()
-  const m = d.getMonth()
-  const day = d.getDate()
-  const date = new Date(y, m, day)
+  const date = parseLocalCalendarDate(dateStr)
+  if (!date) return false
 
   // Parse weekStartDate as YYYY-MM-DD in local time
   const parts = weekStartDate.split("-").map(Number)
@@ -153,38 +172,6 @@ function isDateInWeekRange(dateStr: string, weekStartDate: string): boolean {
 }
 
 const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
-
-/**
- * Stable hash function for distributing recipes to days
- * Uses recipe ID to produce a consistent day index
- */
-function stableRecipeHash(recipeId: string): number {
-  let hash = 0
-  for (let i = 0; i < recipeId.length; i++) {
-    const char = recipeId.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32-bit integer
-  }
-  return Math.abs(hash)
-}
-
-/**
- * Hex colors for category pills (for inline styles)
- */
-const CATEGORY_HEX_COLORS: Record<string, string> = {
-  chicken: "#4d7c0f",     // lime-700
-  beef: "#b91c1c",        // red-700
-  lamb: "#c2410c",        // orange-700
-  turkey: "#a16207",      // yellow-700
-  vegetarian: "#1d4ed8",  // blue-700
-}
-
-/**
- * Get hex color for a category
- */
-function getCategoryHexColor(category: string): string {
-  return CATEGORY_HEX_COLORS[category.toLowerCase()] || "#6b7280" // gray-500 fallback
-}
 
 /**
  * Compact category pill with inline stepper for meal selection
@@ -255,11 +242,6 @@ type WeekAssignments = Record<string, RecipeDayAssignments> // week_date -> Reci
 /**
  * Parse YYYY-MM-DD as local calendar date (avoid UTC shift from new Date(str)).
  */
-function parseLocalDate(isoDate: string): Date {
-  const [y, m, d] = isoDate.split("-").map(Number)
-  return new Date(y, m - 1, d)
-}
-
 /**
  * Get array of day objects for a week
  */
@@ -371,6 +353,41 @@ function FlipRecipeCard({
   )
 }
 
+function DraggableRecipeCard({
+  recipe,
+  children,
+}: {
+  recipe: Recipe
+  children: React.ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `recipe-${recipe.id}`,
+    data: { recipeId: recipe.id },
+  })
+
+  const style = {
+    touchAction: "none",
+    WebkitUserDrag: "none" as const,
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      draggable={false}
+      onDragStart={(e) => e.preventDefault()}
+      className={cn(
+        "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-0 pointer-events-none"
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
 function DayColumn({
   day,
   dayIndex,
@@ -410,11 +427,21 @@ function DayColumn({
   isToday?: boolean
   statsMap: Map<string, RecipeStats>
 }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `day-${dayIndex}`,
+  })
+
   const mainRecipe = dayRecipes[0]
   const extraRecipes = dayRecipes.slice(1)
 
   return (
-    <div className="space-y-3">
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "space-y-3 rounded-2xl transition-colors",
+        isOver && "bg-primary/5 ring-2 ring-primary/30"
+      )}
+    >
       <div
         className={cn(
           "text-center pb-2",
@@ -437,49 +464,55 @@ function DayColumn({
         <div className="space-y-2">
           <FlipRecipeCard key={`day-${dayIndex}-slot-0`} recipe={mainRecipe} slotKey={`day-${dayIndex}-slot-0`}>
             {(displayedRecipe) => (
-              <StitchRecipeCard
-                compact={false}
-                recipe={displayedRecipe}
-                isMade={isRecipeMade(displayedRecipe)}
-                isMarkingThis={markingRecipeId === mainRecipe.id}
-                isAddingToCart={addingToCartRecipeId === mainRecipe.id}
-                isSwapping={swappingRecipeId === mainRecipe.id}
-                isToday={isToday}
-                onView={() => onViewRecipe(mainRecipe)}
-                onSwap={() => onSwapRecipe(mainRecipe)}
-                onMarkMade={() => onMarkMade(mainRecipe.id, isRecipeMade(mainRecipe))}
-                onAddToCart={() => onAddToCart(mainRecipe.id)}
-                onRemove={() => onRemoveRecipe(mainRecipe)}
-                onMoveToDay={(dayIdx) => onMoveToDay(mainRecipe.id, dayIdx)}
-                weekDays={weekDays}
-                currentDayIndex={currentDayIndex}
-                lastMade={statsMap.get(mainRecipe.id)?.lastMade ?? null}
-                timesMade={statsMap.get(mainRecipe.id)?.timesMade ?? 0}
-              />
+              <DraggableRecipeCard recipe={displayedRecipe}>
+                <StitchRecipeCard
+                  compact={false}
+                  recipe={displayedRecipe}
+                  isMade={isRecipeMade(displayedRecipe)}
+                  isMarkingThis={markingRecipeId === mainRecipe.id}
+                  isAddingToCart={addingToCartRecipeId === mainRecipe.id}
+                  isSwapping={swappingRecipeId === mainRecipe.id}
+                  isToday={isToday}
+                  onView={() => onViewRecipe(mainRecipe)}
+                  onSwap={() => onSwapRecipe(mainRecipe)}
+                  onMarkMade={() => onMarkMade(mainRecipe.id, isRecipeMade(mainRecipe))}
+                  onAddToCart={() => onAddToCart(mainRecipe.id)}
+                  onRemove={() => onRemoveRecipe(mainRecipe)}
+                  onMoveToDay={(dayIdx) => onMoveToDay(mainRecipe.id, dayIdx)}
+                  weekDays={weekDays}
+                  currentDayIndex={currentDayIndex}
+                  showMoveToDay={false}
+                  lastMade={statsMap.get(mainRecipe.id)?.lastMade ?? null}
+                  timesMade={statsMap.get(mainRecipe.id)?.timesMade ?? 0}
+                />
+              </DraggableRecipeCard>
             )}
           </FlipRecipeCard>
           {extraRecipes.map((r, slotIdx) => (
             <FlipRecipeCard key={`day-${dayIndex}-slot-${slotIdx + 1}`} recipe={r} slotKey={`day-${dayIndex}-slot-${slotIdx + 1}`}>
               {(displayedRecipe) => (
-                <StitchRecipeCard
-                  compact
-                  recipe={displayedRecipe}
-                  isMade={isRecipeMade(displayedRecipe)}
-                  isMarkingThis={markingRecipeId === r.id}
-                  isAddingToCart={addingToCartRecipeId === r.id}
-                  isSwapping={swappingRecipeId === r.id}
-                  isToday={false}
-                  onView={() => onViewRecipe(r)}
-                  onSwap={() => onSwapRecipe(r)}
-                  onMarkMade={() => onMarkMade(r.id, isRecipeMade(r))}
-                  onAddToCart={() => onAddToCart(r.id)}
-                  onRemove={() => onRemoveRecipe(r)}
-                  onMoveToDay={(dayIdx) => onMoveToDay(r.id, dayIdx)}
-                  weekDays={weekDays}
-                  currentDayIndex={currentDayIndex}
-                  lastMade={statsMap.get(r.id)?.lastMade ?? null}
-                  timesMade={statsMap.get(r.id)?.timesMade ?? 0}
-                />
+                <DraggableRecipeCard recipe={displayedRecipe}>
+                  <StitchRecipeCard
+                    compact
+                    recipe={displayedRecipe}
+                    isMade={isRecipeMade(displayedRecipe)}
+                    isMarkingThis={markingRecipeId === r.id}
+                    isAddingToCart={addingToCartRecipeId === r.id}
+                    isSwapping={swappingRecipeId === r.id}
+                    isToday={false}
+                    onView={() => onViewRecipe(r)}
+                    onSwap={() => onSwapRecipe(r)}
+                    onMarkMade={() => onMarkMade(r.id, isRecipeMade(r))}
+                    onAddToCart={() => onAddToCart(r.id)}
+                    onRemove={() => onRemoveRecipe(r)}
+                    onMoveToDay={(dayIdx) => onMoveToDay(r.id, dayIdx)}
+                    weekDays={weekDays}
+                    currentDayIndex={currentDayIndex}
+                    showMoveToDay={false}
+                    lastMade={statsMap.get(r.id)?.lastMade ?? null}
+                    timesMade={statsMap.get(r.id)?.timesMade ?? 0}
+                  />
+                </DraggableRecipeCard>
               )}
             </FlipRecipeCard>
           ))}
@@ -606,6 +639,7 @@ function StitchRecipeCard({
   weekDays,
   currentDayIndex,
   compact = false,
+  showMoveToDay = true,
   lastMade = null,
   timesMade = 0,
 }: {
@@ -624,6 +658,7 @@ function StitchRecipeCard({
   weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
   currentDayIndex: Record<string, number> | undefined
   compact?: boolean
+  showMoveToDay?: boolean
   lastMade?: string | null
   timesMade?: number
 }) {
@@ -650,6 +685,7 @@ function StitchRecipeCard({
           <img
             src={recipe.image_url}
             alt={recipe.name}
+            draggable={false}
             className="planner-desktop-card-image w-full h-full object-cover"
           />
         ) : (
@@ -701,6 +737,7 @@ function StitchRecipeCard({
               >
                 <X className="h-4 w-4" />
               </button>
+            {showMoveToDay && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -717,7 +754,7 @@ function StitchRecipeCard({
                     <DropdownMenuItem
                       key={idx}
                       onClick={(e) => { e.stopPropagation(); onMoveToDay(idx) }}
-                      disabled={currentDayIndex?.[recipe.id] === idx}
+                      disabled={currentDayIndex?.[recipe.id] === d.date.getDay()}
                     >
                       <CalendarIcon className="h-4 w-4 mr-2" />
                       {d.dayName}, {d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -725,6 +762,7 @@ function StitchRecipeCard({
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
+            )}
             </div>
           </div>
         ) : (
@@ -764,30 +802,32 @@ function StitchRecipeCard({
             >
               <X className="h-4 w-4" />
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
-                  title="Move to another day"
-                >
-                  <CalendarIcon className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {weekDays.map((d, idx) => (
-                  <DropdownMenuItem
-                    key={idx}
-                    onClick={(e) => { e.stopPropagation(); onMoveToDay(idx) }}
-                    disabled={currentDayIndex?.[recipe.id] === idx}
+            {showMoveToDay && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
+                    title="Move to another day"
                   >
-                    <CalendarIcon className="h-4 w-4 mr-2" />
-                    {d.dayName}, {d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                    <CalendarIcon className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {weekDays.map((d, idx) => (
+                    <DropdownMenuItem
+                      key={idx}
+                      onClick={(e) => { e.stopPropagation(); onMoveToDay(idx) }}
+                      disabled={currentDayIndex?.[recipe.id] === d.date.getDay()}
+                    >
+                      <CalendarIcon className="h-4 w-4 mr-2" />
+                      {d.dayName}, {d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         )}
       </div>
@@ -859,6 +899,7 @@ function MobileRecipeCard({
           <img
             src={recipe.image_url}
             alt={recipe.name}
+            draggable={false}
             className="meal-image w-full h-full object-cover"
           />
         ) : (
@@ -970,7 +1011,7 @@ function MobileRecipeCard({
                   <DropdownMenuItem
                     key={idx}
                     onClick={(e) => { e.stopPropagation(); onMoveToDay(idx) }}
-                    disabled={currentDayIndex?.[recipe.id] === idx}
+                    disabled={currentDayIndex?.[recipe.id] === d.date.getDay()}
                   >
                     <CalendarIcon className="h-4 w-4 mr-2" />
                     {d.dayName}, {d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
@@ -990,13 +1031,6 @@ function MobileRecipeCard({
   )
 }
 
-/**
- * Get day name abbreviation
- */
-function getDayName(date: Date): string {
-  return date.toLocaleDateString("en-US", { weekday: "short" })
-}
-
 export function MealPlanner() {
   // Default to current week (client local date); syncs to user's week_start_day when config loads
   const [currentWeekDate, setCurrentWeekDate] = useState<string>(() =>
@@ -1008,7 +1042,7 @@ export function MealPlanner() {
   const [markingRecipeId, setMarkingRecipeId] = useState<string | null>(null)
   const [addingToCartRecipeId, setAddingToCartRecipeId] = useState<string | null>(null)
   const [swappingRecipeId, setSwappingRecipeId] = useState<string | null>(null)
-  const [pendingRemovalRecipeId, setPendingRemovalRecipeId] = useState<string | null>(null)
+  const [pendingRemovalRecipeIds, setPendingRemovalRecipeIds] = useState<Set<string>>(new Set())
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
   const [addRecipeTargetDayIndex, setAddRecipeTargetDayIndex] = useState<number | null>(null)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
@@ -1016,6 +1050,21 @@ export function MealPlanner() {
   const [isDatePickerOpenDesktop, setIsDatePickerOpenDesktop] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>("thisWeek")
+  const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
+  const [localDayAssignments, setLocalDayAssignments] = useState<Record<string, number> | null>(null)
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true
+    return window.matchMedia("(min-width: 1024px)").matches
+  })
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 1024px)")
+    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
+    setIsDesktop(mq.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
 
   // Hook to save day assignments to database
   const saveDayAssignments = useSaveDayAssignments()
@@ -1026,6 +1075,7 @@ export function MealPlanner() {
 
   // Get day assignments from the weekly plan (database) with localStorage fallback
   const recipeDayAssignments = useMemo(() => {
+    if (localDayAssignments) return localDayAssignments
     // First try to get from database (weekly plan)
     if (weeklyPlan?.day_assignments) {
       return weeklyPlan.day_assignments
@@ -1035,15 +1085,33 @@ export function MealPlanner() {
       try {
         const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
         if (stored) {
-          const allAssignments: WeekAssignments = JSON.parse(stored)
-          return allAssignments[currentWeekDate] || {}
+          const parsed = JSON.parse(stored)
+          if (parsed && typeof parsed === "object" && parsed.version === 2 && parsed.weeks) {
+            return parsed.weeks[currentWeekDate] || {}
+          }
+          const allAssignments: WeekAssignments = parsed
+          const legacyAssignments = allAssignments[currentWeekDate] || {}
+          // Legacy localStorage stored week-grid indices; convert to absolute day-of-week
+          const weekStartDay = config?.week_start_day ?? 1
+          return Object.fromEntries(
+            Object.entries(legacyAssignments).map(([recipeId, dayIndex]) => [
+              recipeId,
+              dayIndexToDayOfWeek(dayIndex, weekStartDay),
+            ])
+          )
         }
       } catch {
         // Ignore parse errors
       }
     }
     return {}
-  }, [weeklyPlan?.day_assignments, currentWeekDate])
+  }, [localDayAssignments, weeklyPlan?.day_assignments, currentWeekDate, config?.week_start_day])
+
+  useEffect(() => {
+    if (weeklyPlan?.day_assignments) {
+      setLocalDayAssignments(weeklyPlan.day_assignments)
+    }
+  }, [weeklyPlan?.day_assignments])
 
   // Get week days for calendar view (needed early for handleMarkMade)
   const weekDays = useMemo(() => {
@@ -1073,7 +1141,7 @@ export function MealPlanner() {
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecipeHistory()
   const { data: allCategories } = useCategories()
-  const { data: allRecipes } = useRecipes({})
+  const { data: allRecipes } = useRecipes({ select: "id", limit: 1 })
   const hasAnyRecipes = (allRecipes?.length ?? 0) > 0
 
   const generatePlan = useGenerateMealPlan()
@@ -1091,10 +1159,17 @@ export function MealPlanner() {
   // Build a map of recipe_id -> stats (last made + times made)
   const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
 
-  // Sync to current week when config loads (user's week_start_day) so default view is always "this week"
+  // Sync to current week when config first loads (user's week_start_day)
+  const hasSyncedInitialWeekRef = useRef(false)
+  const markUserNavigated = useCallback(() => {
+    hasSyncedInitialWeekRef.current = true
+  }, [])
   useEffect(() => {
-    const weekStart = getWeekStartDate(new Date(), config?.week_start_day ?? 1)
+    if (hasSyncedInitialWeekRef.current) return
+    if (!config?.week_start_day) return
+    const weekStart = getWeekStartDate(new Date(), config.week_start_day)
     setCurrentWeekDate(weekStart)
+    hasSyncedInitialWeekRef.current = true
   }, [config?.week_start_day])
 
   // Initialize selection from config
@@ -1105,6 +1180,7 @@ export function MealPlanner() {
   }, [config?.default_selection])
 
   const handlePrevWeek = () => {
+    markUserNavigated()
     const next = navigateWeek(currentWeekDate, "prev")
     setCurrentWeekDate(next)
     const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
@@ -1114,6 +1190,7 @@ export function MealPlanner() {
   }
 
   const handleNextWeek = () => {
+    markUserNavigated()
     const next = navigateWeek(currentWeekDate, "next")
     setCurrentWeekDate(next)
     const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
@@ -1123,6 +1200,7 @@ export function MealPlanner() {
   }
 
   const handleMobileWeekTab = (tab: MobileWeekTab) => {
+    markUserNavigated()
     setMobileWeekTab(tab)
     const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
     const nextWeekStart = navigateWeek(thisWeekStart, "next")
@@ -1198,13 +1276,13 @@ export function MealPlanner() {
     // Calculate the date to use: if recipe is assigned to a day, use that day's date
     // Otherwise, use today's date (for recipes marked from recipe view or unassigned recipes)
     let dateMade: string | undefined
-    const assignedDayIndex = recipeDayAssignments[recipeId]
-    if (assignedDayIndex !== undefined && weekDays[assignedDayIndex]) {
-      // Recipe is assigned to a specific day - use that day's date
-      const assignedDate = new Date(weekDays[assignedDayIndex].date)
-      // Set time to start of day to avoid timezone issues
-      assignedDate.setHours(0, 0, 0, 0)
-      dateMade = assignedDate.toISOString()
+    const assignedDayOfWeek = recipeDayAssignments[recipeId]
+    if (assignedDayOfWeek !== undefined) {
+      const assignedDay = weekDays.find((d) => d.date.getDay() === assignedDayOfWeek)
+      if (assignedDay) {
+        // Recipe is assigned to a specific day - use that day's date (local noon)
+        dateMade = toLocalNoonISOString(assignedDay.date)
+      }
     }
     // If no day assignment, dateMade will be undefined and the hook will use today's date
 
@@ -1238,15 +1316,23 @@ export function MealPlanner() {
 
   const handleRemoveFromPlan = useCallback((recipe: Recipe) => {
     if (!currentWeekDate) return
-    setPendingRemovalRecipeId(recipe.id)
+    setPendingRemovalRecipeIds((prev) => new Set(prev).add(recipe.id))
     undoToast.show({
       message: `"${recipe.name}" removed from plan`,
       onUndo: () => {
-        setPendingRemovalRecipeId(null)
+        setPendingRemovalRecipeIds((prev) => {
+          const next = new Set(prev)
+          next.delete(recipe.id)
+          return next
+        })
       },
       onExpire: () => {
         removeFromPlan.mutate({ weekDate: currentWeekDate, recipeId: recipe.id })
-        setPendingRemovalRecipeId(null)
+        setPendingRemovalRecipeIds((prev) => {
+          const next = new Set(prev)
+          next.delete(recipe.id)
+          return next
+        })
       },
     })
   }, [currentWeekDate, undoToast, removeFromPlan])
@@ -1263,12 +1349,16 @@ export function MealPlanner() {
   // Move recipe to a different day
   const handleMoveToDay = useCallback((recipeId: string, dayIndex: number) => {
     if (!currentWeekDate || dayIndex < 0 || dayIndex >= 7) return
-    
+
+    const weekStartDay = config?.week_start_day ?? 1
+    const dayOfWeek = dayIndexToDayOfWeek(dayIndex, weekStartDay)
+
     // Update local state immediately for optimistic UI update
     const updatedAssignments = {
       ...recipeDayAssignments,
-      [recipeId]: dayIndex,
+      [recipeId]: dayOfWeek,
     }
+    setLocalDayAssignments(updatedAssignments)
     
     // Save to database
     saveDayAssignments.mutate({
@@ -1280,14 +1370,23 @@ export function MealPlanner() {
     if (typeof window !== "undefined") {
       try {
         const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
-        const allAssignments: WeekAssignments = stored ? JSON.parse(stored) : {}
+        const parsed = stored ? JSON.parse(stored) : null
+        let allAssignments: WeekAssignments = {}
+        if (parsed && typeof parsed === "object" && parsed.version === 2 && parsed.weeks) {
+          allAssignments = parsed.weeks
+        } else if (parsed) {
+          allAssignments = parsed as WeekAssignments
+        }
         allAssignments[currentWeekDate] = updatedAssignments
-        localStorage.setItem(RECIPE_DAY_ASSIGNMENTS_KEY, JSON.stringify(allAssignments))
+        localStorage.setItem(
+          RECIPE_DAY_ASSIGNMENTS_KEY,
+          JSON.stringify({ version: 2, weeks: allAssignments })
+        )
       } catch {
         // Ignore localStorage errors
       }
     }
-  }, [currentWeekDate, recipeDayAssignments, saveDayAssignments])
+  }, [currentWeekDate, recipeDayAssignments, saveDayAssignments, config?.week_start_day])
 
   const formatWeekLabel = (dateStr: string) => {
     if (!dateStr) return ""
@@ -1303,32 +1402,72 @@ export function MealPlanner() {
   const totalMeals = Object.values(selection).reduce((sum, n) => sum + n, 0)
 
   // Filter out pending removal recipes
-  const displayedRecipes = recipes?.filter(r => r.id !== pendingRemovalRecipeId)
+  const displayedRecipes = recipes?.filter(r => !pendingRemovalRecipeIds.has(r.id))
+  const activeRecipe = activeRecipeId
+    ? (displayedRecipes || []).find((r) => r.id === activeRecipeId) || null
+    : null
+
+  // Build day priority for distributing unassigned recipes (preferred first, then available)
+  const unassignedDayPriority = useMemo(
+    () => buildUnassignedDayPriority(config?.excluded_days || [], config?.preferred_days || null),
+    [config?.excluded_days, config?.preferred_days]
+  )
 
   // Get recipes assigned to each day
   const getRecipesByDay = useCallback((dayIndex: number): Recipe[] => {
     if (!displayedRecipes) return []
-    
-    // Get recipes explicitly assigned to this day
+
+    const day = weekDays[dayIndex]
+    const dayOfWeek = day ? day.date.getDay() : dayIndex
+
+    // Get recipes explicitly assigned to this day-of-week
     const assignedRecipes = displayedRecipes.filter(
-      recipe => recipeDayAssignments[recipe.id] === dayIndex
-    )
-    
-    // Get recipes that aren't assigned to any day
-    const unassignedRecipes = displayedRecipes.filter(
-      recipe => recipeDayAssignments[recipe.id] === undefined
+      recipe => recipeDayAssignments[recipe.id] === dayOfWeek
     )
     
     // Distribute unassigned recipes evenly across days using stable ID-based hash
     // This ensures recipes don't shift days when other recipes are added/removed
     const unassignedForThisDay = displayedRecipes.filter((recipe) => {
       // Only include if it's unassigned AND the stable hash maps to this day
-      return recipeDayAssignments[recipe.id] === undefined && (stableRecipeHash(recipe.id) % 7 === dayIndex)
+      if (recipeDayAssignments[recipe.id] !== undefined) return false
+      const assignedDayOfWeek = getUnassignedDayOfWeek(recipe.id, unassignedDayPriority)
+      return assignedDayOfWeek === dayOfWeek
     })
     
     // Combine assigned recipes with unassigned recipes for this day
     return [...assignedRecipes, ...unassignedForThisDay]
-  }, [displayedRecipes, recipeDayAssignments])
+  }, [displayedRecipes, recipeDayAssignments, weekDays, unassignedDayPriority])
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  )
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const recipeId = event.active.data.current?.recipeId
+    if (recipeId) setActiveRecipeId(recipeId)
+  }, [])
+
+  const handleDragCancel = useCallback(() => {
+    setActiveRecipeId(null)
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const recipeId = event.active.data.current?.recipeId
+    const overId = event.over?.id ? String(event.over.id) : null
+    setActiveRecipeId(null)
+
+    if (!recipeId || !overId) return
+    const match = overId.match(/day-(\d+)$/)
+    if (!match) return
+    const targetDayIndex = Number(match[1])
+    if (Number.isNaN(targetDayIndex)) return
+    if (!weekDays[targetDayIndex]) return
+
+    const targetDayOfWeek = weekDays[targetDayIndex].date.getDay()
+    if (recipeDayAssignments[recipeId] === targetDayOfWeek) return
+
+    handleMoveToDay(recipeId, targetDayIndex)
+  }, [handleMoveToDay, recipeDayAssignments, weekDays])
 
   // Check if displayed week is the current week
   const currentWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
@@ -1360,7 +1499,7 @@ export function MealPlanner() {
     return isManuallyMarked || isMadeInWeek
   }, [weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
 
-  return (
+  const plannerContent = (
     <div className="space-y-6 pb-6">
       {/* Mobile: compact schedule (planner_mobile_redesign) */}
       <div className="lg:hidden space-y-4">
@@ -1400,10 +1539,11 @@ export function MealPlanner() {
                     <Calendar
                       selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                       onSelect={(date) => {
-                        if (date) {
-                          const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
-                          setCurrentWeekDate(weekStart)
-                          setIsDatePickerOpenMobile(false)
+                      if (date) {
+                        markUserNavigated()
+                        const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
+                        setCurrentWeekDate(weekStart)
+                        setIsDatePickerOpenMobile(false)
                           const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
                           const nextWeekStart = navigateWeek(thisWeekStart, "next")
                           if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
@@ -1432,6 +1572,7 @@ export function MealPlanner() {
       </div>
 
       {/* Desktop: Current Schedule + Quick Meal Mix — Stitch 2-col layout */}
+      {isDesktop && (
       <div className="hidden lg:grid lg:grid-cols-12 gap-6">
         {/* Current Schedule */}
         <div className="lg:col-span-4 bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-stone-100 dark:border-zinc-800">
@@ -1477,6 +1618,7 @@ export function MealPlanner() {
                     selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                     onSelect={(date) => {
                       if (date) {
+                        markUserNavigated()
                         const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
                         setCurrentWeekDate(weekStart)
                         setIsDatePickerOpenDesktop(false)
@@ -1558,6 +1700,7 @@ export function MealPlanner() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Week navigation (mobile) + Add to Cart */}
       <div className="space-y-4">
@@ -1673,6 +1816,7 @@ export function MealPlanner() {
                 </div>
               </div>
               {/* Desktop: calendar week with Add meal on each day */}
+              {isDesktop && (
               <div className="hidden lg:flex items-start gap-2">
                 <button
                   type="button"
@@ -1720,11 +1864,13 @@ export function MealPlanner() {
                   <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
                 </button>
               </div>
+              )}
             </>
           )
         ) : (
           <>
             {/* Desktop: Calendar View (7-day grid) with week navigation */}
+            {isDesktop && (
             <div className="hidden lg:flex items-start gap-2">
               <button
                 type="button"
@@ -1773,6 +1919,7 @@ export function MealPlanner() {
                 <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
               </button>
             </div>
+            )}
 
             {/* Mobile: calendar view — Stitch calendarview_redesign_mobile: week strip + day sections */}
             <div className="lg:hidden space-y-6">
@@ -1854,6 +2001,7 @@ export function MealPlanner() {
         onOpenChange={(open) => { setIsAddRecipeModalOpen(open); if (!open) setAddRecipeTargetDayIndex(null); }}
         weekDate={currentWeekDate}
         targetDayIndex={addRecipeTargetDayIndex}
+        weekStartDay={config?.week_start_day ?? 1}
       />
 
       {/* Regeneration Confirmation Dialog */}
@@ -1897,5 +2045,52 @@ export function MealPlanner() {
         isUpdating={updateConfig.isPending}
       />
     </div>
+  )
+
+  if (!isDesktop) {
+    return plannerContent
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[snapCenterToCursor]}
+      onDragStart={handleDragStart}
+      onDragCancel={handleDragCancel}
+      onDragEnd={handleDragEnd}
+    >
+      {plannerContent}
+      <DragOverlay adjustScale={false} dropAnimation={null}>
+        {activeRecipe ? (
+          <div className="pointer-events-none w-[220px] rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
+            <div className="relative h-20 w-full">
+              {activeRecipe.image_url ? (
+                <img
+                  src={activeRecipe.image_url}
+                  alt={activeRecipe.name}
+                  draggable={false}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-slate-100 dark:bg-slate-700" />
+              )}
+              <div
+                className="absolute top-2 right-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded uppercase"
+                style={{ backgroundColor: getCategoryHexColor(activeRecipe.category) }}
+              >
+                {activeRecipe.category}
+              </div>
+            </div>
+            <div className="p-3">
+              <div className="text-sm font-semibold truncate">{activeRecipe.name}</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                {activeRecipe.servings} serves
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   )
 }

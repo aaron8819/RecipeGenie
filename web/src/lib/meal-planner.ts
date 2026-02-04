@@ -127,7 +127,10 @@ export function autoAssignDays(
   preferredDays: number[] | null = null,
   existingAssignments: Record<string, number> = {}
 ): Record<string, number> {
-  const assignments: Record<string, number> = { ...existingAssignments }
+  // Drop assignments for recipes that are no longer in the plan
+  const assignments: Record<string, number> = Object.fromEntries(
+    Object.entries(existingAssignments).filter(([recipeId]) => recipeIds.includes(recipeId))
+  )
   
   // Get available days (0-6, excluding excluded days)
   const allDays = [0, 1, 2, 3, 4, 5, 6]

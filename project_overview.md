@@ -105,10 +105,10 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | `hooks/` | `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts` | TanStack Query hooks for Supabase |
 | `hooks/shopping/` | Domain-focused modules | Shopping hooks split by domain (list, items, recipes, categories, config, pantry) |
 | `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization (singleton pattern) |
-| `lib/` | `meal-planner.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, list aggregation with normalization, category management, recipe text parsing with modifier extraction) |
+| `lib/` | `meal-planner.ts`, `planner-colors.ts`, `planner-utils.ts`, `user-config.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, planner colors/date helpers, user config defaults, list aggregation with normalization, category management, recipe text parsing with modifier extraction) |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
 
-**Testing:** E2E tests in `web/tests/` (Playwright); unit tests in `hooks/__tests__/` (Vitest). See README Testing section.
+**Testing:** E2E tests in `web/tests/` (Playwright); unit tests in `hooks/__tests__/` and `lib/__tests__/` (Vitest). See README Testing section.
 
 ### Middleware (`src/middleware.ts`)
 
@@ -251,6 +251,8 @@ For UI changes:
 |------|------------|
 | Understand data fetching | `src/hooks/use-recipes.ts` |
 | Understand meal plan generation | `src/lib/meal-planner.ts` |
+| Planner date/day helpers | `src/lib/planner-utils.ts`, `src/lib/planner-colors.ts` |
+| User config defaults and errors | `src/lib/user-config.ts` |
 | Understand shopping list logic | `src/lib/shopping-list.ts` |
 | Understand shopping categories | `src/lib/shopping-categories.ts` |
 | Modify shopping hooks | `src/hooks/shopping/` (domain-focused modules) |
@@ -266,9 +268,18 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-02-01 (v2.12.4)*
+*Last updated: 2026-02-04 (v2.12.6)*
 
-## Recent Updates (v2.12.4)
+## Recent Updates (v2.12.6)
+
+### Planner Refactor & Fixes (2026-02-04)
+- **Planner lib modules**: `planner-colors.ts` (category hex colors), `planner-utils.ts` (local date parsing, day-index conversion, stableRecipeHash), `user-config.ts` (default config, resolveUserConfig for fetch errors)
+- **Local-date handling**: `isDateInWeekRange` and "mark made" use local calendar dates and noon ISO strings to avoid UTC boundary shifts
+- **Stale day_assignments**: `autoAssignDays()` prunes assignments for recipes no longer in the plan
+- **User config**: PGRST116 returns default config; other errors rethrown
+- **Unit tests**: meal-planner, planner-colors, planner-utils, user-config in `lib/__tests__/`
+
+## Previous Updates (v2.12.4)
 
 ### Meal Planner Swap UX (2026-02-01)
 - **Swap preserves day**: When you swap a recipe in the planner, the new recipe keeps the same day slot (day_assignments updated)

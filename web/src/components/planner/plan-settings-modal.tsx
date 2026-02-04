@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Settings, X } from "lucide-react"
 import {
   Dialog,
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import type { UserConfig } from "@/types/database"
 import { cn } from "@/lib/utils"
+import { getCategoryHexColor } from "@/lib/planner-colors"
 
 interface PlanSettingsModalProps {
   open: boolean
@@ -40,15 +41,7 @@ function CategoryPill({
   onIncrement: () => void
   onDecrement: () => void
 }) {
-  const CATEGORY_HEX_COLORS: Record<string, string> = {
-    chicken: "#4d7c0f",
-    beef: "#b91c1c",
-    lamb: "#c2410c",
-    turkey: "#a16207",
-    vegetarian: "#1d4ed8",
-  }
-
-  const categoryColor = CATEGORY_HEX_COLORS[category.toLowerCase()] || "#6b7280"
+  const categoryColor = getCategoryHexColor(category)
   const isActive = count > 0
 
   return (
@@ -125,7 +118,7 @@ export function PlanSettingsModal({
   )
 
   // Initialize from config when it changes
-  useMemo(() => {
+  useEffect(() => {
     if (config) {
       setDefaultSelection(config.default_selection || {})
       setExcludedDays(config.excluded_days || [])

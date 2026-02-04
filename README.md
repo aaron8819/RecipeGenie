@@ -90,7 +90,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Testing
 
-- **Unit tests (Vitest):** `npm run test` or `npm run test:watch`. Tests live in `src/hooks/__tests__/` and similar.
+- **Unit tests (Vitest):** `npm run test` or `npm run test:watch`. Tests live in `src/hooks/__tests__/`, `src/lib/__tests__/`, and similar.
 - **E2E tests (Playwright):** `npm run test:e2e`. Requires the dev server (`npm run dev`). Optional: run global setup once to persist auth state for authenticated E2E tests (`playwright/.auth/`). Other scripts: `test:e2e:ui`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:report`, `test:e2e:codegen`.
 
 ## Deployment to Vercel
