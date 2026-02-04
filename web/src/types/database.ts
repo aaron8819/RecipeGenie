@@ -78,6 +78,7 @@ export interface Database {
           excluded_keywords: string[]
           history_exclusion_days: number
           week_start_day: number
+          onboarding_completed_at: string | null
           category_overrides: Record<string, string>
           custom_categories: CustomShoppingCategory[]
           category_order: string[] | null
@@ -92,6 +93,7 @@ export interface Database {
           excluded_keywords?: string[]
           history_exclusion_days?: number
           week_start_day?: number
+          onboarding_completed_at?: string | null
           category_overrides?: Record<string, string>
           custom_categories?: CustomShoppingCategory[]
           category_order?: string[] | null
@@ -106,6 +108,7 @@ export interface Database {
           excluded_keywords?: string[]
           history_exclusion_days?: number
           week_start_day?: number
+          onboarding_completed_at?: string | null
           category_overrides?: Record<string, string>
           custom_categories?: CustomShoppingCategory[]
           category_order?: string[] | null

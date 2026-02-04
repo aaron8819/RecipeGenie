@@ -68,6 +68,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { CalendarDays, BookOpen } from "lucide-react"
 import { getTagClassName, getTagColor } from "@/lib/tag-colors"
 import { getCategoryHexColor } from "@/lib/planner-colors"
+import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import {
   parseLocalDate,
   parseLocalCalendarDate,
@@ -663,6 +664,7 @@ function StitchRecipeCard({
   timesMade?: number
 }) {
   const pillBg = getCategoryHexColor(recipe.category)
+  const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
 
   const cardClasses = cn(
     "relative overflow-hidden flex flex-col border transition-all cursor-pointer rounded-2xl",
@@ -681,9 +683,9 @@ function StitchRecipeCard({
       className={cardClasses}
     >
       <div className="relative h-24 flex-shrink-0 overflow-hidden">
-        {recipe.image_url ? (
+        {recipeImageUrl ? (
           <img
-            src={recipe.image_url}
+            src={recipeImageUrl}
             alt={recipe.name}
             draggable={false}
             className="planner-desktop-card-image w-full h-full object-cover"
@@ -875,6 +877,7 @@ function MobileRecipeCard({
   timesMade?: number
 }) {
   const pillBg = getCategoryHexColor(recipe.category)
+  const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
 
   const cardClasses = cn(
     "rounded-3xl overflow-hidden shadow-sm flex flex-col cursor-pointer transition-all",
@@ -895,9 +898,9 @@ function MobileRecipeCard({
       className={cardClasses}
     >
       <div className="relative h-44 flex-shrink-0">
-        {recipe.image_url ? (
+        {recipeImageUrl ? (
           <img
-            src={recipe.image_url}
+            src={recipeImageUrl}
             alt={recipe.name}
             draggable={false}
             className="meal-image w-full h-full object-cover"
@@ -1406,6 +1409,7 @@ export function MealPlanner() {
   const activeRecipe = activeRecipeId
     ? (displayedRecipes || []).find((r) => r.id === activeRecipeId) || null
     : null
+  const activeRecipeImageUrl = activeRecipe ? getRecipeImageUrl(activeRecipe.image_url) : null
 
   // Build day priority for distributing unassigned recipes (preferred first, then available)
   const unassignedDayPriority = useMemo(
@@ -2065,9 +2069,9 @@ export function MealPlanner() {
         {activeRecipe ? (
           <div className="pointer-events-none w-[220px] rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
             <div className="relative h-20 w-full">
-              {activeRecipe.image_url ? (
+              {activeRecipeImageUrl ? (
                 <img
-                  src={activeRecipe.image_url}
+                  src={activeRecipeImageUrl}
                   alt={activeRecipe.name}
                   draggable={false}
                   className="w-full h-full object-cover"
@@ -2094,3 +2098,4 @@ export function MealPlanner() {
     </DndContext>
   )
 }
+

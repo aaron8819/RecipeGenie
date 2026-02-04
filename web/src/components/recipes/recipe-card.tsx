@@ -13,6 +13,7 @@ import {
 import type { Recipe } from "@/types/database"
 import { cn } from "@/lib/utils"
 import { getTagClassName, getTagColor } from "@/lib/tag-colors"
+import { getRecipeImageUrl } from "@/lib/supabase/storage"
 
 /** Stitch recipes_redesign: category pill classes for grid cards */
 const REF_CATEGORY_PILL: Record<string, string> = {
@@ -56,6 +57,7 @@ export function RecipeCard({
   isAddingToShoppingList = false,
   isMarkingAsMade = false,
 }: RecipeCardProps) {
+  const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
   // List view — match reference: horizontal card, image + favorite overlay, pills, icon actions
   if (viewMode === "list") {
     const categoryColor = getTagColor(recipe.category, true)
@@ -95,14 +97,14 @@ export function RecipeCard({
               />
             </button>
             <div className="w-32 h-32 rounded-2xl overflow-hidden bg-stone-100 dark:bg-slate-700 shadow-inner">
-              {recipe.image_url ? (
+              {recipeImageUrl ? (
                 <Image
-                  src={recipe.image_url}
+                  src={recipeImageUrl}
                   alt={recipe.name}
                   width={128}
                   height={128}
                   className="w-full h-full object-cover"
-                  unoptimized={!recipe.image_url.includes("supabase.co")}
+                  unoptimized={!recipeImageUrl.includes("supabase.co")}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-3xl opacity-30">
@@ -237,14 +239,14 @@ export function RecipeCard({
     >
       {/* Image */}
       <div className="relative h-60 overflow-hidden bg-stone-100 dark:bg-zinc-800">
-        {recipe.image_url ? (
+        {recipeImageUrl ? (
           <Image
-            src={recipe.image_url}
+            src={recipeImageUrl}
             alt={recipe.name}
             fill
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-            unoptimized={!recipe.image_url.includes("supabase.co")}
+            unoptimized={!recipeImageUrl.includes("supabase.co")}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-card-cream dark:bg-zinc-800">
@@ -436,3 +438,4 @@ export function RecipeCard({
     </Card>
   )
 }
+

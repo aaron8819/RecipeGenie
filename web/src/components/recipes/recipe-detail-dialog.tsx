@@ -24,6 +24,7 @@ import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
 import { useState } from "react"
+import { getRecipeImageUrl } from "@/lib/supabase/storage"
 
 interface RecipeDetailDialogProps {
   open: boolean
@@ -48,6 +49,7 @@ export function RecipeDetailDialog({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   if (!recipe) return null
+  const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
 
   const handleDelete = () => {
     if (onDelete) {
@@ -79,14 +81,14 @@ export function RecipeDetailDialog({
           {/* Image — aspect 16/10, rounded-3xl; placeholder when no image */}
           <div className="p-6 pb-0">
             <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-card-cream dark:bg-zinc-800">
-              {recipe.image_url ? (
+              {recipeImageUrl ? (
                 <Image
-                  src={recipe.image_url}
+                  src={recipeImageUrl}
                   alt={recipe.name}
                   fill
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 672px"
-                  unoptimized={!recipe.image_url.includes("supabase.co")}
+                  unoptimized={!recipeImageUrl.includes("supabase.co")}
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -249,3 +251,4 @@ export function RecipeDetailDialog({
     </Dialog>
   )
 }
+

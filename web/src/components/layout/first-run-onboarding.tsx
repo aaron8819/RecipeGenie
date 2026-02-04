@@ -4,6 +4,9 @@ import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,23 +16,26 @@ import {
   ArrowRight,
   Check,
 } from "lucide-react"
-import { useUpdateUserConfig } from "@/hooks/use-planner"
-
-const ONBOARDING_SEEN_KEY = "recipe-genie-onboarding-seen"
+import { useUpdateUserConfig, useUserConfig } from "@/hooks/use-planner"
+import { useAuthContext } from "@/lib/auth-context"
 
 // Hook to check and manage onboarding state
 export function useFirstRunOnboarding() {
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const { isAuthenticated } = useAuthContext()
+  const { data: config, isLoading } = useUserConfig({ enabled: isAuthenticated })
 
   useEffect(() => {
-    const seen = localStorage.getItem(ONBOARDING_SEEN_KEY)
-    if (!seen) {
-      setShowOnboarding(true)
+    if (isLoading) return
+    if (!isAuthenticated) {
+      setShowOnboarding(false)
+      return
     }
-  }, [])
+    const completedAt = config?.onboarding_completed_at
+    setShowOnboarding(!completedAt)
+  }, [config?.onboarding_completed_at, isAuthenticated, isLoading])
 
   const completeOnboarding = () => {
-    localStorage.setItem(ONBOARDING_SEEN_KEY, "true")
     setShowOnboarding(false)
   }
 
@@ -54,18 +60,22 @@ const DAYS_OF_WEEK = [
 export function FirstRunOnboarding({ open, onComplete }: FirstRunOnboardingProps) {
   const [step, setStep] = useState(0)
   const [selectedDay, setSelectedDay] = useState(1) // Monday default
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const updateConfig = useUpdateUserConfig()
 
   const handleComplete = async () => {
     try {
+      setSaveError(null)
       await updateConfig.mutateAsync({
         week_start_day: selectedDay,
+        onboarding_completed_at: new Date().toISOString(),
       })
       onComplete()
     } catch (error) {
       console.error("Failed to save config:", error)
-      onComplete() // Still close on error
+      setSaveError("We couldn't save your settings. Please try again.")
+      // Keep onboarding open so user can retry
     }
   }
 
@@ -169,11 +179,20 @@ export function FirstRunOnboarding({ open, onComplete }: FirstRunOnboardingProps
           ))}
         </div>
 
-        <div className="text-center mb-6">
-          <h2 className="text-xl font-semibold">{currentStep.title}</h2>
-        </div>
+        <DialogHeader className="text-center mb-6">
+          <DialogTitle className="text-xl font-semibold">{currentStep.title}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {`Onboarding step ${step + 1} of ${steps.length}.`}
+          </DialogDescription>
+        </DialogHeader>
 
         {currentStep.content}
+
+        {saveError && (
+          <div className="mt-4 text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
+            {saveError}
+          </div>
+        )}
 
         <div className="flex gap-3 mt-6">
           {step > 0 && (

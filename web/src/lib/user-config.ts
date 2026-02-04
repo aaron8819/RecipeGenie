@@ -7,6 +7,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   excluded_keywords: [],
   history_exclusion_days: 10,
   week_start_day: 1,
+  onboarding_completed_at: null,
   category_overrides: {},
   custom_categories: [],
   category_order: null,

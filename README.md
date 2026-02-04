@@ -46,8 +46,12 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
    - `supabase/migrations/009_planner_settings.sql`
    - `supabase/migrations/010_add_recipe_images.sql`
    - `supabase/migrations/011_create_recipe_images_bucket.sql`
+   - `supabase/migrations/012_add_onboarding_completed_at.sql`
+   - `supabase/migrations/013_default_recipe_images.sql`
+   - `supabase/migrations/014_default_recipe_images_uuid_suffix.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 5. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
+6. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npx tsx scripts/upload-default-recipe-images.ts` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
 
 ### 2. Configure Environment
 

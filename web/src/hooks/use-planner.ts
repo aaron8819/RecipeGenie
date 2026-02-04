@@ -101,7 +101,7 @@ export function useRecipeHistory() {
 /**
  * Hook to fetch user config
  */
-export function useUserConfig() {
+export function useUserConfig(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...CONFIG_KEY],
     queryFn: async () => {
@@ -113,6 +113,7 @@ export function useUserConfig() {
 
       return resolveUserConfig(data as UserConfig | null, error)
     },
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -134,8 +135,24 @@ export function useUpdateUserConfig() {
         .select()
         .single()
 
-      if (error) throw error
-      return data as UserConfig
+      if (!error) {
+        return data as UserConfig
+      }
+
+      // If the row doesn't exist yet, upsert it with defaults
+      if (error.code === "PGRST116") {
+        const { data: upsertData, error: upsertError } = await supabase
+          .from("user_config")
+          // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
+          .upsert({ user_id: user!.id, ...updates }, { onConflict: "user_id" })
+          .select()
+          .single()
+
+        if (upsertError) throw upsertError
+        return upsertData as UserConfig
+      }
+
+      throw error
     },
     onSuccess: (data) => {
       queryClient.setQueryData([...CONFIG_KEY], data)

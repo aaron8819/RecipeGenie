@@ -90,7 +90,7 @@ export default function Home() {
     if (finalError) {
       let errorMessage = "Authentication error occurred."
       
-      if (finalErrorCode === "otp_expired") {
+      if (finalErrorCode === "otp_expired" || finalErrorCode === "link_expired") {
         errorMessage = "The confirmation link has expired. Please request a new confirmation email."
       } else if (finalErrorCode === "pkce_code_verifier_not_found") {
         errorMessage = "The confirmation link was opened in a different browser or session. Please try signing in directly - your email may already be confirmed."

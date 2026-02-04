@@ -12,6 +12,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string) => Promise<void>
+  resendConfirmation: (email: string) => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -104,6 +105,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const resendConfirmation = useCallback(async (email: string) => {
+    const supabase = getSupabase()
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+    })
+    if (error) throw error
+  }, [])
+
   const signOut = useCallback(async () => {
     const supabase = getSupabase()
     const { error } = await supabase.auth.signOut()
@@ -117,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!session,
     signIn,
     signUp,
+    resendConfirmation,
     signOut,
   }
 

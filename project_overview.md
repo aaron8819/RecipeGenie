@@ -128,7 +128,7 @@ One-time import of legacy `data/*.json` files into Supabase. Uses service role k
 |-------|--------|---------|
 | `recipes` | `id, user_id, name, category, servings, ingredients (JSONB with modifier support), instructions, favorite, created_at, updated_at` | Recipe collection |
 | `pantry_items` | `user_id, item (PK), created_at` | Items user has on hand |
-| `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, category_overrides, custom_categories[], category_order[], excluded_days[], preferred_days[], auto_assign_days` | User preferences |
+| `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, onboarding_completed_at, category_overrides, custom_categories[], category_order[], excluded_days[], preferred_days[], auto_assign_days` | User preferences |
 | `recipe_history` | `id, user_id, recipe_id (FK), date_made` | When recipes were cooked |
 | `weekly_plans` | `user_id, week_date (PK), recipe_ids[], day_assignments (JSONB), scale, generated_at` | Saved plans keyed by week start with day assignments |
 | `shopping_list` | `user_id (PK), items[], already_have[], excluded[], source_recipes[], scale, total_servings, custom_order, generated_at` | Current shopping list state |
@@ -268,9 +268,16 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-02-04 (v2.12.6)*
+*Last updated: 2026-02-04 (v2.13.0)*
 
-## Recent Updates (v2.12.6)
+## Recent Updates (v2.13.0)
+
+### Onboarding & Default Recipe Images (2026-02-04)
+- **Onboarding completion**: `user_config.onboarding_completed_at` tracks when first-run onboarding was completed; first-run onboarding only shows until user dismisses it (config updated via `useUpdateUserConfig`)
+- **Default recipe images**: Trigger `set_default_recipe_images` sets storage path for default recipes on insert (supports ID with UUID suffix); migrations 013/014 backfill existing defaults
+- **Upload script**: `web/scripts/upload-default-recipe-images.ts` uploads default images to `recipe-images/defaults/` (run with service role key); client resolves paths via `getRecipeImageUrl()`
+
+## Previous Updates (v2.12.6)
 
 ### Planner Refactor & Fixes (2026-02-04)
 - **Planner lib modules**: `planner-colors.ts` (category hex colors), `planner-utils.ts` (local date parsing, day-index conversion, stableRecipeHash), `user-config.ts` (default config, resolveUserConfig for fetch errors)

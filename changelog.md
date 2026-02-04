@@ -4,6 +4,35 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.13.0] - 2026-02-04
+
+**Summary:** Onboarding completion tracking and default recipe images for new users
+
+### Added
+
+- **Onboarding completion**:
+  - `user_config.onboarding_completed_at` (TIMESTAMPTZ, nullable) — stores when the user completed first-run onboarding
+  - First-run onboarding checks this field; on completion, updates user config via `useUpdateUserConfig` so the dialog does not show again
+  - Migration: `012_add_onboarding_completed_at.sql`
+
+- **Default recipe images**:
+  - Database trigger `set_default_recipe_images` on `recipes` (BEFORE INSERT): when `image_url` is null/empty, sets storage path (e.g. `defaults/mac-and-cheese.webp`) for the 8 default recipe slugs; supports recipe IDs with UUID suffix (`slug-uuid`) via `regexp_replace` to match base slug
+  - Migrations: `013_default_recipe_images.sql` (exact ID match + backfill), `014_default_recipe_images_uuid_suffix.sql` (ID suffix match + backfill)
+  - Script `web/scripts/upload-default-recipe-images.ts` — uploads default images from `.cursor/images` to Supabase Storage `recipe-images/defaults/`; run with `npx tsx scripts/upload-default-recipe-images.ts` (requires `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+
+### Changed
+
+- **First-run onboarding**: Uses `useUserConfig` for `onboarding_completed_at`; on "Got it" calls `useUpdateUserConfig` with `onboarding_completed_at: new Date().toISOString()`
+- **user_config types**: `DEFAULT_USER_CONFIG` and database types include `onboarding_completed_at: null`
+- **Recipe images**: Default recipes (inserted by signup trigger) now get `image_url` set to storage path; client resolves paths via `getRecipeImageUrl()` (already supports storage paths → public URL)
+
+### Technical Notes
+
+- Default image paths are storage-relative (e.g. `defaults/mac-and-cheese.webp`); public URL is resolved client-side via `getRecipeImageUrl()` in recipe-card and recipe-detail-dialog
+- Run migrations 012, 013, 014 in order after 011; upload default images to storage before or after so `defaults/*.webp` exist in the `recipe-images` bucket
+
+---
+
 ## [2.12.6] - 2026-02-04
 
 **Summary:** Planner refactor — shared lib modules, local-date handling, stale day-assignment pruning, and user-config error handling

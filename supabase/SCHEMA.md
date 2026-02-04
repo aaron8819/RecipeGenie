@@ -94,6 +94,7 @@ Stores user-specific configuration and preferences.
 | `excluded_keywords` | TEXT[] | DEFAULT '{}' | Keywords to exclude from recipe suggestions |
 | `history_exclusion_days` | INTEGER | DEFAULT 7 | Number of days to exclude recently made recipes |
 | `week_start_day` | INTEGER | DEFAULT 1 | Day of week that starts the meal plan (1 = Monday) |
+| `onboarding_completed_at` | TIMESTAMPTZ | DEFAULT NULL | Timestamp when the user completed onboarding |
 | `category_overrides` | JSONB | DEFAULT '{}' | User-defined category overrides for shopping list items (maps item names to category keys) |
 | `custom_categories` | JSONB | DEFAULT '[]' | User-defined shopping categories: `[{ "id": "uuid", "name": "Category Name", "order": number }]` |
 | `category_order` | JSONB | DEFAULT NULL | Custom order for all categories (array of category keys), null uses default order |
@@ -302,6 +303,16 @@ Trigger function that calls `insert_default_recipes_for_user()` when a new user 
 
 **Error Handling:** Wraps recipe insertion in a BEGIN/EXCEPTION block to log errors as warnings without failing the user creation transaction.
 
+### set_default_recipe_images()
+
+Trigger function that sets a default storage path for recipe images when a new recipe is inserted with null/empty `image_url`. Matches the 8 default recipe slugs (e.g. `mac-and-cheese`, `beef-and-broccoli`); supports recipe IDs with UUID suffix (e.g. `mac-and-cheese-550e8400-e29b-41d4-a716-446655440000`) by stripping the suffix before matching.
+
+**Returns:** `TRIGGER`
+
+**Language:** `plpgsql`
+
+**Usage:** BEFORE INSERT on `recipes`; sets `NEW.image_url` to path like `defaults/mac-and-cheese.webp`. Client resolves paths to public URLs via `getRecipeImageUrl()`.
+
 ## Triggers
 
 ### update_recipes_updated_at
@@ -323,6 +334,16 @@ Trigger function that calls `insert_default_recipes_for_user()` when a new user 
 **Function:** `handle_new_user()`
 
 **Description:** Automatically creates default recipes, user config, and shopping list when a new user signs up.
+
+### set_default_recipe_images
+
+**Table:** `recipes`
+
+**Event:** `BEFORE INSERT`
+
+**Function:** `set_default_recipe_images()`
+
+**Description:** Sets default storage path for recipe images when `image_url` is null/empty, for the 8 default recipe slugs (supports ID with UUID suffix). Public URLs are resolved client-side.
 
 ## Relationships
 
@@ -363,6 +384,9 @@ The schema has evolved through the following migrations:
 9. **009_planner_settings.sql** - Added `excluded_days`, `preferred_days`, and `auto_assign_days` to `user_config` for planner day placement rules and automatic day assignment
 10. **010_add_recipe_images.sql** - Added `image_url` column to `recipes` table for storing recipe image URLs (Supabase Storage paths or external URLs)
 11. **011_create_recipe_images_bucket.sql** - Created `recipe-images` storage bucket with RLS policies for secure user-specific image storage
+12. **012_add_onboarding_completed_at.sql** - Added `onboarding_completed_at` to `user_config` for user-scoped onboarding state
+13. **013_default_recipe_images.sql** - Added default recipe image mapping for new users and backfilled existing defaults
+14. **014_default_recipe_images_uuid_suffix.sql** - Updated default image mapping to handle recipe ID UUID suffixes and backfilled existing records
 
 ## Query Examples
 

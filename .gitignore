@@ -25,6 +25,7 @@ yarn-error.log*
 
 # IDE/Editor
 .cursor/
+.cursor/images/
 .claude/
 .vscode/
 .idea/

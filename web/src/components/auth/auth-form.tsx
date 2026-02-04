@@ -20,7 +20,10 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
   const [error, setError] = useState<string | null>(initialError || null)
   const [loading, setLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
-  const { signIn, signUp } = useAuth()
+  const [resendMessage, setResendMessage] = useState<string | null>(null)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null)
+  const { signIn, signUp, resendConfirmation } = useAuth()
 
   // Update error when initialError changes
   useEffect(() => {
@@ -33,12 +36,14 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
     e.preventDefault()
     setError(null)
     setSuccessMessage(null)
+    setResendMessage(null)
     setLoading(true)
 
     try {
       if (isSignUp) {
         await signUp(email, password)
         setSuccessMessage("Check your email for a confirmation link!")
+        setPendingEmail(email)
       } else {
         await signIn(email, password)
       }
@@ -49,6 +54,22 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
       setError(errorMessage)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (!pendingEmail) return
+    setResendLoading(true)
+    setResendMessage(null)
+    setError(null)
+    try {
+      await resendConfirmation(pendingEmail)
+      setResendMessage("Confirmation email sent. Check your inbox.")
+    } catch (err: any) {
+      const errorMessage = err?.message || err?.error?.message || "Failed to resend confirmation email"
+      setError(errorMessage)
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -103,11 +124,46 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
             </div>
           )}
 
+          {resendMessage && (
+            <div className="text-sm text-sage-700 bg-sage-100 p-3 rounded-lg">
+              {resendMessage}
+            </div>
+          )}
+
           <Button type="submit" className="w-full h-11" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isSignUp ? "Sign Up" : "Sign In"}
           </Button>
         </form>
+
+        {isSignUp && successMessage && pendingEmail && (
+          <div className="mt-4 space-y-3 text-center">
+            <p className="text-xs text-muted-foreground">
+              Didn&apos;t get the email? It can take a minute.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-10"
+              onClick={handleResend}
+              disabled={resendLoading}
+            >
+              {resendLoading ? "Sending..." : "Resend confirmation email"}
+            </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(false)
+                setError(null)
+                setResendMessage(null)
+                setPendingEmail(null)
+              }}
+              className="text-sm text-primary hover:underline transition-colors"
+            >
+              Already confirmed? Sign in
+            </button>
+          </div>
+        )}
 
         <div className="mt-6 text-center">
           <button
@@ -116,6 +172,8 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
               setIsSignUp(!isSignUp)
               setError(null)
               setSuccessMessage(null)
+              setResendMessage(null)
+              setPendingEmail(null)
             }}
             className="text-sm text-primary hover:underline transition-colors"
           >
