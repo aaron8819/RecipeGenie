@@ -768,14 +768,20 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
-        className={`flex gap-2 items-center group ${isDragging ? "z-50" : ""}`}
+        className={`flex flex-col gap-2 sm:flex-row sm:items-center group ${isDragging ? "z-50" : ""}`}
       >
-        {dragHandle}
-        {amountInput}
-        {unitInput}
-        {itemInput}
-        {modifierInput}
-        {deleteButton}
+        <div className="flex items-center gap-2 sm:flex-[3]">
+          {dragHandle}
+          <div className="flex-1 min-w-0">
+            {itemInput}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 pl-6 sm:pl-0 sm:flex-[2]">
+          {amountInput}
+          {unitInput}
+          {modifierInput}
+          {deleteButton}
+        </div>
       </div>
     )
   }

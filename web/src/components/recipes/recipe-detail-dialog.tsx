@@ -23,7 +23,7 @@ import { useToggleFavorite } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 
 interface RecipeDetailDialogProps {
@@ -47,40 +47,87 @@ export function RecipeDetailDialog({
 }: RecipeDetailDialogProps) {
   const toggleFavorite = useToggleFavorite()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showFloatingClose, setShowFloatingClose] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const imageRef = useRef<HTMLDivElement>(null)
 
-  if (!recipe) return null
-  const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
+  const recipeImageUrl = recipe ? getRecipeImageUrl(recipe.image_url) : null
 
   const handleDelete = () => {
-    if (onDelete) {
+    if (onDelete && recipe) {
       onDelete(recipe)
       setShowDeleteConfirm(false)
       onOpenChange(false)
     }
   }
 
+  const handleScroll = () => {
+    const content = contentRef.current
+    const image = imageRef.current
+    if (!content || !image) return
+    const threshold = Math.max(0, image.offsetHeight - 24)
+    setShowFloatingClose(content.scrollTop > threshold)
+  }
+
+  useEffect(() => {
+    if (!open) {
+      setShowFloatingClose(false)
+      return
+    }
+    const id = requestAnimationFrame(handleScroll)
+    return () => cancelAnimationFrame(id)
+  }, [open, recipeImageUrl])
+
+  useEffect(() => {
+    if (!open) return
+    const onResize = () => handleScroll()
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [open])
+
+  if (!recipe) return null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
-        className="max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto scrollbar-recipe-dialog"
+        ref={contentRef}
+        onScroll={handleScroll}
+        className="relative max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto scrollbar-recipe-dialog"
       >
         {/* Custom close — recipemodal_redesign */}
         <DialogTitle className="sr-only">{recipe.name}</DialogTitle>
-        <DialogClose asChild>
-          <button
-            type="button"
-            className="absolute top-6 right-6 z-10 bg-white/80 dark:bg-black/40 backdrop-blur-md p-2 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200"
-            aria-label="Close"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </DialogClose>
-
+        <div
+          className={cn(
+            "sticky top-3 z-20 h-0 transition-all duration-200 ease-out",
+            showFloatingClose ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
+          )}
+        >
+          <div className="flex justify-end px-4">
+            <DialogClose asChild>
+              <button
+                type="button"
+                className="pointer-events-auto bg-white/90 dark:bg-black/50 backdrop-blur-md p-1.5 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200 shadow-md"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </DialogClose>
+          </div>
+        </div>
         <div>
           {/* Image — aspect 16/10, rounded-3xl; placeholder when no image */}
           <div className="p-6 pb-0">
-            <div className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-card-cream dark:bg-zinc-800">
+            <div ref={imageRef} className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-card-cream dark:bg-zinc-800">
+              <DialogClose asChild>
+                <button
+                  type="button"
+                  className="absolute top-4 right-4 z-10 bg-white/85 dark:bg-black/50 backdrop-blur-md p-2 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200 shadow-md"
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </DialogClose>
               {recipeImageUrl ? (
                 <Image
                   src={recipeImageUrl}
@@ -251,4 +298,5 @@ export function RecipeDetailDialog({
     </Dialog>
   )
 }
+
 

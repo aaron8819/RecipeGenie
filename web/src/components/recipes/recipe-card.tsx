@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type { Recipe } from "@/types/database"
 import { cn } from "@/lib/utils"
-import { getTagClassName, getTagColor } from "@/lib/tag-colors"
+import { getTagColor } from "@/lib/tag-colors"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 
 /** Stitch recipes_redesign: category pill classes for grid cards */
@@ -72,9 +72,9 @@ export function RecipeCard({
             onClick?.(recipe)
           }
         }}
-        className="recipe-card group flex items-center justify-between p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 animate-fade-in cursor-pointer w-full"
+        className="recipe-card group flex items-center justify-between p-4 md:p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 active:scale-[0.98] animate-fade-in cursor-pointer w-full"
       >
-        <div className="flex items-center gap-6 min-w-0 flex-1">
+        <div className="flex items-start md:items-center gap-4 md:gap-6 min-w-0 flex-1">
           {/* Image with favorite overlay — reference: w-32 h-32 rounded-2xl, heart top-left */}
           <div className="relative flex-shrink-0">
             <button
@@ -85,7 +85,9 @@ export function RecipeCard({
               }}
               className={cn(
                 "absolute top-2 left-2 p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur rounded-full z-10 transition-opacity",
-                recipe.favorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                recipe.favorite
+                  ? "opacity-100"
+                  : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
               )}
               aria-label={recipe.favorite ? "Remove from favorites" : "Add to favorites"}
             >
@@ -96,7 +98,7 @@ export function RecipeCard({
                 )}
               />
             </button>
-            <div className="w-32 h-32 rounded-2xl overflow-hidden bg-stone-100 dark:bg-slate-700 shadow-inner">
+            <div className="w-28 h-28 md:w-32 md:h-32 rounded-2xl overflow-hidden bg-stone-100 dark:bg-slate-700 shadow-inner">
               {recipeImageUrl ? (
                 <Image
                   src={recipeImageUrl}
@@ -115,15 +117,18 @@ export function RecipeCard({
           </div>
 
           {/* Title, tags, history */}
-          <div className="min-w-0 flex-1">
-            <h3 className="font-display text-2xl font-semibold mb-2 text-slate-900 dark:text-white line-clamp-2">
-              {recipe.name}
-            </h3>
+          <div className="min-w-0 flex-1 flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="font-display text-lg md:text-2xl font-semibold text-slate-900 dark:text-white line-clamp-2">
+                {recipe.name}
+              </h3>
+              <ChevronRight className="h-4 w-4 text-slate-300 md:hidden mt-1 flex-shrink-0" />
+            </div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
               {recipe.category && (
                 <span
                   className={cn(
-                    "px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider",
+                    "px-2.5 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider md:px-3 md:py-1 md:text-xs md:rounded-full",
                     categoryColor.bg,
                     categoryColor.text
                   )}
@@ -142,7 +147,7 @@ export function RecipeCard({
                       onTagClick?.(tag)
                     }}
                     className={cn(
-                      "px-3 py-1 text-xs font-medium rounded-full",
+                      "px-2.5 py-0.5 text-[10px] font-medium rounded-md md:px-3 md:py-1 md:text-xs md:rounded-full",
                       tagColor.bg,
                       tagColor.text,
                       onTagClick && "cursor-pointer hover:opacity-80 transition-opacity"
@@ -154,16 +159,69 @@ export function RecipeCard({
                 )
               })}
             </div>
-            <p className="-mt-0.5 text-sm text-slate-400 dark:text-slate-500 font-medium">
+            <p className="-mt-0.5 text-xs md:text-sm text-slate-400 dark:text-slate-500 font-medium">
               {timesMade > 0
                 ? `Made ${timesMade}x${lastMade ? ` • Last: ${new Date(lastMade).toLocaleDateString()}` : ""}`
                 : "Not made yet"}
             </p>
+
+            <div className="flex justify-end gap-2 md:hidden">
+              {onMarkAsMade && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onMarkAsMade?.(recipe)
+                  }}
+                  disabled={isMarkingAsMade}
+                  className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                  title="Mark as Done"
+                >
+                  {isMarkingAsMade ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Check className="h-5 w-5" />
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddToShoppingList?.(recipe)
+                }}
+                disabled={isAddingToShoppingList}
+                className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                title="Add to Shopping List"
+              >
+                {isAddingToShoppingList ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <ShoppingCart className="h-5 w-5" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onAddToPlan?.(recipe)
+                }}
+                disabled={isAddingToPlan}
+                className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                title="Plan Meal"
+              >
+                {isAddingToPlan ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <CalendarPlus className="h-5 w-5" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Action icons — reference: check_circle, shopping_cart, calendar_today, divider, chevron_right */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="hidden md:flex items-center gap-1 flex-shrink-0">
           {onMarkAsMade && (
             <button
               type="button"
@@ -438,4 +496,8 @@ export function RecipeCard({
     </Card>
   )
 }
+
+
+
+
 

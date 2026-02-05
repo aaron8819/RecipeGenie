@@ -114,7 +114,10 @@ export function RecipeList() {
   const [category, setCategory] = useState<string | null>(null)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [favoritesOnly, setFavoritesOnly] = useState(false)
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window === "undefined") return "grid"
+    return window.innerWidth < 768 ? "list" : "grid"
+  })
   const [sortBy, setSortBy] = useState<SortOption>("lastMade")
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
@@ -124,6 +127,13 @@ export function RecipeList() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [skeletonDelayed, setSkeletonDelayed] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (window.innerWidth < 768) {
+      setViewMode("list")
+    }
+  }, [])
 
   const { data: recipes, isLoading, isFetching } = useRecipes({
     category,
@@ -227,29 +237,29 @@ export function RecipeList() {
 
 
   const pillOutline =
-    "flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-full font-medium transition-all text-sm hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
+    "flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-full font-medium transition-all text-xs md:text-sm hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
 
   return (
     <div className="w-full min-w-0 overflow-x-hidden">
       {/* Search — full width, generous spacing below */}
-      <div className="relative mb-8 p-1">
-        <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400 dark:text-slate-500 pointer-events-none" />
+      <div className="relative mb-6 md:mb-8 p-1">
+        <Search className="absolute left-4 md:left-5 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-slate-400 dark:text-slate-500 pointer-events-none" />
         <Input
           placeholder="Search recipes by name, ingredient, or cuisine..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-auto py-5 pl-12 pr-5 text-base bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary rounded-2xl placeholder:text-slate-400 outline-none transition-all"
+          className="w-full h-auto py-3.5 md:py-5 pl-10 md:pl-12 pr-4 md:pr-5 text-sm md:text-base bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary rounded-2xl placeholder:text-slate-400 outline-none transition-all"
         />
       </div>
 
       {/* Single row spanning full width: filters left, Settings + Add Recipe right */}
-      <div className="flex flex-nowrap items-center justify-between gap-4 md:gap-6 mb-10 w-full min-w-0 overflow-x-auto pb-1 scrollbar-thin">
+      <div className="flex flex-col md:flex-row md:flex-nowrap md:items-center md:justify-between gap-4 md:gap-6 mb-8 md:mb-10 w-full min-w-0">
         {/* Left: All categories, Filter by tags, Favorites, Recently Made, divider, view toggle */}
-        <div className="flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
+        <div className="flex flex-nowrap items-center gap-3 md:gap-4 min-w-0 overflow-x-auto md:overflow-visible pb-1 md:pb-0 scrollbar-thin">
           <Select value={category || "all"} onValueChange={(v) => setCategory(v === "all" ? null : v)}>
             <SelectTrigger
               className={cn(
-                "flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm h-auto w-auto min-w-0 shrink-0 transition-all",
+                "flex items-center gap-2 px-4 md:px-4 py-2 md:py-2.5 rounded-full font-medium text-xs md:text-sm h-auto w-auto min-w-0 shrink-0 transition-all",
                 !category
                   ? "bg-primary text-primary-foreground border-0 shadow-md shadow-primary/20 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 hover:brightness-105"
                   : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
@@ -275,7 +285,7 @@ export function RecipeList() {
                 value={selectedTags}
                 onChange={setSelectedTags}
                 placeholder="Filter by tags"
-                className="w-auto [&>button]:rounded-full [&>button]:px-4 [&>button]:py-2.5 [&>button]:text-sm [&>button]:border-slate-200 [&>button]:dark:border-slate-700 [&>button]:text-slate-600 [&>button]:dark:text-slate-300 [&>button]:whitespace-nowrap [&>button]:transition-all [&>button]:hover:bg-slate-100 [&>button]:dark:hover:bg-slate-600 [&>button]:hover:border-slate-300 [&>button]:dark:hover:border-slate-500 [&>button]:hover:text-slate-800 [&>button]:dark:hover:text-slate-100"
+                className="w-[130px] md:w-[140px] [&>button]:rounded-full [&>button]:px-3 md:[&>button]:px-4 [&>button]:py-2 md:[&>button]:py-2.5 [&>button]:text-xs md:[&>button]:text-sm [&>button]:border-slate-200 [&>button]:dark:border-slate-700 [&>button]:text-slate-600 [&>button]:dark:text-slate-300 [&>button]:whitespace-nowrap [&>button]:transition-all [&>button]:hover:bg-slate-100 [&>button]:dark:hover:bg-slate-600 [&>button]:hover:border-slate-300 [&>button]:dark:hover:border-slate-500 [&>button]:hover:text-slate-800 [&>button]:dark:hover:text-slate-100"
                 tagCounts={tagCounts}
               />
             </div>
@@ -285,7 +295,7 @@ export function RecipeList() {
             variant="ghost"
             onClick={() => setFavoritesOnly(!favoritesOnly)}
             className={cn(
-              "flex items-center gap-2 px-4 py-2.5 rounded-full font-medium transition-all text-sm shrink-0 border border-slate-200 dark:border-slate-700",
+              "flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-full font-medium transition-all text-xs md:text-sm shrink-0 border border-slate-200 dark:border-slate-700",
               favoritesOnly
                 ? "text-red-600 dark:text-red-400 bg-white dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-200 dark:hover:border-red-800 hover:text-red-700 dark:hover:text-red-300"
                 : pillOutline
@@ -340,7 +350,7 @@ export function RecipeList() {
         </div>
 
         {/* Right: Settings, Add Recipe */}
-        <div className="flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
+        <div className="hidden md:flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
           <Button
             variant="outline"
             onClick={() => setIsSettingsOpen(true)}
@@ -476,7 +486,7 @@ export function RecipeList() {
       <button
         type="button"
         onClick={() => setIsAddDialogOpen(true)}
-        className="fixed bottom-24 right-6 lg:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-lg shadow-primary/40 hover:opacity-90 transition-opacity z-30"
+        className="fixed bottom-24 right-6 md:right-8 lg:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-xl shadow-primary/40 hover:opacity-90 transition-opacity z-30"
         aria-label="Add Recipe"
       >
         <Plus className="h-6 w-6" />

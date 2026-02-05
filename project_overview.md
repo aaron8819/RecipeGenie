@@ -268,9 +268,20 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-02-04 (v2.13.0)*
+*Last updated: 2026-02-04 (v2.13.1)*
 
-## Recent Updates (v2.13.0)
+## Recent Updates (v2.13.1)
+
+### Mobile UX & Component Updates (2026-02-04)
+- **Input/Textarea**: `text-[16px]` on mobile to prevent iOS zoom on focus; desktop remains `text-sm`.
+- **MultiSelect**: Uses Radix Popover instead of custom dropdown; search removed; accessible clear/remove (keyboard + role="button").
+- **Meal planner**: Mobile day numbers scroll to that day’s section (scrollToDay, data-day-date); aria-labels on day buttons.
+- **Recipe card**: Responsive padding/image size; smaller pills on mobile; favorite always visible on mobile; tap feedback.
+- **Recipe detail**: Explicit close button with aria-label.
+- **Recipe dialog**: Ingredient rows stack on mobile (item row, then amount/unit/modifier/delete).
+- **Recipe list**: Default list view on mobile, grid on desktop; responsive filter row; Settings/Add Recipe hidden on mobile (FAB only).
+
+## Previous Updates (v2.13.0)
 
 ### Onboarding & Default Recipe Images (2026-02-04)
 - **Onboarding completion**: `user_config.onboarding_completed_at` tracks when first-run onboarding was completed; first-run onboarding only shows until user dismisses it (config updated via `useUpdateUserConfig`)

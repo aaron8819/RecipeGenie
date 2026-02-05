@@ -172,6 +172,13 @@ function isDateInWeekRange(dateStr: string, weekStartDate: string): boolean {
   return date >= weekStart && date <= weekEnd
 }
 
+function formatLocalISODate(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, "0")
+  const day = `${date.getDate()}`.padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
 
 /**
@@ -569,7 +576,11 @@ function MobileDayColumn({
   const dayNameLong = day.date.toLocaleDateString("en-US", { weekday: "long" })
 
   return (
-    <section className="space-y-4" data-day-index={dayIndex}>
+    <section
+      className="space-y-4"
+      data-day-index={dayIndex}
+      data-day-date={formatLocalISODate(day.date)}
+    >
       <div
         className={cn(
           "flex items-baseline justify-between pb-2",
@@ -1053,6 +1064,7 @@ export function MealPlanner() {
   const [isDatePickerOpenDesktop, setIsDatePickerOpenDesktop] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>("thisWeek")
+  const mobileDaysContainerRef = useRef<HTMLDivElement>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
   const [localDayAssignments, setLocalDayAssignments] = useState<Record<string, number> | null>(null)
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
@@ -1140,6 +1152,15 @@ export function MealPlanner() {
     if (currentWeekDate === nextWeekStart) return "nextWeek"
     return null // No tab matches (viewing a different week)
   }, [currentWeekDate, mobileWeekTab, config?.week_start_day])
+
+  const scrollToDay = useCallback((date: Date) => {
+    const key = formatLocalISODate(date)
+    const target = mobileDaysContainerRef.current?.querySelector<HTMLElement>(
+      `[data-day-date="${key}"]`
+    )
+    if (!target) return
+    target.scrollIntoView({ block: "start", behavior: "smooth" })
+  }, [])
 
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecipeHistory()
@@ -1707,7 +1728,7 @@ export function MealPlanner() {
       )}
 
       {/* Week navigation (mobile) + Add to Cart */}
-      <div className="space-y-4">
+      <div className="space-y-4 -mt-3 lg:mt-0">
       <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
         {/* Mobile: Today | This Week | Next Week (ref: planner_mobile_redesign) */}
         <nav className="lg:hidden flex border-b border-border-muted">
@@ -1936,16 +1957,25 @@ export function MealPlanner() {
                         <span className={cn("text-[10px] uppercase tracking-widest font-bold", isToday ? "text-primary dark:text-emerald-400" : "text-slate-400")}>
                           {d.dayName}
                         </span>
-                        <span className={cn("text-lg font-display font-medium", isToday && "font-bold text-primary dark:text-emerald-400")}>
+                        <button
+                          type="button"
+                          onClick={() => scrollToDay(d.date)}
+                          className={cn(
+                            "text-lg font-display font-medium transition-colors",
+                            isToday && "font-bold text-primary dark:text-emerald-400",
+                            !isToday && "text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-emerald-300"
+                          )}
+                          aria-label={`Scroll to ${d.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
+                        >
                           {d.dayNumber}
-                        </span>
+                        </button>
                         {isToday && <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary dark:bg-emerald-400 rounded-full" />}
                       </div>
                     )
                   })}
                 </div>
               )}
-              <div className="space-y-10">
+              <div className="space-y-10" ref={mobileDaysContainerRef}>
                 {mobileDays.map((day) => {
                   const dayIndex = weekDays.findIndex((w) => w.date.toDateString() === day.date.toDateString())
                   const dayRecipes = getRecipesByDay(dayIndex >= 0 ? dayIndex : 0)

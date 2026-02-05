@@ -4,6 +4,33 @@ All notable changes to Recipe Genie are documented here.
 
 ---
 
+## [2.13.1] - 2026-02-04
+
+**Summary:** Mobile UX improvements, MultiSelect refactor (Popover), planner scroll-to-day, and input/textarea zoom fix
+
+### Changed
+
+- **Input & Textarea (UI)**: `text-[16px] md:text-sm` so mobile browsers do not zoom on focus (iOS); desktop keeps `text-sm`.
+- **MultiSelect**: Replaced custom dropdown with Radix `Popover`; removed in-dropdown search; close-on-outside and focus management handled by Popover. Clear and remove-tag actions use `role="button"`, `onMouseDown`/`onClick`, and keyboard (Enter/Space) for accessibility. Option labels use `truncate` and `min-w-0` for overflow.
+- **Meal planner (mobile)**:
+  - Day numbers in the mobile week strip are buttons that scroll to that day’s section (`scrollToDay`, `mobileDaysContainerRef`, `data-day-date` on day sections).
+  - Added `formatLocalISODate` helper and `aria-label` on day buttons (e.g. “Scroll to Monday, February 4”).
+  - Layout: `-mt-3 lg:mt-0` on week nav; mobile days container ref for scroll-into-view.
+- **Recipe card**: Responsive padding and image size (`p-4 md:p-6`, `w-28 h-28 md:w-32 md:h-32`); category/tag pills smaller on mobile (`text-[10px]`/rounded-md, `md:text-xs`/rounded-full); favorite button always visible on mobile (`opacity-100 md:opacity-0 md:group-hover:opacity-100`); list card shows ChevronRight on mobile; `active:scale-[0.98]` tap feedback.
+- **Recipe detail dialog**: Explicit close button (top-right) with `DialogClose`, `aria-label="Close"`.
+- **Recipe dialog (ingredient row)**: SortableIngredientRow stacks on mobile: first row = drag handle + item, second row = amount, unit, modifier, delete (with `pl-6` on mobile); `sm:flex-row` for desktop.
+- **Recipe list**:
+  - Default view mode: list on mobile (<768px), grid on desktop; `useEffect` sets list on mount for narrow viewports.
+  - Filter row: responsive layout (`flex-col md:flex-row`), smaller pills/buttons on mobile (`text-xs md:text-sm`, `py-2 md:py-2.5`); MultiSelect trigger width `w-[130px] md:w-[140px]`.
+  - Settings and Add Recipe buttons hidden on mobile (Add Recipe FAB only); FAB position `md:right-8`, search input padding reduced on mobile.
+
+### Technical Notes
+
+- MultiSelect no longer uses internal search; relies on Radix Popover for positioning and dismiss behavior.
+- `getTagClassName` still used in MultiSelect for tag pill colors; recipe-card uses `getTagColor` only.
+
+---
+
 ## [2.13.0] - 2026-02-04
 
 **Summary:** Onboarding completion tracking and default recipe images for new users
