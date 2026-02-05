@@ -93,7 +93,7 @@ export function RecipeDetailDialog({
         hideCloseButton
         ref={contentRef}
         onScroll={handleScroll}
-        className="relative max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto scrollbar-recipe-dialog"
+        className="relative max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto scrollbar-recipe-dialog !top-2 !translate-y-0 !max-h-[calc(100dvh-1rem)] md:!top-6 md:!translate-y-0 md:!max-h-[calc(100dvh-3rem)]"
       >
         {/* Custom close — recipemodal_redesign */}
         <DialogTitle className="sr-only">{recipe.name}</DialogTitle>
