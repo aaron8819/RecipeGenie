@@ -1,5 +1,9 @@
 # Recipe Genie - Supabase Database Schema Documentation
 
+> **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
+
+*Last updated: 2026-02-08 (v2.13.1)*
+
 This document describes the complete database schema for the Recipe Genie application.
 
 ## Table of Contents

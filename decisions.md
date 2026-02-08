@@ -1,12 +1,16 @@
 # Architectural Decisions
 
+> **When to read:** You're making a major architectural decision, proposing a refactor, or need context on why something was built a certain way.
+
+*Last updated: 2026-02-08 (v2.13.1)*
+
 This document captures key architectural and design decisions for Recipe Genie, including rationale and tradeoffs.
 
 ---
 
 ## ADR-001: Flask Monolith with Single-File Backend
 
-**Status:** Accepted (inferred from existing implementation)
+**Status:** Superseded by ADR-010 (Next.js migration)
 
 **Context:** The application needed a web framework for a local meal planning tool.
 
@@ -31,7 +35,7 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ## ADR-002: JSON File Storage Instead of Database
 
-**Status:** Accepted (inferred from existing implementation)
+**Status:** Superseded by ADR-011 (Supabase)
 
 **Context:** Recipe, pantry, and configuration data needs to persist between sessions.
 
@@ -67,7 +71,7 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ## ADR-003: Single-Page Application with Vanilla JavaScript
 
-**Status:** Accepted (inferred from existing implementation)
+**Status:** Superseded by ADR-010 (Next.js migration)
 
 **Context:** The UI needs multiple views (planner, recipes, pantry, shopping list).
 
@@ -176,7 +180,7 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ## ADR-007: REST API Design
 
-**Status:** Accepted (inferred from existing implementation)
+**Status:** Superseded by ADR-011 (Supabase direct client queries)
 
 **Context:** Frontend needs to communicate with backend for all operations.
 
@@ -205,7 +209,7 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ## ADR-008: Input Validation on API Endpoints
 
-**Status:** Accepted (2026-01-09)
+**Status:** Superseded by ADR-011 (Supabase RLS + Zod client-side validation)
 
 **Context:** API endpoints accepted any JSON structure without validation. Malformed requests could corrupt data files or cause runtime errors.
 
@@ -244,7 +248,7 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ## ADR-009: Unified Shopping List Items Array
 
-**Status:** Accepted (2026-01-09)
+**Status:** Superseded (concept carried forward into Supabase schema)
 
 **Context:** Shopping lists had two separate arrays: `items` (from recipes) and `manual_items` (user-added). This required merging logic in multiple places (rendering, copying, persistence).
 
