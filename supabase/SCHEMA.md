@@ -188,6 +188,21 @@ Stores the user's shopping list state.
 | `custom_order` | BOOLEAN | DEFAULT FALSE | Whether the list has been manually reordered (disables auto-sorting) |
 | `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when list was generated |
 
+### plan_templates
+
+Stores reusable meal plan templates for quick loading.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Template ID |
+| `user_id` | UUID | NOT NULL, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the template |
+| `name` | TEXT | NOT NULL | User-assigned template name |
+| `recipe_ids` | TEXT[] | NOT NULL, DEFAULT '{}' | Recipe IDs in the template |
+| `day_assignments` | JSONB | DEFAULT NULL | Map of recipe_id → day-of-week (0=Sun..6=Sat) |
+| `category_selection` | JSONB | DEFAULT NULL | Category selection counts used to generate the plan |
+| `created_at` | TIMESTAMPTZ | DEFAULT NOW() | When the template was created |
+| `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | When the template was last updated |
+
 ## Storage Buckets
 
 ### recipe-images
@@ -240,6 +255,9 @@ Public storage bucket for recipe images. Images are organized by user ID in fold
 ### shopping_list
 - `idx_shopping_list_user_id` - Index on `user_id` for user-specific queries
 - `idx_shopping_list_unique_user` - Unique index on `user_id` to ensure one list per user
+
+### plan_templates
+- `idx_plan_templates_user_id` - Index on `user_id` for user-specific queries
 
 ## Row Level Security (RLS)
 
@@ -358,6 +376,7 @@ auth.users (Supabase Auth)
   ├── pantry_items (user_id → auth.users.id)
   ├── user_config (user_id → auth.users.id)
   ├── weekly_plans (user_id → auth.users.id)
+  ├── plan_templates (user_id → auth.users.id)
   └── shopping_list (user_id → auth.users.id)
 ```
 

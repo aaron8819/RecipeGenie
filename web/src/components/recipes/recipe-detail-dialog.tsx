@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, Pencil, Trash2, X, History, UtensilsCrossed } from "lucide-react"
+import { Heart, Pencil, Trash2, X, History, UtensilsCrossed, ChefHat } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,7 @@ import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
 import { useEffect, useRef, useState } from "react"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
+import { CookMode } from "./cook-mode"
 
 interface RecipeDetailDialogProps {
   open: boolean
@@ -48,6 +49,7 @@ export function RecipeDetailDialog({
   const toggleFavorite = useToggleFavorite()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showFloatingClose, setShowFloatingClose] = useState(false)
+  const [isCookMode, setIsCookMode] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
   const imageRef = useRef<HTMLDivElement>(null)
 
@@ -203,6 +205,15 @@ export function RecipeDetailDialog({
                     )}
                   />
                 </button>
+                {recipe.instructions && recipe.instructions.length > 0 && (
+                  <Button
+                    onClick={() => setIsCookMode(true)}
+                    className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold rounded-full px-6 py-2.5"
+                  >
+                    <ChefHat className="h-5 w-5" />
+                    Start Cooking
+                  </Button>
+                )}
                 {onEdit && (
                   <Button
                     variant="outline"
@@ -274,6 +285,14 @@ export function RecipeDetailDialog({
           )}
         </div>
       </DialogContent>
+
+      {/* Cook Mode Overlay */}
+      {isCookMode && recipe && (
+        <CookMode
+          recipe={recipe}
+          onClose={() => setIsCookMode(false)}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

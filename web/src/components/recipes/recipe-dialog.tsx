@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Image from "next/image"
-import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical, Upload, X } from "lucide-react"
+import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical, Upload, X, Link, Loader2 } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -50,6 +50,7 @@ import { useUndoToast } from "@/hooks/use-undo-toast"
 import { parseRecipeText, type ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
 import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
+import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 
 interface RecipeDialogProps {
@@ -87,9 +88,11 @@ export function RecipeDialog({
   
   // Import state
   const [importText, setImportText] = useState("")
+  const [importUrl, setImportUrl] = useState("")
   const [parseError, setParseError] = useState<string | null>(null)
   const [importStep, setImportStep] = useState<'input' | 'preview'>('input')
   const [parsedPreview, setParsedPreview] = useState<ParsedRecipe | null>(null)
+  const importFromUrl = useImportRecipeFromUrl()
 
   const { data: allTags = [] } = useAllTags()
   const { data: tagCounts = [] } = useTagsWithCounts()
@@ -108,6 +111,7 @@ export function RecipeDialog({
       setImagePreview(null)
       setMode("manual")
       setImportText("")
+      setImportUrl("")
       setParseError(null)
       setImportStep('input')
       setParsedPreview(null)
@@ -123,6 +127,7 @@ export function RecipeDialog({
       setImagePreview(null)
       setMode("manual")
       setImportText("")
+      setImportUrl("")
       setParseError(null)
       setImportStep('input')
       setParsedPreview(null)
@@ -180,6 +185,45 @@ export function RecipeDialog({
         error instanceof Error
           ? error.message
           : "Failed to parse recipe. Please check the format and try again."
+      )
+    }
+  }
+
+  const handleUrlImport = async () => {
+    if (!importUrl.trim()) {
+      setParseError('Please enter a recipe URL')
+      return
+    }
+
+    try {
+      new URL(importUrl.trim())
+    } catch {
+      setParseError('Please enter a valid URL')
+      return
+    }
+
+    setParseError(null)
+    try {
+      const result = await importFromUrl.mutateAsync(
+        importUrl.trim()
+      )
+      setParsedPreview({
+        name: result.name,
+        ingredients: result.ingredients,
+        instructions: result.instructions,
+        servings: result.servings,
+        warnings: result.warnings,
+      })
+      // Store the extracted image URL for later
+      if (result.imageUrl) {
+        setImageUrl(result.imageUrl)
+      }
+      setImportStep('preview')
+    } catch (err) {
+      setParseError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to import recipe from URL'
       )
     }
   }
@@ -374,6 +418,51 @@ export function RecipeDialog({
             <TabsContent value="import" className="space-y-4 mt-0 flex-1 overflow-y-auto pb-8 px-8 scrollbar-recipe-dialog data-[state=inactive]:hidden">
               {importStep === 'input' ? (
                 <>
+                  <div className="space-y-2">
+                    <Label htmlFor="import-url">Import from URL</Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="import-url"
+                          value={importUrl}
+                          onChange={(e) => {
+                            setImportUrl(e.target.value)
+                            setParseError(null)
+                          }}
+                          placeholder="https://www.example.com/recipe..."
+                          className="pl-9 font-mono text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleUrlImport()
+                            }
+                          }}
+                        />
+                      </div>
+                      <Button
+                        onClick={handleUrlImport}
+                        disabled={importFromUrl.isPending}
+                        className="shrink-0"
+                      >
+                        {importFromUrl.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Importing...
+                          </>
+                        ) : (
+                          'Import'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="relative flex items-center gap-4 py-1">
+                    <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+                    <span className="text-xs text-muted-foreground font-medium">or paste text</span>
+                    <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="import-text">Paste Recipe Text</Label>
                     <Textarea

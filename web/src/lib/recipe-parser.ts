@@ -202,13 +202,16 @@ const UNIT_ABBREVIATIONS = [
  * - "Salt & black pepper to taste"
  * - "½–1 cup chicken broth"
  */
-function parseIngredientLine(line: string): Ingredient {
+export function parseIngredientLine(line: string): Ingredient {
   let cleaned = line.trim()
 
   // Remove list markers (bullets, dashes, dots) at the start, but preserve numbers
   // This handles cases like "• 1 cup" or "- 2 tbsp" but keeps "1 cup" intact
   cleaned = cleaned.replace(/^[\-\*•\.]\s+/, "")
   cleaned = cleaned.trim()
+
+  // Preserve the cleaned text before parsing
+  const originalText = cleaned
 
   // Skip empty lines or section headers
   if (!cleaned || cleaned.toLowerCase().includes("ingredients")) {
@@ -281,6 +284,7 @@ function parseIngredientLine(line: string): Ingredient {
       amount: amount,
       unit: unit,
       modifier: modifier || undefined,
+      originalText,
     }
   }
 
@@ -292,6 +296,7 @@ function parseIngredientLine(line: string): Ingredient {
     amount: null,
     unit: "",
     modifier: modifier || undefined,
+    originalText,
   }
 }
 

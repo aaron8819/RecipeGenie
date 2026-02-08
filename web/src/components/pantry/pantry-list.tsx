@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useCallback } from "react"
-import { Plus, X, Package, Ban, Loader2 } from "lucide-react"
+import { Plus, X, Package, Ban, Loader2, ChefHat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,10 +15,12 @@ import {
   useRemoveExcludedKeyword,
 } from "@/hooks/use-pantry"
 import { useUndoToast } from "@/hooks/use-undo-toast"
+import { WhatCanIMake } from "./what-can-i-make"
 
 export function PantryList() {
   const [newItem, setNewItem] = useState("")
   const [newKeyword, setNewKeyword] = useState("")
+  const [isWhatCanIMakeOpen, setIsWhatCanIMakeOpen] = useState(false)
   const [pendingPantryDeletion, setPendingPantryDeletion] = useState<string | null>(null)
   const [pendingKeywordDeletion, setPendingKeywordDeletion] = useState<string | null>(null)
 
@@ -130,7 +132,19 @@ export function PantryList() {
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
+    <div className="space-y-6">
+      {/* What Can I Make? button */}
+      <div className="flex justify-end">
+        <Button
+          onClick={() => setIsWhatCanIMakeOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <ChefHat className="h-4 w-4" />
+          What Can I Make?
+        </Button>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2">
       {/* Pantry Items */}
       <Card>
         <CardHeader>
@@ -252,6 +266,13 @@ export function PantryList() {
           )}
         </CardContent>
       </Card>
+    </div>
+
+      {/* What Can I Make? Dialog */}
+      <WhatCanIMake
+        open={isWhatCanIMakeOpen}
+        onOpenChange={setIsWhatCanIMakeOpen}
+      />
     </div>
   )
 }

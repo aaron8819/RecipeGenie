@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2 } from "lucide-react"
+import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
@@ -21,6 +21,7 @@ import {
 import { useRecipeHistory, useMarkRecipeAsMade, useUnmarkRecipeAsMade } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
+import { downloadRecipesAsJson } from "@/lib/recipe-export"
 import type { Recipe, RecipeHistory } from "@/types/database"
 
 interface RecipeStats {
@@ -351,6 +352,21 @@ export function RecipeList() {
 
         {/* Right: Settings, Add Recipe */}
         <div className="hidden md:flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (displayRecipes.length > 0) {
+                downloadRecipesAsJson(displayRecipes)
+              }
+            }}
+            disabled={displayRecipes.length === 0}
+            className={cn(pillOutline, "shrink-0")}
+            title="Export all recipes as JSON"
+          >
+            <Download className="h-4 w-4 shrink-0" />
+            Export
+          </Button>
+
           <Button
             variant="outline"
             onClick={() => setIsSettingsOpen(true)}

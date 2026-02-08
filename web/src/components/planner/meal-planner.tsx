@@ -46,6 +46,8 @@ import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import { AddRecipeToPlanModal } from "./add-recipe-to-plan-modal"
 import { PlanSettingsModal } from "./plan-settings-modal"
+import { SaveTemplateDialog } from "./save-template-dialog"
+import { LoadTemplateDialog } from "./load-template-dialog"
 import {
   useWeeklyPlan,
   useWeeklyPlanRecipes,
@@ -65,7 +67,7 @@ import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useCategories, useToggleFavorite, useRecipes } from "@/hooks/use-recipes"
 import { EmptyState } from "@/components/ui/empty-state"
-import { CalendarDays, BookOpen } from "lucide-react"
+import { CalendarDays, BookOpen, Save, FolderOpen } from "lucide-react"
 import { getTagClassName, getTagColor } from "@/lib/tag-colors"
 import { getCategoryHexColor } from "@/lib/planner-colors"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
@@ -78,6 +80,7 @@ import {
   getUnassignedDayOfWeek,
 } from "@/lib/planner-utils"
 import { cn } from "@/lib/utils"
+import { getSupabase } from "@/lib/supabase/client"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -96,7 +99,8 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import type { Recipe, RecipeHistory } from "@/types/database"
+import { useSaveWeeklyPlan } from "@/hooks/use-planner"
+import type { Recipe, RecipeHistory, PlanTemplate } from "@/types/database"
 
 /**
  * Get the most recent "made" date for each recipe from history
@@ -1063,6 +1067,8 @@ export function MealPlanner() {
   const [isDatePickerOpenMobile, setIsDatePickerOpenMobile] = useState(false)
   const [isDatePickerOpenDesktop, setIsDatePickerOpenDesktop] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false)
+  const [isLoadTemplateOpen, setIsLoadTemplateOpen] = useState(false)
   const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>("thisWeek")
   const mobileDaysContainerRef = useRef<HTMLDivElement>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
@@ -1175,6 +1181,7 @@ export function MealPlanner() {
   const addRecipeToPlan = useAddRecipeToPlan()
   const addToShoppingList = useAddToShoppingList()
   const toggleFavorite = useToggleFavorite()
+  const saveWeeklyPlan = useSaveWeeklyPlan()
   const undoToast = useUndoToast()
 
   // Build a map of recipe_id -> last made date
@@ -1272,6 +1279,59 @@ export function MealPlanner() {
     } catch (error) {
       // Error handling is done by the mutation itself
       console.error("Failed to add to shopping list:", error)
+    }
+  }
+
+  const handleLoadTemplate = async (template: PlanTemplate) => {
+    if (!currentWeekDate) return
+    try {
+      // Filter out deleted recipes
+      const { data: recipeRows } = await getSupabase()
+        .from('recipes')
+        .select('id')
+      const existingRecipeIds = new Set(
+        (recipeRows as { id: string }[] || [])
+          .map(r => r.id)
+      )
+      const validIds = template.recipe_ids.filter(
+        (id) => existingRecipeIds.has(id)
+      )
+      const missing =
+        template.recipe_ids.length - validIds.length
+
+      await saveWeeklyPlan.mutateAsync({
+        weekDate: currentWeekDate,
+        recipeIds: validIds,
+      })
+
+      // Apply day assignments if present
+      if (template.day_assignments) {
+        // Filter assignments to only include valid recipes
+        const validAssignments = Object.fromEntries(
+          Object.entries(template.day_assignments)
+            .filter(([id]) => existingRecipeIds.has(id))
+        )
+        setLocalDayAssignments(validAssignments)
+        saveDayAssignments.mutate({
+          weekDate: currentWeekDate,
+          dayAssignments: validAssignments,
+        })
+      }
+
+      // Apply category selection if present
+      if (template.category_selection) {
+        setSelection(
+          template.category_selection as Record<string, number>
+        )
+      }
+
+      let msg = `Template "${template.name}" loaded`
+      if (missing > 0) {
+        msg += ` (${missing} deleted recipe${missing !== 1 ? 's' : ''} removed)`
+      }
+      undoToast.show({ message: msg, duration: 4000 })
+    } catch (error) {
+      console.error('Failed to load template:', error)
     }
   }
 
@@ -1759,6 +1819,27 @@ export function MealPlanner() {
             Add recipe
           </Button>
           <Button
+            onClick={() => setIsSaveTemplateOpen(true)}
+            disabled={!displayedRecipes?.length}
+            variant="outline"
+            size="default"
+            title="Save current plan as template"
+          >
+            <Save className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Save Template</span>
+            <span className="sm:hidden">Save</span>
+          </Button>
+          <Button
+            onClick={() => setIsLoadTemplateOpen(true)}
+            variant="outline"
+            size="default"
+            title="Load a saved template"
+          >
+            <FolderOpen className="h-4 w-4 mr-2" />
+            <span className="hidden sm:inline">Load Template</span>
+            <span className="sm:hidden">Load</span>
+          </Button>
+          <Button
             onClick={handleGenerateShoppingList}
             disabled={addToShoppingList.isPending || !displayedRecipes?.length}
             variant="outline"
@@ -2077,6 +2158,22 @@ export function MealPlanner() {
           }
         }}
         isUpdating={updateConfig.isPending}
+      />
+
+      {/* Save Template Dialog */}
+      <SaveTemplateDialog
+        open={isSaveTemplateOpen}
+        onOpenChange={setIsSaveTemplateOpen}
+        recipeIds={weeklyPlan?.recipe_ids || []}
+        dayAssignments={recipeDayAssignments || null}
+        categorySelection={selection}
+      />
+
+      {/* Load Template Dialog */}
+      <LoadTemplateDialog
+        open={isLoadTemplateOpen}
+        onOpenChange={setIsLoadTemplateOpen}
+        onLoadTemplate={handleLoadTemplate}
       />
     </div>
   )

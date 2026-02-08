@@ -227,6 +227,7 @@ export interface Ingredient {
   unit: string
   shoppingCategory?: string
   modifier?: string
+  originalText?: string
 }
 
 export interface ShoppingItem {
@@ -254,3 +255,14 @@ export type UserConfig = Database["public"]["Tables"]["user_config"]["Row"]
 export type RecipeHistory = Database["public"]["Tables"]["recipe_history"]["Row"]
 export type WeeklyPlan = Database["public"]["Tables"]["weekly_plans"]["Row"]
 export type ShoppingList = Database["public"]["Tables"]["shopping_list"]["Row"]
+
+export interface PlanTemplate {
+  id: string
+  user_id: string
+  name: string
+  recipe_ids: string[]
+  day_assignments: Record<string, number> | null
+  category_selection: Record<string, number> | null
+  created_at: string
+  updated_at: string
+}

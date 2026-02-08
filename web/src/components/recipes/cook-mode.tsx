@@ -1,0 +1,251 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChefHat,
+  Check,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useWakeLock } from '@/hooks/use-wake-lock';
+import { cn, toFraction } from '@/lib/utils';
+import type { Recipe } from '@/types/database';
+
+interface CookModeProps {
+  recipe: Recipe;
+  onClose: () => void;
+}
+
+export function CookMode({ recipe, onClose }: CookModeProps) {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [checkedIngredients, setCheckedIngredients] =
+    useState<Set<number>>(new Set());
+  const [showIngredients, setShowIngredients] =
+    useState(false);
+
+  const wakeLock = useWakeLock();
+  const steps = recipe.instructions || [];
+  const ingredients = recipe.ingredients || [];
+  const totalSteps = steps.length;
+
+  // Request wake lock on mount
+  useEffect(() => {
+    wakeLock.request();
+    return () => {
+      wakeLock.release();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keyboard navigation
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          e.preventDefault();
+          setCurrentStep((s) =>
+            Math.min(s + 1, totalSteps - 1)
+          );
+          break;
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          e.preventDefault();
+          setCurrentStep((s) => Math.max(s - 1, 0));
+          break;
+        case 'Escape':
+          e.preventDefault();
+          onClose();
+          break;
+      }
+    },
+    [totalSteps, onClose]
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () =>
+      window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  // Prevent body scroll while cook mode is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  const toggleIngredient = (index: number) => {
+    setCheckedIngredients((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <ChefHat className="h-5 w-5 text-primary shrink-0" />
+          <h1 className="text-lg font-bold text-primary truncate">
+            {recipe.name}
+          </h1>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="shrink-0"
+          aria-label="Exit cook mode"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
+
+      {/* Ingredient Checklist (collapsible) */}
+      <div className="border-b border-border shrink-0">
+        <button
+          type="button"
+          onClick={() =>
+            setShowIngredients(!showIngredients)
+          }
+          className="w-full px-4 sm:px-6 py-3 flex items-center justify-between text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <span>
+            Ingredients ({checkedIngredients.size}/
+            {ingredients.length})
+          </span>
+          <ChevronRight
+            className={cn(
+              'h-4 w-4 transition-transform',
+              showIngredients && 'rotate-90'
+            )}
+          />
+        </button>
+        {showIngredients && (
+          <div className="px-4 sm:px-6 pb-4 max-h-48 overflow-y-auto">
+            <ul className="space-y-2">
+              {ingredients.map((ing, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    onClick={() => toggleIngredient(i)}
+                    className={cn(
+                      'flex items-center gap-3 w-full',
+                      'text-left text-sm py-1',
+                      'transition-colors',
+                      checkedIngredients.has(i) &&
+                        'text-muted-foreground'
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        'w-5 h-5 rounded border-2',
+                        'flex items-center justify-center',
+                        'shrink-0 transition-colors',
+                        checkedIngredients.has(i)
+                          ? 'bg-primary border-primary'
+                          : 'border-muted-foreground/40'
+                      )}
+                    >
+                      {checkedIngredients.has(i) && (
+                        <Check className="h-3 w-3 text-primary-foreground" />
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        checkedIngredients.has(i) &&
+                          'line-through'
+                      )}
+                    >
+                      {ing.amount != null && (
+                        <>
+                          {toFraction(ing.amount)}{' '}
+                          {ing.unit}{' '}
+                        </>
+                      )}
+                      {ing.item}
+                      {ing.modifier && (
+                        <span className="text-muted-foreground">
+                          , {ing.modifier}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Step Content */}
+      <div className="flex-1 flex items-center justify-center px-6 sm:px-12 py-8 overflow-y-auto">
+        {totalSteps > 0 ? (
+          <div className="max-w-2xl w-full text-center">
+            <div className="mb-6">
+              <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary text-primary-foreground font-bold text-xl">
+                {currentStep + 1}
+              </span>
+            </div>
+            <p className="text-xl sm:text-2xl md:text-4xl leading-relaxed text-foreground font-medium">
+              {steps[currentStep]}
+            </p>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-lg">
+            No instructions available.
+          </p>
+        )}
+      </div>
+
+      {/* Navigation Footer */}
+      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-t border-border shrink-0 gap-4">
+        <Button
+          variant="outline"
+          onClick={() =>
+            setCurrentStep((s) => Math.max(s - 1, 0))
+          }
+          disabled={currentStep === 0}
+          className="min-h-14 px-6 text-base"
+        >
+          <ChevronLeft className="h-5 w-5 mr-2" />
+          Previous
+        </Button>
+
+        <span className="text-sm text-muted-foreground font-medium">
+          Step {currentStep + 1} of {totalSteps}
+        </span>
+
+        <Button
+          onClick={() => {
+            if (currentStep < totalSteps - 1) {
+              setCurrentStep((s) => s + 1);
+            } else {
+              onClose();
+            }
+          }}
+          className="min-h-14 px-6 text-base"
+        >
+          {currentStep < totalSteps - 1 ? (
+            <>
+              Next
+              <ChevronRight className="h-5 w-5 ml-2" />
+            </>
+          ) : (
+            'Done'
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
