@@ -58,6 +58,7 @@ interface RecipeDialogProps {
   onOpenChange: (open: boolean) => void
   recipe?: Recipe
   categories: string[]
+  onRecipeCreated?: (recipe: Recipe) => void
 }
 
 export function RecipeDialog({
@@ -65,6 +66,7 @@ export function RecipeDialog({
   onOpenChange,
   recipe,
   categories,
+  onRecipeCreated,
 }: RecipeDialogProps) {
   const isEditing = !!recipe
   const createRecipe = useCreateRecipe()
@@ -342,7 +344,8 @@ export function RecipeDialog({
           updates: recipeData,
         })
       } else {
-        await createRecipe.mutateAsync(recipeData)
+        const created = await createRecipe.mutateAsync(recipeData)
+        onRecipeCreated?.(created as Recipe)
       }
       onOpenChange(false)
     } catch (error) {
@@ -363,8 +366,8 @@ export function RecipeDialog({
         hideCloseButton
         className={
           isEditing
-            ? "max-w-6xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-3xl overflow-hidden bg-card h-[90vh] max-h-[90vh] flex flex-col"
-            : "max-w-6xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92vh] flex flex-col"
+            ? "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-2xl sm:rounded-3xl overflow-hidden bg-card h-[90vh] max-h-[90vh] flex flex-col"
+            : "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92vh] flex flex-col"
         }
       >
         <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
@@ -388,34 +391,35 @@ export function RecipeDialog({
 
         {!isEditing && (
           <Tabs value={mode} onValueChange={(v) => setMode(v as "manual" | "import")} className="flex-1 min-h-0 flex flex-col">
-            <div className="px-8 pt-6 pb-4 flex justify-between items-center border-b border-stone-100 dark:border-zinc-900 flex-shrink-0">
-              <TabsList className="flex w-fit rounded-full p-1 bg-stone-100 dark:bg-zinc-900 gap-0">
+            <div className="px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 flex justify-between items-center border-b border-stone-100 dark:border-zinc-900 flex-shrink-0 gap-2">
+              <TabsList className="flex w-fit rounded-full p-1 bg-stone-100 dark:bg-zinc-900 gap-0 min-w-0">
                 <TabsTrigger
                   value="manual"
-                  className="flex items-center gap-2 px-5 py-1.5 rounded-full text-xs font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
+                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 rounded-full text-xs font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
                 >
-                  <PenTool className="h-[18px] w-[18px]" />
-                  Manual Entry
+                  <PenTool className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+                  <span className="hidden sm:inline">Manual Entry</span>
+                  <span className="sm:hidden">Manual</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="import"
-                  className="flex items-center gap-2 px-5 py-1.5 rounded-full text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
+                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 rounded-full text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
                 >
-                  <FileText className="h-[18px] w-[18px]" />
-                  Import from Text
+                  <FileText className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+                  Import
                 </TabsTrigger>
               </TabsList>
               <DialogClose asChild>
                 <button
                   type="button"
-                  className="p-2 hover:bg-stone-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-stone-400"
+                  className="p-2 hover:bg-stone-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-stone-400 shrink-0"
                   aria-label="Close"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </DialogClose>
             </div>
-            <TabsContent value="import" className="space-y-4 mt-0 flex-1 overflow-y-auto pb-8 px-8 scrollbar-recipe-dialog data-[state=inactive]:hidden">
+            <TabsContent value="import" className="space-y-4 mt-0 flex-1 overflow-y-auto pb-6 sm:pb-8 px-4 sm:px-8 scrollbar-recipe-dialog data-[state=inactive]:hidden">
               {importStep === 'input' ? (
                 <>
                   <div className="space-y-2">
@@ -565,7 +569,7 @@ Instructions:
                         Ingredients ({parsedPreview?.ingredients?.length || 0})
                       </div>
                       {parsedPreview?.ingredients && parsedPreview.ingredients.length > 0 ? (
-                        <ul className="text-sm space-y-1 max-h-32 overflow-y-auto">
+                        <ul className="text-sm space-y-1">
                           {parsedPreview.ingredients.map((ing, i) => (
                             <li key={i} className="flex gap-2">
                               <span className="text-muted-foreground">
@@ -590,7 +594,7 @@ Instructions:
                         Instructions ({parsedPreview?.instructions?.length || 0} steps)
                       </div>
                       {parsedPreview?.instructions && parsedPreview.instructions.length > 0 ? (
-                        <ol className="text-sm space-y-1 max-h-32 overflow-y-auto list-decimal list-inside">
+                        <ol className="text-sm space-y-1 list-decimal list-inside">
                           {parsedPreview.instructions.map((step, i) => (
                             <li key={i}>{step}</li>
                           ))}
@@ -675,7 +679,7 @@ Instructions:
           className={
             isEditing
               ? "px-4 sm:px-8 py-4 sm:py-6 bg-muted/50 dark:bg-zinc-900/50 border-t border-stone-200 dark:border-zinc-800 flex justify-end gap-3 flex-shrink-0"
-              : "px-8 py-6 border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex justify-end gap-3 flex-shrink-0"
+              : "px-4 sm:px-8 py-4 sm:py-6 border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex justify-end gap-3 flex-shrink-0"
           }
         >
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -840,14 +844,30 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
-        className={`grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 items-center bg-background dark:bg-zinc-900 border border-stone-100 dark:border-zinc-800 p-1.5 rounded-xl group ${isDragging ? "z-50" : ""}`}
+        className={`bg-background dark:bg-zinc-900 border border-stone-100 dark:border-zinc-800 p-1.5 rounded-xl group ${isDragging ? "z-50" : ""}`}
       >
-        {dragHandle}
-        {itemInput}
-        {amountInput}
-        {unitInput}
-        {modifierInput}
-        {deleteButton}
+        {/* Desktop: single row grid */}
+        <div className="hidden sm:grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 items-center">
+          {dragHandle}
+          {itemInput}
+          {amountInput}
+          {unitInput}
+          {modifierInput}
+          {deleteButton}
+        </div>
+        {/* Mobile: two rows */}
+        <div className="sm:hidden space-y-1.5">
+          <div className="flex items-center gap-2">
+            {dragHandle}
+            <div className="flex-1 min-w-0">{itemInput}</div>
+            {deleteButton}
+          </div>
+          <div className="flex items-center gap-2 pl-6">
+            {amountInput}
+            {unitInput}
+            {modifierInput}
+          </div>
+        </div>
       </div>
     )
   }
@@ -1156,7 +1176,7 @@ function RecipeFormContent({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
       {/* Left: lg:col-span-5 — Image, Name, Category, Servings, Tags */}
-      <div className="lg:col-span-5 border-r border-stone-100 dark:border-zinc-900 p-8 space-y-6">
+      <div className="lg:col-span-5 border-r border-stone-100 dark:border-zinc-900 p-4 sm:p-8 space-y-6">
         <div className="space-y-3">
           <h3 className={addLabelClass}>Recipe Image</h3>
           {hasImage ? (
@@ -1262,7 +1282,7 @@ function RecipeFormContent({
       </div>
 
       {/* Right: lg:col-span-7 — Ingredients, Instructions */}
-      <div className="lg:col-span-7 p-8 space-y-8">
+      <div className="lg:col-span-7 p-4 sm:p-8 space-y-8">
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className={addLabelClass}>Ingredients</h3>
@@ -1286,7 +1306,7 @@ function RecipeFormContent({
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-2">
-                <div className="grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 px-2 text-[9px] font-bold uppercase text-stone-400 dark:text-stone-500">
+                <div className="hidden sm:grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 px-2 text-[9px] font-bold uppercase text-stone-400 dark:text-stone-500">
                   <span aria-hidden="true" />
                   <span>Ingredient</span>
                   <span>Amt</span>

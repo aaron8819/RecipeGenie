@@ -79,6 +79,37 @@ export function useSavePlanTemplate() {
 }
 
 /**
+ * Rename a plan template.
+ */
+export function useRenamePlanTemplate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      templateId,
+      name,
+    }: {
+      templateId: string;
+      name: string;
+    }) => {
+      const supabase = getSupabase();
+      const { error } = await supabase
+        .from('plan_templates')
+        // @ts-expect-error - Supabase infers update params as never
+        .update({ name })
+        .eq('id', templateId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: TEMPLATES_KEY,
+      });
+    },
+  });
+}
+
+/**
  * Delete a plan template.
  */
 export function useDeletePlanTemplate() {

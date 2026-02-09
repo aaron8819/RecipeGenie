@@ -1808,15 +1808,31 @@ export function MealPlanner() {
             </button>
           ))}
         </nav>
-        <div className="flex items-center gap-2 lg:ml-auto shrink-0">
+        <div className="flex items-center gap-2 lg:ml-auto shrink-0 overflow-x-auto pb-1 lg:pb-0 scrollbar-thin">
           <Button
             onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
             disabled={!hasAnyRecipes}
             variant="outline"
             size="default"
+            className="shrink-0"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add recipe
+            <span className="hidden sm:inline">Add recipe</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
+          <Button
+            onClick={handleGenerateShoppingList}
+            disabled={addToShoppingList.isPending || !displayedRecipes?.length}
+            variant="outline"
+            size="default"
+            className="shrink-0 border-2 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary"
+          >
+            {addToShoppingList.isPending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <ShoppingCart className="h-4 w-4 mr-2" />
+            )}
+            Cart
           </Button>
           <Button
             onClick={() => setIsSaveTemplateOpen(true)}
@@ -1824,6 +1840,7 @@ export function MealPlanner() {
             variant="outline"
             size="default"
             title="Save current plan as template"
+            className="shrink-0"
           >
             <Save className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Save Template</span>
@@ -1834,24 +1851,11 @@ export function MealPlanner() {
             variant="outline"
             size="default"
             title="Load a saved template"
+            className="shrink-0"
           >
             <FolderOpen className="h-4 w-4 mr-2" />
             <span className="hidden sm:inline">Load Template</span>
             <span className="sm:hidden">Load</span>
-          </Button>
-          <Button
-            onClick={handleGenerateShoppingList}
-            disabled={addToShoppingList.isPending || !displayedRecipes?.length}
-            variant="outline"
-            size="default"
-            className="border-2 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary"
-          >
-            {addToShoppingList.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <ShoppingCart className="h-4 w-4 mr-2" />
-            )}
-            Add to Cart
           </Button>
         </div>
       </div>

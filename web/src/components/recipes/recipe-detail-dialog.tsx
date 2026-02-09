@@ -23,7 +23,7 @@ import { useToggleFavorite } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import { CookMode } from "./cook-mode"
 
@@ -48,10 +48,8 @@ export function RecipeDetailDialog({
 }: RecipeDetailDialogProps) {
   const toggleFavorite = useToggleFavorite()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showFloatingClose, setShowFloatingClose] = useState(false)
   const [isCookMode, setIsCookMode] = useState(false)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const imageRef = useRef<HTMLDivElement>(null)
+  const cookModeRecipeRef = useRef<Recipe | null>(null)
 
   const recipeImageUrl = recipe ? getRecipeImageUrl(recipe.image_url) : null
 
@@ -63,48 +61,31 @@ export function RecipeDetailDialog({
     }
   }
 
-  const handleScroll = () => {
-    const content = contentRef.current
-    const image = imageRef.current
-    if (!content || !image) return
-    const threshold = Math.max(0, image.offsetHeight - 24)
-    setShowFloatingClose(content.scrollTop > threshold)
-  }
-
-  useEffect(() => {
-    if (!open) {
-      setShowFloatingClose(false)
-      return
+  if (!recipe) {
+    // Render cook mode even when dialog recipe is null (dialog was closed to enter cook mode)
+    if (isCookMode && cookModeRecipeRef.current) {
+      return (
+        <CookMode
+          recipe={cookModeRecipeRef.current}
+          onClose={() => {
+            setIsCookMode(false)
+            cookModeRecipeRef.current = null
+          }}
+        />
+      )
     }
-    const id = requestAnimationFrame(handleScroll)
-    return () => cancelAnimationFrame(id)
-  }, [open, recipeImageUrl])
-
-  useEffect(() => {
-    if (!open) return
-    const onResize = () => handleScroll()
-    window.addEventListener("resize", onResize)
-    return () => window.removeEventListener("resize", onResize)
-  }, [open])
-
-  if (!recipe) return null
+    return null
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideCloseButton
-        ref={contentRef}
-        onScroll={handleScroll}
-        className="relative max-w-3xl w-full p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-[32px] overflow-hidden bg-card max-h-[90vh] overflow-y-auto scrollbar-recipe-dialog !top-2 !translate-y-0 !max-h-[calc(100dvh-1rem)] md:!top-6 md:!translate-y-0 md:!max-h-[calc(100dvh-3rem)]"
+        className="relative max-w-3xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-2xl sm:rounded-[32px] bg-card overflow-x-hidden overflow-y-auto scrollbar-recipe-dialog !top-2 !translate-y-0 !max-h-[calc(100dvh-1rem)] md:!top-6 md:!translate-y-0 md:!max-h-[calc(100dvh-3rem)]"
       >
         {/* Custom close — recipemodal_redesign */}
         <DialogTitle className="sr-only">{recipe.name}</DialogTitle>
-        <div
-          className={cn(
-            "sticky top-3 z-20 h-0 transition-all duration-200 ease-out",
-            showFloatingClose ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-1 pointer-events-none"
-          )}
-        >
+        <div className="sticky top-3 z-20 h-0">
           <div className="flex justify-end px-4">
             <DialogClose asChild>
               <button
@@ -119,17 +100,8 @@ export function RecipeDetailDialog({
         </div>
         <div>
           {/* Image — aspect 16/10, rounded-3xl; placeholder when no image */}
-          <div className="p-6 pb-0">
-            <div ref={imageRef} className="relative aspect-[16/10] overflow-hidden rounded-[24px] bg-card-cream dark:bg-zinc-800">
-              <DialogClose asChild>
-                <button
-                  type="button"
-                  className="absolute top-4 right-4 z-10 bg-white/85 dark:bg-black/50 backdrop-blur-md p-2 rounded-full hover:bg-white dark:hover:bg-black/60 transition-colors text-stone-800 dark:text-stone-200 shadow-md"
-                  aria-label="Close"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </DialogClose>
+          <div className="p-3 sm:p-6 pb-0">
+            <div className="relative aspect-[16/10] overflow-hidden rounded-2xl sm:rounded-[24px] bg-card-cream dark:bg-zinc-800">
               {recipeImageUrl ? (
                 <Image
                   src={recipeImageUrl}
@@ -148,7 +120,7 @@ export function RecipeDetailDialog({
           </div>
 
           {/* Header: title, category, history, heart, Edit — recipemodal_redesign */}
-          <div className="px-8 pt-8 pb-4">
+          <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h1 className="text-3xl md:text-4xl font-display font-bold text-primary dark:text-stone-100 mb-2">
@@ -187,7 +159,7 @@ export function RecipeDetailDialog({
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <button
                   type="button"
                   onClick={() =>
@@ -207,10 +179,14 @@ export function RecipeDetailDialog({
                 </button>
                 {recipe.instructions && recipe.instructions.length > 0 && (
                   <Button
-                    onClick={() => setIsCookMode(true)}
-                    className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold rounded-full px-6 py-2.5"
+                    onClick={() => {
+                      cookModeRecipeRef.current = recipe
+                      onOpenChange(false)
+                      setIsCookMode(true)
+                    }}
+                    className="flex items-center gap-2 bg-primary text-primary-foreground font-semibold rounded-full px-4 sm:px-6 py-2 sm:py-2.5 text-sm"
                   >
-                    <ChefHat className="h-5 w-5" />
+                    <ChefHat className="h-4 w-4 sm:h-5 sm:w-5" />
                     Start Cooking
                   </Button>
                 )}
@@ -218,9 +194,9 @@ export function RecipeDetailDialog({
                   <Button
                     variant="outline"
                     onClick={() => onEdit(recipe)}
-                    className="flex items-center gap-2 border-2 border-primary dark:border-stone-700 text-primary dark:text-stone-300 font-semibold rounded-full hover:bg-primary hover:text-primary-foreground dark:hover:bg-stone-700 dark:hover:text-stone-100 transition-all px-6 py-2.5"
+                    className="flex items-center gap-2 border-2 border-primary dark:border-stone-700 text-primary dark:text-stone-300 font-semibold rounded-full hover:bg-primary hover:text-primary-foreground dark:hover:bg-stone-700 dark:hover:text-stone-100 transition-all px-4 sm:px-6 py-2 sm:py-2.5 text-sm"
                   >
-                    <Pencil className="h-5 w-5" />
+                    <Pencil className="h-4 w-4 sm:h-5 sm:w-5" />
                     Edit Recipe
                   </Button>
                 )}
@@ -230,7 +206,7 @@ export function RecipeDetailDialog({
           </div>
 
           {/* Ingredients | Instructions — 2-col grid, recipemodal_redesign */}
-          <div className="px-8 pb-12 grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12">
+          <div className="px-4 sm:px-8 pb-12 grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12">
             <div className="md:col-span-4">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-primary dark:text-stone-200">Ingredients</h2>
@@ -272,7 +248,7 @@ export function RecipeDetailDialog({
 
           {/* Delete */}
           {onDelete && (
-            <div className="px-8 pb-8 pt-2 border-t border-stone-200 dark:border-stone-800 flex justify-end">
+            <div className="px-4 sm:px-8 pb-8 pt-2 border-t border-stone-200 dark:border-stone-800 flex justify-end">
               <Button
                 variant="outline"
                 onClick={() => setShowDeleteConfirm(true)}
@@ -285,14 +261,6 @@ export function RecipeDetailDialog({
           )}
         </div>
       </DialogContent>
-
-      {/* Cook Mode Overlay */}
-      {isCookMode && recipe && (
-        <CookMode
-          recipe={recipe}
-          onClose={() => setIsCookMode(false)}
-        />
-      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

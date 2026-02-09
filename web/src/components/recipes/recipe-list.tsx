@@ -513,6 +513,7 @@ export function RecipeList() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         categories={categories || []}
+        onRecipeCreated={(recipe) => setViewingRecipe(recipe)}
       />
 
       {/* Edit Dialog */}

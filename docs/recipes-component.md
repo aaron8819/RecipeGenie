@@ -26,8 +26,8 @@
 |------|-------|---------|
 | `components/recipes/recipe-list.tsx` | ~539 | Main container — filtering, sorting, search, dialog orchestration |
 | `components/recipes/recipe-card.tsx` | ~504 | Card display — grid and list view modes |
-| `components/recipes/recipe-dialog.tsx` | ~1,244 | Create/edit modal — manual entry + text import |
-| `components/recipes/recipe-detail-dialog.tsx` | ~150 | Read-only detail view with actions |
+| `components/recipes/recipe-dialog.tsx` | ~1,350 | Create/edit modal — manual entry + text/URL import |
+| `components/recipes/recipe-detail-dialog.tsx` | ~290 | Read-only detail view with actions, cook mode entry |
 | `components/recipes/add-to-plan-dialog.tsx` | ~100 | Add recipe to a weekly plan |
 | `components/recipes/recipe-settings-modal.tsx` | ~100 | Category and tag management settings |
 | `components/recipes/tag-management-modal.tsx` | ~100 | Tag rename, merge, delete |
@@ -100,8 +100,9 @@ RecipeDialog (create/edit)
 |   +-- Instructions
 |   +-- Image upload (Supabase Storage)
 |
-+-- Import from Text Tab
-    +-- Paste area -> parseRecipeText() -> preview -> apply
++-- Import Tab
+    +-- URL import -> /api/recipe-import -> preview -> apply
+    +-- Text paste -> parseRecipeText() -> preview -> apply
 
 RecipeSettingsModal
 +-- Categories Tab (reorder, rename, delete with dnd-kit)
@@ -175,14 +176,21 @@ Client-side OR logic: recipes with ANY selected tag pass the filter. Done client
 - **List:** Horizontal row with smaller image, text details, inline action icons (desktop) or dropdown menu (mobile)
 
 ### 2. Recipe Dialog (Create/Edit)
-- **Two tabs:** Manual entry and Import from text
-- **Ingredient management:** dnd-kit drag-reorder, inline editing (amount, unit, item, modifier)
+- **Three tabs (add mode):** Manual entry, Import from text, Import from URL
+- **URL import flow:** Paste URL → server-side fetch/parse via `/api/recipe-import` → preview → apply & edit
+- **Import preview:** Scrollable preview area (warnings + name/servings/ingredients/instructions). No individual section scroll limits — entire preview scrolls as one unit within the tab.
+- **Ingredient management:** dnd-kit drag-reorder, inline editing (amount, unit, item, modifier). On mobile, ingredient rows stack into two rows (item + drag/delete on top, amt/unit/modifier below). Column headers hidden on mobile.
 - **Image upload:** JPG/PNG/WebP, max 5MB, auto-compressed >1MB to 2000px width
 - **Validation:** Requires name, category, at least 1 ingredient
+- **Post-creation:** `onRecipeCreated` callback passes newly created recipe to parent. `RecipeList` opens the detail dialog for the new recipe.
+- **Mobile layout:** Responsive padding (`px-4 sm:px-8`), tab labels shortened ("Manual", "Import"), dialog width `w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)]` with `overflow-hidden`
 
 ### 3. Recipe Detail Dialog
-- Sticky floating close button (appears after scrolling past image)
+- **Always-visible floating close button** — sticky at top-right, glass-effect backdrop blur, no scroll-based show/hide
 - Image display (16:10 aspect), history stats, favorite toggle, edit/delete actions
+- **Action buttons wrap** on mobile (`flex-wrap`, reduced padding `px-4 sm:px-6`)
+- **Cook mode entry:** Closes dialog first, saves recipe to ref, renders `CookMode` independently via early-return path when `recipe` prop becomes null
+- **Mobile layout:** Responsive padding throughout (`p-3 sm:p-6`, `px-4 sm:px-8`), `overflow-x-hidden` prevents horizontal overflow, `rounded-2xl sm:rounded-[32px]`
 
 ### 4. Category Management
 - Drag-reorder categories (dnd-kit)
@@ -260,6 +268,12 @@ interface Ingredient {
 6. **Image handling**: Upload goes to Supabase Storage via `uploadRecipeImage()`. Delete old image before uploading new one. Placeholder shows cooking emoji if no `image_url`.
 
 7. **Category pill colors**: Hardcoded map (`REF_CATEGORY_PILL`) for chicken/beef/lamb/turkey/vegetarian. Custom categories fall back to `getTagColor()`.
+
+8. **Dialog mobile overflow**: Dialog containers need both `w-[calc(100%-Xrem)]` AND `overflow-x-hidden`. Width alone doesn't fix cutoff — internal content with fixed padding (`px-8`) or non-wrapping button rows will push content past the edge. Always make internal padding responsive (`px-4 sm:px-8`) and use `flex-wrap` on button rows.
+
+9. **Cook mode lifecycle**: `CookMode` must render outside the `Dialog` tree. The parent nulls the recipe prop when the dialog closes, so use a `useRef` to persist the recipe for cook mode. The early-return path (`if (!recipe)`) checks `isCookMode` and renders `CookMode` from the ref.
+
+10. **Duplicate close buttons**: When adding a persistent floating close button to a dialog, check for existing static close buttons (e.g., inside image areas) and remove them.
 
 ---
 

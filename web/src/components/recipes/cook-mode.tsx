@@ -91,7 +91,7 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-background flex flex-col h-[100dvh]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
@@ -209,21 +209,21 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
       </div>
 
       {/* Navigation Footer */}
-      <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-t border-border shrink-0 gap-4">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4 border-t border-border shrink-0 gap-2 sm:gap-4">
         <Button
           variant="outline"
           onClick={() =>
             setCurrentStep((s) => Math.max(s - 1, 0))
           }
           disabled={currentStep === 0}
-          className="min-h-14 px-6 text-base"
+          className="min-h-11 sm:min-h-14 px-3 sm:px-6 text-sm sm:text-base"
         >
-          <ChevronLeft className="h-5 w-5 mr-2" />
-          Previous
+          <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
+          Prev
         </Button>
 
-        <span className="text-sm text-muted-foreground font-medium">
-          Step {currentStep + 1} of {totalSteps}
+        <span className="text-xs sm:text-sm text-muted-foreground font-medium whitespace-nowrap">
+          {currentStep + 1} / {totalSteps}
         </span>
 
         <Button
@@ -234,12 +234,12 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
               onClose();
             }
           }}
-          className="min-h-14 px-6 text-base"
+          className="min-h-11 sm:min-h-14 px-3 sm:px-6 text-sm sm:text-base"
         >
           {currentStep < totalSteps - 1 ? (
             <>
               Next
-              <ChevronRight className="h-5 w-5 ml-2" />
+              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 ml-1 sm:ml-2" />
             </>
           ) : (
             'Done'

@@ -17,10 +17,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Trash2, Calendar } from 'lucide-react';
+import { Loader2, Trash2, Calendar, Pencil, Check, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import {
   usePlanTemplates,
   useDeletePlanTemplate,
+  useRenamePlanTemplate,
 } from '@/hooks/use-plan-templates';
 import { useRecipes } from '@/hooks/use-recipes';
 import type { PlanTemplate } from '@/types/database';
@@ -40,8 +42,11 @@ export function LoadTemplateDialog({
     usePlanTemplates();
   const { data: recipes } = useRecipes();
   const deleteTemplate = useDeletePlanTemplate();
+  const renameTemplate = useRenamePlanTemplate();
   const [deleteTarget, setDeleteTarget] =
     useState<PlanTemplate | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const handleLoad = (template: PlanTemplate) => {
     onLoadTemplate(template);
@@ -52,6 +57,26 @@ export function LoadTemplateDialog({
     if (!deleteTarget) return;
     await deleteTemplate.mutateAsync(deleteTarget.id);
     setDeleteTarget(null);
+  };
+
+  const startRename = (template: PlanTemplate) => {
+    setRenamingId(template.id);
+    setRenameValue(template.name);
+  };
+
+  const cancelRename = () => {
+    setRenamingId(null);
+    setRenameValue('');
+  };
+
+  const submitRename = async () => {
+    if (!renamingId || !renameValue.trim()) return;
+    await renameTemplate.mutateAsync({
+      templateId: renamingId,
+      name: renameValue.trim(),
+    });
+    setRenamingId(null);
+    setRenameValue('');
   };
 
   // Check which recipe IDs from a template still exist
@@ -99,44 +124,90 @@ export function LoadTemplateDialog({
                   return (
                     <div
                       key={template.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                      className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleLoad(template)
-                        }
-                        className="flex-1 text-left min-w-0"
-                      >
-                        <div className="font-medium truncate">
-                          {template.name}
-                        </div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                          <Calendar className="h-3 w-3" />
-                          {valid} recipe
-                          {valid !== 1 ? 's' : ''}
-                          {missing > 0 && (
-                            <span className="text-amber-600 dark:text-amber-400">
-                              ({missing} deleted)
-                            </span>
-                          )}
-                          <span>
-                            {new Date(
-                              template.created_at
-                            ).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() =>
-                          setDeleteTarget(template)
-                        }
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {renamingId === template.id ? (
+                        <>
+                          <div className="flex-1 min-w-0">
+                            <Input
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') submitRename();
+                                if (e.key === 'Escape') cancelRename();
+                              }}
+                              autoFocus
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={submitRename}
+                            disabled={!renameValue.trim() || renameTemplate.isPending}
+                            className="shrink-0 text-primary hover:text-primary"
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={cancelRename}
+                            className="shrink-0 text-muted-foreground"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleLoad(template)
+                            }
+                            className="flex-1 text-left min-w-0"
+                          >
+                            <div className="font-medium truncate">
+                              {template.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                              <Calendar className="h-3 w-3" />
+                              {valid} recipe
+                              {valid !== 1 ? 's' : ''}
+                              {missing > 0 && (
+                                <span className="text-amber-600 dark:text-amber-400">
+                                  ({missing} deleted)
+                                </span>
+                              )}
+                              <span>
+                                {new Date(
+                                  template.created_at
+                                ).toLocaleDateString()}
+                              </span>
+                            </div>
+                          </button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              startRename(template)
+                            }
+                            className="shrink-0 text-muted-foreground hover:text-primary"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              setDeleteTarget(template)
+                            }
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   );
                 })}

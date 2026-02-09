@@ -275,6 +275,8 @@ resolveUserConfig(data, error): UserConfig  // PGRST116 -> defaults, other error
 
 6. **PGRST116 handling**: `useUserConfig()` uses `resolveUserConfig()` — PGRST116 (no config row) returns defaults. Other Supabase errors are rethrown.
 
+7. **Action button overflow on mobile**: The planner toolbar (Add recipe, Cart, Save, Load) uses `overflow-x-auto scrollbar-thin` with `shrink-0` on each button — same pattern as the recipe filter pills. Button order: Add recipe, Cart, Save Template, Load Template. Labels shorten on mobile ("Add", "Cart", "Save", "Load").
+
 ---
 
 ## Related Documentation
