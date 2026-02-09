@@ -58,6 +58,7 @@ import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
+import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import { useRecipe, useRecipes, useCategories } from "@/hooks/use-recipes"
@@ -1172,22 +1173,10 @@ export function ShoppingListView() {
 
     if (activeIndex === -1 || overIndex === -1 || activeIndex >= filteredItems.length || overIndex >= filteredItems.length) return
 
-    // Map filtered indices to actual item indices in shoppingList.items
-    const activeItemFromFiltered = filteredItems[activeIndex]
-    const overItemFromFiltered = filteredItems[overIndex]
     const items = shoppingList.items
-    const actualActiveIndex = items.findIndex((i) => i.item === activeItemFromFiltered.item)
-    const actualOverIndex = items.findIndex((i) => i.item === overItemFromFiltered.item)
-
-    if (actualActiveIndex === -1 || actualOverIndex === -1) return
-
-    const draggedItem = items[actualActiveIndex]
-    const overItem = items[actualOverIndex]
-
-    // Create new array with reordered items
-    const newItems = [...items]
-    newItems.splice(activeIndex, 1)
-    newItems.splice(overIndex, 0, draggedItem)
+    const reorderResult = reorderByFilteredIndices(items, filteredItems, activeIndex, overIndex)
+    if (!reorderResult) return
+    const { newItems, draggedItem, overItem, actualOverIndex } = reorderResult
 
     // Check if the item is being moved to a different category
     const oldCategory = draggedItem.categoryKey
@@ -1203,7 +1192,7 @@ export function ShoppingListView() {
         categoryKey: newCategory,
         categoryOrder: categoryInfo?.order || 8,
       }
-      newItems[overIndex] = updatedItem
+      newItems[actualOverIndex] = updatedItem
 
       // Save category override for future shopping lists
       try {

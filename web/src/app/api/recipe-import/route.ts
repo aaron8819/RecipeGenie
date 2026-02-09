@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { extractRecipeFromHtml } from '@/lib/recipe-url-parser';
+import { fetchRecipeHtmlSafely, UnsafeUrlError } from '@/lib/url-safety';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const USER_AGENT =
@@ -40,45 +41,25 @@ export async function POST(request: Request) {
   }
 
   try {
-    new URL(url);
-  } catch {
-    return NextResponse.json(
-      { error: 'Invalid URL format' },
-      { status: 400 }
-    );
-  }
-
-  // Fetch the page
-  let html: string;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(
-      () => controller.abort(),
-      FETCH_TIMEOUT_MS
-    );
-
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Accept': 'text/html,application/xhtml+xml',
-      },
-      signal: controller.signal,
-      redirect: 'follow',
+    const html = await fetchRecipeHtmlSafely(url, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      userAgent: USER_AGENT,
+      maxRedirects: 5,
+      maxBytes: 2_000_000,
     });
 
-    clearTimeout(timer);
+    // Extract recipe from HTML
+    const recipe = extractRecipeFromHtml(html);
 
-    if (!res.ok) {
+    return NextResponse.json(recipe);
+  } catch (err) {
+    if (err instanceof UnsafeUrlError) {
       return NextResponse.json(
-        {
-          error: `Failed to fetch page (${res.status})`,
-        },
-        { status: 422 }
+        { error: err.message },
+        { status: 400 }
       );
     }
 
-    html = await res.text();
-  } catch (err) {
     const message = err instanceof Error
       ? err.message
       : 'Unknown error';
@@ -93,9 +74,4 @@ export async function POST(request: Request) {
       { status: 422 }
     );
   }
-
-  // Extract recipe from HTML
-  const recipe = extractRecipeFromHtml(html);
-
-  return NextResponse.json(recipe);
 }

@@ -34,21 +34,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 1. Go to [supabase.com](https://supabase.com) and create a new project
 2. Once created, go to **SQL Editor** in the dashboard
-3. Run all migration files in order:
-   - `supabase/migrations/001_initial_schema.sql`
-   - `supabase/migrations/002_add_category_overrides.sql`
-   - `supabase/migrations/003_add_made_recipe_ids.sql`
-   - `supabase/migrations/004_merge_steak_into_beef.sql`
-   - `supabase/migrations/005_multi_user_support.sql`
-   - `supabase/migrations/006_fix_signup_trigger.sql`
-   - `supabase/migrations/007_custom_categories.sql`
-   - `supabase/migrations/008_add_day_assignments.sql`
-   - `supabase/migrations/009_planner_settings.sql`
-   - `supabase/migrations/010_add_recipe_images.sql`
-   - `supabase/migrations/011_create_recipe_images_bucket.sql`
-   - `supabase/migrations/012_add_onboarding_completed_at.sql`
-   - `supabase/migrations/013_default_recipe_images.sql`
-   - `supabase/migrations/014_default_recipe_images_uuid_suffix.sql`
+3. Run all migration files in order from `supabase/migrations/` (numbered `001` through `014`)
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 5. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
 6. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npx tsx scripts/upload-default-recipe-images.ts` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
@@ -242,7 +228,13 @@ web/
 
 ## Documentation
 
-- `project_overview.md` - Architecture and 10-min orientation
-- `changelog.md` - Version history
-- `decisions.md` - Architectural decision records (ADRs)
-- `supabase/SCHEMA.md` - Database schema reference
+| File | Purpose |
+|------|---------|
+| `CLAUDE.md` | Claude Code context — commands, conventions, architecture quick-ref |
+| `project_overview.md` | 10-minute engineering orientation (architecture, data flow, adding features) |
+| `changelog.md` | Recent version history (v2.8+); `changelog-archive.md` for older |
+| `decisions.md` | Architectural Decision Records (ADRs 001–019) |
+| `supabase/SCHEMA.md` | Database schema — tables, RLS policies, migrations, query examples |
+| `docs/shopping-component.md` | Shopping list component deep-dive (architecture, data flow, testing) |
+| `docs/planner-component.md` | Meal planner component deep-dive (auto-assign, date handling, history) |
+| `web/tests/README.md` | E2E testing guide (Playwright setup, fixtures, debugging) |
