@@ -1234,7 +1234,7 @@ export function ShoppingListView() {
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
       {/* Header — shoppinglist_redesign; mobile: shoppinglist_mobile_redesign (compact, icon-only Organize+Clear, no Copy) */}
       <header className="mb-6 md:mb-10">
         {/* Mobile: one row, title + icon Organize + icon Clear */}
@@ -1315,7 +1315,7 @@ export function ShoppingListView() {
         {(uniqueRecipes.length > 0 || filteredItems.length > 0) && (
           <div className="flex flex-col gap-2">
             <span className="text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-widest md:tracking-wider px-1">Recipes in list</span>
-            <div className="flex overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+            <div className="flex w-full max-w-full overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 px-1 md:px-0 scrollbar-hide">
               {uniqueRecipes.map((recipeName) => (
                 <span key={recipeName} className="flex-none">
                   <RecipeTag
@@ -1333,7 +1333,7 @@ export function ShoppingListView() {
       </header>
 
       {/* Shopping List — full width (sidebar removed) */}
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
       {/* Shopping List */}
       {showLoading ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
@@ -1410,9 +1410,9 @@ export function ShoppingListView() {
                         className="px-4 py-3 md:px-6 md:py-4 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
                         onClick={() => toggleCategory(categoryData.key)}
                       >
-                        <div className="flex items-center gap-2 md:gap-3">
+                        <div className="flex items-center gap-2 md:gap-3 min-w-0">
                           <CategoryIcon className="h-5 w-5 text-primary shrink-0" />
-                          <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
+                          <CardTitle className="min-w-0 truncate font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
                             {categoryData.name}
                           </CardTitle>
                           {categoryData.isCustom && (
@@ -1534,7 +1534,7 @@ export function ShoppingListView() {
                 <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">{mergedAlreadyHave.length}</span>
               </div>
               <p className="hidden md:block text-xs text-muted-foreground mb-4">Click to add back to list</p>
-              <div className="flex overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+              <div className="flex w-full max-w-full overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 px-1 md:px-0 scrollbar-hide">
                 {mergedAlreadyHave.map((item, index) => (
                   <button
                     key={`already-have-${item.item}-${item.unit || ''}-${index}`}
@@ -1560,7 +1560,7 @@ export function ShoppingListView() {
                 <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">{displayShoppingList.excluded.length}</span>
               </div>
               <p className="hidden md:block text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
-              <div className="flex overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-hide">
+              <div className="flex w-full max-w-full overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 px-1 md:px-0 scrollbar-hide">
                 {displayShoppingList.excluded.map((item, index) => (
                   <button
                     key={`excluded-${item.item}-${item.unit || ''}-${index}`}
