@@ -157,7 +157,7 @@ export function RecipeList() {
   const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
   
   // Show cached data immediately even while fetching (stale-while-revalidate)
-  const displayRecipes = recipes || []
+  const displayRecipes = useMemo(() => recipes || [], [recipes])
   
   // Sort recipes based on selected sort option
   const sortedRecipes = useMemo(() => {

@@ -34,6 +34,7 @@ import {
   X,
   UtensilsCrossed,
 } from "lucide-react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -680,6 +681,7 @@ function StitchRecipeCard({
 }) {
   const pillBg = getCategoryHexColor(recipe.category)
   const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
+  const unoptimizedImage = recipeImageUrl ? !recipeImageUrl.includes(".supabase.co") : false
 
   const cardClasses = cn(
     "relative overflow-hidden flex flex-col border transition-all cursor-pointer rounded-2xl",
@@ -699,11 +701,14 @@ function StitchRecipeCard({
     >
       <div className="relative h-24 flex-shrink-0 overflow-hidden">
         {recipeImageUrl ? (
-          <img
+          <Image
             src={recipeImageUrl}
             alt={recipe.name}
+            fill
+            sizes="(max-width: 768px) 100vw, 320px"
+            unoptimized={unoptimizedImage}
             draggable={false}
-            className="planner-desktop-card-image w-full h-full object-cover"
+            className="planner-desktop-card-image object-cover"
           />
         ) : (
           <div className={cn(
@@ -893,6 +898,7 @@ function MobileRecipeCard({
 }) {
   const pillBg = getCategoryHexColor(recipe.category)
   const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
+  const unoptimizedImage = recipeImageUrl ? !recipeImageUrl.includes(".supabase.co") : false
 
   const cardClasses = cn(
     "rounded-3xl overflow-hidden shadow-sm flex flex-col cursor-pointer transition-all",
@@ -914,11 +920,14 @@ function MobileRecipeCard({
     >
       <div className="relative h-44 flex-shrink-0">
         {recipeImageUrl ? (
-          <img
+          <Image
             src={recipeImageUrl}
             alt={recipe.name}
+            fill
+            sizes="(max-width: 768px) 100vw, 320px"
+            unoptimized={unoptimizedImage}
             draggable={false}
-            className="meal-image w-full h-full object-cover"
+            className="meal-image object-cover"
           />
         ) : (
           <div className="w-full h-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
@@ -1491,6 +1500,7 @@ export function MealPlanner() {
     ? (displayedRecipes || []).find((r) => r.id === activeRecipeId) || null
     : null
   const activeRecipeImageUrl = activeRecipe ? getRecipeImageUrl(activeRecipe.image_url) : null
+  const activeRecipeUnoptimized = activeRecipeImageUrl ? !activeRecipeImageUrl.includes(".supabase.co") : false
 
   // Build day priority for distributing unassigned recipes (preferred first, then available)
   const unassignedDayPriority = useMemo(
@@ -2201,11 +2211,14 @@ export function MealPlanner() {
           <div className="pointer-events-none w-[220px] rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
             <div className="relative h-20 w-full">
               {activeRecipeImageUrl ? (
-                <img
+                <Image
                   src={activeRecipeImageUrl}
                   alt={activeRecipe.name}
+                  fill
+                  sizes="220px"
+                  unoptimized={activeRecipeUnoptimized}
                   draggable={false}
-                  className="w-full h-full object-cover"
+                  className="object-cover"
                 />
               ) : (
                 <div className="w-full h-full bg-slate-100 dark:bg-slate-700" />

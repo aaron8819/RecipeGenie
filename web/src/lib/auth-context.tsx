@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from "react"
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import type { User, Session } from "@supabase/supabase-js"
 import { getSupabase } from "@/lib/supabase/client"
@@ -18,11 +18,20 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+export function shouldClearQueriesOnAuthEvent(
+  previousSession: Session | null,
+  nextSession: Session | null,
+  event: string
+): boolean {
+  return !!previousSession && !nextSession && event !== 'SIGNED_OUT'
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const queryClient = useQueryClient()
+  const sessionRef = useRef<Session | null>(null)
 
   useEffect(() => {
     const supabase = getSupabase()
@@ -30,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Get initial session
     supabase.auth.getSession()
       .then(({ data: { session } }) => {
+        sessionRef.current = session
         setSession(session)
         setUser(session?.user ?? null)
         setLoading(false)
@@ -45,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       // Handle session expiry: if we had a session but now don't, and it's not a sign out
-      const hadSession = !!user
+      const previousSession = sessionRef.current
       const hasSession = !!session
 
       setSession(session)
@@ -54,18 +64,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Handle token refresh failure (session expired and couldn't be refreshed)
       // This happens when TOKEN_REFRESHED fires but session is null, or when
       // the session simply disappears without a SIGNED_OUT event
-      if (hadSession && !hasSession && event !== 'SIGNED_OUT') {
+      if (shouldClearQueriesOnAuthEvent(previousSession, session, event)) {
         console.warn('Session expired or token refresh failed')
         // The middleware will redirect to login on next navigation
         // Clear any stale queries to prevent showing outdated data
         queryClient.clear()
       }
 
+      sessionRef.current = session
       setLoading(false)
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [queryClient])
 
   const signIn = useCallback(async (email: string, password: string) => {
     const supabase = getSupabase()

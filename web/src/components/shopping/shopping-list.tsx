@@ -1011,7 +1011,7 @@ export function ShoppingListView() {
     if (hasChanges) {
       setCollapsedCategories(newCollapsed)
     }
-  }, [filteredItems, groupedItems, orderedCategories, manuallyExpandedCategories, manuallyCollapsedCategories])
+  }, [filteredItems, groupedItems, orderedCategories, manuallyExpandedCategories, manuallyCollapsedCategories, collapsedCategories])
 
   // Create a flat list of all item IDs for the sortable context
   // Use index-based IDs to ensure uniqueness while preserving drag-and-drop functionality

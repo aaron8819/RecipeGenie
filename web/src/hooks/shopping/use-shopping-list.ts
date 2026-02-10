@@ -48,6 +48,25 @@ export function useShoppingList() {
   })
 }
 
+export function preserveCheckedItemsFromExisting(
+  generatedItems: ShoppingItem[],
+  existingItems: ShoppingItem[]
+): ShoppingItem[] {
+  const checkedItemNames = new Set(
+    existingItems
+      .filter((item) => item.checked)
+      .map((item) => normalizeItemName(item.item))
+  )
+
+  if (checkedItemNames.size === 0) return generatedItems
+
+  return generatedItems.map((item) =>
+    checkedItemNames.has(normalizeItemName(item.item))
+      ? { ...item, checked: true }
+      : item
+  )
+}
+
 /**
  * Hook to generate a shopping list from recipes
  */
@@ -64,7 +83,7 @@ export function useGenerateShoppingList() {
         supabase.from("recipes").select("*").in("id", recipeIds),
         supabase.from("pantry_items").select("*"),
         supabase.from("user_config").select("excluded_keywords, category_overrides").single(),
-        supabase.from("shopping_list").select("already_have").maybeSingle(),
+        supabase.from("shopping_list").select("items, already_have").maybeSingle(),
       ])
 
       if (recipesRes.error) throw recipesRes.error
@@ -73,12 +92,7 @@ export function useGenerateShoppingList() {
       const recipes = recipesRes.data as Recipe[]
       const pantryItems = pantryRes.data as PantryItem[]
       const typedConfig = configRes.data as { excluded_keywords?: string[]; category_overrides?: Record<string, string> } | null
-      const currentList = currentListRes.data as { already_have?: ShoppingItem[] } | null
-
-      // Get currently checked item names to preserve
-      const checkedItemNames = new Set(
-        (currentList?.already_have || []).map(item => normalizeItemName(item.item))
-      )
+      const currentList = currentListRes.data as { items?: ShoppingItem[]; already_have?: ShoppingItem[] } | null
 
       const result = generateShoppingList(
         recipes,
@@ -88,17 +102,12 @@ export function useGenerateShoppingList() {
         typedConfig?.category_overrides || null
       )
 
-      // Preserve checked states: move items that were previously checked to already_have
-      const preservedItems: ShoppingItem[] = []
+      // Preserve checked states without moving items into pantry
+      const preservedItems = preserveCheckedItemsFromExisting(
+        result.items,
+        currentList?.items || []
+      )
       const preservedAlreadyHave: ShoppingItem[] = [...result.alreadyHave]
-
-      for (const item of result.items) {
-        if (checkedItemNames.has(normalizeItemName(item.item))) {
-          preservedAlreadyHave.push(item)
-        } else {
-          preservedItems.push(item)
-        }
-      }
 
       const shoppingListData = {
         user_id: user!.id,

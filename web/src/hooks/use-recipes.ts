@@ -8,6 +8,35 @@ import { getSupabase } from "@/lib/supabase/client"
 
 const RECIPES_KEY = ["recipes"]
 
+function buildRecipesKey(options?: {
+  category?: string | null
+  search?: string | null
+  favoritesOnly?: boolean
+  tags?: string[]
+  select?: string
+  limit?: number
+}) {
+  const normalizedTags = options?.tags ? [...options.tags].sort() : []
+  return [
+    ...RECIPES_KEY,
+    {
+      category: options?.category ?? null,
+      search: options?.search ?? null,
+      favoritesOnly: options?.favoritesOnly ?? false,
+      tags: normalizedTags,
+      select: options?.select ?? "*",
+      limit: options?.limit ?? null,
+    },
+  ]
+}
+
+export function normalizeRecipeUpdates(updates: RecipeUpdate): RecipeUpdate {
+  return {
+    ...updates,
+    ...(updates.tags !== undefined ? { tags: updates.tags ?? [] } : {}),
+  }
+}
+
 /**
  * Helper to safely update recipe queries that may be arrays or single recipes
  */
@@ -36,7 +65,7 @@ export function useRecipes(options?: {
   limit?: number
 }) {
   return useQuery({
-    queryKey: [...RECIPES_KEY, options],
+    queryKey: buildRecipesKey(options),
     queryFn: async () => {
       const supabase = getSupabase()
       let query = supabase
@@ -91,7 +120,7 @@ export function useRecipe(id: string | null) {
   return useQuery({
     queryKey: [...RECIPES_KEY, id],
     queryFn: async () => {
-      if (!id) return null
+      if (!id || !user) return null
 
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -104,7 +133,7 @@ export function useRecipe(id: string | null) {
       if (error) throw error
       return data as Recipe
     },
-    enabled: !!id,
+    enabled: !!id && !!user,
   })
 }
 
@@ -226,11 +255,7 @@ export function useUpdateRecipe() {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: RecipeUpdate }) => {
-      // Ensure tags is always a defined array
-      const normalizedUpdates = {
-        ...updates,
-        tags: updates.tags ?? [],
-      }
+      const normalizedUpdates = normalizeRecipeUpdates(updates)
 
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -253,11 +278,7 @@ export function useUpdateRecipe() {
       // Snapshot previous values for rollback
       const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
 
-      // Ensure tags is always a defined array
-      const normalizedUpdates = {
-        ...updates,
-        tags: updates.tags ?? [],
-      }
+      const normalizedUpdates = normalizeRecipeUpdates(updates)
 
       // Optimistically update all recipe queries
       queryClient.setQueriesData<Recipe[] | Recipe | null>(

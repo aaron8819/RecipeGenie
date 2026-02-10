@@ -37,6 +37,9 @@ import {
 } from "@/lib/shopping-categories"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 
+const EMPTY_CUSTOM_CATEGORIES: CustomShoppingCategory[] = []
+const EMPTY_OVERRIDES: Record<string, string> = {}
+
 interface ShoppingSettingsModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -171,9 +174,9 @@ export function ShoppingSettingsModal({
 
   const undoToast = useUndoToast()
 
-  const customCategories = config?.custom_categories || []
-  const categoryOrder = config?.category_order || null
-  const categoryOverrides = config?.category_overrides || {}
+  const customCategories = config?.custom_categories ?? EMPTY_CUSTOM_CATEGORIES
+  const categoryOrder = config?.category_order ?? null
+  const categoryOverrides = config?.category_overrides ?? EMPTY_OVERRIDES
 
   // Get all categories with current ordering
   const allCategories = useMemo(() => {

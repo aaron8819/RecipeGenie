@@ -12,6 +12,8 @@ const CONFIG_KEY = ["user_config"]
  * Hook to fetch all pantry items
  */
 export function usePantryItems() {
+  const { user } = useAuthContext()
+
   return useQuery({
     queryKey: [...PANTRY_KEY],
     queryFn: async () => {
@@ -27,6 +29,7 @@ export function usePantryItems() {
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+    enabled: !!user,
   })
 }
 
@@ -168,6 +171,8 @@ export function useRemovePantryItem() {
  * Hook to fetch excluded keywords
  */
 export function useExcludedKeywords() {
+  const { user } = useAuthContext()
+
   return useQuery({
     queryKey: [...CONFIG_KEY, "excluded_keywords"],
     queryFn: async () => {
@@ -187,6 +192,7 @@ export function useExcludedKeywords() {
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+    enabled: !!user,
   })
 }
 

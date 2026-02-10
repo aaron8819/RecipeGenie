@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { ShoppingItem, ShoppingList } from '@/types/database'
+import { preserveCheckedItemsFromExisting } from '@/hooks/shopping/use-shopping-list'
 
 describe('Shopping List Checked State Logic', () => {
   let mockShoppingList: ShoppingList
@@ -294,6 +295,25 @@ describe('Shopping List Checked State Logic', () => {
 
       expect(updatedItem.checked).toBe(true)
       expect(updatedItem.amount).toBe(2)
+    })
+  })
+
+  describe('Preserve Checked Items on Regenerate', () => {
+    it('should keep checked items checked without moving them to pantry', () => {
+      const existingItems: ShoppingItem[] = [
+        { ...mockShoppingList.items[0], checked: true },
+        { ...mockShoppingList.items[1], checked: false },
+      ]
+
+      const generatedItems: ShoppingItem[] = [
+        { ...mockShoppingList.items[0], item: 'milk', checked: undefined },
+        { ...mockShoppingList.items[2], checked: undefined },
+      ]
+
+      const preserved = preserveCheckedItemsFromExisting(generatedItems, existingItems)
+
+      expect(preserved.find((i) => i.item.toLowerCase() === 'milk')?.checked).toBe(true)
+      expect(preserved.find((i) => i.item.toLowerCase() === 'eggs')?.checked ?? false).toBe(false)
     })
   })
 })

@@ -21,36 +21,53 @@ function parseIpv4(ip: string): number[] | null {
   return octets
 }
 
+function isPrivateIpv4(ip: string): boolean {
+  const octets = parseIpv4(ip)
+  if (!octets) return true
+  const [a, b] = octets
+
+  return (
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a === 0
+  )
+}
+
+function extractMappedIpv4(ip: string): string | null {
+  const normalized = ip.toLowerCase()
+  if (!normalized.startsWith("::ffff:")) return null
+  const candidate = normalized.slice("::ffff:".length)
+  return net.isIP(candidate) === 4 ? candidate : null
+}
+
 export function isPrivateIpAddress(ip: string): boolean {
   const kind = net.isIP(ip)
 
   if (kind === 4) {
-    const octets = parseIpv4(ip)
-    if (!octets) return true
-    const [a, b] = octets
-
-    return (
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      a === 0
-    )
+    return isPrivateIpv4(ip)
   }
 
   if (kind === 6) {
     const normalized = ip.toLowerCase()
+    const mapped = extractMappedIpv4(normalized)
+    if (mapped) {
+      return isPrivateIpv4(mapped)
+    }
+    if (normalized.startsWith("::ffff:")) {
+      return true
+    }
 
     return (
       normalized === "::1" ||
       normalized === "::" ||
       normalized.startsWith("fc") ||
       normalized.startsWith("fd") ||
-      normalized.startsWith("fe80:") ||
-      normalized.startsWith("::ffff:127.")
+      normalized.startsWith("fe80:")
     )
   }
 

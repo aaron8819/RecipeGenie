@@ -16,6 +16,11 @@ describe("isPrivateIpAddress", () => {
     expect(isPrivateIpAddress("fc00::1")).toBe(true)
     expect(isPrivateIpAddress("fd12:3456::1")).toBe(true)
     expect(isPrivateIpAddress("fe80::1")).toBe(true)
+    expect(isPrivateIpAddress("::ffff:127.0.0.1")).toBe(true)
+    expect(isPrivateIpAddress("::ffff:10.0.0.1")).toBe(true)
+    expect(isPrivateIpAddress("::ffff:172.16.0.1")).toBe(true)
+    expect(isPrivateIpAddress("::ffff:192.168.1.1")).toBe(true)
+    expect(isPrivateIpAddress("::ffff:8.8.8.8")).toBe(false)
     expect(isPrivateIpAddress("2606:4700:4700::1111")).toBe(false)
   })
 })
@@ -35,6 +40,12 @@ describe("assertSafePublicRecipeUrl", () => {
         "https://recipes.example.com/chili",
         async () => ["10.0.0.5"]
       )
+    ).rejects.toBeInstanceOf(UnsafeUrlError)
+  })
+
+  it("rejects ipv4-mapped ipv6 addresses", async () => {
+    await expect(
+      assertSafePublicRecipeUrl("https://[::ffff:10.0.0.1]/recipe")
     ).rejects.toBeInstanceOf(UnsafeUrlError)
   })
 

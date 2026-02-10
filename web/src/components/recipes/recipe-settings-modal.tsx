@@ -287,7 +287,7 @@ export function RecipeSettingsModal({
       console.error("Failed to add category:", error)
       undoToast.show({ message: getErrorMessage(error, "Failed to add category"), duration: 4000 })
     }
-  }, [newCategoryName, categories, updateCategories])
+  }, [newCategoryName, categories, updateCategories, undoToast])
 
   const handleEditStart = useCallback((category: string) => {
     setEditingCategory(category)
@@ -351,7 +351,7 @@ export function RecipeSettingsModal({
       console.error("Failed to update category:", error)
       undoToast.show({ message: getErrorMessage(error, "Failed to update category"), duration: 4000 })
     }
-  }, [editingCategory, editCategoryName, categories, updateCategories, bulkUpdate, config?.default_selection, updateConfig])
+  }, [editingCategory, editCategoryName, categories, updateCategories, bulkUpdate, config?.default_selection, updateConfig, undoToast])
 
   const handleDeleteCategory = useCallback(
     async (category: string) => {
@@ -389,7 +389,7 @@ export function RecipeSettingsModal({
         undoToast.show({ message: getErrorMessage(error, "Failed to delete category"), duration: 4000 })
       }
     },
-    [categories, categoryRecipeCounts, updateCategories, config?.default_selection, updateConfig]
+    [categories, categoryRecipeCounts, updateCategories, config?.default_selection, updateConfig, undoToast]
   )
 
   const handleReassignAndDelete = useCallback(async () => {
@@ -437,7 +437,7 @@ export function RecipeSettingsModal({
       console.error("Failed to reassign and delete:", error)
       undoToast.show({ message: "Failed to reassign recipes and delete category", duration: 4000 })
     }
-  }, [categoryToDelete, targetCategory, categories, bulkUpdate, updateCategories, config?.default_selection, updateConfig])
+  }, [categoryToDelete, targetCategory, categories, bulkUpdate, updateCategories, config?.default_selection, updateConfig, undoToast])
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
