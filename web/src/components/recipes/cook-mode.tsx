@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   ChevronLeft,
@@ -24,6 +25,7 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
     useState<Set<number>>(new Set());
   const [showIngredients, setShowIngredients] =
     useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   const wakeLock = useWakeLock();
   const steps = recipe.instructions || [];
@@ -78,6 +80,13 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
     };
   }, []);
 
+  useEffect(() => {
+    setIsMounted(true);
+    return () => {
+      setIsMounted(false);
+    };
+  }, []);
+
   const toggleIngredient = (index: number) => {
     setCheckedIngredients((prev) => {
       const next = new Set(prev);
@@ -90,8 +99,8 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
     });
   };
 
-  return (
-    <div className="fixed inset-0 z-[60] bg-background flex flex-col h-[100dvh]">
+  const cookModeContent = (
+    <div className="fixed inset-0 z-[120] bg-background flex flex-col h-[100dvh] pt-[env(safe-area-inset-top)]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
@@ -248,4 +257,10 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
       </div>
     </div>
   );
+
+  if (!isMounted) {
+    return null;
+  }
+
+  return createPortal(cookModeContent, document.body);
 }

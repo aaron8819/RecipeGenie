@@ -201,12 +201,61 @@ export interface Database {
           generated_at?: string
         }
       }
+      recipe_shares: {
+        Row: {
+          id: string
+          sender_user_id: string
+          sender_email: string
+          recipient_user_id: string
+          recipient_email: string
+          source_recipe_id: string
+          source_recipe_snapshot: RecipeShareSnapshot
+          message: string | null
+          status: "pending" | "accepted" | "declined" | "canceled"
+          accepted_recipe_id: string | null
+          created_at: string
+          responded_at: string | null
+        }
+        Insert: {
+          id?: string
+          sender_user_id: string
+          sender_email: string
+          recipient_user_id: string
+          recipient_email: string
+          source_recipe_id: string
+          source_recipe_snapshot: RecipeShareSnapshot
+          message?: string | null
+          status?: "pending" | "accepted" | "declined" | "canceled"
+          accepted_recipe_id?: string | null
+          created_at?: string
+          responded_at?: string | null
+        }
+        Update: {
+          id?: string
+          sender_user_id?: string
+          sender_email?: string
+          recipient_user_id?: string
+          recipient_email?: string
+          source_recipe_id?: string
+          source_recipe_snapshot?: RecipeShareSnapshot
+          message?: string | null
+          status?: "pending" | "accepted" | "declined" | "canceled"
+          accepted_recipe_id?: string | null
+          created_at?: string
+          responded_at?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      accept_recipe_share: {
+        Args: {
+          p_share_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
@@ -246,6 +295,16 @@ export interface ShoppingItem {
   excludedBy?: string
 }
 
+export interface RecipeShareSnapshot {
+  name: string
+  category: string
+  servings: number
+  tags: string[]
+  ingredients: Ingredient[]
+  instructions: string[]
+  image_url: string | null
+}
+
 export type Recipe = Database["public"]["Tables"]["recipes"]["Row"]
 export type RecipeInsert = Database["public"]["Tables"]["recipes"]["Insert"]
 export type RecipeUpdate = Database["public"]["Tables"]["recipes"]["Update"]
@@ -255,6 +314,9 @@ export type UserConfig = Database["public"]["Tables"]["user_config"]["Row"]
 export type RecipeHistory = Database["public"]["Tables"]["recipe_history"]["Row"]
 export type WeeklyPlan = Database["public"]["Tables"]["weekly_plans"]["Row"]
 export type ShoppingList = Database["public"]["Tables"]["shopping_list"]["Row"]
+export type RecipeShare = Database["public"]["Tables"]["recipe_shares"]["Row"]
+export type RecipeShareInsert = Database["public"]["Tables"]["recipe_shares"]["Insert"]
+export type RecipeShareUpdate = Database["public"]["Tables"]["recipe_shares"]["Update"]
 
 export interface PlanTemplate {
   id: string

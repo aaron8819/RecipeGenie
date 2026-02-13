@@ -16,6 +16,7 @@ This document describes the complete database schema for the Recipe Genie applic
   - [recipe_history](#recipe_history)
   - [weekly_plans](#weekly_plans)
   - [shopping_list](#shopping_list)
+  - [recipe_shares](#recipe_shares)
 - [Storage Buckets](#storage-buckets)
   - [recipe-images](#recipe-images)
 - [Indexes](#indexes)
@@ -35,6 +36,7 @@ The schema supports:
 - Recipe history tracking
 - Weekly meal planning
 - Shopping list generation
+- Recipe sharing requests and recipient acceptance
 - Image storage via Supabase Storage
 
 ## Tables
@@ -188,6 +190,26 @@ Stores the user's shopping list state.
 | `custom_order` | BOOLEAN | DEFAULT FALSE | Whether the list has been manually reordered (disables auto-sorting) |
 | `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when list was generated |
 
+### recipe_shares
+
+Stores cross-user recipe share requests and response state. Sharing is
+copy-on-accept: recipient receives an independent recipe copy.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `id` | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Share request ID |
+| `sender_user_id` | UUID | NOT NULL, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | User sending the share |
+| `sender_email` | TEXT | NOT NULL | Sender email snapshot for display/audit |
+| `recipient_user_id` | UUID | NOT NULL, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | User receiving the share |
+| `recipient_email` | TEXT | NOT NULL | Recipient email entered by sender |
+| `source_recipe_id` | TEXT | NOT NULL | Sender-owned recipe ID at time of sharing |
+| `source_recipe_snapshot` | JSONB | NOT NULL | Recipe content snapshot used to materialize recipient copy |
+| `message` | TEXT | NULL, `char_length(message) <= 300` | Optional sender note |
+| `status` | TEXT | NOT NULL, DEFAULT `'pending'`, CHECK in (`pending`, `accepted`, `declined`, `canceled`) | Share lifecycle state |
+| `accepted_recipe_id` | TEXT | NULL | Recipient recipe ID created on accept |
+| `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Share creation timestamp |
+| `responded_at` | TIMESTAMPTZ | NULL | When recipient accepted/declined or sender canceled |
+
 ### plan_templates
 
 Stores reusable meal plan templates for quick loading.
@@ -259,6 +281,11 @@ Public storage bucket for recipe images. Images are organized by user ID in fold
 ### plan_templates
 - `idx_plan_templates_user_id` - Index on `user_id` for user-specific queries
 
+### recipe_shares
+- `idx_recipe_shares_recipient_status_created` - Index on `(recipient_user_id, status, created_at DESC)` for inbox queries
+- `idx_recipe_shares_sender_created` - Index on `(sender_user_id, created_at DESC)` for sent queries
+- `idx_recipe_shares_pending_dedupe` - Partial unique index on `(sender_user_id, recipient_user_id, source_recipe_id)` WHERE `status = 'pending'`
+
 ## Row Level Security (RLS)
 
 All tables have RLS enabled with user-specific policies that ensure users can only access their own data.
@@ -273,6 +300,11 @@ All tables use the same pattern: users can only access rows where `auth.uid() = 
 - **recipe_history**: `users_own_history` - Users can only access their own history
 - **weekly_plans**: `users_own_plans` - Users can only access their own plans
 - **shopping_list**: `users_own_shopping` - Users can only access their own shopping list
+- **recipe_shares**:
+  - `users_own_recipe_shares_select` - Sender or recipient can read share rows
+  - `users_create_recipe_shares` - Sender can insert rows with `sender_user_id = auth.uid()`
+  - `recipients_respond_recipe_shares` - Recipient can move `pending` → `accepted/declined`
+  - `senders_cancel_recipe_shares` - Sender can move `pending` → `canceled`
 
 All policies use `FOR ALL` operations (SELECT, INSERT, UPDATE, DELETE) with:
 - `USING (auth.uid() = user_id)` - For SELECT operations
@@ -335,6 +367,19 @@ Trigger function that sets a default storage path for recipe images when a new r
 
 **Usage:** BEFORE INSERT on `recipes`; sets `NEW.image_url` to path like `defaults/mac-and-cheese.webp`. Client resolves paths to public URLs via `getRecipeImageUrl()`.
 
+### accept_recipe_share(p_share_id UUID)
+
+Materializes a shared recipe snapshot into the recipient's `recipes` table and
+marks the share as accepted. Function is idempotent and returns existing
+`accepted_recipe_id` if called again after acceptance.
+
+**Parameters:**
+- `p_share_id` (UUID) - Share request ID
+
+**Returns:** `TEXT` (`accepted_recipe_id`)
+
+**Language:** `plpgsql SECURITY DEFINER`
+
 ## Triggers
 
 ### update_recipes_updated_at
@@ -377,7 +422,8 @@ auth.users (Supabase Auth)
   ├── user_config (user_id → auth.users.id)
   ├── weekly_plans (user_id → auth.users.id)
   ├── plan_templates (user_id → auth.users.id)
-  └── shopping_list (user_id → auth.users.id)
+  ├── shopping_list (user_id → auth.users.id)
+  └── recipe_shares (sender_user_id/recipient_user_id → auth.users.id)
 ```
 
 ### Foreign Key Relationships
@@ -389,6 +435,8 @@ auth.users (Supabase Auth)
 5. **recipe_history.recipe_id** → `recipes(id)` ON DELETE CASCADE
 6. **weekly_plans.user_id** → `auth.users(id)` ON DELETE CASCADE
 7. **shopping_list.user_id** → `auth.users(id)` ON DELETE CASCADE
+8. **recipe_shares.sender_user_id** → `auth.users(id)` ON DELETE CASCADE
+9. **recipe_shares.recipient_user_id** → `auth.users(id)` ON DELETE CASCADE
 
 All foreign keys use `ON DELETE CASCADE`, meaning if a user is deleted, all their associated data is automatically deleted.
 
@@ -410,6 +458,8 @@ The schema has evolved through the following migrations:
 12. **012_add_onboarding_completed_at.sql** - Added `onboarding_completed_at` to `user_config` for user-scoped onboarding state
 13. **013_default_recipe_images.sql** - Added default recipe image mapping for new users and backfilled existing defaults
 14. **014_default_recipe_images_uuid_suffix.sql** - Updated default image mapping to handle recipe ID UUID suffixes and backfilled existing records
+15. **015_plan_templates.sql** - Added reusable meal plan templates table
+16. **016_recipe_sharing.sql** - Added `recipe_shares` table, sharing RLS policies, and `accept_recipe_share()` copy-on-accept function
 
 ## Query Examples
 

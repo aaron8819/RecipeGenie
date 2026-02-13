@@ -59,7 +59,6 @@ web/tests/
 blob-report/
 
 # Project-specific
-supabase/migrations/
 images/
 reference/
 web/docs/

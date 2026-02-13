@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download } from "lucide-react"
+import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Share2, Inbox } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
@@ -9,6 +9,8 @@ import { RecipeDialog } from "./recipe-dialog"
 import { RecipeDetailDialog } from "./recipe-detail-dialog"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
 import { RecipeSettingsModal } from "./recipe-settings-modal"
+import { ShareRecipeDialog } from "./share-recipe-dialog"
+import { SharedRecipesInbox } from "./shared-recipes-inbox"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   useRecipes,
@@ -127,6 +129,9 @@ export function RecipeList() {
   const [markingAsMadeId, setMarkingAsMadeId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isSharedInboxOpen, setIsSharedInboxOpen] = useState(false)
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
+  const [shareRecipe, setShareRecipe] = useState<Recipe | null>(null)
   const [skeletonDelayed, setSkeletonDelayed] = useState(false)
 
   useEffect(() => {
@@ -227,6 +232,11 @@ export function RecipeList() {
     } finally {
       setMarkingAsMadeId(null)
     }
+  }
+
+  const handleShareRecipe = (recipe: Recipe) => {
+    setShareRecipe(recipe)
+    setIsShareDialogOpen(true)
   }
 
   const clearAllFilters = () => {
@@ -348,10 +358,42 @@ export function RecipeList() {
               <List className="h-5 w-5" />
             </button>
           </div>
+
+          <div
+            className="md:hidden h-6 w-px bg-slate-200 dark:bg-slate-600 shrink-0 mx-1"
+            aria-hidden
+          />
+
+          <Button
+            variant="outline"
+            onClick={() => setIsSharedInboxOpen(true)}
+            className={cn(pillOutline, "md:hidden shrink-0")}
+          >
+            <Inbox className="h-4 w-4 shrink-0" />
+            Shared
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => setIsSettingsOpen(true)}
+            className={cn(pillOutline, "md:hidden shrink-0")}
+          >
+            <Settings className="h-4 w-4 shrink-0" />
+            Settings
+          </Button>
         </div>
 
         {/* Right: Settings, Add Recipe */}
         <div className="hidden md:flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => setIsSharedInboxOpen(true)}
+            className={cn(pillOutline, "shrink-0")}
+          >
+            <Inbox className="h-4 w-4 shrink-0" />
+            Shared
+          </Button>
+
           <Button
             variant="outline"
             onClick={() => {
@@ -479,6 +521,7 @@ export function RecipeList() {
                     onAddToPlan={setAddToPlanRecipe}
                     onAddToShoppingList={handleAddToShoppingList}
                     onMarkAsMade={handleMarkAsMade}
+                    onShare={handleShareRecipe}
                     onClick={setViewingRecipe}
                     onTagClick={(tag) => {
                       if (!selectedTags.includes(tag)) {
@@ -489,6 +532,7 @@ export function RecipeList() {
                     timesMade={stats?.timesMade ?? 0}
                     isAddingToShoppingList={addingToShoppingListId === recipe.id}
                     isMarkingAsMade={markingAsMadeId === recipe.id}
+                    isSharing={false}
                   />
                 </div>
               )
@@ -534,8 +578,32 @@ export function RecipeList() {
           setEditingRecipe(r)
         }}
         onDelete={handleDelete}
+        onShare={handleShareRecipe}
         lastMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.lastMade ?? null : null}
         timesMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.timesMade ?? 0 : 0}
+      />
+
+      <button
+        type="button"
+        onClick={() => setIsSharedInboxOpen(true)}
+        className="fixed bottom-40 right-6 md:right-8 lg:hidden w-12 h-12 bg-white dark:bg-slate-800 text-primary rounded-full flex items-center justify-center shadow-lg border border-slate-200 dark:border-slate-700 hover:opacity-90 transition-opacity z-30"
+        aria-label="Open shared recipes inbox"
+      >
+        <Share2 className="h-5 w-5" />
+      </button>
+
+      <ShareRecipeDialog
+        open={isShareDialogOpen}
+        onOpenChange={(open) => {
+          setIsShareDialogOpen(open)
+          if (!open) setShareRecipe(null)
+        }}
+        recipe={shareRecipe}
+      />
+
+      <SharedRecipesInbox
+        open={isSharedInboxOpen}
+        onOpenChange={setIsSharedInboxOpen}
       />
 
       {/* Add to Plan Dialog */}

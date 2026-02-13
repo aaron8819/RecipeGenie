@@ -8,6 +8,7 @@ For older entries (v1.0.0 – v2.7.1), see `changelog-archive.md`.
 
 ## Table of Contents
 
+- [2.14.0](#2140---2026-02-13) — Recipe sharing (copy-on-accept)
 - [2.13.1](#2131---2026-02-04) — Mobile UX, MultiSelect refactor
 - [2.13.0](#2130---2026-02-04) — Onboarding, default recipe images
 - [2.12.6](#2126---2026-02-04) — Planner refactor, local-date handling
@@ -25,6 +26,40 @@ For older entries (v1.0.0 – v2.7.1), see `changelog-archive.md`.
 - [2.9.0](#290---2026-01-27) — Recipe image support
 - [2.8.1](#281---2026-01-26) — Ingredient drag-and-drop
 - [2.8.0](#280---2026-01-25) — Meal planner settings
+
+---
+
+## [2.14.0] - 2026-02-13
+
+**Summary:** In-app recipe sharing between existing users with exact-email recipient entry and copy-on-accept behavior
+
+### Added
+
+- **Recipe sharing data model**:
+  - New `recipe_shares` table for sender/recipient metadata, immutable recipe snapshots, status, and response timestamps
+  - Migration `016_recipe_sharing.sql` with indexes and RLS policies
+  - `accept_recipe_share(p_share_id uuid)` database function for idempotent, transactional copy-on-accept
+- **API routes**:
+  - `POST /api/recipe-shares` to create share requests
+  - `GET /api/recipe-shares/inbox` and `GET /api/recipe-shares/sent` for recipient/sender views
+  - `POST /api/recipe-shares/[id]/accept` and `POST /api/recipe-shares/[id]/decline` for recipient actions
+- **Recipe sharing UI**:
+  - Share actions on recipe cards and recipe detail dialog
+  - `ShareRecipeDialog` for recipient email + optional note
+  - `SharedRecipesInbox` dialog with "Shared With Me" and "Sent" tabs
+- **Hooks/types/helpers**:
+  - `use-recipe-shares.ts` hooks (`create`, `inbox`, `sent`, `accept`, `decline`)
+  - New `recipe_shares` and `RecipeShareSnapshot` TypeScript types
+  - `buildRecipeShareSnapshot()` helper in `lib/recipe-sharing.ts`
+- **Testing**:
+  - Unit test for snapshot generation (`lib/__tests__/recipe-sharing.test.ts`)
+  - Playwright coverage for share dialog/inbox visibility in `tests/recipes.spec.ts`
+
+### Technical Notes
+
+- Recipient discovery is exact-email only; there is no searchable user directory.
+- Acceptance creates an independent recipient-owned recipe copy (no live sync).
+- Pending duplicate shares for the same sender/recipient/recipe are deduplicated via partial unique index.
 
 ---
 

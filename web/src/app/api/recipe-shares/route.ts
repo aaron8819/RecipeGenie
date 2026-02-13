@@ -1,0 +1,176 @@
+import { NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { buildRecipeShareSnapshot } from '@/lib/recipe-sharing';
+import type { Recipe } from '@/types/database';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MESSAGE_LIMIT = 300;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 10;
+
+const shareRequestLog = new Map<string, number[]>();
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const windowStart = now - RATE_LIMIT_WINDOW_MS;
+  const attempts = (shareRequestLog.get(userId) || []).filter(
+    (t) => t >= windowStart
+  );
+
+  attempts.push(now);
+  shareRequestLog.set(userId, attempts);
+  return attempts.length > RATE_LIMIT_MAX_REQUESTS;
+}
+
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (isRateLimited(user.id)) {
+    return NextResponse.json(
+      { error: 'Too many share attempts. Please wait a minute and try again.' },
+      { status: 429 }
+    );
+  }
+
+  let body: {
+    recipeId?: string;
+    recipientEmail?: string;
+    message?: string | null;
+  };
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const recipeId = body.recipeId?.trim();
+  const recipientEmail = normalizeEmail(body.recipientEmail || '');
+  const message = body.message?.trim() || null;
+
+  if (!recipeId) {
+    return NextResponse.json({ error: 'Recipe ID is required' }, { status: 400 });
+  }
+
+  if (!EMAIL_REGEX.test(recipientEmail)) {
+    return NextResponse.json(
+      { error: 'Please enter a valid recipient email address' },
+      { status: 400 }
+    );
+  }
+
+  if (message && message.length > MESSAGE_LIMIT) {
+    return NextResponse.json(
+      { error: `Message must be ${MESSAGE_LIMIT} characters or less` },
+      { status: 400 }
+    );
+  }
+
+  if (recipientEmail === normalizeEmail(user.email || '')) {
+    return NextResponse.json(
+      { error: 'You cannot share a recipe with yourself' },
+      { status: 400 }
+    );
+  }
+
+  const { data: sourceRecipe, error: recipeError } = await supabase
+    .from('recipes')
+    .select('*')
+    .eq('id', recipeId)
+    .eq('user_id', user.id)
+    .single();
+
+  if (recipeError || !sourceRecipe) {
+    return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
+  }
+
+  const typedSourceRecipe = sourceRecipe as Recipe;
+
+  let recipientUser:
+    | {
+        id: string;
+        email: string | null;
+      }
+    | undefined;
+
+  try {
+    const admin = createAdminClient();
+    // Supabase auth.users is only available server-side with service role.
+    const { data: recipients } = await admin
+      .schema('auth')
+      .from('users')
+      .select('id, email')
+      .ilike('email', recipientEmail)
+      .limit(1);
+    recipientUser = recipients?.[0];
+  } catch {
+    return NextResponse.json(
+      { error: 'Server configuration error' },
+      { status: 500 }
+    );
+  }
+
+  if (!recipientUser?.id) {
+    return NextResponse.json(
+      { error: 'Recipient not found or unavailable' },
+      { status: 400 }
+    );
+  }
+
+  const { data: existingPending } = await supabase
+    .from('recipe_shares')
+    .select('id')
+    .eq('sender_user_id', user.id)
+    .eq('recipient_user_id', recipientUser.id)
+    .eq('source_recipe_id', recipeId)
+    .eq('status', 'pending')
+    .maybeSingle();
+
+  const typedExistingPending = existingPending as { id: string } | null;
+
+  if (typedExistingPending?.id) {
+    return NextResponse.json({
+      id: typedExistingPending.id,
+      status: 'pending',
+      deduplicated: true,
+    });
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('recipe_shares')
+    // @ts-expect-error - TypeScript can infer insert parameter type as 'never'
+    .insert({
+      sender_user_id: user.id,
+      sender_email: normalizeEmail(user.email || ''),
+      recipient_user_id: recipientUser.id,
+      recipient_email: recipientEmail,
+      source_recipe_id: typedSourceRecipe.id,
+      source_recipe_snapshot: buildRecipeShareSnapshot(typedSourceRecipe),
+      message,
+      status: 'pending',
+    })
+    .select('id, status')
+    .single();
+
+  if (insertError || !inserted) {
+    return NextResponse.json(
+      { error: 'Unable to create recipe share' },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json(inserted);
+}

@@ -28,11 +28,14 @@
 | `components/recipes/recipe-card.tsx` | ~504 | Card display — grid and list view modes |
 | `components/recipes/recipe-dialog.tsx` | ~1,350 | Create/edit modal — manual entry + text/URL import |
 | `components/recipes/recipe-detail-dialog.tsx` | ~290 | Read-only detail view with actions, cook mode entry |
+| `components/recipes/share-recipe-dialog.tsx` | ~170 | Share recipe modal (exact recipient email + optional note) |
+| `components/recipes/shared-recipes-inbox.tsx` | ~220 | Inbox/sent view for incoming/outgoing shares |
 | `components/recipes/add-to-plan-dialog.tsx` | ~100 | Add recipe to a weekly plan |
 | `components/recipes/recipe-settings-modal.tsx` | ~100 | Category and tag management settings |
 | `components/recipes/tag-management-modal.tsx` | ~100 | Tag rename, merge, delete |
 | `components/recipes/index.ts` | 7 | Barrel exports |
 | `hooks/use-recipes.ts` | ~771 | TanStack Query hooks — 15 exported hooks for recipe CRUD |
+| `hooks/use-recipe-shares.ts` | ~170 | TanStack Query hooks for create/inbox/sent/accept/decline share flows |
 | `lib/recipe-parser.ts` | ~467 | Plain text → structured recipe parser |
 
 ### Quick Commands
@@ -208,6 +211,13 @@ Client-side OR logic: recipes with ANY selected tag pass the filter. Done client
 - Three options: This Week, Next Week, Custom (with week navigation)
 - Respects `week_start_day` from user config
 
+### 7. Recipe Sharing (Copy-on-Accept)
+- **Share action locations:** recipe cards (list/grid), recipe detail dialog
+- **Share dialog:** exact recipient email + optional message (max 300 chars)
+- **Recipient inbox:** "Shared With Me" tab with Accept/Decline actions
+- **Sent tab:** status tracking for outgoing shares (`pending`, `accepted`, `declined`, `canceled`)
+- **Acceptance behavior:** creates a recipient-owned copy from immutable snapshot; no live sync to sender
+
 ---
 
 ## Module Reference
@@ -249,6 +259,7 @@ interface Ingredient {
 ### E2E Tests (Playwright)
 
 - `tests/recipes.spec.ts` — Grid/list view, search, filtering, add/edit/delete, import from text, image upload, categories, tags
+- `tests/recipes.spec.ts` (sharing coverage) — Share button visibility, share dialog opening, shared inbox opening
 - Runs across all browsers + mobile viewports
 
 ---
@@ -274,6 +285,8 @@ interface Ingredient {
 9. **Cook mode lifecycle**: `CookMode` must render outside the `Dialog` tree. The parent nulls the recipe prop when the dialog closes, so use a `useRef` to persist the recipe for cook mode. The early-return path (`if (!recipe)`) checks `isCookMode` and renders `CookMode` from the ref.
 
 10. **Duplicate close buttons**: When adding a persistent floating close button to a dialog, check for existing static close buttons (e.g., inside image areas) and remove them.
+
+11. **Recipient lookup privacy**: Recipient discovery is exact-email only via server-side endpoint; no client-side searchable user directory.
 
 ---
 

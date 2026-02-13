@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, History, UtensilsCrossed, CalendarPlus, Loader2, ChevronRight, ShoppingCart, Check, MoreVertical } from "lucide-react"
+import { Heart, History, UtensilsCrossed, CalendarPlus, Loader2, ChevronRight, ShoppingCart, Check, MoreVertical, Share2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -32,6 +32,7 @@ interface RecipeCardProps {
   onAddToPlan?: (recipe: Recipe) => void
   onAddToShoppingList?: (recipe: Recipe) => void
   onMarkAsMade?: (recipe: Recipe) => void
+  onShare?: (recipe: Recipe) => void
   onClick?: (recipe: Recipe) => void
   onTagClick?: (tag: string) => void
   lastMade?: string | null
@@ -39,6 +40,7 @@ interface RecipeCardProps {
   isAddingToPlan?: boolean
   isAddingToShoppingList?: boolean
   isMarkingAsMade?: boolean
+  isSharing?: boolean
 }
 
 export function RecipeCard({
@@ -49,6 +51,7 @@ export function RecipeCard({
   onAddToPlan,
   onAddToShoppingList,
   onMarkAsMade,
+  onShare,
   onClick,
   onTagClick,
   lastMade,
@@ -56,6 +59,7 @@ export function RecipeCard({
   isAddingToPlan = false,
   isAddingToShoppingList = false,
   isMarkingAsMade = false,
+  isSharing = false,
 }: RecipeCardProps) {
   const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
   // List view — match reference: horizontal card, image + favorite overlay, pills, icon actions
@@ -216,6 +220,22 @@ export function RecipeCard({
                   <CalendarPlus className="h-5 w-5" />
                 )}
               </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onShare?.(recipe)
+                }}
+                disabled={isSharing}
+                className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                title="Share Recipe"
+              >
+                {isSharing ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Share2 className="h-5 w-5" />
+                )}
+              </button>
             </div>
           </div>
         </div>
@@ -270,6 +290,22 @@ export function RecipeCard({
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <CalendarPlus className="h-5 w-5" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onShare?.(recipe)
+            }}
+            disabled={isSharing}
+            className="p-3 text-slate-400 hover:text-primary dark:hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-all"
+            title="Share Recipe"
+          >
+            {isSharing ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Share2 className="h-5 w-5" />
             )}
           </button>
           <div className="w-px h-8 bg-slate-100 dark:bg-slate-700 mx-2" aria-hidden />
@@ -423,12 +459,20 @@ export function RecipeCard({
                   <CalendarPlus className="h-4 w-4 mr-2" />
                   Add to Meal Plan
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onShare?.(recipe)}
+                  disabled={isSharing}
+                  className="text-slate-700 dark:text-slate-300"
+                >
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share Recipe
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
-        {/* Desktop: 3-button grid. Mobile: no separate action row */}
-        <div className="hidden md:grid grid-cols-3 gap-2">
+        {/* Desktop: 4-button grid. Mobile: no separate action row */}
+        <div className="hidden md:grid grid-cols-4 gap-2">
           {onMarkAsMade && (
             <Button
               variant="outline"
@@ -488,6 +532,26 @@ export function RecipeCard({
               <>
                 <CalendarPlus className="h-[18px] w-[18px]" />
                 Plan
+              </>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              onShare?.(recipe)
+            }}
+            disabled={isSharing}
+            className="flex items-center justify-center gap-1.5 py-2 px-1 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 hover:border-slate-300 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-100 transition-colors"
+            title="Share Recipe"
+          >
+            {isSharing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Share2 className="h-[18px] w-[18px]" />
+                Share
               </>
             )}
           </Button>

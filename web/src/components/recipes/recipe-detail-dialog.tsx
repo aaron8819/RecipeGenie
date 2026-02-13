@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, Pencil, Trash2, X, History, UtensilsCrossed, ChefHat } from "lucide-react"
+import { Heart, Pencil, Trash2, X, History, UtensilsCrossed, ChefHat, Share2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -33,6 +33,7 @@ interface RecipeDetailDialogProps {
   recipe: Recipe | null
   onEdit?: (recipe: Recipe) => void
   onDelete?: (recipe: Recipe) => void
+  onShare?: (recipe: Recipe) => void
   lastMade?: string | null
   timesMade?: number
 }
@@ -43,6 +44,7 @@ export function RecipeDetailDialog({
   recipe,
   onEdit,
   onDelete,
+  onShare,
   lastMade,
   timesMade = 0,
 }: RecipeDetailDialogProps) {
@@ -198,6 +200,16 @@ export function RecipeDetailDialog({
                   >
                     <Pencil className="h-4 w-4 sm:h-5 sm:w-5" />
                     Edit Recipe
+                  </Button>
+                )}
+                {onShare && (
+                  <Button
+                    variant="outline"
+                    onClick={() => onShare(recipe)}
+                    className="flex items-center gap-2 border-2 border-slate-200 dark:border-stone-700 text-slate-700 dark:text-stone-200 font-semibold rounded-full hover:bg-slate-100 dark:hover:bg-stone-700 transition-all px-4 sm:px-6 py-2 sm:py-2.5 text-sm"
+                  >
+                    <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                    Share
                   </Button>
                 )}
               </div>
