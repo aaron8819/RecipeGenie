@@ -5,6 +5,7 @@ import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { useUpdateUserConfig } from "@/hooks/use-planner"
 import { getSupabase } from "@/lib/supabase/client"
+import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
 
 const RECIPES_KEY = ["recipes"]
 
@@ -147,7 +148,7 @@ export function useCreateRecipe() {
 
   return useMutation({
     mutationFn: async (recipe: RecipeInsert) => {
-      const id = recipe.id || recipe.name.toLowerCase().replace(/\s+/g, "-")
+      const id = recipe.id || sanitizeRecipeNameForStorage(recipe.name)
       const now = new Date().toISOString()
 
       const supabase = getSupabase()
