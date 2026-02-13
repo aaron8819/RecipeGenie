@@ -15,6 +15,44 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+async function resolveRecipientUserByEmail(recipientEmail: string) {
+  const admin = createAdminClient();
+  const targetEmail = normalizeEmail(recipientEmail);
+  let page = 1;
+
+  // Supabase Auth Admin API has no direct "get user by email", so scan pages.
+  while (page <= 10) {
+    const { data, error } = await admin.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    });
+
+    if (error) {
+      throw new Error('Unable to resolve recipient');
+    }
+
+    const users = data.users || [];
+    const matched = users.find(
+      (u) => normalizeEmail(u.email || '') === targetEmail
+    );
+
+    if (matched?.id) {
+      return {
+        id: matched.id,
+        email: matched.email || null,
+      };
+    }
+
+    if (users.length < 200) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return null;
+}
+
 function isRateLimited(userId: string): boolean {
   const now = Date.now();
   const windowStart = now - RATE_LIMIT_WINDOW_MS;
@@ -104,18 +142,10 @@ export async function POST(request: Request) {
         id: string;
         email: string | null;
       }
-    | undefined;
+    | null = null;
 
   try {
-    const admin = createAdminClient();
-    // Supabase auth.users is only available server-side with service role.
-    const { data: recipients } = await admin
-      .schema('auth')
-      .from('users')
-      .select('id, email')
-      .ilike('email', recipientEmail)
-      .limit(1);
-    recipientUser = recipients?.[0];
+    recipientUser = await resolveRecipientUserByEmail(recipientEmail);
   } catch {
     return NextResponse.json(
       { error: 'Server configuration error' },
