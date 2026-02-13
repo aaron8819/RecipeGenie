@@ -41,6 +41,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   const [progress, setProgress] = useState(100)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const animationRef = useRef<number | null>(null)
+  const toastRef = useRef<ToastState | null>(null)
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) {
@@ -57,28 +58,40 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
     clearTimers()
     setIsVisible(false)
     // Wait for exit animation before clearing toast
-    setTimeout(() => setToast(null), 200)
+    setTimeout(() => {
+      setToast(null)
+      toastRef.current = null
+    }, 200)
   }, [clearTimers])
 
   const show = useCallback((options: UndoToastOptions) => {
+    // If a toast is already active, finalize it before showing the next one.
+    // This prevents pending undo actions from being silently canceled.
+    const activeToast = toastRef.current
+    if (activeToast?.onExpire) {
+      activeToast.onExpire()
+    }
+
     clearTimers()
 
     const duration = options.duration ?? 5000
     const startTime = Date.now()
-
-    setToast({
+    const nextToast: ToastState = {
       message: options.message,
       duration,
       onUndo: options.onUndo,
       onExpire: options.onExpire,
       startTime,
-    })
+    }
+
+    toastRef.current = nextToast
+    setToast(nextToast)
     setProgress(100)
     setIsVisible(true)
 
     // Set up expiration timer
     timerRef.current = setTimeout(() => {
-      options.onExpire?.()
+      nextToast.onExpire?.()
       dismiss()
     }, duration)
 
@@ -99,6 +112,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
     if (toast && toast.onUndo) {
       clearTimers()
       toast.onUndo()
+      toastRef.current = null
       setIsVisible(false)
       setTimeout(() => setToast(null), 200)
     }

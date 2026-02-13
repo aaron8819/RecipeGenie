@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Share2, Inbox } from "lucide-react"
+import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Inbox } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
@@ -582,15 +582,6 @@ export function RecipeList() {
         lastMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.lastMade ?? null : null}
         timesMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.timesMade ?? 0 : 0}
       />
-
-      <button
-        type="button"
-        onClick={() => setIsSharedInboxOpen(true)}
-        className="fixed bottom-40 right-6 md:right-8 lg:hidden w-12 h-12 bg-white dark:bg-slate-800 text-primary rounded-full flex items-center justify-center shadow-lg border border-slate-200 dark:border-slate-700 hover:opacity-90 transition-opacity z-30"
-        aria-label="Open shared recipes inbox"
-      >
-        <Share2 className="h-5 w-5" />
-      </button>
 
       <ShareRecipeDialog
         open={isShareDialogOpen}

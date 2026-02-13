@@ -696,6 +696,7 @@ function useSwipeHint() {
 
 export function ShoppingListView() {
   const [newItem, setNewItem] = useState("")
+  const addItemInputRef = useRef<HTMLInputElement>(null)
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
   const [pendingItemDeletion, setPendingItemDeletion] = useState<string | null>(null)
   const [pendingRecipeDeletion, setPendingRecipeDeletion] = useState<string | null>(null)
@@ -1062,7 +1063,10 @@ export function ShoppingListView() {
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newItem.trim()) return
+    if (!newItem.trim()) {
+      addItemInputRef.current?.focus()
+      return
+    }
 
     // Split by comma and filter empty strings
     const items = newItem
@@ -1085,6 +1089,7 @@ export function ShoppingListView() {
         }
       }
       setNewItem("")
+      addItemInputRef.current?.focus()
 
       // Show confirmation toast
       if (addedItems.length > 0) {
@@ -1293,20 +1298,25 @@ export function ShoppingListView() {
           </div>
         </div>
 
-        {/* Add item — input and button aligned (inset-y-0 !h-auto overrides Button h-10 so heights match) */}
+        {/* Add item — mobile uses a compact circular + action */}
         <form onSubmit={handleAddItem} className="relative mb-6">
           <Input
+            ref={addItemInputRef}
             placeholder="Add tomatoes, milk..."
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
-            className="w-full h-11 md:h-12 pl-4 pr-12 py-2.5 md:pl-6 md:pr-36 md:py-3 text-base md:text-lg bg-white border-2 border-stone-100 rounded-xl shadow-sm focus:ring-2 focus:ring-primary focus:border-primary"
+            className="w-full h-11 md:h-12 pl-4 pr-14 py-2.5 md:pl-6 md:pr-32 md:py-3 text-base md:text-lg bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
           <Button
             type="submit"
             disabled={addItem.isPending}
-            className="absolute right-2 inset-y-0 w-10 md:w-auto md:px-8 !h-auto bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2"
+            aria-label="Add item"
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 md:h-9 md:w-auto md:px-6 bg-primary text-primary-foreground rounded-full md:rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2"
           >
-            <Plus className="h-4 w-4" />
+            <span className="md:hidden text-lg leading-none font-semibold">
+              +
+            </span>
+            <Plus className="hidden md:block h-4 w-4" />
             <span className="hidden md:inline">Add Item</span>
           </Button>
         </form>
