@@ -516,3 +516,11 @@ ORDER BY created_at DESC;
 - The `shopping_list.items` field uses JSONB for flexible shopping list item storage
 - Default recipes are automatically created for new users via the `on_auth_user_created` trigger
 - Composite primary keys are enforced via unique indexes rather than traditional PRIMARY KEY constraints for tables that were migrated from single-user to multi-user
+
+## Archived Migrations
+
+One-time data fixes and inspection queries are kept in `migrations/archive/`:
+- `check-user-recipes.sql` - Data inspection query for debugging recipe ownership
+- `migrate-bad-recipe-id.sql` - One-time fix for malformed recipe IDs
+
+These are not schema migrations and should not be re-run.

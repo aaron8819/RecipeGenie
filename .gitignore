@@ -55,7 +55,6 @@ playwright/.auth/
 web/playwright/.auth/
 test-results/
 web/test-results/
-web/tests/
 blob-report/
 
 # Project-specific
