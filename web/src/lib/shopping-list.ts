@@ -64,12 +64,12 @@ export function generateShoppingList(
       const unit = normalizeUnit(ingredient.unit || "")
       const shoppingCategory = ingredient.shoppingCategory
 
-      // Build display name with alternatives if present
+      // Build display name with alternatives if present (normalized to lowercase)
       const displayItem = ingredient.alternatives?.length
-        ? `${ingredient.item} (or ${ingredient.alternatives.join(', ')})`
-        : ingredient.item
+        ? `${itemName} (or ${ingredient.alternatives.map(a => normalizeItemName(a)).join(', ')})`
+        : itemName
 
-      // Use normalized ORIGINAL item name as key (merge by item, not item+unit)
+      // Use normalized item name as key (merge by item, not item+unit)
       const key = itemName
 
       if (ingredientMap.has(key)) {
@@ -127,23 +127,25 @@ export function generateShoppingList(
     )
 
     const shoppingItem: ShoppingItem = {
-      item: ingredient.item, // Already normalized
+      item: ingredient.item, // Normalized to lowercase
       amount: ingredient.amount > 0 ? roundForDisplay(ingredient.amount) : null,
-      unit: ingredient.unit, // Already normalized
+      unit: ingredient.unit, // Normalized
       categoryKey: catKey,
       categoryOrder: catOrder,
       sources: ingredient.sources,
       shoppingCategory: ingredient.shoppingCategory,
       additionalAmounts: ingredient.additionalAmounts?.map(a => ({
         amount: roundForDisplay(a.amount),
-        unit: a.unit, // Already normalized
+        unit: a.unit, // Normalized
       })),
     }
 
-    if (pantrySet.has(ingredient.item)) {
+    // Use normalized lowercase for pantry comparison
+    const normalizedItem = normalizeItemName(ingredient.item)
+    if (pantrySet.has(normalizedItem)) {
       alreadyHave.push(shoppingItem)
     } else {
-      const matchingKeyword = getExcludedKeyword(ingredient.item, excludedKeywords)
+      const matchingKeyword = getExcludedKeyword(normalizedItem, excludedKeywords)
       if (matchingKeyword) {
         excluded.push({
           ...shoppingItem,
