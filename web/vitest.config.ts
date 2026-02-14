@@ -4,7 +4,8 @@ import path from 'path'
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'node',
+    environment: 'jsdom', // Changed from 'node' for React component testing
+    setupFiles: ['./src/test/setup.ts'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
     coverage: {
       provider: 'v8',
@@ -15,6 +16,7 @@ export default defineConfig({
         '**/*.config.*',
         '**/types/**',
         '**/*.d.ts',
+        '**/test/**',
       ],
     },
   },
