@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { extractRecipeFromHtml } from '@/lib/recipe-url-parser';
 import { fetchRecipeHtmlSafely, UnsafeUrlError } from '@/lib/url-safety';
 
@@ -17,6 +18,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401 }
+    );
+  }
+
+  // Rate limit: 5 requests per minute (URL parsing is expensive)
+  const rateCheck = await checkRateLimit(user.id, {
+    maxRequests: 5,
+    window: '1 m',
+  });
+  if (!rateCheck.success) {
+    return NextResponse.json(
+      { error: 'Too many import attempts. Please wait and try again.' },
+      { status: 429 }
     );
   }
 

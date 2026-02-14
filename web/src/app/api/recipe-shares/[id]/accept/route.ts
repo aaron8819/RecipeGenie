@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -15,6 +16,17 @@ export async function POST(_request: Request, context: RouteContext) {
 
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const rateCheck = await checkRateLimit(user.id, {
+    maxRequests: 20,
+    window: '1 m',
+  });
+  if (!rateCheck.success) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please wait and try again.' },
+      { status: 429 }
+    );
   }
 
   if (!id) {

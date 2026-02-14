@@ -2,14 +2,11 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { buildRecipeShareSnapshot } from '@/lib/recipe-sharing';
+import { checkRateLimit } from '@/lib/rate-limit';
 import type { Recipe } from '@/types/database';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MESSAGE_LIMIT = 300;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-const RATE_LIMIT_MAX_REQUESTS = 10;
-
-const shareRequestLog = new Map<string, number[]>();
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
@@ -53,18 +50,6 @@ async function resolveRecipientUserByEmail(recipientEmail: string) {
   return null;
 }
 
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const windowStart = now - RATE_LIMIT_WINDOW_MS;
-  const attempts = (shareRequestLog.get(userId) || []).filter(
-    (t) => t >= windowStart
-  );
-
-  attempts.push(now);
-  shareRequestLog.set(userId, attempts);
-  return attempts.length > RATE_LIMIT_MAX_REQUESTS;
-}
-
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -76,10 +61,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  if (isRateLimited(user.id)) {
+  const rateCheck = await checkRateLimit(user.id);
+  if (!rateCheck.success) {
     return NextResponse.json(
-      { error: 'Too many share attempts. Please wait a minute and try again.' },
-      { status: 429 }
+      {
+        error: 'Too many share attempts. Please wait and try again.',
+        reset: rateCheck.reset,
+      },
+      {
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': rateCheck.limit.toString(),
+          'X-RateLimit-Remaining': rateCheck.remaining.toString(),
+          'X-RateLimit-Reset': rateCheck.reset.toString(),
+        },
+      }
     );
   }
 
