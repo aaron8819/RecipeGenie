@@ -61,6 +61,7 @@ import {
   useAddRecipeToPlan,
   useRecipeHistory,
   useSaveDayAssignments,
+  usePlannerCategories,
   getWeekStartDate,
   navigateWeek,
 } from "@/hooks/use-planner"
@@ -1180,6 +1181,7 @@ export function MealPlanner() {
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecipeHistory()
   const { data: allCategories } = useCategories()
+  const plannerCategories = usePlannerCategories()
   const { data: allRecipes } = useRecipes({ select: "id", limit: 1 })
   const hasAnyRecipes = (allRecipes?.length ?? 0) > 0
 
@@ -1759,7 +1761,7 @@ export function MealPlanner() {
             </button>
           </div>
           <div className="flex flex-wrap gap-4">
-            {categories.map((category: string) => (
+            {plannerCategories.map((category: string) => (
               <CategoryPill
                 key={category}
                 category={category}
@@ -1891,7 +1893,7 @@ export function MealPlanner() {
                   Select how many meals you want for each category, then generate a meal plan.
                 </p>
                 <div className="w-full max-w-md flex flex-wrap gap-3 justify-center mb-6">
-                  {categories.map((category: string) => (
+                  {plannerCategories.map((category: string) => (
                     <CategoryPill
                       key={category}
                       category={category}

@@ -14,6 +14,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   excluded_days: [],
   preferred_days: null,
   auto_assign_days: true,
+  enabled_planner_categories: null,
 }
 
 export function resolveUserConfig(

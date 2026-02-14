@@ -116,6 +116,9 @@ export function PlanSettingsModal({
   const [historyExclusionDays, setHistoryExclusionDays] = useState<number>(
     config?.history_exclusion_days || 7
   )
+  const [enabledPlannerCategories, setEnabledPlannerCategories] = useState<string[] | null>(
+    config?.enabled_planner_categories || null
+  )
 
   // Initialize from config when it changes
   useEffect(() => {
@@ -125,6 +128,7 @@ export function PlanSettingsModal({
       setPreferredDays(config.preferred_days || null)
       setAutoAssignDays(config.auto_assign_days ?? true)
       setHistoryExclusionDays(config.history_exclusion_days || 7)
+      setEnabledPlannerCategories(config.enabled_planner_categories || null)
     }
   }, [config])
 
@@ -152,6 +156,7 @@ export function PlanSettingsModal({
         preferred_days: preferredDays,
         auto_assign_days: autoAssignDays,
         history_exclusion_days: historyExclusionDays,
+        enabled_planner_categories: enabledPlannerCategories,
       })
       onOpenChange(false)
     } catch (error) {
@@ -375,6 +380,85 @@ export function PlanSettingsModal({
             <p className="text-xs text-muted-foreground">
               Recipes made within this window will be excluded from meal plan generation.
             </p>
+          </div>
+
+          {/* Planner Categories */}
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Planner Categories</h3>
+              <p className="text-xs text-muted-foreground mb-3">
+                Select which categories appear in Quick Meal Mix. Unchecked categories will still be available in your recipe library.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {categories.map((category) => {
+                const isEnabled = enabledPlannerCategories === null || enabledPlannerCategories.includes(category)
+                const categoryColor = getCategoryHexColor(category)
+
+                return (
+                  <label
+                    key={category}
+                    className={cn(
+                      "flex items-center gap-2 p-3 rounded-lg border cursor-pointer transition-colors",
+                      isEnabled
+                        ? "bg-sage-50 border-sage-200 hover:bg-sage-100"
+                        : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                    )}
+                  >
+                    <Checkbox
+                      checked={isEnabled}
+                      onCheckedChange={(checked) => {
+                        setEnabledPlannerCategories((prev) => {
+                          // If prev is null, initialize with all categories
+                          const current = prev === null ? [...categories] : prev
+
+                          if (checked) {
+                            // Add category if not present
+                            return current.includes(category) ? current : [...current, category]
+                          } else {
+                            // Remove category
+                            const updated = current.filter(c => c !== category)
+                            // If all categories are enabled, return null (default)
+                            return updated.length === categories.length ? null : updated
+                          }
+                        })
+                      }}
+                    />
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: categoryColor }}
+                      />
+                      <span className="text-sm font-medium capitalize">{category}</span>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+
+            {enabledPlannerCategories !== null && enabledPlannerCategories.length === 0 && (
+              <div className="p-3 rounded-lg border border-yellow-200 bg-yellow-50">
+                <p className="text-xs text-yellow-800">
+                  <strong>Warning:</strong> No categories enabled. You won't be able to generate meal plans until at least one category is enabled.
+                </p>
+              </div>
+            )}
+
+            {enabledPlannerCategories !== null && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {enabledPlannerCategories.length} of {categories.length} categories enabled
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEnabledPlannerCategories(null)}
+                  className="text-primary hover:underline"
+                >
+                  Enable All
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Warning if conflicts */}

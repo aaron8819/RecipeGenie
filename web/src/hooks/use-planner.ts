@@ -1,11 +1,13 @@
 "use client"
 
+import { useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Recipe, RecipeHistory, WeeklyPlan, UserConfig } from "@/types/database"
 import { generateMealPlan, getSwapRecipe, autoAssignDays } from "@/lib/meal-planner"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import { resolveUserConfig } from "@/lib/user-config"
+import { useCategories } from "./use-recipes"
 
 const WEEKLY_PLANS_KEY = ["weekly_plans"]
 const HISTORY_KEY = ["recipe_history"]
@@ -118,6 +120,29 @@ export function useUserConfig(options?: { enabled?: boolean }) {
 }
 
 /**
+ * Hook to get categories enabled for the planner
+ * Returns all categories if enabled_planner_categories is null (not configured)
+ * Returns filtered subset if enabled_planner_categories is set
+ */
+export function usePlannerCategories() {
+  const { data: config } = useUserConfig()
+  const { data: allCategories } = useCategories()
+
+  return useMemo(() => {
+    if (!config || !allCategories) return []
+
+    // If enabled_planner_categories is null, return all categories (default)
+    if (config.enabled_planner_categories === null) {
+      return allCategories
+    }
+
+    // Otherwise, filter to only enabled categories (maintains order from allCategories)
+    const enabledSet = new Set(config.enabled_planner_categories)
+    return allCategories.filter(cat => enabledSet.has(cat))
+  }, [config, allCategories])
+}
+
+/**
  * Hook to update user config
  */
 export function useUpdateUserConfig() {
@@ -186,7 +211,7 @@ export function useGenerateMealPlan() {
       // Get full config for planner settings
       const { data: config } = await supabase
         .from("user_config")
-        .select("history_exclusion_days, excluded_days, preferred_days, auto_assign_days")
+        .select("history_exclusion_days, excluded_days, preferred_days, auto_assign_days, enabled_planner_categories")
         .single()
 
       // Check if plan already exists to preserve made recipes
@@ -204,7 +229,7 @@ export function useGenerateMealPlan() {
       // If regenerating and we need to preserve made recipes, filter them out from selection
       let recipesToGenerate = recipes as Recipe[]
       let preservedRecipeIds: string[] = []
-      
+
       if (existingPlan && madeRecipeIds.length > 0) {
         // Preserve recipes that are marked as made
         preservedRecipeIds = madeRecipeIds
@@ -212,10 +237,30 @@ export function useGenerateMealPlan() {
         recipesToGenerate = recipesToGenerate.filter((r) => !preservedRecipeIds.includes(r.id))
       }
 
+      // Filter selection to only include enabled categories
+      const typedConfig = config as {
+        history_exclusion_days?: number
+        excluded_days?: number[]
+        preferred_days?: number[] | null
+        auto_assign_days?: boolean
+        enabled_planner_categories?: string[] | null
+      } | null
+
+      const enabledCategories = typedConfig?.enabled_planner_categories
+      let filteredSelection = selection
+
+      // If enabled_planner_categories is set (not null), filter selection
+      if (enabledCategories !== null && enabledCategories !== undefined) {
+        const enabledSet = new Set(enabledCategories)
+        filteredSelection = Object.fromEntries(
+          Object.entries(selection).filter(([category]) => enabledSet.has(category))
+        )
+      }
+
       const result = generateMealPlan(
         recipesToGenerate,
         history as RecipeHistory[],
-        selection,
+        filteredSelection,
         (config as { history_exclusion_days?: number } | null)?.history_exclusion_days || 7
       )
 
@@ -224,7 +269,6 @@ export function useGenerateMealPlan() {
 
       // Auto-assign days if enabled
       let dayAssignments: Record<string, number> | null = existingDayAssignments
-      const typedConfig = config as { auto_assign_days?: boolean; excluded_days?: number[]; preferred_days?: number[] | null } | null
       if (typedConfig?.auto_assign_days) {
         dayAssignments = autoAssignDays(
           allRecipeIds,

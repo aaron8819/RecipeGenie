@@ -85,6 +85,7 @@ export interface Database {
           excluded_days: number[]
           preferred_days: number[] | null
           auto_assign_days: boolean
+          enabled_planner_categories: string[] | null
         }
         Insert: {
           user_id?: string // Optional - will be set by RLS/trigger
@@ -100,6 +101,7 @@ export interface Database {
           excluded_days?: number[]
           preferred_days?: number[] | null
           auto_assign_days?: boolean
+          enabled_planner_categories?: string[] | null
         }
         Update: {
           user_id?: string
@@ -115,6 +117,7 @@ export interface Database {
           excluded_days?: number[]
           preferred_days?: number[] | null
           auto_assign_days?: boolean
+          enabled_planner_categories?: string[] | null
         }
       }
       recipe_history: {
