@@ -61,13 +61,20 @@ export async function middleware(request: NextRequest) {
   const headers = new Headers(response.headers);
 
   // Content Security Policy
+  // Note: Next.js requires 'unsafe-inline' for production hydration scripts
+  // TODO: Implement nonce-based CSP for better security (see docs/plans/security-hardening-2026-02.md)
+  const isDev = process.env.NODE_ENV === 'development';
+
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval'", // unsafe-eval required for Next.js dev/production hydration
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Required for Next.js hydration
     "style-src 'self' 'unsafe-inline'", // Required for Radix UI + Tailwind
     "img-src 'self' data: https://*.supabase.co blob:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    // In dev: allow localhost for HMR WebSocket
+    isDev
+      ? "connect-src 'self' https://*.supabase.co wss://*.supabase.co ws://localhost:* http://localhost:*"
+      : "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
