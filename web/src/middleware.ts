@@ -69,7 +69,7 @@ export async function middleware(request: NextRequest) {
     "default-src 'self'",
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Required for Next.js hydration
     "style-src 'self' 'unsafe-inline'", // Required for Radix UI + Tailwind
-    "img-src 'self' data: https://*.supabase.co blob:",
+    "img-src 'self' data: https: blob:", // Allow HTTPS images from any domain for recipe URLs
     "font-src 'self' data:",
     // In dev: allow localhost for HMR WebSocket
     isDev
