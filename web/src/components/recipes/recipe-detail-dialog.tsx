@@ -235,6 +235,12 @@ export function RecipeDetailDialog({
                         <>{toFraction(ingredient.amount)} {ingredient.unit}{" "}</>
                       )}
                       {ingredient.item}
+                      {ingredient.alternatives && ingredient.alternatives.length > 0 && (
+                        <span className="text-stone-600 dark:text-stone-400 font-normal">
+                          {' or '}
+                          {ingredient.alternatives.join(' or ')}
+                        </span>
+                      )}
                       {ingredient.modifier && (
                         <span className="text-stone-500 dark:text-stone-400 font-normal">, {ingredient.modifier}</span>
                       )}

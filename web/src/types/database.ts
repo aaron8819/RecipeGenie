@@ -276,6 +276,7 @@ export interface Ingredient {
   unit: string
   shoppingCategory?: string
   modifier?: string
+  alternatives?: string[]
   originalText?: string
 }
 

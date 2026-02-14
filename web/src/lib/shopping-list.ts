@@ -64,7 +64,12 @@ export function generateShoppingList(
       const unit = normalizeUnit(ingredient.unit || "")
       const shoppingCategory = ingredient.shoppingCategory
 
-      // Use normalized item name as key (merge by item, not item+unit)
+      // Build display name with alternatives if present
+      const displayItem = ingredient.alternatives?.length
+        ? `${ingredient.item} (or ${ingredient.alternatives.join(', ')})`
+        : ingredient.item
+
+      // Use normalized ORIGINAL item name as key (merge by item, not item+unit)
       const key = itemName
 
       if (ingredientMap.has(key)) {
@@ -98,7 +103,7 @@ export function generateShoppingList(
         }
       } else {
         ingredientMap.set(key, {
-          item: itemName,
+          item: displayItem,
           amount,
           unit,
           shoppingCategory,

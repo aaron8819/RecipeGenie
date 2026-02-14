@@ -181,10 +181,13 @@ Client-side OR logic: recipes with ANY selected tag pass the filter. Done client
 ### 2. Recipe Dialog (Create/Edit)
 - **Three tabs (add mode):** Manual entry, Import from text, Import from URL
 - **URL import flow:** Paste URL → server-side fetch/parse via `/api/recipe-import` → preview → apply & edit
+- **Live import preview (v2.15.0):** Two-column responsive layout with real-time preview (300ms debounced). Desktop shows side-by-side input/preview, mobile stacks vertically. Preview displays recipe name, stats (ingredient/step counts), warnings, first 8 ingredients, and first 3 steps. "Apply to Form" button pre-fills Manual tab.
 - **Import preview:** Scrollable preview area (warnings + name/servings/ingredients/instructions). No individual section scroll limits — entire preview scrolls as one unit within the tab.
 - **Ingredient management:** dnd-kit drag-reorder, inline editing (amount, unit, item, modifier). On mobile, ingredient rows stack into two rows (item + drag/delete on top, amt/unit/modifier below). Column headers hidden on mobile.
+- **Ingredient validation (v2.15.0):** Real-time validation with amber ring indicators and warning icons. Blocking issues: missing-item, unit-without-amount. Soft warnings: amount-without-unit (allows "3 bananas"). Validation summary banner with issue count and auto-fix button. Pre-submit validation blocks on critical issues only.
+- **Alternative ingredients (v2.15.0):** Parser detects "X or Y" patterns (e.g., "Greek yogurt or sour cream"). Displays in recipe detail, cook mode, and shopping list as "(or sour cream)".
 - **Image upload:** JPG/PNG/WebP, max 5MB, auto-compressed >1MB to 2000px width
-- **Validation:** Requires name, category, at least 1 ingredient
+- **Validation:** Requires name, category, at least 1 ingredient. Real-time validation indicators for ingredient issues (soft warnings don't block submission).
 - **Post-creation:** `onRecipeCreated` callback passes newly created recipe to parent. `RecipeList` opens the detail dialog for the new recipe.
 - **Mobile layout:** Responsive padding (`px-4 sm:px-8`), tab labels shortened ("Manual", "Import"), dialog width `w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)]` with `overflow-hidden`
 

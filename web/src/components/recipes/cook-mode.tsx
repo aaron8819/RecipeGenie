@@ -183,6 +183,12 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
                         </>
                       )}
                       {ing.item}
+                      {ing.alternatives && ing.alternatives.length > 0 && (
+                        <span className="text-muted-foreground">
+                          {' or '}
+                          {ing.alternatives.join(' or ')}
+                        </span>
+                      )}
                       {ing.modifier && (
                         <span className="text-muted-foreground">
                           , {ing.modifier}

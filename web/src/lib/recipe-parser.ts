@@ -187,6 +187,7 @@ const UNIT_ABBREVIATIONS = [
   "clove", "cloves", "head", "heads",
   "piece", "pieces", "pc", "pcs",
   "slice", "slices", "strip", "strips",
+  "pinch", "dash", "sprinkle",
 ]
 
 /**
@@ -279,11 +280,15 @@ export function parseIngredientLine(line: string): Ingredient {
     // Extract modifier if present (e.g., "lentils, rinsed" -> item: "lentils", modifier: "rinsed")
     const { item: baseItem, modifier } = extractModifier(item)
 
+    // Extract alternatives if present (e.g., "yogurt or sour cream" -> item: "yogurt", alternatives: ["sour cream"])
+    const { item: finalItem, alternatives } = extractAlternatives(baseItem)
+
     return {
-      item: baseItem || cleaned,
+      item: finalItem || cleaned,
       amount: amount,
       unit: unit,
       modifier: modifier || undefined,
+      alternatives: alternatives,
       originalText,
     }
   }
@@ -291,11 +296,16 @@ export function parseIngredientLine(line: string): Ingredient {
   // No amount found, treat entire line as ingredient name
   // Still check for modifiers
   const { item: baseItem, modifier } = extractModifier(cleaned)
+
+  // Extract alternatives if present
+  const { item: finalItem, alternatives } = extractAlternatives(baseItem)
+
   return {
-    item: baseItem,
+    item: finalItem,
     amount: null,
     unit: "",
     modifier: modifier || undefined,
+    alternatives: alternatives,
     originalText,
   }
 }
@@ -306,17 +316,26 @@ export function parseIngredientLine(line: string): Ingredient {
  */
 function normalizeUnicode(text: string): string {
   let normalized = text
-  
-  // Replace Unicode fractions with decimal strings
-  // We convert to decimal to make regex matching easier
+
+  // PASS 1: Handle mixed fractions FIRST (e.g., "1¾" → "1.75")
+  // Match whole number + fraction with NO space between
   for (const [char, value] of Object.entries(UNICODE_FRACTIONS)) {
-    // Use a more precise replacement that preserves spacing
+    const mixedPattern = new RegExp(`(\\d+)${char}`, 'g')
+    normalized = normalized.replace(mixedPattern, (match, whole) => {
+      const wholeNum = parseFloat(whole)
+      return (wholeNum + value).toString()
+    })
+  }
+
+  // PASS 2: Handle standalone fractions (existing logic)
+  // Replace Unicode fractions with decimal strings
+  for (const [char, value] of Object.entries(UNICODE_FRACTIONS)) {
     normalized = normalized.replace(new RegExp(char, "g"), value.toString())
   }
-  
-  // Replace en-dash and em-dash with regular dash for consistency
+
+  // PASS 3: Replace en-dash and em-dash with regular dash for consistency
   normalized = normalized.replace(/[–—]/g, "-")
-  
+
   return normalized
 }
 
@@ -402,56 +421,158 @@ function matchUnit(text: string): { unit: string; endIndex: number } | null {
 
 /**
  * Extract modifier from ingredient item name
- * Detects preparation instructions after commas
- * Examples:
- * - "lentils, rinsed" -> item: "lentils", modifier: "rinsed"
- * - "onion, diced" -> item: "onion", modifier: "diced"
- * - "garlic, minced" -> item: "garlic", modifier: "minced"
- * - "bell pepper, diced (optional)" -> item: "bell pepper", modifier: "diced (optional)"
- * - "lentils, rinsed and drained" -> item: "lentils", modifier: "rinsed and drained"
+ * Detects preparation instructions in multiple formats:
+ * - Comma-separated: "lentils, rinsed" → item: "lentils", modifier: "rinsed"
+ * - Parenthetical: "butter (softened)" → item: "butter", modifier: "softened"
+ * - "for X" pattern: "sugar, for topping" → item: "sugar", modifier: "for topping"
+ * - Combinations: "butter (softened), for greasing" → item: "butter", modifier: "softened, for greasing"
  */
 function extractModifier(item: string): { item: string; modifier: string | null } {
   if (!item) return { item: "", modifier: null }
 
+  let baseItem = item
+  const modifiers: string[] = []
+
+  // Step 1: Extract "for X" pattern at the end (must be after comma or be the whole suffix)
+  // Examples: "for topping", "for garnish", "for serving"
+  const forPattern = /,?\s*\bfor\s+[a-z\s]+$/i
+  const forMatch = baseItem.match(forPattern)
+  if (forMatch) {
+    const forText = forMatch[0].replace(/^,\s*/, '').trim()
+    // Only accept if it's short (likely a purpose, not a long note)
+    if (forText.length < 30) {
+      modifiers.push(forText)
+      baseItem = baseItem.substring(0, baseItem.length - forMatch[0].length).trim()
+    }
+  }
+
+  // Step 2: Extract parenthetical modifiers
+  // Only extract if they're short and likely prep instructions, not long notes
+  // Examples: "(optional)", "(softened)", "(to be browned)", "(raw)", "(medium)"
+  const parenPattern = /\s*\(([^)]+)\)\s*/g
+  const parenMatches: { text: string; fullMatch: string; index: number }[] = []
+  let match: RegExpExecArray | null
+
+  while ((match = parenPattern.exec(baseItem)) !== null) {
+    const innerText = match[1].trim()
+    parenMatches.push({
+      text: innerText,
+      fullMatch: match[0],
+      index: match.index
+    })
+  }
+
+  // Filter for short parentheticals that look like modifiers
+  // Match if the entire text is a known modifier or starts with one
+  const modifierKeywords = /^(optional|softened|melted|browned|chopped|minced|diced|sliced|peeled|grated|shredded|crushed|mashed|drained|dried|toasted|roasted|fresh|frozen|thawed|cooked|uncooked|raw|whole|halved|quartered|cubed|medium|large|small|extra\s+large|to\s+be|as\s+needed|or\s+to\s+taste|peeled\s+or|or\s+unpeeled)(\s|$)/i
+
+  for (const parenMatch of parenMatches.reverse()) { // Reverse to remove from end first
+    const innerText = parenMatch.text
+    // Accept if it's short enough and starts with or is a known modifier
+    // Max 30 chars to avoid long notes like "(use 0.75 if bananas are very large)"
+    const isModifier = innerText.length <= 30 && modifierKeywords.test(innerText)
+
+    if (isModifier) {
+      modifiers.unshift(innerText) // Add to front to maintain order
+      // Remove the parenthetical, preserving spaces around it
+      const before = baseItem.substring(0, parenMatch.index)
+      const after = baseItem.substring(parenMatch.index + parenMatch.fullMatch.length)
+      baseItem = (before + ' ' + after).replace(/\s+/g, ' ').trim()
+    }
+  }
+  baseItem = baseItem.trim()
+
+  // Step 3: Extract comma-separated modifier (existing logic)
   // Find the last comma that's not inside parentheses
-  // This handles cases like "1 (28 oz) can crushed tomatoes" where comma is in parentheses
   let lastCommaIndex = -1
   let parenDepth = 0
-  
-  for (let i = item.length - 1; i >= 0; i--) {
-    if (item[i] === ')') parenDepth++
-    else if (item[i] === '(') parenDepth--
-    else if (item[i] === ',' && parenDepth === 0) {
+
+  for (let i = baseItem.length - 1; i >= 0; i--) {
+    if (baseItem[i] === ')') parenDepth++
+    else if (baseItem[i] === '(') parenDepth--
+    else if (baseItem[i] === ',' && parenDepth === 0) {
       lastCommaIndex = i
       break
     }
   }
 
-  // If no comma found, no modifier
-  if (lastCommaIndex === -1) {
-    return { item, modifier: null }
+  if (lastCommaIndex !== -1) {
+    const potentialModifier = baseItem.substring(lastCommaIndex + 1).trim()
+    const beforeComma = baseItem.substring(0, lastCommaIndex).trim()
+
+    // Only treat as modifier if it's reasonably short (likely a prep instruction)
+    const isLikelyModifier =
+      potentialModifier.length > 0 &&
+      potentialModifier.length < 60 && // Reasonable length for a modifier
+      !potentialModifier.match(/^\d+/) && // Doesn't start with a number
+      beforeComma.length > 0 &&
+      (potentialModifier.length < 25 || // Short enough to likely be a modifier
+       modifierKeywords.test(potentialModifier))
+
+    if (isLikelyModifier) {
+      modifiers.unshift(potentialModifier) // Add to front to maintain order
+      baseItem = beforeComma
+    }
   }
 
-  // Extract base item and potential modifier
-  const baseItem = item.substring(0, lastCommaIndex).trim()
-  const potentialModifier = item.substring(lastCommaIndex + 1).trim()
-
-  // Only treat as modifier if it's reasonably short (likely a prep instruction)
-  // Common modifiers are usually 1-30 characters
-  // Also check for common modifier keywords to avoid false positives
-  const isLikelyModifier = 
-    potentialModifier.length > 0 &&
-    potentialModifier.length < 60 && // Reasonable length for a modifier
-    !potentialModifier.match(/^\d+/) && // Doesn't start with a number (likely not a modifier)
-    (potentialModifier.length < 25 || // Short enough to likely be a modifier
-     /(rinsed|chopped|minced|diced|sliced|peeled|grated|shredded|crushed|mashed|optional|drained|dried|toasted|roasted|fresh|frozen|thawed|cooked|uncooked|raw|whole|halved|quartered|cubed|julienned|spiralized|zested|juiced|pitted|seeded|stemmed|trimmed|cleaned|washed|blanched|parboiled|steamed|boiled|fried|sautéed|grilled|baked|broiled|smoked|cured|marinated|brined|seasoned|salted|peppered|floured|breaded|battered|glazed|frosted|garnished|to taste|as needed)/i.test(potentialModifier))
-
-  if (isLikelyModifier && baseItem.length > 0) {
-    return { item: baseItem, modifier: potentialModifier }
+  // Combine all modifiers
+  if (modifiers.length > 0) {
+    return { item: baseItem, modifier: modifiers.join(', ') }
   }
 
-  // No modifier detected
-  return { item, modifier: null }
+  return { item: baseItem, modifier: null }
+}
+
+/**
+ * Extract alternative ingredients from "X or Y" pattern
+ * Only extracts if pattern is clear substitution, not modifier context
+ *
+ * Examples:
+ * - "Greek yogurt or sour cream" → item: "Greek yogurt", alternatives: ["sour cream"]
+ * - "salt or pepper to taste" → item: "salt or pepper to taste", alternatives: undefined (keep as is)
+ * - "peeled or unpeeled potatoes" → item: "peeled or unpeeled potatoes" (modifier context)
+ */
+function extractAlternatives(item: string): {
+  item: string;
+  alternatives?: string[]
+} {
+  // Ignore if it's a modifier context (appears in common phrases)
+  const modifierContextPatterns = [
+    /to taste/i,
+    /as needed/i,
+    /or unpeeled/i,
+    /or peeled/i,
+    /more or less/i,
+    /or more/i,
+    /or less/i,
+  ];
+
+  for (const pattern of modifierContextPatterns) {
+    if (pattern.test(item)) {
+      return { item };
+    }
+  }
+
+  // Match "X or Y" pattern (case-insensitive)
+  // Requires "or" to be surrounded by word boundaries to avoid matching "orange" etc.
+  const altPattern = /^(.+?)\s+\bor\b\s+(.+)$/i;
+  const match = item.match(altPattern);
+
+  if (match) {
+    const [_, primary, alternative] = match;
+    const trimmedPrimary = primary.trim();
+    const trimmedAlt = alternative.trim();
+
+    // Only extract if both parts are substantial (not just single letters)
+    if (trimmedPrimary.length > 1 && trimmedAlt.length > 1) {
+      return {
+        item: trimmedPrimary,
+        alternatives: [trimmedAlt]
+      };
+    }
+  }
+
+  return { item };
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Image from "next/image"
-import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical, Upload, X, Link, Loader2 } from "lucide-react"
+import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical, Upload, X, Link, Loader2, List as ListIcon, ChefHat, AlertCircle, Wand2 } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -47,9 +47,11 @@ import {
 } from "@/components/ui/tabs"
 import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from "@/hooks/use-recipes"
 import { useUndoToast } from "@/hooks/use-undo-toast"
-import { parseRecipeText, type ParsedRecipe } from "@/lib/recipe-parser"
+import { useDebouncedCallback } from "@/hooks/use-debounce"
+import { parseRecipeText, parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
 import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
+import { cn } from "@/lib/utils"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
@@ -60,6 +62,47 @@ interface RecipeDialogProps {
   recipe?: Recipe
   categories: string[]
   onRecipeCreated?: (recipe: Recipe) => void
+}
+
+/**
+ * Validate an ingredient for common issues
+ * Returns array of issue codes for UI rendering
+ */
+function validateIngredient(ingredient: Ingredient): string[] {
+  const issues: string[] = [];
+
+  // Missing item name
+  if (!ingredient.item || !ingredient.item.trim()) {
+    issues.push('missing-item');
+  }
+
+  // Unit specified but no amount
+  if (ingredient.unit && ingredient.unit.trim() && !ingredient.amount) {
+    issues.push('unit-without-amount');
+  }
+
+  // Amount specified but no unit (only flag if amount > 0)
+  if (ingredient.amount && ingredient.amount > 0 && !ingredient.unit?.trim()) {
+    issues.push('amount-without-unit');
+  }
+
+  return issues;
+}
+
+/**
+ * Get human-readable message for validation issue
+ */
+function getValidationMessage(issueCode: string): string {
+  switch (issueCode) {
+    case 'missing-item':
+      return 'Missing ingredient name';
+    case 'unit-without-amount':
+      return 'Unit specified without amount';
+    case 'amount-without-unit':
+      return 'Amount specified without unit';
+    default:
+      return 'Validation issue';
+  }
 }
 
 export function RecipeDialog({
@@ -95,6 +138,7 @@ export function RecipeDialog({
   const [parseError, setParseError] = useState<string | null>(null)
   const [importStep, setImportStep] = useState<'input' | 'preview'>('input')
   const [parsedPreview, setParsedPreview] = useState<ParsedRecipe | null>(null)
+  const [livePreview, setLivePreview] = useState<ParsedRecipe | null>(null)
   const importFromUrl = useImportRecipeFromUrl()
 
   const { data: allTags = [] } = useAllTags()
@@ -171,6 +215,22 @@ export function RecipeDialog({
       })
     }
   }, [])
+
+  // Debounced live preview parser
+  const debouncedParse = useDebouncedCallback(((text: string) => {
+    if (!text.trim()) {
+      setLivePreview(null);
+      return;
+    }
+
+    try {
+      const parsed = parseRecipeText(text);
+      setLivePreview(parsed);
+    } catch (error) {
+      console.error('Live preview parse error:', error);
+      setLivePreview(null);
+    }
+  }) as (...args: unknown[]) => void, 300);
 
   const handleParseImport = () => {
     if (!importText.trim()) {
@@ -258,6 +318,54 @@ export function RecipeDialog({
     setParsedPreview(null)
   }
 
+  // Handle auto-fix for validation issues
+  const handleAutoFix = useCallback(() => {
+    const fixed = ingredients.map((ing) => {
+      const issues = validateIngredient(ing);
+
+      if (issues.length === 0) return ing;
+
+      // Try parsing the item field for structured data
+      if (ing.item && (issues.includes('amount-without-unit') || issues.includes('unit-without-amount'))) {
+        const parsed = parseIngredientLine(ing.item);
+
+        if (parsed.item && parsed.item !== ing.item) {
+          return {
+            ...ing,
+            amount: parsed.amount !== null ? parsed.amount : ing.amount,
+            unit: parsed.unit || ing.unit,
+            item: parsed.item,
+            modifier: parsed.modifier || ing.modifier,
+          };
+        }
+      }
+
+      // Unit without amount → default to 1
+      if (issues.includes('unit-without-amount') && !ing.amount) {
+        return { ...ing, amount: 1 };
+      }
+
+      return ing;
+    });
+
+    setIngredients(fixed);
+
+    // Count fixed items
+    const fixedCount = fixed.filter((f, i) => {
+      const before = validateIngredient(ingredients[i]).length;
+      const after = validateIngredient(f).length;
+      return after < before;
+    }).length;
+
+    if (fixedCount > 0) {
+      undoToast.show({
+        message: `Auto-fixed ${fixedCount} ingredient(s)`,
+        duration: 3000
+      });
+    }
+  }, [ingredients, setIngredients, undoToast]);
+
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -292,6 +400,21 @@ export function RecipeDialog({
   }
 
   const handleSubmit = async () => {
+    // P3: Validate ingredients before submitting (only blocking issues)
+    const blockingIssues = ingredients.filter(ing => {
+      const issues = validateIngredient(ing)
+      // Only block on truly invalid cases, not "amount-without-unit" (e.g., "3 bananas" is valid)
+      return issues.some(issue => issue === 'missing-item' || issue === 'unit-without-amount')
+    })
+
+    if (blockingIssues.length > 0) {
+      undoToast.show({
+        message: `${blockingIssues.length} ingredient(s) have critical issues. Please fix them before saving.`,
+        duration: 5000
+      })
+      return
+    }
+
     // Filter out empty ingredients
     const validIngredients = ingredients.filter((i) => i.item.trim())
 
@@ -422,62 +545,65 @@ export function RecipeDialog({
             </div>
             <TabsContent value="import" className="space-y-4 mt-0 flex-1 overflow-y-auto pb-6 sm:pb-8 px-4 sm:px-8 scrollbar-recipe-dialog data-[state=inactive]:hidden">
               {importStep === 'input' ? (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="import-url">Import from URL</Label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="import-url"
-                          value={importUrl}
-                          onChange={(e) => {
-                            setImportUrl(e.target.value)
-                            setParseError(null)
-                          }}
-                          placeholder="https://www.example.com/recipe..."
-                          className="pl-9 font-mono text-sm"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              handleUrlImport()
-                            }
-                          }}
-                        />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* LEFT COLUMN: Input */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="import-url">Import from URL</Label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="import-url"
+                            value={importUrl}
+                            onChange={(e) => {
+                              setImportUrl(e.target.value)
+                              setParseError(null)
+                            }}
+                            placeholder="https://www.example.com/recipe..."
+                            className="pl-9 font-mono text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                handleUrlImport()
+                              }
+                            }}
+                          />
+                        </div>
+                        <Button
+                          onClick={handleUrlImport}
+                          disabled={importFromUrl.isPending}
+                          className="shrink-0"
+                        >
+                          {importFromUrl.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Importing...
+                            </>
+                          ) : (
+                            'Import'
+                          )}
+                        </Button>
                       </div>
-                      <Button
-                        onClick={handleUrlImport}
-                        disabled={importFromUrl.isPending}
-                        className="shrink-0"
-                      >
-                        {importFromUrl.isPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Importing...
-                          </>
-                        ) : (
-                          'Import'
-                        )}
-                      </Button>
                     </div>
-                  </div>
 
-                  <div className="relative flex items-center gap-4 py-1">
-                    <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
-                    <span className="text-xs text-muted-foreground font-medium">or paste text</span>
-                    <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
-                  </div>
+                    <div className="relative flex items-center gap-4 py-1">
+                      <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+                      <span className="text-xs text-muted-foreground font-medium">or paste text</span>
+                      <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="import-text">Paste Recipe Text</Label>
-                    <Textarea
-                      id="import-text"
-                      value={importText}
-                      onChange={(e) => {
-                        setImportText(e.target.value)
-                        setParseError(null)
-                      }}
-                      placeholder={`Example:
+                    <div className="space-y-2">
+                      <Label htmlFor="import-text">Paste Recipe Text</Label>
+                      <Textarea
+                        id="import-text"
+                        value={importText}
+                        onChange={(e) => {
+                          setImportText(e.target.value)
+                          setParseError(null)
+                          debouncedParse(e.target.value)
+                        }}
+                        placeholder={`Example:
 Chocolate Chip Cookies
 Makes 24 cookies
 
@@ -498,27 +624,184 @@ Instructions:
 6. Stir in chocolate chips
 7. Drop rounded tablespoons onto baking sheet
 8. Bake for 9-11 minutes`}
-                      rows={12}
-                      className="font-mono text-sm"
-                    />
-                    {parseError && (
-                      <p className="text-sm text-destructive" role="alert" aria-live="assertive">{parseError}</p>
-                    )}
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <p>Tips for best results:</p>
-                      <ul className="list-disc list-inside space-y-0.5 ml-2">
-                        <li>Include a recipe name at the top</li>
-                        <li>Use &quot;Ingredients:&quot; header before the ingredient list</li>
-                        <li>Use &quot;Instructions:&quot; or &quot;Directions:&quot; before steps</li>
-                        <li>One ingredient per line</li>
-                        <li>One instruction step per line</li>
-                      </ul>
+                        rows={20}
+                        className="font-mono text-sm resize-none"
+                      />
+                      {parseError && (
+                        <p className="text-sm text-destructive" role="alert" aria-live="assertive">{parseError}</p>
+                      )}
                     </div>
                   </div>
-                  <Button onClick={handleParseImport} className="w-full">
-                    Parse & Preview Recipe
-                  </Button>
-                </>
+
+                  {/* RIGHT COLUMN: Live Preview */}
+                  <div className="space-y-4">
+                    <Label className="text-sm font-semibold">Live Preview</Label>
+
+                    {livePreview ? (
+                      <div className="bg-muted/30 border border-border rounded-xl p-6 space-y-6 h-full">
+                        {/* Recipe Name */}
+                        <div>
+                          <div className="text-xs uppercase text-muted-foreground mb-1 font-semibold tracking-wide">
+                            Recipe Name
+                          </div>
+                          <div className="font-serif text-2xl text-primary font-medium">
+                            {livePreview.name}
+                          </div>
+                          {livePreview.servings && (
+                            <div className="text-sm text-muted-foreground mt-1">
+                              Serves {livePreview.servings}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Quick Stats */}
+                        <div className="flex gap-6 text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <ChefHat className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-lg">
+                                {livePreview.ingredients.length}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                ingredient{livePreview.ingredients.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <ListIcon className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-lg">
+                                {livePreview.instructions.length}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                step{livePreview.instructions.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Warnings */}
+                        {livePreview.warnings.length > 0 && (
+                          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-xs font-bold uppercase tracking-wide mb-2">
+                              <AlertTriangle className="h-4 w-4" />
+                              Parsing Notes
+                            </div>
+                            <ul className="text-sm text-amber-700 dark:text-amber-400 space-y-1">
+                              {livePreview.warnings.slice(0, 4).map((warning, i) => (
+                                <li key={i} className="flex items-start gap-2">
+                                  <span className="text-amber-500 mt-0.5">•</span>
+                                  <span>{warning}</span>
+                                </li>
+                              ))}
+                              {livePreview.warnings.length > 4 && (
+                                <li className="text-xs italic text-amber-600">
+                                  +{livePreview.warnings.length - 4} more warning{livePreview.warnings.length - 4 !== 1 ? 's' : ''}
+                                </li>
+                              )}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Ingredient Preview */}
+                        {livePreview.ingredients.length > 0 && (
+                          <div>
+                            <div className="text-xs uppercase text-muted-foreground mb-3 font-semibold tracking-wide">
+                              Ingredients Preview
+                            </div>
+                            <div className="space-y-2 text-sm bg-background/50 rounded-lg p-3 max-h-48 overflow-y-auto">
+                              {livePreview.ingredients.slice(0, 8).map((ing, i) => (
+                                <div key={i} className="flex gap-3 items-start">
+                                  <span className="text-muted-foreground font-mono text-xs min-w-[70px] text-right flex-shrink-0 mt-0.5">
+                                    {ing.amount !== null ? `${ing.amount} ${ing.unit}`.trim() : '—'}
+                                  </span>
+                                  <span className="flex-1">
+                                    {ing.item}
+                                    {ing.modifier && (
+                                      <span className="text-muted-foreground text-xs">, {ing.modifier}</span>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                              {livePreview.ingredients.length > 8 && (
+                                <div className="text-xs text-muted-foreground italic text-center pt-2 border-t">
+                                  +{livePreview.ingredients.length - 8} more ingredient{livePreview.ingredients.length - 8 !== 1 ? 's' : ''}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Instructions Preview */}
+                        {livePreview.instructions.length > 0 && (
+                          <div>
+                            <div className="text-xs uppercase text-muted-foreground mb-3 font-semibold tracking-wide">
+                              Instructions Preview
+                            </div>
+                            <div className="space-y-2 text-sm bg-background/50 rounded-lg p-3 max-h-32 overflow-y-auto">
+                              {livePreview.instructions.slice(0, 3).map((step, i) => (
+                                <div key={i} className="flex gap-2 items-start">
+                                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                                    {i + 1}
+                                  </span>
+                                  <span className="flex-1 leading-relaxed">
+                                    {step.length > 100 ? `${step.substring(0, 100)}...` : step}
+                                  </span>
+                                </div>
+                              ))}
+                              {livePreview.instructions.length > 3 && (
+                                <div className="text-xs text-muted-foreground italic text-center pt-2 border-t">
+                                  +{livePreview.instructions.length - 3} more step{livePreview.instructions.length - 3 !== 1 ? 's' : ''}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Apply Button */}
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            if (livePreview) {
+                              setParsedPreview(livePreview);
+                              setName(livePreview.name);
+                              setIngredients(livePreview.ingredients);
+                              setInstructions(livePreview.instructions.join('\n'));
+                              setServings(livePreview.servings || 4);
+                              setMode('manual');
+                            }
+                          }}
+                          className="w-full"
+                          size="lg"
+                          disabled={
+                            !livePreview ||
+                            livePreview.warnings.some(w =>
+                              w.includes("No ingredients") || w.includes("No instructions")
+                            )
+                          }
+                        >
+                          <Check className="h-4 w-4 mr-2" />
+                          Apply to Form
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="bg-muted/10 border-2 border-dashed border-muted-foreground/20 rounded-xl p-12 flex flex-col items-center justify-center text-center h-full min-h-[500px]">
+                        <FileText className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                        <p className="text-sm text-muted-foreground font-medium mb-1">
+                          Paste recipe text to see live preview
+                        </p>
+                        <p className="text-xs text-muted-foreground/70 max-w-[280px]">
+                          Your recipe will be parsed in real-time as you type
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ) : (
                 /* Preview State */
                 <div className="space-y-4">
@@ -635,6 +918,7 @@ Instructions:
                 onIngredientChange={handleIngredientChange}
                 isEditing={false}
                 onReorderIngredients={handleReorderIngredients}
+                handleAutoFix={handleAutoFix}
                 imagePreview={imagePreview}
                 imageUrl={imageUrl}
                 onImageSelect={handleImageSelect}
@@ -667,6 +951,7 @@ Instructions:
             onIngredientChange={handleIngredientChange}
             isEditing={true}
             onReorderIngredients={handleReorderIngredients}
+            handleAutoFix={handleAutoFix}
             imagePreview={imagePreview}
             imageUrl={imageUrl}
             onImageSelect={handleImageSelect}
@@ -724,6 +1009,7 @@ interface RecipeFormContentProps {
   ) => void
   isEditing: boolean
   onReorderIngredients: (event: DragEndEvent) => void
+  handleAutoFix: () => void
 }
 
 // Sortable ingredient row component
@@ -767,6 +1053,10 @@ function SortableIngredientRow({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  // Validation
+  const issues = validateIngredient(ingredient)
+  const hasIssues = issues.length > 0
+
   const compactInput = editModeTwoColLayout
   const addRecipeInput = addRecipeModalLayout
   const dragHandle = isEditing || addRecipeModalLayout ? (
@@ -783,7 +1073,10 @@ function SortableIngredientRow({
 
   const amountInput = (
     <Input
-      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 text-center rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-16 text-center text-sm py-2 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 rounded-lg text-center bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-20"}
+      className={cn(
+        editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 text-center rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-16 text-center text-sm py-2 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 rounded-lg text-center bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-20",
+        issues.includes('unit-without-amount') && "border-amber-400 dark:border-amber-500"
+      )}
       type="number"
       step="0.25"
       placeholder="Amt"
@@ -799,7 +1092,10 @@ function SortableIngredientRow({
   )
   const unitInput = (
     <Input
-      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-24"}
+      className={cn(
+        editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-24",
+        issues.includes('amount-without-unit') && "border-amber-400 dark:border-amber-500"
+      )}
       placeholder="Unit"
       value={ingredient.unit}
       onChange={(e) =>
@@ -809,7 +1105,10 @@ function SortableIngredientRow({
   )
   const itemInput = (
     <Input
-      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "flex-1 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "flex-1"}
+      className={cn(
+        editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "flex-1 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "flex-1",
+        issues.includes('missing-item') && "border-amber-400 dark:border-amber-500"
+      )}
       placeholder="Ingredient"
       value={ingredient.item}
       onChange={(e) =>
@@ -845,8 +1144,23 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
-        className={`bg-background dark:bg-zinc-900 border border-stone-100 dark:border-zinc-800 p-1.5 rounded-xl group ${isDragging ? "z-50" : ""}`}
+        className={cn(
+          "bg-background dark:bg-zinc-900 border border-stone-100 dark:border-zinc-800 p-1.5 rounded-xl group relative",
+          isDragging && "z-50",
+          hasIssues && "ring-2 ring-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20"
+        )}
       >
+        {/* Validation indicator */}
+        {hasIssues && (
+          <div
+            className="absolute -top-2 -right-2 z-10"
+            title={issues.map(getValidationMessage).join(', ')}
+          >
+            <div className="bg-amber-500 text-white rounded-full p-1 shadow-sm">
+              <AlertCircle className="h-3.5 w-3.5" />
+            </div>
+          </div>
+        )}
         {/* Desktop: single row grid */}
         <div className="hidden sm:grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 items-center">
           {dragHandle}
@@ -976,6 +1290,7 @@ function RecipeFormContent({
   onImageSelect,
   onRemoveImage,
   fileInputRef,
+  handleAutoFix,
 }: RecipeFormContentPropsWithImage) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
@@ -1124,6 +1439,34 @@ function RecipeFormContent({
                 ADD INGREDIENT
               </button>
             </div>
+
+            {/* Validation Summary */}
+            {ingredients.some(ing => validateIngredient(ing).length > 0) && (
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-amber-900 dark:text-amber-200 text-sm mb-1">
+                      Ingredient Validation Issues
+                    </div>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
+                      {ingredients.filter(ing => validateIngredient(ing).length > 0).length} ingredient(s) need attention. Check highlighted fields.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoFix}
+                      className="text-xs h-7"
+                    >
+                      <Wand2 className="h-3 w-3 mr-1.5" />
+                      Attempt Auto-Fix
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}

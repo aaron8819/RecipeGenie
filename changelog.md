@@ -8,6 +8,7 @@ For older entries (v1.0.0 – v2.7.1), see `changelog-archive.md`.
 
 ## Table of Contents
 
+- [2.15.0](#2150---2026-02-14) — Recipe parser improvements (P0-P3)
 - [2.14.0](#2140---2026-02-13) — Recipe sharing (copy-on-accept)
 - [2.13.1](#2131---2026-02-04) — Mobile UX, MultiSelect refactor
 - [2.13.0](#2130---2026-02-04) — Onboarding, default recipe images
@@ -26,6 +27,51 @@ For older entries (v1.0.0 – v2.7.1), see `changelog-archive.md`.
 - [2.9.0](#290---2026-01-27) — Recipe image support
 - [2.8.1](#281---2026-01-26) — Ingredient drag-and-drop
 - [2.8.0](#280---2026-01-25) — Meal planner settings
+
+---
+
+## [2.15.0] - 2026-02-14
+
+**Summary:** Recipe parser improvements including mixed fraction fix, live import preview, alternative ingredients detection, and soft validation indicators
+
+### Added
+
+- **Live import preview (P1)**:
+  - Real-time preview panel with 300ms debouncing in Import tab
+  - New `use-debounce.ts` hook for performance optimization
+  - Two-column responsive layout (desktop side-by-side, mobile stacked)
+  - Preview shows recipe name, ingredient/step counts, warnings, and first 8 ingredients/3 steps
+  - "Apply to Form" button pre-fills Manual tab from preview
+- **Alternative ingredients detection (P2)**:
+  - Added `alternatives?: string[]` field to Ingredient type (JSONB backward-compatible)
+  - Parser detects "X or Y" patterns (e.g., "Greek yogurt or sour cream")
+  - Smart context detection avoids false positives (e.g., "to taste", "or unpeeled")
+  - Alternative rendering in recipe detail, cook mode, and shopping list displays as "(or sour cream)"
+- **Ingredient validation indicators (P3)**:
+  - Real-time validation with visual amber rings and warning icons
+  - Three validation rules: missing-item (blocking), unit-without-amount (blocking), amount-without-unit (soft warning)
+  - Validation summary banner shows issue count
+  - Auto-fix button attempts to parse structured data from item field
+  - Pre-submit validation blocks on critical issues only (allows "3 bananas" without unit)
+
+### Fixed
+
+- **Mixed fraction parsing bug (P0)**:
+  - Fixed critical bug where "1¾ cups" parsed as amount=1, unit="10.75 cups"
+  - Implemented two-pass normalization: mixed fractions first, then standalone fractions
+  - Now correctly parses "1¾ cups flour" as amount=1.75, unit="cups"
+
+### Changed
+
+- Recipe dialog Import tab now uses responsive two-column grid layout
+- Ingredient validation changed from blocking to soft warnings for amount-without-unit cases
+- Updated recipe-detail-dialog.tsx, cook-mode.tsx, and shopping-list.ts to display alternatives
+
+### Tests
+
+- Added 7 new mixed fraction parsing tests (all passing)
+- Added 8 new alternative ingredient detection tests (all passing)
+- Total parser test suite: 32 tests passing
 
 ---
 
