@@ -1428,17 +1428,7 @@ function RecipeFormContent({
         {/* Right: Ingredients, Instructions — recipemodal_editmode_redesign */}
         <div className="space-y-6 sm:space-y-8 flex flex-col min-h-0">
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <Label className="text-sm font-semibold text-primary">Ingredients</Label>
-              <button
-                type="button"
-                onClick={onAddIngredient}
-                className="text-xs font-bold text-primary flex items-center hover:opacity-80 transition-opacity"
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                ADD INGREDIENT
-              </button>
-            </div>
+            <Label className="text-sm font-semibold text-primary mb-4 block">Ingredients</Label>
 
             {/* Validation Summary */}
             {ingredients.some(ing => validateIngredient(ing).length > 0) && (
@@ -1498,6 +1488,14 @@ function RecipeFormContent({
                 ) : null}
               </DragOverlay>
             </DndContext>
+            <button
+              type="button"
+              onClick={onAddIngredient}
+              className="mt-3 text-xs font-bold text-primary flex items-center hover:opacity-80 transition-opacity"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              ADD INGREDIENT
+            </button>
           </div>
 
           <div className="flex-1 flex flex-col min-h-0">
@@ -1628,17 +1626,7 @@ function RecipeFormContent({
       {/* Right: lg:col-span-7 — Ingredients, Instructions */}
       <div className="lg:col-span-7 p-4 sm:p-8 space-y-8">
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className={addLabelClass}>Ingredients</h3>
-            <button
-              type="button"
-              onClick={onAddIngredient}
-              className="text-[10px] font-bold uppercase text-accent hover:text-primary transition-colors flex items-center gap-1"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Row
-            </button>
-          </div>
+          <h3 className={addLabelClass}>Ingredients</h3>
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -1678,6 +1666,14 @@ function RecipeFormContent({
               ) : null}
             </DragOverlay>
           </DndContext>
+          <button
+            type="button"
+            onClick={onAddIngredient}
+            className="mt-3 text-[10px] font-bold uppercase text-accent hover:text-primary transition-colors flex items-center gap-1"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Row
+          </button>
         </div>
 
         <div className="space-y-4">
