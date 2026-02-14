@@ -82,6 +82,7 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 - **RLS**: Every new table needs an explicit RLS policy — test in Supabase SQL Editor first
 - **Shopping merging**: Uses ES module imports only, not `require()` — dynamic require breaks at runtime
 - **E2E env vars**: Tests need `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, `TEST_USER_PASSWORD`
+- **CSP nonces**: Middleware sets `x-nonce` header; root layout MUST call `headers()` to trigger Next.js 15 automatic nonce application to inline scripts
 - **User config fetch**: PGRST116 (not found) is expected for new users — `resolveUserConfig()` returns defaults
 
 ## Doc Router — Read Before You Act

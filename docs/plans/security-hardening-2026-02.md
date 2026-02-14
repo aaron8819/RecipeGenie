@@ -505,24 +505,30 @@ git push origin main
 
 ---
 
-### CSP Nonce Implementation
-**Current:** `script-src 'self' 'unsafe-eval'`
-**Target:** `script-src 'self' 'nonce-{random}'`
+### ✅ CSP Nonce Implementation - COMPLETED (2026-02-14)
+**Previous:** `script-src 'self' 'unsafe-eval'` (blocked inline scripts)
+**Current:** `script-src 'self' 'nonce-{random}' 'unsafe-eval'` (proper nonce-based CSP)
 
-**Why defer:**
-- Current CSP with `'unsafe-eval'` is industry-standard for Next.js apps
-- Nonce implementation requires:
-  - Middleware nonce generation using `crypto.randomUUID()`
-  - Injecting nonce into CSP header
-  - Passing nonce to `<style>` tags via Next.js headers
-  - Testing across all Radix UI components
-- **Decision:** Current CSP provides significant security improvement over no CSP
+**Implementation:**
+- Middleware generates cryptographic nonce using `Buffer.from(crypto.randomUUID()).toString('base64')`
+- Nonce injected into CSP header: `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`
+- Nonce passed via `x-nonce` header (lowercase per Next.js 15 convention)
+- Root layout made async and calls `headers()` to trigger Next.js 15 automatic nonce detection
+- Next.js 15+ automatically applies nonce to all inline scripts (hydration data, routing, config)
 
-**When to revisit:** When security audit requires stricter CSP or Next.js adds better nonce support
+**Security improvement:**
+- Each page load gets unique, unpredictable nonce that attackers cannot forge
+- Blocks unauthorized inline scripts while allowing Next.js-generated scripts
+- Significantly stronger XSS protection than `'unsafe-inline'`
+
+**Testing:**
+- Production build succeeds
+- Dev server runs without CSP violations
+- All inline scripts properly tagged with matching nonce
 
 **References:**
-- [Next.js CSP Guide](https://nextjs.org/docs/app/guides/content-security-policy)
-- [Radix UI CSP Discussion](https://github.com/radix-ui/primitives/discussions/1726)
+- [Next.js 15 CSP Guide](https://nextjs.org/docs/app/guides/content-security-policy)
+- Next.js 15+ automatic nonce detection via `headers()` call in root layout
 
 ---
 

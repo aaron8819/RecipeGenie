@@ -60,14 +60,16 @@ export async function middleware(request: NextRequest) {
   // Add security headers
   const headers = new Headers(response.headers);
 
+  // Generate nonce for CSP (Next.js 15+ will automatically apply to inline scripts)
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const isDev = process.env.NODE_ENV === 'development';
 
-  // Content Security Policy
-  // 'unsafe-eval' required for Next.js hydration/React
-  // 'unsafe-inline' for scripts would reduce security; nonce implementation deferred (see security plan)
+  // Content Security Policy with nonce-based script execution
+  // Nonce allows only scripts with matching nonce attribute, blocking XSS
+  // 'unsafe-eval' still required for Next.js hydration/React
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-eval'",
+    `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`,
     "style-src 'self' 'unsafe-inline'", // Required for Radix UI + Tailwind
     "img-src 'self' data: https: blob:", // Allow HTTPS images from any domain for recipe URLs
     "font-src 'self' data:",
@@ -82,6 +84,7 @@ export async function middleware(request: NextRequest) {
   ].join('; ');
 
   headers.set('Content-Security-Policy', csp);
+  headers.set('x-nonce', nonce); // Next.js 15+ reads this to apply nonce to inline scripts
   headers.set('X-Frame-Options', 'DENY');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
