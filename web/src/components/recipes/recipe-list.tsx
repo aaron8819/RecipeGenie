@@ -119,6 +119,14 @@ export function RecipeList() {
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid"
+
+    // Check localStorage for saved preference
+    const saved = localStorage.getItem("recipeViewMode")
+    if (saved === "grid" || saved === "list") {
+      return saved
+    }
+
+    // Fallback to responsive default
     return window.innerWidth < 768 ? "list" : "grid"
   })
   const [sortBy, setSortBy] = useState<SortOption>("lastMade")
@@ -134,12 +142,11 @@ export function RecipeList() {
   const [shareRecipe, setShareRecipe] = useState<Recipe | null>(null)
   const [skeletonDelayed, setSkeletonDelayed] = useState(false)
 
+  // Persist view mode preference to localStorage
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (window.innerWidth < 768) {
-      setViewMode("list")
-    }
-  }, [])
+    localStorage.setItem("recipeViewMode", viewMode)
+  }, [viewMode])
 
   const { data: recipes, isLoading, isFetching } = useRecipes({
     category,
