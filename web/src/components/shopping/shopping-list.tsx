@@ -710,8 +710,10 @@ export function ShoppingListView() {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const { showSwipeHint } = useSwipeHint()
 
-  // Mobile UX improvements - recipes section collapse and scroll-to-top FAB
+  // Mobile UX improvements - collapsible sections and scroll-to-top FAB
   const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(false)
+  const [pantryCollapsed, setPantryCollapsed] = useState(true) // Default: collapsed
+  const [excludedCollapsed, setExcludedCollapsed] = useState(true) // Default: collapsed
   const [showScrollToTop, setShowScrollToTop] = useState(false)
 
   const { data: shoppingList, isLoading, isFetching } = useShoppingList()
@@ -850,6 +852,14 @@ export function ShoppingListView() {
   // Toggle recipes section collapse (mobile only)
   const toggleRecipeSection = useCallback(() => {
     setRecipeSectionCollapsed(prev => !prev)
+  }, [])
+
+  const togglePantrySection = useCallback(() => {
+    setPantryCollapsed(prev => !prev)
+  }, [])
+
+  const toggleExcludedSection = useCallback(() => {
+    setExcludedCollapsed(prev => !prev)
   }, [])
 
   // Scroll to top handler (mobile only)
@@ -1402,8 +1412,8 @@ export function ShoppingListView() {
         </div>
       </div>
 
-      {/* Desktop header - full layout with add item and recipes in header */}
-      <header className="hidden md:block mb-6 md:mb-10">
+      {/* Desktop header - full layout with add item */}
+      <header className="hidden md:block mb-6 md:mb-2">
         {/* Desktop: title, subtitle, Organize + Copy + Clear */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
@@ -1457,25 +1467,6 @@ export function ShoppingListView() {
             <span>Add Item</span>
           </Button>
         </form>
-
-        {/* Desktop recipes in list - stays in header */}
-        {(uniqueRecipes.length > 0 || filteredItems.length > 0) && (
-          <div className="flex flex-col gap-2">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Recipes in list</span>
-            <div className="flex flex-wrap gap-2">
-              {uniqueRecipes.map((recipeName) => (
-                <RecipeTag
-                  key={recipeName}
-                  recipeName={recipeName}
-                  onRemove={() => handleRemoveRecipeItems(recipeName)}
-                  onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
-                  isRemoving={false}
-                  colorIndex={recipeColorMap.get(recipeName)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
       </header>
 
       {/* Shopping List — full width (sidebar removed) */}
@@ -1508,13 +1499,14 @@ export function ShoppingListView() {
               overscrollBehavior: 'contain',
             }}
           >
-            {/* Collapsible recipes card - mobile only, first card in scrollable area */}
+            {/* Recipes in list — Collapsible on mobile, always expanded on desktop */}
             {uniqueRecipes.length > 0 && (
-              <Card className="md:hidden mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
+              <Card className="mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
+                {/* Mobile: Collapsible header */}
                 <CardHeader
                   role="button"
                   tabIndex={0}
-                  className="px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
+                  className="md:hidden px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
                   onClick={toggleRecipeSection}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -1547,8 +1539,22 @@ export function ShoppingListView() {
                     )}
                   </button>
                 </CardHeader>
+
+                {/* Desktop: Static header (no collapse) */}
+                <CardHeader className="hidden md:flex px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100">
+                  <div className="flex items-center gap-2 md:gap-3">
+                    <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
+                      Recipes in list
+                    </CardTitle>
+                    <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">
+                      {uniqueRecipes.length}
+                    </span>
+                  </div>
+                </CardHeader>
+
+                {/* Mobile: Conditional content */}
                 {!recipeSectionCollapsed && (
-                  <CardContent className="p-4">
+                  <CardContent className="md:hidden p-4">
                     <div className="flex flex-wrap gap-2">
                       {uniqueRecipes.map((recipeName) => (
                         <RecipeTag
@@ -1563,6 +1569,22 @@ export function ShoppingListView() {
                     </div>
                   </CardContent>
                 )}
+
+                {/* Desktop: Always visible content */}
+                <CardContent className="hidden md:block p-4 md:p-6">
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueRecipes.map((recipeName) => (
+                      <RecipeTag
+                        key={recipeName}
+                        recipeName={recipeName}
+                        onRemove={() => handleRemoveRecipeItems(recipeName)}
+                        onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
+                        isRemoving={false}
+                        colorIndex={recipeColorMap.get(recipeName)}
+                      />
+                    ))}
+                  </div>
+                </CardContent>
               </Card>
             )}
 
@@ -1729,59 +1751,196 @@ export function ShoppingListView() {
             </Card>
           )}
 
-          {/* In Pantry — mobile: single-row horizontal scroll carousel; desktop: wrap (shoppinglist_mobile_redesign) */}
+          {/* In Pantry — Collapsible on mobile, always expanded on desktop */}
           {mergedAlreadyHave && mergedAlreadyHave.length > 0 && (
-            <div className="bg-white border border-stone-100 rounded-xl overflow-hidden shadow-sm p-4 md:p-6 animate-fade-in">
-              <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
-                <Package className="h-5 w-5 text-primary" />
-                <h2 className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">In Pantry</h2>
-                <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">{mergedAlreadyHave.length}</span>
-              </div>
-              <p className="hidden md:block text-xs text-muted-foreground mb-4">Click to add back to list</p>
-              <div className="flex w-full max-w-full overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 px-1 md:px-0 scrollbar-hide">
-                {mergedAlreadyHave.map((item, index) => (
-                  <button
-                    key={`already-have-${item.item}-${item.unit || ''}-${index}`}
-                    type="button"
-                    onClick={() => moveToList.mutate(item)}
-                    disabled={moveToList.isPending}
-                    className="shrink-0 px-3 py-2 md:px-4 md:py-1.5 text-xs md:text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer min-h-[44px] md:min-h-0"
-                    style={{ animationDelay: `${index * 20}ms` }}
-                  >
-                    {item.item}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Card className="mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
+              {/* Mobile: Collapsible header */}
+              <CardHeader
+                role="button"
+                tabIndex={0}
+                className="md:hidden px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
+                onClick={togglePantrySection}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    togglePantrySection()
+                  }
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-primary" />
+                  <CardTitle className="font-display text-sm font-semibold text-foreground uppercase tracking-wide">
+                    In Pantry
+                  </CardTitle>
+                  <span className="text-[10px] font-medium px-2 py-0.5 bg-accent-green/20 text-primary rounded-full uppercase tracking-tighter">
+                    {mergedAlreadyHave.length}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    togglePantrySection()
+                  }}
+                  className="p-1.5 text-stone-400 hover:text-primary rounded-lg transition-colors"
+                  aria-label={pantryCollapsed ? "Expand pantry items" : "Collapse pantry items"}
+                >
+                  {pantryCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+                </button>
+              </CardHeader>
+
+              {/* Desktop: Static header (no collapse) */}
+              <CardHeader className="hidden md:flex px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100">
+                <div className="flex items-center gap-2 md:gap-3">
+                  <Package className="h-5 w-5 text-primary" />
+                  <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
+                    In Pantry
+                  </CardTitle>
+                  <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">
+                    {mergedAlreadyHave.length}
+                  </span>
+                </div>
+              </CardHeader>
+
+              {/* Mobile: Conditional content */}
+              {!pantryCollapsed && (
+                <CardContent className="md:hidden p-4">
+                  <p className="text-xs text-muted-foreground mb-3">Click to add back to list</p>
+                  <div className="flex flex-wrap gap-2">
+                    {mergedAlreadyHave.map((item, index) => (
+                      <button
+                        key={`already-have-${item.item}-${item.unit || ''}-${index}`}
+                        type="button"
+                        onClick={() => moveToList.mutate(item)}
+                        disabled={moveToList.isPending}
+                        className="px-3 py-2 text-xs font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer min-h-[44px]"
+                        style={{ animationDelay: `${index * 20}ms` }}
+                      >
+                        {item.item}
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              )}
+
+              {/* Desktop: Always visible content */}
+              <CardContent className="hidden md:block p-4 md:p-6">
+                <p className="text-xs text-muted-foreground mb-4">Click to add back to list</p>
+                <div className="flex flex-wrap gap-2">
+                  {mergedAlreadyHave.map((item, index) => (
+                    <button
+                      key={`already-have-${item.item}-${item.unit || ''}-${index}`}
+                      type="button"
+                      onClick={() => moveToList.mutate(item)}
+                      disabled={moveToList.isPending}
+                      className="px-4 py-1.5 text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer"
+                      style={{ animationDelay: `${index * 20}ms` }}
+                    >
+                      {item.item}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
-          {/* Excluded — mobile: single-row horizontal scroll carousel; desktop: wrap (shoppinglist_mobile_redesign) */}
+          {/* Excluded — Collapsible on mobile, always expanded on desktop */}
           {displayShoppingList?.excluded && displayShoppingList.excluded.length > 0 && (
-            <div className="bg-white border border-stone-100 rounded-xl overflow-hidden shadow-sm p-4 md:p-6 animate-fade-in">
-              <div className="flex items-center gap-2 md:gap-3 mb-3 md:mb-4">
-                <Ban className="h-5 w-5 text-red-500" />
-                <h2 className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">Excluded</h2>
-                <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">{displayShoppingList.excluded.length}</span>
-              </div>
-              <p className="hidden md:block text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
-              <div className="flex w-full max-w-full overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 px-1 md:px-0 scrollbar-hide">
-                {displayShoppingList.excluded.map((item, index) => (
-                  <button
-                    key={`excluded-${item.item}-${item.unit || ''}-${index}`}
-                    type="button"
-                    onClick={() => moveExcludedToList.mutate(item)}
-                    disabled={moveExcludedToList.isPending}
-                    className="shrink-0 px-3 py-2 md:px-4 md:py-1.5 text-xs md:text-sm font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer min-h-[44px] md:min-h-0 flex items-center gap-1.5"
-                    style={{ animationDelay: `${index * 20}ms` }}
-                  >
-                    <span>{item.item}</span>
-                    {item.excludedBy && (
-                      <span className="text-[9px] opacity-60 font-normal"> ({item.excludedBy})</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Card className="mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
+              {/* Mobile: Collapsible header */}
+              <CardHeader
+                role="button"
+                tabIndex={0}
+                className="md:hidden px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
+                onClick={toggleExcludedSection}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    toggleExcludedSection()
+                  }
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <Ban className="h-5 w-5 text-red-500" />
+                  <CardTitle className="font-display text-sm font-semibold text-foreground uppercase tracking-wide">
+                    Excluded
+                  </CardTitle>
+                  <span className="text-[10px] font-medium px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full uppercase tracking-tighter">
+                    {displayShoppingList.excluded.length}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleExcludedSection()
+                  }}
+                  className="p-1.5 text-stone-400 hover:text-primary rounded-lg transition-colors"
+                  aria-label={excludedCollapsed ? "Expand excluded items" : "Collapse excluded items"}
+                >
+                  {excludedCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+                </button>
+              </CardHeader>
+
+              {/* Desktop: Static header (no collapse) */}
+              <CardHeader className="hidden md:flex px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100">
+                <div className="flex items-center gap-2 md:gap-3">
+                  <Ban className="h-5 w-5 text-red-500" />
+                  <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
+                    Excluded
+                  </CardTitle>
+                  <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">
+                    {displayShoppingList.excluded.length}
+                  </span>
+                </div>
+              </CardHeader>
+
+              {/* Mobile: Conditional content */}
+              {!excludedCollapsed && (
+                <CardContent className="md:hidden p-4">
+                  <p className="text-xs text-muted-foreground mb-3">Items excluded by keywords. Click to add back to list.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {displayShoppingList.excluded.map((item, index) => (
+                      <button
+                        key={`excluded-${item.item}-${item.unit || ''}-${index}`}
+                        type="button"
+                        onClick={() => moveExcludedToList.mutate(item)}
+                        disabled={moveExcludedToList.isPending}
+                        className="px-3 py-2 text-xs font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer min-h-[44px] flex items-center gap-1.5"
+                        style={{ animationDelay: `${index * 20}ms` }}
+                      >
+                        <span>{item.item}</span>
+                        {item.excludedBy && (
+                          <span className="text-[9px] opacity-60 font-normal"> ({item.excludedBy})</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </CardContent>
+              )}
+
+              {/* Desktop: Always visible content */}
+              <CardContent className="hidden md:block p-4 md:p-6">
+                <p className="text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
+                <div className="flex flex-wrap gap-2">
+                  {displayShoppingList.excluded.map((item, index) => (
+                    <button
+                      key={`excluded-${item.item}-${item.unit || ''}-${index}`}
+                      type="button"
+                      onClick={() => moveExcludedToList.mutate(item)}
+                      disabled={moveExcludedToList.isPending}
+                      className="px-4 py-1.5 text-sm font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                      style={{ animationDelay: `${index * 20}ms` }}
+                    >
+                      <span>{item.item}</span>
+                      {item.excludedBy && (
+                        <span className="text-[9px] opacity-60 font-normal"> ({item.excludedBy})</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           </div>
@@ -1830,7 +1989,7 @@ export function ShoppingListView() {
     {showScrollToTop && (
       <button
         onClick={handleScrollToTop}
-        className="md:hidden fixed bottom-20 right-4 z-40 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
+        className="md:hidden fixed bottom-28 right-4 z-40 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
         aria-label="Scroll to top"
       >
         <ChevronUp className="h-5 w-5" />
