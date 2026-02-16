@@ -710,6 +710,10 @@ export function ShoppingListView() {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const { showSwipeHint } = useSwipeHint()
 
+  // Mobile UX improvements - recipes section collapse and scroll-to-top FAB
+  const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(false)
+  const [showScrollToTop, setShowScrollToTop] = useState(false)
+
   const { data: shoppingList, isLoading, isFetching } = useShoppingList()
   
   // Fetch recipe for viewing
@@ -843,11 +847,124 @@ export function ShoppingListView() {
     })
   }, [collapsedCategories])
 
+  // Toggle recipes section collapse (mobile only)
+  const toggleRecipeSection = useCallback(() => {
+    setRecipeSectionCollapsed(prev => !prev)
+  }, [])
+
+  // Scroll to top handler (mobile only)
+  const handleScrollToTop = useCallback(() => {
+    // Find scroll container - same logic as useEffect
+    let scrollContainer: HTMLElement | null = document.querySelector('[aria-hidden="false"].overflow-y-auto')
+    if (!scrollContainer) {
+      scrollContainer = document.querySelector('[aria-hidden="false"] .overflow-y-auto')
+    }
+
+    if (!scrollContainer) return
+
+    scrollContainer.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    })
+  }, [])
+
+  // Scroll detection for FAB visibility (mobile only)
+  // Using requestAnimationFrame polling since scroll events don't fire reliably
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Use matchMedia instead of window.innerWidth - works with DevTools device emulation
+    const isMobile = window.matchMedia('(max-width: 767px)').matches
+    if (!isMobile) {
+      setShowScrollToTop(false)
+      return
+    }
+
+    let animationFrameId: number
+    let isRunning = true
+
+    const checkScrollPosition = () => {
+      if (!isRunning) return
+
+      // Check ALL possible scroll sources
+      let scrollTop = 0
+
+      // 1. Check window scroll
+      if (window.scrollY > 0) {
+        scrollTop = window.scrollY
+      }
+
+      // 2. Check document.documentElement
+      if (scrollTop === 0 && document.documentElement.scrollTop > 0) {
+        scrollTop = document.documentElement.scrollTop
+      }
+
+      // 3. Check overflow-y-auto containers
+      if (scrollTop === 0) {
+        const allScrollContainers = document.querySelectorAll('.overflow-y-auto')
+        allScrollContainers.forEach((el) => {
+          const htmlEl = el as HTMLElement
+          if (htmlEl.scrollTop > scrollTop) {
+            scrollTop = htmlEl.scrollTop
+          }
+        })
+      }
+
+      // 4. Check any element with scrollTop > 0 (fallback)
+      if (scrollTop === 0) {
+        const allElements = document.querySelectorAll('*')
+        allElements.forEach((el) => {
+          const htmlEl = el as HTMLElement
+          if (htmlEl.scrollTop > scrollTop) {
+            scrollTop = htmlEl.scrollTop
+          }
+        })
+      }
+
+      const shouldShow = scrollTop > 200
+
+      // Only update state if it changed to avoid unnecessary re-renders
+      setShowScrollToTop((prev) => {
+        if (prev !== shouldShow) {
+          return shouldShow
+        }
+        return prev
+      })
+
+      // Continue polling
+      animationFrameId = requestAnimationFrame(checkScrollPosition)
+    }
+
+    // Start polling after a small delay to ensure DOM is ready
+    const startTimer = setTimeout(() => {
+      checkScrollPosition()
+    }, 100)
+
+    // Add resize listener to handle orientation changes
+    const mediaQuery = window.matchMedia('(max-width: 767px)')
+    const handleMediaChange = (e: MediaQueryListEvent) => {
+      if (!e.matches) {
+        setShowScrollToTop(false)
+      }
+    }
+
+    mediaQuery.addEventListener('change', handleMediaChange)
+
+    return () => {
+      clearTimeout(startTimer)
+      isRunning = false
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
+      }
+      mediaQuery.removeEventListener('change', handleMediaChange)
+    }
+  }, [])
+
   // Sensors: TouchSensor (long-press) for mobile to avoid scroll conflicts;
   // MouseSensor for desktop; KeyboardSensor for accessibility.
   const sensors = useSensors(
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
+      activationConstraint: { delay: 150, tolerance: 8 }, // Optimized: reduced delay for responsiveness, increased tolerance for stability
     }),
     useSensor(MouseSensor, {
       activationConstraint: { distance: 8 },
@@ -1239,33 +1356,56 @@ export function ShoppingListView() {
   }
 
   return (
+    <>
     <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
-      {/* Header — shoppinglist_redesign; mobile: shoppinglist_mobile_redesign (compact, icon-only Organize+Clear, no Copy) */}
-      <header className="mb-6 md:mb-10">
-        {/* Mobile: one row, title + icon Organize + icon Clear */}
-        <div className="flex md:hidden items-center justify-between mb-4">
-          <h1 className="font-display text-2xl font-bold text-foreground">Shopping List</h1>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => setShowSettings(true)}
-              className="p-3 text-slate-500 hover:text-primary transition-colors rounded-lg"
-              aria-label="Organize"
-            >
-              <Sparkles className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={handleClearListWithUndo}
-              className="p-3 text-red-600 hover:text-red-700 transition-colors rounded-lg"
-              aria-label="Clear list"
-            >
-              <Trash2 className="h-5 w-5" />
-            </button>
-          </div>
+      {/* Mobile sticky add item - always accessible at top */}
+      <div className="md:hidden sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-stone-100 pb-3 mb-4">
+        <form onSubmit={handleAddItem} className="relative">
+          <Input
+            ref={addItemInputRef}
+            placeholder="Add item..."
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            className="w-full h-11 pl-4 pr-14 py-2.5 text-base bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
+          />
+          <Button
+            type="submit"
+            disabled={addItem.isPending}
+            aria-label="Add item"
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 min-w-[44px] min-h-[44px] bg-primary text-primary-foreground rounded-full font-medium hover:opacity-90 flex items-center justify-center"
+          >
+            <span className="text-lg leading-none font-semibold">+</span>
+          </Button>
+        </form>
+      </div>
+
+      {/* Mobile header - compact title and icon buttons only */}
+      <div className="flex md:hidden items-center justify-between mb-4">
+        <h1 className="font-display text-2xl font-bold text-foreground">Shopping List</h1>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="p-3 text-slate-500 hover:text-primary transition-colors rounded-lg"
+            aria-label="Organize"
+          >
+            <Sparkles className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleClearListWithUndo}
+            className="p-3 text-red-600 hover:text-red-700 transition-colors rounded-lg"
+            aria-label="Clear list"
+          >
+            <Trash2 className="h-5 w-5" />
+          </button>
         </div>
+      </div>
+
+      {/* Desktop header - full layout with add item and recipes in header */}
+      <header className="hidden md:block mb-6 md:mb-10">
         {/* Desktop: title, subtitle, Organize + Copy + Clear */}
-        <div className="hidden md:flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
             <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2">Shopping List</h1>
             <p className="text-muted-foreground">Plan your farm-to-table meals for the week.</p>
@@ -1298,44 +1438,40 @@ export function ShoppingListView() {
           </div>
         </div>
 
-        {/* Add item — mobile uses a compact circular + action */}
+        {/* Desktop add item form - stays in header */}
         <form onSubmit={handleAddItem} className="relative mb-6">
           <Input
             ref={addItemInputRef}
             placeholder="Add tomatoes, milk..."
             value={newItem}
             onChange={(e) => setNewItem(e.target.value)}
-            className="w-full h-11 md:h-12 pl-4 pr-14 py-2.5 md:pl-6 md:pr-32 md:py-3 text-base md:text-lg bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
+            className="w-full h-12 pl-6 pr-32 py-3 text-lg bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
           <Button
             type="submit"
             disabled={addItem.isPending}
             aria-label="Add item"
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 md:h-9 md:w-auto md:px-6 bg-primary text-primary-foreground rounded-full md:rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2"
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-auto px-6 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2"
           >
-            <span className="md:hidden text-lg leading-none font-semibold">
-              +
-            </span>
-            <Plus className="hidden md:block h-4 w-4" />
-            <span className="hidden md:inline">Add Item</span>
+            <Plus className="h-4 w-4" />
+            <span>Add Item</span>
           </Button>
         </form>
 
-        {/* Recipes in list — mobile: horizontal scroll, scrollbar-hide, flex-none pills (shoppinglist_mobile_redesign) */}
+        {/* Desktop recipes in list - stays in header */}
         {(uniqueRecipes.length > 0 || filteredItems.length > 0) && (
           <div className="flex flex-col gap-2">
-            <span className="text-[10px] md:text-xs font-bold text-muted-foreground uppercase tracking-widest md:tracking-wider px-1">Recipes in list</span>
-            <div className="flex w-full max-w-full overflow-x-auto md:overflow-visible flex-nowrap md:flex-wrap gap-2 pb-2 md:pb-0 px-1 md:px-0 scrollbar-hide">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider px-1">Recipes in list</span>
+            <div className="flex flex-wrap gap-2">
               {uniqueRecipes.map((recipeName) => (
-                <span key={recipeName} className="flex-none">
-                  <RecipeTag
-                    recipeName={recipeName}
-                    onRemove={() => handleRemoveRecipeItems(recipeName)}
-                    onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
-                    isRemoving={false}
-                    colorIndex={recipeColorMap.get(recipeName)}
-                  />
-                </span>
+                <RecipeTag
+                  key={recipeName}
+                  recipeName={recipeName}
+                  onRemove={() => handleRemoveRecipeItems(recipeName)}
+                  onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
+                  isRemoving={false}
+                  colorIndex={recipeColorMap.get(recipeName)}
+                />
               ))}
             </div>
           </div>
@@ -1365,13 +1501,71 @@ export function ShoppingListView() {
               </div>
             </div>
           )}
-          <div 
+          <div
             className="space-y-4"
             style={{
               WebkitOverflowScrolling: 'touch',
               overscrollBehavior: 'contain',
             }}
           >
+            {/* Collapsible recipes card - mobile only, first card in scrollable area */}
+            {uniqueRecipes.length > 0 && (
+              <Card className="md:hidden mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
+                <CardHeader
+                  role="button"
+                  tabIndex={0}
+                  className="px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
+                  onClick={toggleRecipeSection}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      toggleRecipeSection()
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="font-display text-sm font-semibold text-foreground uppercase tracking-wide">
+                      Recipes in list
+                    </CardTitle>
+                    <span className="text-[10px] font-medium px-2 py-0.5 bg-accent-green/20 text-primary rounded-full uppercase tracking-tighter">
+                      {uniqueRecipes.length}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleRecipeSection()
+                    }}
+                    className="p-1.5 text-stone-400 hover:text-primary rounded-lg transition-colors"
+                    aria-label={recipeSectionCollapsed ? "Expand recipes list" : "Collapse recipes list"}
+                  >
+                    {recipeSectionCollapsed ? (
+                      <ChevronDown className="h-5 w-5" />
+                    ) : (
+                      <ChevronUp className="h-5 w-5" />
+                    )}
+                  </button>
+                </CardHeader>
+                {!recipeSectionCollapsed && (
+                  <CardContent className="p-4">
+                    <div className="flex flex-wrap gap-2">
+                      {uniqueRecipes.map((recipeName) => (
+                        <RecipeTag
+                          key={recipeName}
+                          recipeName={recipeName}
+                          onRemove={() => handleRemoveRecipeItems(recipeName)}
+                          onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
+                          isRemoving={false}
+                          colorIndex={recipeColorMap.get(recipeName)}
+                        />
+                      ))}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            )}
+
             <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
@@ -1631,5 +1825,17 @@ export function ShoppingListView() {
         categories={categories || []}
       />
     </div>
+
+    {/* Scroll to top FAB - mobile only (outside overflow container) */}
+    {showScrollToTop && (
+      <button
+        onClick={handleScrollToTop}
+        className="md:hidden fixed bottom-20 right-4 z-40 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
+        aria-label="Scroll to top"
+      >
+        <ChevronUp className="h-5 w-5" />
+      </button>
+    )}
+    </>
   )
 }
