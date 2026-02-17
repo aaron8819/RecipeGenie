@@ -92,7 +92,86 @@ export function useMoveToShoppingList() {
       if (saveError) throw saveError
       return mergedItem
     },
+    // Optimistic update
+    onMutate: async (item) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
+
+      // Snapshot previous value for rollback
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+
+      const normalizedItem = item.item.toLowerCase().trim()
+
+      // Optimistically update cache
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY],
+        (old) => {
+          if (!old) return old
+
+          const alreadyHave = old.already_have || []
+          const currentItems = old.items || []
+
+          // Find all items with the same name in already_have and merge them
+          const itemsToMerge = alreadyHave.filter((i) => i.item.toLowerCase() === normalizedItem)
+          if (itemsToMerge.length === 0) return old
+
+          // Merge all items with the same name (same logic as mutationFn)
+          let mergedItem = itemsToMerge[0]
+          for (let i = 1; i < itemsToMerge.length; i++) {
+            const nextItem = itemsToMerge[i]
+
+            const existingSources = mergedItem.sources || []
+            const newSources = nextItem.sources || []
+            const sourceSet = new Set(existingSources.map((s) => s.recipeName))
+            const combinedSources = [...existingSources]
+            for (const source of newSources) {
+              if (!sourceSet.has(source.recipeName)) {
+                combinedSources.push(source)
+              }
+            }
+
+            const mergeResult = mergeAmounts(mergedItem.amount, mergedItem.unit, nextItem.amount, nextItem.unit)
+            if (mergeResult) {
+              mergedItem = {
+                ...mergedItem,
+                amount: roundForDisplay(mergeResult.amount),
+                unit: mergeResult.unit,
+                sources: combinedSources,
+              }
+            } else {
+              mergedItem = {
+                ...mergedItem,
+                sources: combinedSources,
+              }
+            }
+          }
+
+          let updatedItems = currentItems
+          if (!currentItems.some((i) => i.item.toLowerCase() === normalizedItem)) {
+            updatedItems = [...currentItems, mergedItem]
+            if (!old.custom_order) {
+              updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+            }
+          }
+
+          return {
+            ...old,
+            items: updatedItems,
+            already_have: alreadyHave.filter((i) => i.item.toLowerCase() !== normalizedItem),
+          }
+        }
+      )
+
+      return { previousList }
+    },
+    onError: (err, item, context) => {
+      // Rollback on error
+      if (context?.previousList) {
+        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
+      }
+    },
     onSuccess: () => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
   })
@@ -141,7 +220,51 @@ export function useMoveExcludedToShoppingList() {
       if (saveError) throw saveError
       return item
     },
+    // Optimistic update
+    onMutate: async (item) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
+
+      // Snapshot previous value for rollback
+      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+
+      const normalizedItem = item.item.toLowerCase().trim()
+
+      // Optimistically update cache
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY],
+        (old) => {
+          if (!old) return old
+
+          const currentItems = old.items || []
+          const excluded = old.excluded || []
+
+          let updatedItems = currentItems
+          if (!currentItems.some((i) => i.item.toLowerCase() === normalizedItem)) {
+            updatedItems = [...currentItems, item]
+            if (!old.custom_order) {
+              updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+            }
+          }
+
+          return {
+            ...old,
+            items: updatedItems,
+            excluded: excluded.filter((i) => i.item.toLowerCase() !== normalizedItem),
+          }
+        }
+      )
+
+      return { previousList }
+    },
+    onError: (err, item, context) => {
+      // Rollback on error
+      if (context?.previousList) {
+        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
+      }
+    },
     onSuccess: () => {
+      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
     },
   })
@@ -185,9 +308,18 @@ export function useAddToPantryAndRemove() {
         .single()
 
       if (fetchError) {
-        // Rollback pantry add if we just added it
+        // Attempt rollback — track error so caller can surface it
         if (addedToPantry) {
-          await supabase.from("pantry_items").delete().eq("user_id", user!.id).eq("item", normalizedItem)
+          const { error: rollbackErr } = await supabase
+            .from("pantry_items")
+            .delete()
+            .eq("user_id", user!.id)
+            .eq("item", normalizedItem)
+          const err = new Error(`Failed to load shopping list: ${fetchError.message}`)
+          if (rollbackErr) {
+            err.cause = new Error(`Pantry rollback also failed: ${rollbackErr.message}`)
+          }
+          throw err
         }
         throw fetchError
       }
@@ -216,13 +348,22 @@ export function useAddToPantryAndRemove() {
         .eq("user_id", user!.id)
 
       if (saveError) {
-        // Rollback pantry add if we just added it
+        // Attempt rollback — track error so caller can surface it
         if (addedToPantry) {
-          await supabase.from("pantry_items").delete().eq("user_id", user!.id).eq("item", normalizedItem)
+          const { error: rollbackErr } = await supabase
+            .from("pantry_items")
+            .delete()
+            .eq("user_id", user!.id)
+            .eq("item", normalizedItem)
+          const err = new Error(`Failed to save shopping list: ${saveError.message}`)
+          if (rollbackErr) {
+            err.cause = new Error(`Pantry rollback also failed: ${rollbackErr.message}`)
+          }
+          throw err
         }
         throw saveError
       }
-      return { itemName: normalizedItem }
+      return { itemName: normalizedItem, wasAdded: addedToPantry }
     },
     // Optimistic update
     onMutate: async (item) => {

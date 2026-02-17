@@ -49,6 +49,7 @@ export function generateShoppingList(
       shoppingCategory?: string
       sources: { recipeId: string; recipeName: string }[]
       additionalAmounts?: { amount: number; unit: string }[]
+      alternatives?: string[]
     }
   >()
 
@@ -108,6 +109,7 @@ export function generateShoppingList(
           unit,
           shoppingCategory,
           sources: [{ recipeId: recipe.id, recipeName: recipe.name }],
+          alternatives: ingredient.alternatives?.map(a => normalizeItemName(a)),
         })
       }
     }
@@ -118,7 +120,7 @@ export function generateShoppingList(
   const alreadyHave: ShoppingItem[] = []
   const excluded: ShoppingItem[] = []
 
-  for (const ingredient of ingredientMap.values()) {
+  for (const [primaryKey, ingredient] of ingredientMap.entries()) {
     // Categorize the ingredient for sorting (apply user overrides)
     const [catKey, catOrder] = categorizeIngredient(
       ingredient.item,
@@ -140,12 +142,15 @@ export function generateShoppingList(
       })),
     }
 
-    // Use normalized lowercase for pantry comparison
-    const normalizedItem = normalizeItemName(ingredient.item)
-    if (pantrySet.has(normalizedItem)) {
+    // Check pantry: match primary item key or any alternative
+    const isInPantry =
+      pantrySet.has(primaryKey) ||
+      (ingredient.alternatives?.some(alt => pantrySet.has(alt)) ?? false)
+
+    if (isInPantry) {
       alreadyHave.push(shoppingItem)
     } else {
-      const matchingKeyword = getExcludedKeyword(normalizedItem, excludedKeywords)
+      const matchingKeyword = getExcludedKeyword(primaryKey, excludedKeywords)
       if (matchingKeyword) {
         excluded.push({
           ...shoppingItem,

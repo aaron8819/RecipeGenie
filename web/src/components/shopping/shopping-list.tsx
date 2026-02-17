@@ -708,6 +708,10 @@ export function ShoppingListView() {
   const [manuallyCollapsedCategories, setManuallyCollapsedCategories] = useState<Set<string>>(new Set())
   const [viewingRecipeId, setViewingRecipeId] = useState<string | null>(null)
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
+  const [pendingCheckItems, setPendingCheckItems] = useState<Set<string>>(new Set())
+  const [pendingPantryItems, setPendingPantryItems] = useState<Set<string>>(new Set())
+  // Tracks items currently being added to prevent duplicate concurrent submissions
+  const [activeAdditions, setActiveAdditions] = useState<Set<string>>(new Set())
   const { showSwipeHint } = useSwipeHint()
 
   // Mobile UX improvements - collapsible sections and scroll-to-top FAB
@@ -817,14 +821,58 @@ export function ShoppingListView() {
     })
   }, [bulkCheckOff, undoToast])
 
-  // Handle adding item to pantry
+  // Handle adding item to pantry with per-item pending tracking
   const handleAddToPantry = useCallback((item: ShoppingItem) => {
-    addToPantryAndRemove.mutate(item)
-    undoToast.show({
-      message: `"${item.item}" added to pantry`,
-      duration: 2000,
+    const itemKey = item.item.toLowerCase().trim()
+
+    // Add to pending set
+    setPendingPantryItems(prev => new Set(prev).add(itemKey))
+
+    // Perform mutation
+    addToPantryAndRemove.mutate(item, {
+      onSuccess: (data) => {
+        // Different message if item was already in pantry
+        const message = data.wasAdded
+          ? `"${item.item}" added to pantry`
+          : `"${item.item}" already in pantry`
+        undoToast.show({ message, duration: 2000 })
+      },
+      onError: () => {
+        undoToast.show({
+          message: `Failed to add "${item.item}" to pantry`,
+          duration: 3000,
+        })
+      },
+      onSettled: () => {
+        // Remove from pending set when complete (success or error)
+        setPendingPantryItems(prev => {
+          const next = new Set(prev)
+          next.delete(itemKey)
+          return next
+        })
+      },
     })
   }, [addToPantryAndRemove, undoToast])
+
+  // Handle check-off with per-item pending tracking
+  const handleCheckOff = useCallback((item: ShoppingItem) => {
+    const itemKey = item.item.toLowerCase().trim()
+
+    // Add to pending set
+    setPendingCheckItems(prev => new Set(prev).add(itemKey))
+
+    // Perform mutation
+    checkOffItem.mutate(item, {
+      onSettled: () => {
+        // Remove from pending set when complete (success or error)
+        setPendingCheckItems(prev => {
+          const next = new Set(prev)
+          next.delete(itemKey)
+          return next
+        })
+      },
+    })
+  }, [checkOffItem])
 
   // Toggle category collapse (separate setState calls; never call setState inside another's updater)
   const toggleCategory = useCallback((categoryKey: string) => {
@@ -1203,16 +1251,32 @@ export function ShoppingListView() {
 
     if (items.length === 0) return
 
+    // Skip items that are already being added (prevents race condition duplicates)
+    const itemsToAdd = items.filter(item => !activeAdditions.has(item.toLowerCase().trim()))
+
+    if (itemsToAdd.length === 0) {
+      undoToast.show({ message: 'Item already being added', duration: 2000 })
+      return
+    }
+
     try {
       // Add each item
       const addedItems: string[] = []
-      for (const item of items) {
+      for (const item of itemsToAdd) {
+        const normalized = item.toLowerCase().trim()
+        setActiveAdditions(prev => new Set(prev).add(normalized))
         try {
           await addItem.mutateAsync({ itemName: item })
           addedItems.push(item)
         } catch (error) {
           // Skip duplicates or errors for individual items
           console.warn(`Skipped item "${item}":`, error)
+        } finally {
+          setActiveAdditions(prev => {
+            const next = new Set(prev)
+            next.delete(normalized)
+            return next
+          })
         }
       }
       setNewItem("")
@@ -1701,12 +1765,12 @@ export function ShoppingListView() {
                                 key={reactKey}
                                 item={item}
                                 itemIdx={globalIndex}
-                                onCheckOff={() => checkOffItem.mutate(item)}
+                                onCheckOff={() => handleCheckOff(item)}
                                 onRemove={() => handleRemoveItem(item.item)}
                                 onAddToPantry={() => handleAddToPantry(item)}
-                                isCheckingOff={checkOffItem.isPending}
+                                isCheckingOff={pendingCheckItems.has(item.item.toLowerCase().trim())}
                                 isRemoving={false}
-                                isAddingToPantry={addToPantryAndRemove.isPending}
+                                isAddingToPantry={pendingPantryItems.has(item.item.toLowerCase().trim())}
                                 recipeColorMap={recipeColorMap}
                                 showSwipeHint={showHintForThisItem}
                               />

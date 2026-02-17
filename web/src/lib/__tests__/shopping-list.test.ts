@@ -202,6 +202,107 @@ describe('generateShoppingList', () => {
     })
   })
 
+  describe('pantry matching with alternatives', () => {
+    it('should move item to alreadyHave when primary item matches pantry', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
+      })
+      const pantryItems = [createMockPantryItem('yogurt')]
+
+      const result = generateShoppingList([recipe], pantryItems, [])
+
+      expect(result.alreadyHave).toHaveLength(1)
+      expect(result.items).toHaveLength(0)
+    })
+
+    it('should move item to alreadyHave when first alternative matches pantry', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream', 'greek yogurt'] }],
+      })
+      const pantryItems = [createMockPantryItem('sour cream')]
+
+      const result = generateShoppingList([recipe], pantryItems, [])
+
+      expect(result.alreadyHave).toHaveLength(1)
+      expect(result.items).toHaveLength(0)
+    })
+
+    it('should move item to alreadyHave when second alternative matches pantry', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream', 'greek yogurt'] }],
+      })
+      const pantryItems = [createMockPantryItem('greek yogurt')]
+
+      const result = generateShoppingList([recipe], pantryItems, [])
+
+      expect(result.alreadyHave).toHaveLength(1)
+      expect(result.items).toHaveLength(0)
+    })
+
+    it('should match alternatives case-insensitively', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['Sour Cream'] }],
+      })
+      const pantryItems = [createMockPantryItem('sour cream')]
+
+      const result = generateShoppingList([recipe], pantryItems, [])
+
+      expect(result.alreadyHave).toHaveLength(1)
+      expect(result.items).toHaveLength(0)
+    })
+
+    it('should keep item in shopping list when neither primary nor alternatives match pantry', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
+      })
+      const pantryItems = [createMockPantryItem('milk')]
+
+      const result = generateShoppingList([recipe], pantryItems, [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.alreadyHave).toHaveLength(0)
+    })
+
+    it('should keep item in shopping list when alternatives array is empty', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: [] }],
+      })
+      const pantryItems = [createMockPantryItem('sour cream')]
+
+      const result = generateShoppingList([recipe], pantryItems, [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.alreadyHave).toHaveLength(0)
+    })
+
+    it('should keep item in shopping list when alternatives is undefined', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup' }],
+      })
+      const pantryItems = [createMockPantryItem('sour cream')]
+
+      const result = generateShoppingList([recipe], pantryItems, [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.alreadyHave).toHaveLength(0)
+    })
+
+    it('should move to excluded when primary item keyword is excluded, even if alternative matches pantry', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
+      })
+      const pantryItems = [createMockPantryItem('sour cream')]
+      const excludedKeywords = ['yogurt']
+
+      // Pantry check on alternatives takes precedence over excluded keywords
+      const result = generateShoppingList([recipe], pantryItems, excludedKeywords)
+
+      // Pantry match (sour cream) wins — item goes to alreadyHave, not excluded
+      expect(result.alreadyHave).toHaveLength(1)
+      expect(result.excluded).toHaveLength(0)
+    })
+  })
+
   describe('keyword exclusion', () => {
     it('should move excluded items to excluded list', () => {
       const recipe = createMockRecipe({
