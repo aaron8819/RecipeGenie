@@ -339,6 +339,37 @@ describe('generateShoppingList', () => {
       expect(result.excluded).toHaveLength(1)
       expect(result.excluded[0].item).toBe('pepper')
     })
+
+    it('should not exclude item when only its alternative matches excluded keyword', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'Paprika', amount: 1, unit: 'tsp', alternatives: ['red pepper'] }],
+      })
+      const result = generateShoppingList([recipe], [], ['red pepper'])
+      // 'paprika' is the primary key — exclusion only checks primary, not alternatives
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0].item).toContain('paprika')
+      expect(result.excluded).toHaveLength(0)
+    })
+
+    it('should match excluded keyword with surrounding whitespace', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'Salt', amount: 1, unit: 'tsp' }],
+      })
+      const result = generateShoppingList([recipe], [], ['  salt  '])
+      expect(result.excluded).toHaveLength(1)
+      expect(result.excluded[0].excludedBy).toBe('  salt  ')
+    })
+
+    it('should place item in alreadyHave when it matches both pantry and excluded keyword', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'Salt', amount: 1, unit: 'tsp' }],
+      })
+      // Pantry check runs before exclusion check — pantry match wins
+      const result = generateShoppingList([recipe], [createMockPantryItem('salt')], ['salt'])
+      expect(result.alreadyHave).toHaveLength(1)
+      expect(result.excluded).toHaveLength(0)
+      expect(result.items).toHaveLength(0)
+    })
   })
 
   describe('scaling', () => {

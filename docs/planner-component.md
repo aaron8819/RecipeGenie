@@ -277,6 +277,13 @@ resolveUserConfig(data, error): UserConfig  // PGRST116 -> defaults, other error
 
 7. **Action button overflow on mobile**: The planner toolbar (Add recipe, Cart, Save, Load) uses `overflow-x-auto scrollbar-thin` with `shrink-0` on each button — same pattern as the recipe filter pills. Button order: Add recipe, Cart, Save Template, Load Template. Labels shorten on mobile ("Add", "Cart", "Save", "Load").
 
+8. **Remove-from-plan undo pattern**: `handleRemoveFromPlan` uses **immediate-delete + undo re-inserts**. It captures `recipeDayAssignments[recipe.id]` before calling `removeFromPlan.mutate()`, then passes `savedDayOfWeek` to `addRecipeToPlan.mutate()` on undo to restore the original day. There is no `pendingRemovalRecipeIds` state — the optimistic update in `useRemoveRecipeFromPlan` removes the recipe from the weekly plan cache immediately.
+
+9. **Cart feedback — two layers**: Both cart actions combine an icon flip + a toast:
+   - **Single recipe** (`handleAddRecipeToCart`): sets `cartAddedRecipeId` for 1.5s → card button shows `Check` (emerald) instead of `ShoppingCart`; also fires `undoToast` with item count ("5 items added / 3 merged / All already in list").
+   - **Bulk "Cart" button** (`handleGenerateShoppingList`): sets `bulkCartJustAdded` for 1.5s → button switches to green `✓ Added` label; toast was already present.
+   - Pass `cartAddedRecipeId` down through `DayColumn` → `StitchRecipeCard` (`isJustAddedToCart`) and `MobileDayColumn` → `MobileRecipeCard` (`isJustAddedToCart`).
+
 ---
 
 ## Related Documentation

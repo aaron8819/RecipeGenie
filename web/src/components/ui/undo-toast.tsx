@@ -118,9 +118,14 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, [toast, clearTimers])
 
-  // Cleanup on unmount
+  // Flush any pending deferred action and cancel timers on unmount.
+  // This catches cases like tab navigation where the provider unmounts
+  // while a deferred-delete toast is still active.
   useEffect(() => {
-    return () => clearTimers()
+    return () => {
+      toastRef.current?.onExpire?.()
+      clearTimers()
+    }
   }, [clearTimers])
 
   return (

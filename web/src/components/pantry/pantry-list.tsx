@@ -21,9 +21,6 @@ export function PantryList() {
   const [newItem, setNewItem] = useState("")
   const [newKeyword, setNewKeyword] = useState("")
   const [isWhatCanIMakeOpen, setIsWhatCanIMakeOpen] = useState(false)
-  const [pendingPantryDeletion, setPendingPantryDeletion] = useState<string | null>(null)
-  const [pendingKeywordDeletion, setPendingKeywordDeletion] = useState<string | null>(null)
-
   const { data: pantryItems, isLoading: pantryLoading, isFetching: pantryFetching } = usePantryItems()
   const { data: excludedKeywords, isLoading: keywordsLoading, isFetching: keywordsFetching } = useExcludedKeywords()
 
@@ -33,47 +30,38 @@ export function PantryList() {
   const removeKeyword = useRemoveExcludedKeyword()
   const undoToast = useUndoToast()
 
-  // Handle pantry item deletion with undo
+  // Handle pantry item deletion with undo.
+  // Delete immediately so the action isn't lost on refresh or when another
+  // deletion replaces the toast. Undo re-inserts the item.
   const handleRemovePantryItem = useCallback((item: string) => {
-    setPendingPantryDeletion(item)
+    removePantryItem.mutate(item)
     undoToast.show({
       message: `"${item}" removed from pantry`,
       onUndo: () => {
-        setPendingPantryDeletion(null)
-      },
-      onExpire: () => {
-        removePantryItem.mutate(item)
-        setPendingPantryDeletion(null)
+        addPantryItem.mutate(item)
       },
     })
-  }, [undoToast, removePantryItem])
+  }, [undoToast, removePantryItem, addPantryItem])
 
-  // Handle keyword deletion with undo
+  // Handle keyword deletion with undo.
+  // Same immediate-delete pattern as pantry items.
   const handleRemoveKeyword = useCallback((keyword: string) => {
-    setPendingKeywordDeletion(keyword)
+    removeKeyword.mutate(keyword)
     undoToast.show({
       message: `"${keyword}" removed from excluded keywords`,
       onUndo: () => {
-        setPendingKeywordDeletion(null)
-      },
-      onExpire: () => {
-        removeKeyword.mutate(keyword)
-        setPendingKeywordDeletion(null)
+        addKeyword.mutate(keyword)
       },
     })
-  }, [undoToast, removeKeyword])
+  }, [undoToast, removeKeyword, addKeyword])
 
   // Show cached data immediately even while fetching (stale-while-revalidate)
-  const displayPantryItems = pantryItems || []
-  const displayKeywords = excludedKeywords || []
-  
-  // Only show loading on initial load with no cached data
-  const showPantryLoading = pantryLoading && displayPantryItems.length === 0
-  const showKeywordsLoading = keywordsLoading && displayKeywords.length === 0
+  const displayedPantryItems = pantryItems || []
+  const displayedKeywords = excludedKeywords || []
 
-  // Filter out pending deletions from display
-  const displayedPantryItems = displayPantryItems.filter(item => item.item !== pendingPantryDeletion)
-  const displayedKeywords = displayKeywords.filter((kw: string) => kw !== pendingKeywordDeletion)
+  // Only show loading on initial load with no cached data
+  const showPantryLoading = pantryLoading && displayedPantryItems.length === 0
+  const showKeywordsLoading = keywordsLoading && displayedKeywords.length === 0
 
   const handleAddPantryItem = async (e: React.FormEvent) => {
     e.preventDefault()

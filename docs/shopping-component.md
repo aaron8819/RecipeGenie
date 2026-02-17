@@ -2,8 +2,8 @@
 
 > **When to read:** You're working on shopping list generation, ingredient merging/normalization, category assignment, check-off UX, drag-and-drop reordering, or pantry/excluded keyword integration.
 
-**Version:** 2.13.1
-**Last Updated:** 2026-02-08
+**Version:** 2.14.0
+**Last Updated:** 2026-02-17
 **Component:** `web/src/components/shopping/shopping-list.tsx`
 
 ---
@@ -180,18 +180,22 @@ Priority order: user overrides > recipe-level override > keyword matching (longe
 
 ### 4. Pantry Integration
 
-- "In Pantry" section shows items from recipes user already has (exact match)
-- "Add to Pantry" action adds item to `pantry_items` and moves from items[] to already_have[]
+- "In Pantry" section shows items user already has (primary name OR any `alternatives[]` match)
+- "Add to Pantry" adds to `pantry_items` + moves item to `already_have[]` with optimistic update
+- Clicking an "In Pantry" item restores it to the shopping list immediately (optimistic update)
+- Per-item pending tracking: adding item A to pantry never disables item B's button
 
 ### 5. Keyword Exclusion
 
-- Exact match only (case-insensitive)
-- "salt" excludes "salt", NOT "kosher salt"
-- Excluded items shown in collapsible section with matching keyword
+- Exact match only (case-insensitive): "salt" excludes "salt", NOT "kosher salt"
+- Only the primary item name is checked — `alternatives[]` cannot trigger exclusion
+- Excluded items shown in collapsible section with the matching keyword displayed
+- Clicking an excluded item restores it to the shopping list immediately (optimistic update)
 
 ### 6. Check-Off & Auto-Collapse
 
 - Checkbox marks item as purchased (strikethrough, persists across refreshes)
+- Per-item pending tracking: checking item A never disables item B's checkbox
 - Categories auto-collapse when all items checked
 - "Complete Shopping" button appears when all items checked
 
@@ -234,33 +238,98 @@ const CONFIG_KEY = ['user_config']          // User preferences
 
 All mutations use optimistic updates for instant feedback with rollback on error.
 
+### Per-Item Pending Tracking
+
+To prevent a single mutation's `isPending` from blocking unrelated UI elements, the component
+tracks pending state per-item using a `Set` of item keys:
+
+```typescript
+// In shopping-list.tsx — pattern for check-off and Add to Pantry
+const [pendingItems, setPendingItems] = useState<Set<string>>(new Set())
+const itemKey = item.item.toLowerCase().trim()
+const isThisItemPending = pendingItems.has(itemKey)
+
+// Only disable THIS item's button, not all buttons
+<button disabled={isThisItemPending} ... />
+```
+
+This pattern applies to `useCheckOffItem`, `useAddToPantryAndRemove`, and any other
+mutation where multiple items can be mutated concurrently.
+
 ---
 
 ## Testing Strategy
 
-### Unit Tests (Vitest)
+### Unit Tests — Business Logic (Vitest)
 
 Location: `src/lib/__tests__/`
 
-- `shopping-list.test.ts` - List generation
-- `shopping-list-normalization.test.ts` - Unit/name normalization
-- `shopping-list-merging.test.ts` - Item merging
-- `shopping-categories.test.ts` - Category assignment
+- `shopping-list.test.ts` — List generation, pantry matching, exclusion, alternatives, scaling
+- `shopping-list-normalization.test.ts` — Unit/name normalization
+- `shopping-list-merging.test.ts` — Item merging and unit conversion
+- `shopping-categories.test.ts` — Category assignment and keyword lookup
+
+### Unit Tests — Hook Mutations (Vitest + @testing-library/react)
+
+Location: `src/hooks/__tests__/`
+
+- `use-shopping-items.test.ts` — Optimistic updates and rollbacks for check-off, remove, add
+- `use-shopping-pantry.test.ts` — Dual-cache optimistic updates for pantry and restore hooks
+- `shopping-list-checked-state.test.ts` — `preserveCheckedItemsFromExisting` logic
+
+**Hook test pattern:**
+```typescript
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  // ... QueryClientProvider wrapper
+  return { wrapper, queryClient }
+}
+
+// Pre-populate cache, call mutate(), assert via waitFor
+const { wrapper, queryClient } = createWrapper()
+queryClient.setQueryData([...SHOPPING_KEY], makeList({ items: [...] }))
+const { result } = renderHook(() => useCheckOffItem(), { wrapper })
+result.current.mutate(item)
+await waitFor(() => expect(result.current.isSuccess).toBe(true))
+```
+
+**Supabase mock:** Chainable `vi.fn()` mock. Terminal calls:
+- `single()` for reads and pantry inserts → `mockResolvedValue({ data: null, error: null })`
+- `eq()` for updates → `mockResolvedValue({ data: null, error: null })`
+
+To test rollback: fail `single()` → mutationFn throws → `onError` restores cache snapshot.
 
 ### E2E Tests (Playwright)
 
 Location: `tests/`
 
-- `shopping-list.spec.ts` - Desktop tests
-- `shopping-list-mobile.spec.ts` - Mobile-specific tests
+- `shopping-list.spec.ts` — Desktop flows + persistence, pantry restore, excluded restore, rapid interactions
+- `shopping-list-mobile.spec.ts` — Mobile-specific touch interactions and layout
+
+### Running Tests
+
+```bash
+# All shopping unit tests
+npm run test -- --run src/hooks/__tests__/use-shopping-items.test.ts src/hooks/__tests__/use-shopping-pantry.test.ts src/lib/__tests__/shopping-list.test.ts
+
+# E2E shopping tests (Chromium only, fastest)
+npx playwright test shopping-list.spec.ts --project=chromium
+
+# Target specific E2E describe block
+npx playwright test shopping-list.spec.ts --project=chromium -g "Rapid Interactions"
+```
 
 ---
 
 ## Known Limitations
 
 1. **Unit conversion limits**: Volume and weight cannot be merged (no density data). Stored in `additionalAmounts[]`.
-2. **Pantry matching**: Exact matches only ("garlic" != "garlic cloves").
+2. **Pantry matching**: Exact/alternative matches only — fuzzy substring matching not supported ("garlic" ≠ "garlic cloves"). Alternatives array IS checked.
 3. **Mobile drag**: Long-press required (250ms) to distinguish from scroll.
+4. **Exclusion scope**: Only the primary item name is checked against excluded keywords — `alternatives[]` cannot trigger exclusion.
+5. **Deferred-delete undo pattern**: `handleRemoveItem`, `handleRemoveRecipeItems`, and `handleClearListWithUndo` in `shopping-list.tsx`, and `handleDeleteCategory` in `shopping-settings-modal.tsx`, still use the deferred-delete approach — the actual mutation fires in the toast's `onExpire` callback. This means a page refresh during the toast window loses the deletion. The `UndoToastProvider` flushes `onExpire` on unmount as a best-effort safety net for in-app navigation, but cannot guarantee completion on browser refresh/close. (Shopping list items removed this way are recoverable by regenerating the list from the plan.)
 
 ---
 
@@ -282,4 +351,4 @@ Location: `tests/`
 
 ---
 
-*Last updated: 2026-02-07 (v2.13.1)*
+*Last updated: 2026-02-17 (v2.14.0)*

@@ -409,6 +409,7 @@ function DayColumn({
   isRecipeMade,
   markingRecipeId,
   addingToCartRecipeId,
+  cartAddedRecipeId,
   swappingRecipeId,
   onViewRecipe,
   onSwapRecipe,
@@ -428,6 +429,7 @@ function DayColumn({
   isRecipeMade: (recipe: Recipe) => boolean
   markingRecipeId: string | null
   addingToCartRecipeId: string | null
+  cartAddedRecipeId: string | null
   swappingRecipeId: string | null
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
@@ -485,6 +487,7 @@ function DayColumn({
                   isMade={isRecipeMade(displayedRecipe)}
                   isMarkingThis={markingRecipeId === mainRecipe.id}
                   isAddingToCart={addingToCartRecipeId === mainRecipe.id}
+                  isJustAddedToCart={cartAddedRecipeId === mainRecipe.id}
                   isSwapping={swappingRecipeId === mainRecipe.id}
                   isToday={isToday}
                   onView={() => onViewRecipe(mainRecipe)}
@@ -512,6 +515,7 @@ function DayColumn({
                     isMade={isRecipeMade(displayedRecipe)}
                     isMarkingThis={markingRecipeId === r.id}
                     isAddingToCart={addingToCartRecipeId === r.id}
+                    isJustAddedToCart={cartAddedRecipeId === r.id}
                     isSwapping={swappingRecipeId === r.id}
                     isToday={false}
                     onView={() => onViewRecipe(r)}
@@ -549,6 +553,7 @@ function MobileDayColumn({
   isRecipeMade,
   markingRecipeId,
   swappingRecipeId,
+  cartAddedRecipeId,
   onViewRecipe,
   onSwapRecipe,
   onMarkMade,
@@ -566,6 +571,7 @@ function MobileDayColumn({
   isRecipeMade: (recipe: Recipe) => boolean
   markingRecipeId: string | null
   swappingRecipeId: string | null
+  cartAddedRecipeId: string | null
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
   onMarkMade: (recipeId: string, isMade: boolean) => void
@@ -615,6 +621,7 @@ function MobileDayColumn({
                 isMade={isRecipeMade(displayedRecipe)}
                 isMarkingThis={markingRecipeId === recipe.id}
                 isSwapping={swappingRecipeId === recipe.id}
+                isJustAddedToCart={cartAddedRecipeId === recipe.id}
                 isToday={isToday}
                 onView={() => onViewRecipe(recipe)}
                 onSwap={() => onSwapRecipe(recipe)}
@@ -646,6 +653,7 @@ function StitchRecipeCard({
   isMade,
   isMarkingThis,
   isAddingToCart,
+  isJustAddedToCart,
   isSwapping,
   isToday,
   onView,
@@ -665,6 +673,7 @@ function StitchRecipeCard({
   isMade: boolean
   isMarkingThis: boolean
   isAddingToCart: boolean
+  isJustAddedToCart: boolean
   isSwapping: boolean
   isToday?: boolean
   onView: () => void
@@ -811,11 +820,19 @@ function StitchRecipeCard({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-              disabled={isAddingToCart}
-              className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
+              disabled={isAddingToCart || isJustAddedToCart}
+              className={cn(
+                "p-1 rounded transition-colors",
+                isJustAddedToCart
+                  ? "text-emerald-500"
+                  : "hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
+              )}
               title="Add to cart"
             >
-              <ShoppingCart className="h-4 w-4" />
+              {isJustAddedToCart
+                ? <Check className="h-4 w-4" />
+                : <ShoppingCart className="h-4 w-4" />
+              }
             </button>
             <button
               type="button"
@@ -869,6 +886,7 @@ function MobileRecipeCard({
   isMade,
   isMarkingThis,
   isSwapping,
+  isJustAddedToCart,
   isToday,
   onView,
   onSwap,
@@ -885,6 +903,7 @@ function MobileRecipeCard({
   isMade: boolean
   isMarkingThis: boolean
   isSwapping: boolean
+  isJustAddedToCart: boolean
   isToday?: boolean
   onView: () => void
   onSwap: () => void
@@ -1009,10 +1028,17 @@ function MobileRecipeCard({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-                className="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors"
+                disabled={isJustAddedToCart}
+                className={cn(
+                  "flex flex-col items-center gap-1 transition-colors",
+                  isJustAddedToCart ? "text-emerald-500" : "text-slate-400 hover:text-primary"
+                )}
                 title="Add to cart"
               >
-                <ShoppingCart className="h-5 w-5" />
+                {isJustAddedToCart
+                  ? <Check className="h-5 w-5" />
+                  : <ShoppingCart className="h-5 w-5" />
+                }
               </button>
             )}
             <button
@@ -1069,8 +1095,9 @@ export function MealPlanner() {
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [markingRecipeId, setMarkingRecipeId] = useState<string | null>(null)
   const [addingToCartRecipeId, setAddingToCartRecipeId] = useState<string | null>(null)
+  const [cartAddedRecipeId, setCartAddedRecipeId] = useState<string | null>(null)
+  const [bulkCartJustAdded, setBulkCartJustAdded] = useState(false)
   const [swappingRecipeId, setSwappingRecipeId] = useState<string | null>(null)
-  const [pendingRemovalRecipeIds, setPendingRemovalRecipeIds] = useState<Set<string>>(new Set())
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
   const [addRecipeTargetDayIndex, setAddRecipeTargetDayIndex] = useState<number | null>(null)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
@@ -1287,6 +1314,8 @@ export function MealPlanner() {
         message,
         duration: 4000,
       })
+      setBulkCartJustAdded(true)
+      setTimeout(() => setBulkCartJustAdded(false), 1500)
     } catch (error) {
       // Error handling is done by the mutation itself
       console.error("Failed to add to shopping list:", error)
@@ -1411,31 +1440,38 @@ export function MealPlanner() {
 
   const handleRemoveFromPlan = useCallback((recipe: Recipe) => {
     if (!currentWeekDate) return
-    setPendingRemovalRecipeIds((prev) => new Set(prev).add(recipe.id))
+    // Capture day assignment before removing so undo can restore it
+    const savedDayOfWeek = recipeDayAssignments[recipe.id]
+    removeFromPlan.mutate({ weekDate: currentWeekDate, recipeId: recipe.id })
     undoToast.show({
       message: `"${recipe.name}" removed from plan`,
       onUndo: () => {
-        setPendingRemovalRecipeIds((prev) => {
-          const next = new Set(prev)
-          next.delete(recipe.id)
-          return next
-        })
-      },
-      onExpire: () => {
-        removeFromPlan.mutate({ weekDate: currentWeekDate, recipeId: recipe.id })
-        setPendingRemovalRecipeIds((prev) => {
-          const next = new Set(prev)
-          next.delete(recipe.id)
-          return next
+        addRecipeToPlan.mutate({
+          weekDate: currentWeekDate,
+          recipeId: recipe.id,
+          dayOfWeek: savedDayOfWeek,
         })
       },
     })
-  }, [currentWeekDate, undoToast, removeFromPlan])
+  }, [currentWeekDate, undoToast, removeFromPlan, addRecipeToPlan, recipeDayAssignments])
 
   const handleAddRecipeToCart = async (recipeId: string) => {
     setAddingToCartRecipeId(recipeId)
     try {
-      await addToShoppingList.mutateAsync({ recipeIds: [recipeId] })
+      const result = await addToShoppingList.mutateAsync({ recipeIds: [recipeId] })
+      let message = ''
+      if (result.added > 0 && result.merged > 0) {
+        message = `${result.added} item${result.added !== 1 ? 's' : ''} added, ${result.merged} merged`
+      } else if (result.added > 0) {
+        message = `${result.added} item${result.added !== 1 ? 's' : ''} added to shopping list`
+      } else if (result.merged > 0) {
+        message = `${result.merged} item${result.merged !== 1 ? 's' : ''} merged to shopping list`
+      } else {
+        message = 'All items already in shopping list'
+      }
+      undoToast.show({ message, duration: 4000 })
+      setCartAddedRecipeId(recipeId)
+      setTimeout(() => setCartAddedRecipeId(null), 1500)
     } finally {
       setAddingToCartRecipeId(null)
     }
@@ -1496,8 +1532,7 @@ export function MealPlanner() {
   const categories = allCategories || config?.categories || []
   const totalMeals = Object.values(selection).reduce((sum, n) => sum + n, 0)
 
-  // Filter out pending removal recipes
-  const displayedRecipes = recipes?.filter(r => !pendingRemovalRecipeIds.has(r.id))
+  const displayedRecipes = recipes
   const activeRecipe = activeRecipeId
     ? (displayedRecipes || []).find((r) => r.id === activeRecipeId) || null
     : null
@@ -1837,14 +1872,21 @@ export function MealPlanner() {
             disabled={addToShoppingList.isPending || !displayedRecipes?.length}
             variant="outline"
             size="default"
-            className="shrink-0 border-2 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary"
+            className={cn(
+              "shrink-0 border-2 transition-colors",
+              bulkCartJustAdded
+                ? "border-emerald-400 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-600"
+                : "border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary"
+            )}
           >
             {addToShoppingList.isPending ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : bulkCartJustAdded ? (
+              <Check className="h-4 w-4 mr-2" />
             ) : (
               <ShoppingCart className="h-4 w-4 mr-2" />
             )}
-            Cart
+            {bulkCartJustAdded ? 'Added' : 'Cart'}
           </Button>
           <Button
             onClick={() => setIsSaveTemplateOpen(true)}
@@ -1961,6 +2003,7 @@ export function MealPlanner() {
                         isRecipeMade={isRecipeMade}
                         markingRecipeId={markingRecipeId}
                         addingToCartRecipeId={addingToCartRecipeId}
+                        cartAddedRecipeId={cartAddedRecipeId}
                         swappingRecipeId={swappingRecipeId}
                         onViewRecipe={setViewingRecipe}
                         onSwapRecipe={handleSwapRecipe}
@@ -2016,6 +2059,7 @@ export function MealPlanner() {
                       isRecipeMade={isRecipeMade}
                       markingRecipeId={markingRecipeId}
                       addingToCartRecipeId={addingToCartRecipeId}
+                      cartAddedRecipeId={cartAddedRecipeId}
                       swappingRecipeId={swappingRecipeId}
                       onViewRecipe={setViewingRecipe}
                       onSwapRecipe={handleSwapRecipe}
@@ -2085,6 +2129,7 @@ export function MealPlanner() {
                       isRecipeMade={isRecipeMade}
                       markingRecipeId={markingRecipeId}
                       swappingRecipeId={swappingRecipeId}
+                      cartAddedRecipeId={cartAddedRecipeId}
                       onViewRecipe={setViewingRecipe}
                       onSwapRecipe={handleSwapRecipe}
                       onMarkMade={handleMarkMade}

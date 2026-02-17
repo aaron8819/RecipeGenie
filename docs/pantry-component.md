@@ -144,14 +144,14 @@ Shopping list shows "garlic" in main items
 - All items normalized to lowercase, trimmed
 - Duplicate detection at add time
 - Tag-pill display with X button for removal
-- Undo toast on deletion (configurable delay)
+- **Immediate deletion** with undo toast — deletes from DB right away; Undo re-inserts the item
 - Sorted A-Z
 
 ### 2. Excluded Keywords
 - Same input UX as pantry items (comma-separated)
 - Stored in `user_config.excluded_keywords[]`
 - **Exact match only** — "pepper" does NOT exclude "poblano pepper"
-- Undo toast on deletion
+- **Immediate deletion** with undo toast — same pattern as pantry items
 
 ### 3. Stale-While-Revalidate UX
 - 30-second stale time on both queries
@@ -166,6 +166,8 @@ All six mutations follow the pattern:
 3. Update cache immediately
 4. On error: rollback with snapshot
 5. On settle: invalidate query for truth
+
+Removals use **immediate-delete + undo re-inserts**: `removePantryItem.mutate(item)` / `removeKeyword.mutate(kw)` fires immediately (optimistic update removes it from the UI); the undo button calls `addPantryItem.mutate(item)` / `addKeyword.mutate(kw)` to restore it. There is no pending-deletion state in the component — the query cache is the source of truth.
 
 ---
 

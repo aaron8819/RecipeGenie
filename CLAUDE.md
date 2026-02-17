@@ -68,7 +68,7 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 
 **Unit tests** (Vitest, `__tests__/` directories co-located with source):
 - `web/src/lib/__tests__/` — Business logic tests (meal planner, shopping list, merging, normalization, categories)
-- `web/src/hooks/__tests__/` — Hook tests
+- `web/src/hooks/__tests__/` — Hook mutation tests (optimistic updates, rollback); see `docs/shopping-component.md` for the `renderHook` + QueryClient + Supabase mock pattern
 
 **E2E tests** (Playwright, `web/tests/`):
 - Tests for navigation, auth, recipes, planner, pantry, shopping list, responsive, accessibility, visual design
@@ -84,6 +84,8 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 - **E2E env vars**: Tests need `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, `TEST_USER_PASSWORD`
 - **CSP nonces**: Middleware sets `x-nonce` header; root layout MUST call `headers()` to trigger Next.js 15 automatic nonce application to inline scripts
 - **User config fetch**: PGRST116 (not found) is expected for new users — `resolveUserConfig()` returns defaults
+- **Shopping per-item pending**: Never use `mutation.isPending` to disable all items in a list — track pending state per-item with a `Set<string>` of item keys; only disable the specific item being mutated
+- **Shopping pantry alternatives**: Pantry matching checks both primary item name AND `alternatives[]`; exclusion keyword matching only checks the primary name (alternatives cannot trigger exclusion)
 
 ## Doc Router — Read Before You Act
 
@@ -92,7 +94,7 @@ Before starting work, match your task to a doc below and read it first.
 | When working on... | Read first |
 |---------------------|------------|
 | Planner (components, hooks, lib, day assignments) | `docs/planner-component.md` |
-| Shopping (components, hooks, merging, normalization) | `docs/shopping-component.md` |
+| Shopping (components, hooks, merging, normalization, hook tests) | `docs/shopping-component.md` |
 | Recipes (components, hooks, parser, CRUD, tags) | `docs/recipes-component.md` |
 | Pantry (components, hooks, excluded keywords) | `docs/pantry-component.md` |
 | Database (schema, migrations, RLS, new tables/columns) | `supabase/SCHEMA.md` |

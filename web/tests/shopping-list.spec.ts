@@ -719,3 +719,268 @@ test.describe('Shopping List', () => {
     })
   })
 })
+
+test.describe('Shopping List - Persistence', () => {
+  test.beforeEach(async ({ page, setupAuth, navigateToTab }) => {
+    await setupAuth()
+    await addItemsToShoppingList(page, navigateToTab)
+  })
+
+  test('should persist checked state after page reload', async ({ page, navigateToTab }) => {
+    const checkboxes = page.locator('[data-checkbox="true"]')
+    await checkboxes.first().waitFor({ state: 'visible', timeout: 8000 })
+
+    // Uncheck the first item if it's already checked (normalize state)
+    const firstCheckbox = checkboxes.first()
+    if ((await firstCheckbox.getAttribute('aria-label')) === 'Uncheck item') {
+      await firstCheckbox.click()
+      await page.waitForTimeout(300)
+    }
+
+    // Check the first item
+    await firstCheckbox.click()
+    await expect(firstCheckbox).toHaveAttribute('aria-label', 'Uncheck item', { timeout: 5000 })
+
+    // Wait for the Supabase write to complete
+    await page.waitForTimeout(1500)
+
+    // Reload the page
+    await page.reload()
+    await page.waitForLoadState('domcontentloaded')
+
+    // Navigate back to shopping (in case reload lands on a different tab)
+    await navigateToTab('shopping')
+    await page.waitForTimeout(1500)
+
+    // At least one item should still be checked (persisted across reload)
+    const checkedItems = page.locator('[data-checkbox="true"][aria-label="Uncheck item"]')
+    await expect(checkedItems.first()).toBeVisible({ timeout: 8000 })
+  })
+})
+
+test.describe('Shopping List - Pantry Restore Flow', () => {
+  test.beforeEach(async ({ page, setupAuth, navigateToTab }) => {
+    await setupAuth()
+    await addItemsToShoppingList(page, navigateToTab)
+  })
+
+  test('should immediately move item back to shopping list when clicked in In Pantry section', async ({
+    page,
+    isMobileViewport,
+  }) => {
+    const isMobile = await isMobileViewport()
+    const checkboxes = page.locator('[data-checkbox="true"]')
+    await checkboxes.first().waitFor({ state: 'visible', timeout: 8000 })
+
+    // Hover first row (desktop) to reveal "Add to pantry" button
+    const firstRow = checkboxes.first().locator('..')
+    if (!isMobile) {
+      await firstRow.hover()
+      await page.waitForTimeout(300)
+    }
+
+    // Find the "Add to pantry" button — desktop: title="Add to pantry", mobile: aria-label="Add to pantry"
+    const addToPantryBtn = firstRow
+      .locator('[title="Add to pantry"]')
+      .or(firstRow.locator('[aria-label="Add to pantry"]'))
+      .first()
+
+    const btnVisible = await addToPantryBtn.isVisible().catch(() => false)
+    if (!btnVisible) {
+      test.skip()
+      return
+    }
+
+    const itemCountBefore = await checkboxes.count()
+
+    await addToPantryBtn.click()
+    await page.waitForTimeout(500)
+
+    // "In Pantry" section should appear
+    const pantryHeader = page.getByText('In Pantry').first()
+    await expect(pantryHeader).toBeVisible({ timeout: 5000 })
+
+    // On mobile: expand the pantry section (starts collapsed)
+    if (isMobile) {
+      await pantryHeader.locator('..').click()
+      await page.waitForTimeout(300)
+    }
+
+    // Find the item button inside "In Pantry" content (identified by the "Click to add back to list" hint)
+    const pantryContent = page.getByText('Click to add back to list').first().locator('..')
+    const pantryItemBtn = pantryContent.locator('button').filter({ hasText: /\w+/ }).first()
+
+    await pantryItemBtn.waitFor({ state: 'visible', timeout: 5000 })
+
+    // Click to restore — optimistic update makes this immediate
+    await pantryItemBtn.click()
+
+    // Item count should return to previous value immediately (optimistic update)
+    await expect(checkboxes).toHaveCount(itemCountBefore, { timeout: 3000 })
+  })
+})
+
+test.describe('Shopping List - Excluded Restore Flow', () => {
+  test('should immediately move item back to shopping list when clicked in Excluded section', async ({
+    page,
+    setupAuth,
+    navigateToTab,
+    isMobileViewport,
+  }) => {
+    await setupAuth()
+    await addItemsToShoppingList(page, navigateToTab)
+
+    const isMobile = await isMobileViewport()
+
+    // Check if an Excluded section already exists from previously-configured keywords
+    const excludedHeader = page.getByText('Excluded').first()
+    let hasExcluded = await excludedHeader.isVisible().catch(() => false)
+
+    if (!hasExcluded) {
+      // Try to create an excluded item via shopping settings
+      const organizeButton = page
+        .getByRole('button', { name: /organize/i })
+        .or(page.locator('button').filter({ has: page.locator('svg[class*="Sparkles"]') }))
+        .first()
+
+      const organizeVisible = await organizeButton.isVisible().catch(() => false)
+      if (!organizeVisible) {
+        test.skip()
+        return
+      }
+
+      // Read the first item name to create a matching excluded keyword
+      const firstItemName = await page
+        .locator('[data-checkbox="true"]')
+        .first()
+        .locator('..')
+        .locator('span')
+        .first()
+        .textContent()
+        .catch(() => null)
+
+      if (!firstItemName?.trim()) {
+        test.skip()
+        return
+      }
+      // Use just the first word to increase chance of exact match against normalized item name
+      const keyword = firstItemName.trim().toLowerCase().split(' ')[0]
+
+      await organizeButton.click()
+      await page.waitForTimeout(300)
+
+      const dialog = page.locator('[role="dialog"]')
+      await expect(dialog).toBeVisible({ timeout: 5000 })
+
+      const excludedTab = dialog.getByRole('tab', { name: /exclud/i })
+      if (await excludedTab.isVisible().catch(() => false)) {
+        await excludedTab.click()
+        await page.waitForTimeout(200)
+      }
+
+      const keywordInput = dialog
+        .locator('input[placeholder*="keyword" i], input[placeholder*="exclud" i], input[type="text"]')
+        .first()
+
+      if (!(await keywordInput.isVisible().catch(() => false))) {
+        await page.keyboard.press('Escape')
+        test.skip()
+        return
+      }
+
+      await keywordInput.fill(keyword)
+      await page.keyboard.press('Enter')
+      await page.waitForTimeout(500)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(500)
+
+      hasExcluded = await excludedHeader.isVisible().catch(() => false)
+    }
+
+    if (!hasExcluded) {
+      test.skip()
+      return
+    }
+
+    // On mobile: expand excluded section (starts collapsed)
+    if (isMobile) {
+      await excludedHeader.locator('..').click()
+      await page.waitForTimeout(300)
+    }
+
+    const itemCountBefore = await page.locator('[data-checkbox="true"]').count()
+
+    // Find item button in Excluded content (identified by helper text)
+    const excludedContent = page
+      .getByText(/Items excluded by keywords/)
+      .first()
+      .locator('..')
+    const excludedItemBtn = excludedContent.locator('button').filter({ hasText: /\w+/ }).first()
+
+    await excludedItemBtn.waitFor({ state: 'visible', timeout: 5000 })
+    await excludedItemBtn.click()
+
+    // Verify immediate UI update — item count increases (optimistic update)
+    await expect(page.locator('[data-checkbox="true"]')).toHaveCount(itemCountBefore + 1, {
+      timeout: 3000,
+    })
+  })
+})
+
+test.describe('Shopping List - Rapid Interactions', () => {
+  test.beforeEach(async ({ page, setupAuth, navigateToTab }) => {
+    await setupAuth()
+    await addItemsToShoppingList(page, navigateToTab)
+  })
+
+  test('should allow checking multiple items in rapid succession without any being blocked', async ({
+    page,
+  }) => {
+    // Regression: previously, isPending on the shared mutation hook disabled ALL checkboxes
+    // while any single item was being checked. Rapid clicks must all succeed.
+    const checkboxes = page.locator('[data-checkbox="true"]')
+    await checkboxes.first().waitFor({ state: 'visible', timeout: 8000 })
+
+    const count = await checkboxes.count()
+    if (count < 3) {
+      test.skip()
+      return
+    }
+
+    const targetCount = Math.min(count, 5)
+
+    // Normalize: uncheck any already-checked items
+    for (let i = 0; i < targetCount; i++) {
+      const cb = checkboxes.nth(i)
+      if ((await cb.getAttribute('aria-label')) === 'Uncheck item') {
+        await cb.click()
+        await page.waitForTimeout(100)
+      }
+    }
+
+    // Verify all target items start unchecked
+    for (let i = 0; i < targetCount; i++) {
+      await expect(checkboxes.nth(i)).toHaveAttribute('aria-label', 'Check off item', {
+        timeout: 3000,
+      })
+    }
+
+    // Rapidly check all items — 50ms between clicks simulates rapid user interaction
+    for (let i = 0; i < targetCount; i++) {
+      // Each checkbox must be enabled — not blocked by another item's isPending
+      await expect(checkboxes.nth(i)).toBeEnabled({ timeout: 2000 })
+      await checkboxes.nth(i).click()
+      await page.waitForTimeout(50)
+    }
+
+    // Wait for all mutations to settle
+    await page.waitForTimeout(2000)
+
+    // All target checkboxes should be checked
+    for (let i = 0; i < targetCount; i++) {
+      await expect(checkboxes.nth(i)).toHaveAttribute('aria-label', 'Uncheck item', {
+        timeout: 5000,
+      })
+    }
+  })
+})
