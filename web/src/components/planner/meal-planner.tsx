@@ -1634,7 +1634,8 @@ export function MealPlanner() {
   const plannerContent = (
     <div className="space-y-6 pb-6">
       {/* Mobile: compact schedule (planner_mobile_redesign) */}
-      <div className="lg:hidden space-y-4">
+      {!isDesktop && (
+      <div className="space-y-4">
         <div className="bg-card-cream rounded-xl p-4 shadow-sm border border-border-muted">
           <div className="flex items-center justify-between gap-2 mb-3">
             <span className="text-sm font-semibold text-primary">{formatWeekLabel(currentWeekDate)}</span>
@@ -1703,8 +1704,10 @@ export function MealPlanner() {
         </div>
       </div>
 
+      )}
       {/* Desktop: Current Schedule + Quick Meal Mix — Stitch 2-col layout */}
-      <div className="hidden lg:grid lg:grid-cols-12 gap-6">
+      {isDesktop && (
+      <div className="grid grid-cols-12 gap-6">
         {/* Current Schedule */}
         <div className="lg:col-span-4 bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-stone-100 dark:border-zinc-800">
           <div className="flex items-center justify-between mb-6">
@@ -1831,12 +1834,14 @@ export function MealPlanner() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Week navigation (mobile) + Add to Cart */}
       <div className="space-y-4 -mt-3 lg:mt-0">
       <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
         {/* Mobile: Today | This Week | Next Week (ref: planner_mobile_redesign) */}
-        <nav className="lg:hidden flex border-b border-border-muted">
+        {!isDesktop && (
+        <nav className="flex border-b border-border-muted">
           {(["today", "thisWeek", "nextWeek"] as const).map((tab) => (
             <button
               key={tab}
@@ -1853,6 +1858,7 @@ export function MealPlanner() {
             </button>
           ))}
         </nav>
+        )}
         <div className="flex items-center gap-2 lg:ml-auto shrink-0 overflow-x-auto pb-1 lg:pb-0 scrollbar-thin">
           <Button
             onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
@@ -1924,7 +1930,8 @@ export function MealPlanner() {
           ) : (
             <>
               {/* Mobile: category selection + Generate Plan when week has no meals */}
-              <div className="lg:hidden flex flex-col items-center py-8 px-4">
+              {!isDesktop && (
+              <div className="flex flex-col items-center py-8 px-4">
                 <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
                   <CalendarDays className="h-5 w-5 text-muted-foreground shrink-0" />
                   Plan your week
@@ -1977,8 +1984,10 @@ export function MealPlanner() {
                   </Button>
                 </div>
               </div>
+              )}
               {/* Desktop: calendar week with Add meal on each day */}
-              <div className="hidden lg:flex items-start gap-2">
+            {isDesktop && (
+            <div className="flex items-start gap-2">
                 <button
                   type="button"
                   onClick={handlePrevWeek}
@@ -2026,12 +2035,14 @@ export function MealPlanner() {
                   <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
                 </button>
               </div>
+              )}
             </>
           )
         ) : (
           <>
             {/* Desktop: Calendar View (7-day grid) with week navigation */}
-            <div className="hidden lg:flex items-start gap-2">
+            {isDesktop && (
+            <div className="flex items-start gap-2">
               <button
                 type="button"
                 onClick={handlePrevWeek}
@@ -2080,9 +2091,11 @@ export function MealPlanner() {
                 <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
               </button>
             </div>
+            )}
 
             {/* Mobile: calendar view — Stitch calendarview_redesign_mobile: week strip + day sections */}
-            <div className="lg:hidden space-y-6">
+            {!isDesktop && (
+            <div className="space-y-6">
               {mobileWeekTab !== "today" && (
                 <div className="flex items-center justify-between overflow-x-auto scrollbar-hide gap-4 py-2">
                   {weekDays.map((d) => {
@@ -2139,6 +2152,7 @@ export function MealPlanner() {
                 })}
               </div>
             </div>
+            )}
 
           </>
         )}
