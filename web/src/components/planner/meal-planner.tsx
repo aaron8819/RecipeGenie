@@ -1980,7 +1980,6 @@ export function MealPlanner() {
                 </div>
               </div>
               {/* Desktop: calendar week with Add meal on each day */}
-              {isDesktop && (
               <div className="hidden lg:flex items-start gap-2">
                 <button
                   type="button"
@@ -2029,13 +2028,11 @@ export function MealPlanner() {
                   <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
                 </button>
               </div>
-              )}
             </>
           )
         ) : (
           <>
             {/* Desktop: Calendar View (7-day grid) with week navigation */}
-            {isDesktop && (
             <div className="hidden lg:flex items-start gap-2">
               <button
                 type="button"
@@ -2085,7 +2082,6 @@ export function MealPlanner() {
                 <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
               </button>
             </div>
-            )}
 
             {/* Mobile: calendar view — Stitch calendarview_redesign_mobile: week strip + day sections */}
             <div className="lg:hidden space-y-6">
