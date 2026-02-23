@@ -20,6 +20,9 @@ export const metadata: Metadata = {
   description: "Meal planning and recipe management made easy",
 }
 
+// Nonce-based CSP requires dynamic rendering so scripts get the per-request nonce
+export const dynamic = "force-dynamic"
+
 export default async function RootLayout({
   children,
 }: {

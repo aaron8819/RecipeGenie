@@ -2,9 +2,15 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
+  // Generate nonce once and attach to request so layout headers() receives it
+  // (Next.js applies nonce to inline scripts from the request, not the response)
+  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+
   let response = NextResponse.next({
     request: {
-      headers: request.headers,
+      headers: requestHeaders,
     },
   })
 
@@ -24,7 +30,7 @@ export async function middleware(request: NextRequest) {
           })
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: requestHeaders,
             },
           })
           response.cookies.set({
@@ -41,7 +47,7 @@ export async function middleware(request: NextRequest) {
           })
           response = NextResponse.next({
             request: {
-              headers: request.headers,
+              headers: requestHeaders,
             },
           })
           response.cookies.set({
@@ -57,11 +63,8 @@ export async function middleware(request: NextRequest) {
   // Refresh session if expired
   await supabase.auth.getUser()
 
-  // Add security headers
+  // Add security headers (nonce already on request for layout; set on response for CSP)
   const headers = new Headers(response.headers);
-
-  // Generate nonce for CSP (Next.js 15+ will automatically apply to inline scripts)
-  const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const isDev = process.env.NODE_ENV === 'development';
 
   // Content Security Policy with nonce-based script execution
