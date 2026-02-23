@@ -80,6 +80,30 @@ Add sauce.`;
     expect(result.originalText).toBe('½ tsp oregano');
     expect(result.amount).toBe(0.5);
   });
+
+  it('should keep optional ingredient lines instead of treating them as section headers', () => {
+    const text = `Sweet Ginger Teriyaki Chicken Bowl
+
+Ingredients:
+1.25 lb boneless skinless chicken thighs or breasts, cubed
+1 to 1.5 cups sweet ginger teriyaki sauce
+1 tbsp avocado oil or olive oil
+1 red bell pepper, sliced
+1 cup broccoli florets
+2 cloves garlic, minced
+1 tsp fresh grated ginger (optional)
+2 cups cooked jasmine rice
+Sesame seeds (optional)
+Green onions, sliced (optional)
+
+Instructions:
+Cook and serve.`;
+
+    const result = parseRecipeText(text);
+    expect(result.ingredients).toHaveLength(10);
+    expect(result.ingredients.some((i) => i.item.toLowerCase().includes('sesame seeds'))).toBe(true);
+    expect(result.ingredients.some((i) => i.item.toLowerCase().includes('green onions'))).toBe(true);
+  });
 });
 
 describe('modifier extraction improvements', () => {
@@ -257,3 +281,4 @@ describe('alternative ingredient detection (P2)', () => {
     expect(result.alternatives).toBeUndefined();
   });
 });
+

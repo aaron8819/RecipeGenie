@@ -66,11 +66,11 @@ export function parseRecipeText(text: string): ParsedRecipe {
   const ingredientsStart = ingredientsIndex >= 0 ? ingredientsIndex + 1 : 0
   let ingredientsEnd = instructionsIndex >= 0 ? instructionsIndex : lines.length
 
-  // Stop at other sections that aren't ingredients (like "Optional Add-ins", "Serve With", etc.)
-  const otherSections = ["optional", "serve", "garnish", "topping", "note", "tips"]
+  // Stop at other sections that aren't ingredients (like "Optional Add-ins:", "Serve With:", etc.)
+  // Only treat likely headers as section breaks to avoid dropping ingredient lines like
+  // "Sesame seeds (optional)" or "Green onions, sliced (optional)".
   for (let i = ingredientsStart; i < ingredientsEnd; i++) {
-    const lineLower = lines[i].toLowerCase()
-    if (otherSections.some((section) => lineLower.includes(section) && lineLower.length < 30)) {
+    if (isLikelyNonIngredientSectionHeader(lines[i])) {
       ingredientsEnd = i
       break
     }
@@ -149,6 +149,29 @@ function findSectionIndex(lines: string[], keywords: string[]): number {
     }
   }
   return -1
+}
+
+function isLikelyNonIngredientSectionHeader(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed) return false
+
+  // Section headers typically end with ":" and are short labels.
+  if (!trimmed.endsWith(":")) return false
+
+  const normalized = trimmed
+    .toLowerCase()
+    .replace(/[:\-\u2013\u2014]+$/, "")
+    .trim()
+
+  // Guard against false positives for ingredient lines.
+  if (!normalized) return false
+  if (/\d/.test(normalized)) return false
+  if (/[(),]/.test(normalized)) return false
+
+  const words = normalized.split(/\s+/).filter(Boolean)
+  if (words.length > 6) return false
+
+  return /^(optional(\s+add-?ins?)?|serve(\s+with)?|garnish(es)?|toppings?|notes?|tips?)$/.test(normalized)
 }
 
 /**
