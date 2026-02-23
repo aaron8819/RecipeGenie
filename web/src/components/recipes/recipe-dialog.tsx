@@ -930,6 +930,7 @@ Instructions:
                 isEditing={false}
                 onReorderIngredients={handleReorderIngredients}
                 handleAutoFix={handleAutoFix}
+                isWideViewport={isWideViewport}
                 imagePreview={imagePreview}
                 imageUrl={imageUrl}
                 onImageSelect={handleImageSelect}
@@ -963,6 +964,7 @@ Instructions:
             isEditing={true}
             onReorderIngredients={handleReorderIngredients}
             handleAutoFix={handleAutoFix}
+            isWideViewport={isWideViewport}
             imagePreview={imagePreview}
             imageUrl={imageUrl}
             onImageSelect={handleImageSelect}
@@ -1021,6 +1023,7 @@ interface RecipeFormContentProps {
   isEditing: boolean
   onReorderIngredients: (event: DragEndEvent) => void
   handleAutoFix: () => void
+  isWideViewport: boolean
 }
 
 // Sortable ingredient row component
@@ -1034,6 +1037,7 @@ function SortableIngredientRow({
   editModeLayout,
   editModeTwoColLayout,
   addRecipeModalLayout,
+  isWideViewport,
 }: {
   ingredient: Ingredient
   index: number
@@ -1048,6 +1052,7 @@ function SortableIngredientRow({
   editModeLayout?: boolean
   editModeTwoColLayout?: boolean
   addRecipeModalLayout?: boolean
+  isWideViewport?: boolean
 }) {
   const {
     attributes,
@@ -1172,28 +1177,29 @@ function SortableIngredientRow({
             </div>
           </div>
         )}
-        {/* Desktop: single row grid */}
-        <div className="hidden sm:grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 items-center">
-          {dragHandle}
-          {itemInput}
-          {amountInput}
-          {unitInput}
-          {modifierInput}
-          {deleteButton}
-        </div>
-        {/* Mobile: two rows */}
-        <div className="sm:hidden space-y-1.5">
-          <div className="flex items-center gap-2">
+        {isWideViewport ? (
+          <div className="grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 items-center">
             {dragHandle}
-            <div className="flex-1 min-w-0">{itemInput}</div>
-            {deleteButton}
-          </div>
-          <div className="flex items-center gap-2 pl-6">
+            {itemInput}
             {amountInput}
             {unitInput}
             {modifierInput}
+            {deleteButton}
           </div>
-        </div>
+        ) : (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              {dragHandle}
+              <div className="flex-1 min-w-0">{itemInput}</div>
+              {deleteButton}
+            </div>
+            <div className="flex items-center gap-2 pl-6">
+              {amountInput}
+              {unitInput}
+              {modifierInput}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -1296,6 +1302,7 @@ function RecipeFormContent({
   onIngredientChange,
   isEditing,
   onReorderIngredients,
+  isWideViewport,
   imagePreview,
   imageUrl,
   onImageSelect,
@@ -1649,14 +1656,16 @@ function RecipeFormContent({
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-2">
-                <div className="hidden sm:grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 px-2 text-[9px] font-bold uppercase text-stone-400 dark:text-stone-500">
-                  <span aria-hidden="true" />
-                  <span>Ingredient</span>
-                  <span>Amt</span>
-                  <span>Unit</span>
-                  <span>Modifier</span>
-                  <span aria-hidden="true" />
-                </div>
+                {isWideViewport && (
+                  <div className="grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 px-2 text-[9px] font-bold uppercase text-stone-400 dark:text-stone-500">
+                    <span aria-hidden="true" />
+                    <span>Ingredient</span>
+                    <span>Amt</span>
+                    <span>Unit</span>
+                    <span>Modifier</span>
+                    <span aria-hidden="true" />
+                  </div>
+                )}
                 {ingredients.map((ingredient, index) => (
                   <SortableIngredientRow
                     key={index}
@@ -1667,6 +1676,7 @@ function RecipeFormContent({
                     ingredients={ingredients}
                     isEditing={true}
                     addRecipeModalLayout
+                    isWideViewport={isWideViewport}
                   />
                 ))}
               </div>

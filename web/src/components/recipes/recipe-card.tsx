@@ -128,7 +128,9 @@ export function RecipeCard({
               <h3 className="font-display text-lg md:text-2xl font-semibold text-slate-900 dark:text-white line-clamp-2">
                 {recipe.name}
               </h3>
-              <ChevronRight className="h-4 w-4 text-slate-300 md:hidden mt-1 flex-shrink-0" />
+              {!isDesktopViewport && (
+                <ChevronRight className="h-4 w-4 text-slate-300 mt-1 flex-shrink-0" />
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
               {recipe.category && (
@@ -562,7 +564,6 @@ export function RecipeCard({
     </Card>
   )
 }
-
 
 
 
