@@ -1744,7 +1744,7 @@ export function ShoppingListView() {
                                 aria-label={`Check all items in ${categoryData.name}`}
                               >
                                 <CheckCheck className="h-4 w-4 md:h-3 md:w-3 mr-1 shrink-0" />
-                                <span className="hidden sm:inline">All</span>
+                                <span>All</span>
                               </Button>
                             )}
                             <button

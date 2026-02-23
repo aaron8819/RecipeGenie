@@ -1868,8 +1868,7 @@ export function MealPlanner() {
             className="shrink-0"
           >
             <Plus className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Add recipe</span>
-            <span className="sm:hidden">Add</span>
+            {isDesktop ? "Add recipe" : "Add"}
           </Button>
           <Button
             onClick={handleGenerateShoppingList}
@@ -1901,8 +1900,7 @@ export function MealPlanner() {
             className="shrink-0"
           >
             <Save className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Save Template</span>
-            <span className="sm:hidden">Save</span>
+            {isDesktop ? "Save Template" : "Save"}
           </Button>
           <Button
             onClick={() => setIsLoadTemplateOpen(true)}
@@ -1912,8 +1910,7 @@ export function MealPlanner() {
             className="shrink-0"
           >
             <FolderOpen className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Load Template</span>
-            <span className="sm:hidden">Load</span>
+            {isDesktop ? "Load Template" : "Load"}
           </Button>
         </div>
       </div>

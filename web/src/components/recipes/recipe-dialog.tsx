@@ -118,6 +118,10 @@ export function RecipeDialog({
   const undoToast = useUndoToast()
 
   const [mode, setMode] = useState<"manual" | "import">("manual")
+  const [isWideViewport, setIsWideViewport] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    return window.matchMedia("(min-width: 640px)").matches
+  })
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
   const [servings, setServings] = useState(4)
@@ -143,6 +147,14 @@ export function RecipeDialog({
 
   const { data: allTags = [] } = useAllTags()
   const { data: tagCounts = [] } = useTagsWithCounts()
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)")
+    const onChange = (event: MediaQueryListEvent) => setIsWideViewport(event.matches)
+    setIsWideViewport(mq.matches)
+    mq.addEventListener("change", onChange)
+    return () => mq.removeEventListener("change", onChange)
+  }, [])
 
   // Reset form when dialog opens/closes or recipe changes
   useEffect(() => {
@@ -522,8 +534,7 @@ export function RecipeDialog({
                   className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 rounded-full text-xs font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
                 >
                   <PenTool className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
-                  <span className="hidden sm:inline">Manual Entry</span>
-                  <span className="sm:hidden">Manual</span>
+                  <span>{isWideViewport ? "Manual Entry" : "Manual"}</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="import"
