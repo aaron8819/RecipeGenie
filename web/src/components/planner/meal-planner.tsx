@@ -1704,7 +1704,6 @@ export function MealPlanner() {
       </div>
 
       {/* Desktop: Current Schedule + Quick Meal Mix — Stitch 2-col layout */}
-      {isDesktop && (
       <div className="hidden lg:grid lg:grid-cols-12 gap-6">
         {/* Current Schedule */}
         <div className="lg:col-span-4 bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-stone-100 dark:border-zinc-800">
@@ -1832,7 +1831,6 @@ export function MealPlanner() {
           </div>
         </div>
       </div>
-      )}
 
       {/* Week navigation (mobile) + Add to Cart */}
       <div className="space-y-4 -mt-3 lg:mt-0">
