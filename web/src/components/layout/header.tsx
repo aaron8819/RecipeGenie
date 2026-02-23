@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { LogOut, UtensilsCrossed, HelpCircle } from "lucide-react"
 import { OnboardingDialog } from "./onboarding-dialog"
 import { cn } from "@/lib/utils"
@@ -31,9 +32,28 @@ export function Header({
   activeTab,
   onTabChange,
 }: HeaderProps) {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true
+    return window.matchMedia("(min-width: 768px)").matches
+  })
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 768px)")
+    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
+    setIsDesktop(mq.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
+
   return (
     <>
-      <header className="md:fixed md:top-0 md:left-0 md:right-0 z-50 bg-white/80 backdrop-blur-md border-b border-stone-200 px-4 sm:px-6 py-4">
+      <header
+        className={cn(
+          "z-50 bg-white/80 backdrop-blur-md border-b border-stone-200 px-4 sm:px-6 py-4",
+          isDesktop && "fixed top-0 left-0 right-0"
+        )}
+      >
         <div className="w-full flex items-center justify-between">
           {/* Left: logo, app name, help — flush to left padding; logo/text navigate to planner */}
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -64,8 +84,8 @@ export function Header({
           </div>
 
           {/* Center: nav tabs — Stitch: gap-8, centered via justify-between */}
-          {onTabChange && (
-            <nav className="hidden md:flex items-center justify-center gap-8 text-sm font-medium flex-shrink-0">
+          {onTabChange && isDesktop && (
+            <nav className="flex items-center justify-center gap-8 text-sm font-medium flex-shrink-0">
               {NAV_TABS.map((tab) => {
                 const isActive = activeTab === tab.id
                 return (
@@ -101,7 +121,7 @@ export function Header({
               aria-label="Sign out"
               className="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1 transition-colors flex-shrink-0"
             >
-              <span className="hidden md:inline">Sign Out</span>
+              {isDesktop && <span>Sign Out</span>}
               <LogOut className="h-4 w-4" />
             </button>
           </div>
