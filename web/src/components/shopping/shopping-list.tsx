@@ -213,6 +213,7 @@ function RecipeTag({
 // Swipeable item component with swipe-to-delete
 function SwipeableItem({
   item,
+  isDesktop,
   onCheckOff,
   onRemove,
   onAddToPantry,
@@ -226,6 +227,7 @@ function SwipeableItem({
   showSwipeHint,
 }: {
   item: ShoppingItem
+  isDesktop: boolean
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
@@ -443,7 +445,7 @@ function SwipeableItem({
       >
         {/* Swipe hint tooltip */}
         {showSwipeHint && (
-          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-foreground text-background text-xs px-2 py-1 rounded whitespace-nowrap z-10 md:hidden">
+          <div className={cn("absolute -top-8 left-1/2 -translate-x-1/2 bg-foreground text-background text-xs px-2 py-1 rounded whitespace-nowrap z-10", isDesktop && "hidden")}>
             Swipe left to delete
           </div>
         )}
@@ -504,7 +506,7 @@ function SwipeableItem({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="md:hidden p-1 text-slate-400 hover:text-foreground"
+              className={cn("p-1 text-slate-400 hover:text-foreground", isDesktop && "hidden")}
               aria-label="Item actions"
             >
               <MoreVertical className="h-5 w-5" />
@@ -523,7 +525,7 @@ function SwipeableItem({
         </DropdownMenu>
         
         {/* Desktop action buttons */}
-        <div className="hidden md:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className={cn("items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity", isDesktop ? "flex" : "hidden")}>
           <Button
             variant="ghost"
             size="icon"
@@ -554,6 +556,7 @@ function SwipeableItem({
 const SortableShoppingItem = memo(function SortableShoppingItem({
   item,
   itemIdx,
+  isDesktop,
   onCheckOff,
   onRemove,
   onAddToPantry,
@@ -565,6 +568,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
 }: {
   item: ShoppingItem
   itemIdx: number
+  isDesktop: boolean
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
@@ -592,6 +596,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     <li ref={setNodeRef}>
       <SwipeableItem
         item={item}
+        isDesktop={isDesktop}
         onCheckOff={onCheckOff}
         onRemove={onRemove}
         onAddToPantry={onAddToPantry}
@@ -617,6 +622,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
     prevProps.isRemoving === nextProps.isRemoving &&
     prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
+    prevProps.isDesktop === nextProps.isDesktop &&
     prevProps.showSwipeHint === nextProps.showSwipeHint &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
@@ -695,6 +701,10 @@ function useSwipeHint() {
 }
 
 export function ShoppingListView() {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true
+    return window.matchMedia("(min-width: 768px)").matches
+  })
   const [newItem, setNewItem] = useState("")
   const addItemInputRef = useRef<HTMLInputElement>(null)
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
@@ -719,6 +729,15 @@ export function ShoppingListView() {
   const [pantryCollapsed, setPantryCollapsed] = useState(true) // Default: collapsed
   const [excludedCollapsed, setExcludedCollapsed] = useState(true) // Default: collapsed
   const [showScrollToTop, setShowScrollToTop] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 768px)")
+    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
+    setIsDesktop(mq.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
 
   const { data: shoppingList, isLoading, isFetching } = useShoppingList()
   
@@ -1433,7 +1452,7 @@ export function ShoppingListView() {
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
       {/* Mobile sticky add item - always accessible at top */}
-      <div className="md:hidden sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-stone-100 pb-3 mb-4">
+      <div className={cn("sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-stone-100 pb-3 mb-4", isDesktop && "hidden")}>
         <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
@@ -1454,7 +1473,7 @@ export function ShoppingListView() {
       </div>
 
       {/* Mobile header - compact title and icon buttons only */}
-      <div className="flex md:hidden items-center justify-between mb-4">
+      <div className={cn("flex items-center justify-between mb-4", isDesktop && "hidden")}>
         <h1 className="font-display text-2xl font-bold text-foreground">Shopping List</h1>
         <div className="flex gap-1">
           <button
@@ -1477,7 +1496,7 @@ export function ShoppingListView() {
       </div>
 
       {/* Desktop header - full layout with add item */}
-      <header className="hidden md:block mb-6 md:mb-2">
+      <header className={cn("mb-6 md:mb-2", !isDesktop && "hidden")}>
         {/* Desktop: title, subtitle, Organize + Copy + Clear */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
@@ -1570,7 +1589,7 @@ export function ShoppingListView() {
                 <CardHeader
                   role="button"
                   tabIndex={0}
-                  className="md:hidden px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
+                  className={cn("px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors", isDesktop && "hidden")}
                   onClick={toggleRecipeSection}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -1605,7 +1624,7 @@ export function ShoppingListView() {
                 </CardHeader>
 
                 {/* Desktop: Static header (no collapse) */}
-                <CardHeader className="hidden md:flex px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100">
+                <CardHeader className={cn("px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100 flex", !isDesktop && "hidden")}>
                   <div className="flex items-center gap-2 md:gap-3">
                     <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
                       Recipes in list
@@ -1618,7 +1637,7 @@ export function ShoppingListView() {
 
                 {/* Mobile: Conditional content */}
                 {!recipeSectionCollapsed && (
-                  <CardContent className="md:hidden p-4">
+                  <CardContent className={cn("p-4", isDesktop && "hidden")}>
                     <div className="flex flex-wrap gap-2">
                       {uniqueRecipes.map((recipeName) => (
                         <RecipeTag
@@ -1635,7 +1654,7 @@ export function ShoppingListView() {
                 )}
 
                 {/* Desktop: Always visible content */}
-                <CardContent className="hidden md:block p-4 md:p-6">
+                <CardContent className={cn("p-4 md:p-6", !isDesktop && "hidden")}>
                   <div className="flex flex-wrap gap-2">
                     {uniqueRecipes.map((recipeName) => (
                       <RecipeTag
@@ -1765,6 +1784,7 @@ export function ShoppingListView() {
                                 key={reactKey}
                                 item={item}
                                 itemIdx={globalIndex}
+                                isDesktop={isDesktop}
                                 onCheckOff={() => handleCheckOff(item)}
                                 onRemove={() => handleRemoveItem(item.item)}
                                 onAddToPantry={() => handleAddToPantry(item)}
@@ -1822,7 +1842,7 @@ export function ShoppingListView() {
               <CardHeader
                 role="button"
                 tabIndex={0}
-                className="md:hidden px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
+                className={cn("px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors", isDesktop && "hidden")}
                 onClick={togglePantrySection}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1854,7 +1874,7 @@ export function ShoppingListView() {
               </CardHeader>
 
               {/* Desktop: Static header (no collapse) */}
-              <CardHeader className="hidden md:flex px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100">
+              <CardHeader className={cn("px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100 flex", !isDesktop && "hidden")}>
                 <div className="flex items-center gap-2 md:gap-3">
                   <Package className="h-5 w-5 text-primary" />
                   <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
@@ -1868,7 +1888,7 @@ export function ShoppingListView() {
 
               {/* Mobile: Conditional content */}
               {!pantryCollapsed && (
-                <CardContent className="md:hidden p-4">
+                <CardContent className={cn("p-4", isDesktop && "hidden")}>
                   <p className="text-xs text-muted-foreground mb-3">Click to add back to list</p>
                   <div className="flex flex-wrap gap-2">
                     {mergedAlreadyHave.map((item, index) => (
@@ -1888,7 +1908,7 @@ export function ShoppingListView() {
               )}
 
               {/* Desktop: Always visible content */}
-              <CardContent className="hidden md:block p-4 md:p-6">
+              <CardContent className={cn("p-4 md:p-6", !isDesktop && "hidden")}>
                 <p className="text-xs text-muted-foreground mb-4">Click to add back to list</p>
                 <div className="flex flex-wrap gap-2">
                   {mergedAlreadyHave.map((item, index) => (
@@ -1915,7 +1935,7 @@ export function ShoppingListView() {
               <CardHeader
                 role="button"
                 tabIndex={0}
-                className="md:hidden px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
+                className={cn("px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors", isDesktop && "hidden")}
                 onClick={toggleExcludedSection}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -1947,7 +1967,7 @@ export function ShoppingListView() {
               </CardHeader>
 
               {/* Desktop: Static header (no collapse) */}
-              <CardHeader className="hidden md:flex px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100">
+              <CardHeader className={cn("px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100 flex", !isDesktop && "hidden")}>
                 <div className="flex items-center gap-2 md:gap-3">
                   <Ban className="h-5 w-5 text-red-500" />
                   <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
@@ -1961,7 +1981,7 @@ export function ShoppingListView() {
 
               {/* Mobile: Conditional content */}
               {!excludedCollapsed && (
-                <CardContent className="md:hidden p-4">
+                <CardContent className={cn("p-4", isDesktop && "hidden")}>
                   <p className="text-xs text-muted-foreground mb-3">Items excluded by keywords. Click to add back to list.</p>
                   <div className="flex flex-wrap gap-2">
                     {displayShoppingList.excluded.map((item, index) => (
@@ -1984,7 +2004,7 @@ export function ShoppingListView() {
               )}
 
               {/* Desktop: Always visible content */}
-              <CardContent className="hidden md:block p-4 md:p-6">
+              <CardContent className={cn("p-4 md:p-6", !isDesktop && "hidden")}>
                 <p className="text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
                 <div className="flex flex-wrap gap-2">
                   {displayShoppingList.excluded.map((item, index) => (
@@ -2053,7 +2073,7 @@ export function ShoppingListView() {
     {showScrollToTop && (
       <button
         onClick={handleScrollToTop}
-        className="md:hidden fixed bottom-28 right-4 z-40 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center"
+        className={cn("fixed bottom-28 right-4 z-40 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center", isDesktop && "hidden")}
         aria-label="Scroll to top"
       >
         <ChevronUp className="h-5 w-5" />

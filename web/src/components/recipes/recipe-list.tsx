@@ -113,6 +113,20 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { cn, getErrorMessage } from "@/lib/utils"
 
 export function RecipeList() {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true
+    return window.matchMedia("(min-width: 768px)").matches
+  })
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(min-width: 768px)")
+    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
+    setIsDesktop(mq.matches)
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [])
+
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -366,32 +380,37 @@ export function RecipeList() {
             </button>
           </div>
 
-          <div
-            className="md:hidden h-6 w-px bg-slate-200 dark:bg-slate-600 shrink-0 mx-1"
-            aria-hidden
-          />
+          {!isDesktop && (
+            <>
+              <div
+                className="h-6 w-px bg-slate-200 dark:bg-slate-600 shrink-0 mx-1"
+                aria-hidden
+              />
 
-          <Button
-            variant="outline"
-            onClick={() => setIsSharedInboxOpen(true)}
-            className={cn(pillOutline, "md:hidden shrink-0")}
-          >
-            <Inbox className="h-4 w-4 shrink-0" />
-            Shared
-          </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsSharedInboxOpen(true)}
+                className={cn(pillOutline, "shrink-0")}
+              >
+                <Inbox className="h-4 w-4 shrink-0" />
+                Shared
+              </Button>
 
-          <Button
-            variant="outline"
-            onClick={() => setIsSettingsOpen(true)}
-            className={cn(pillOutline, "md:hidden shrink-0")}
-          >
-            <Settings className="h-4 w-4 shrink-0" />
-            Settings
-          </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsSettingsOpen(true)}
+                className={cn(pillOutline, "shrink-0")}
+              >
+                <Settings className="h-4 w-4 shrink-0" />
+                Settings
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Right: Settings, Add Recipe */}
-        <div className="hidden md:flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
+        {isDesktop && (
+        <div className="flex flex-nowrap items-center gap-3 md:gap-4 shrink-0">
           <Button
             variant="outline"
             onClick={() => setIsSharedInboxOpen(true)}
@@ -433,6 +452,7 @@ export function RecipeList() {
             Add Recipe
           </Button>
         </div>
+        )}
       </div>
 
       {/* Recipe Grid/List */}
@@ -521,6 +541,7 @@ export function RecipeList() {
                   <RecipeCard
                     recipe={recipe}
                     viewMode={viewMode}
+                    isDesktopViewport={isDesktop}
                     onDelete={handleDelete}
                     onToggleFavorite={(r) =>
                       toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
@@ -550,14 +571,16 @@ export function RecipeList() {
       </div>
 
       {/* FAB Add Recipe — mobile only */}
-      <button
-        type="button"
-        onClick={() => setIsAddDialogOpen(true)}
-        className="fixed bottom-24 right-6 md:right-8 lg:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-xl shadow-primary/40 hover:opacity-90 transition-opacity z-30"
-        aria-label="Add Recipe"
-      >
-        <Plus className="h-6 w-6" />
-      </button>
+      {!isDesktop && (
+        <button
+          type="button"
+          onClick={() => setIsAddDialogOpen(true)}
+          className="fixed bottom-24 right-6 w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-xl shadow-primary/40 hover:opacity-90 transition-opacity z-30"
+          aria-label="Add Recipe"
+        >
+          <Plus className="h-6 w-6" />
+        </button>
+      )}
 
       {/* Add Dialog */}
       <RecipeDialog

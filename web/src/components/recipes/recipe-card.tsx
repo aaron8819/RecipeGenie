@@ -27,6 +27,7 @@ const REF_CATEGORY_PILL: Record<string, string> = {
 interface RecipeCardProps {
   recipe: Recipe
   viewMode?: "grid" | "list"
+  isDesktopViewport?: boolean
   onDelete?: (recipe: Recipe) => void
   onToggleFavorite?: (recipe: Recipe) => void
   onAddToPlan?: (recipe: Recipe) => void
@@ -46,6 +47,7 @@ interface RecipeCardProps {
 export function RecipeCard({
   recipe,
   viewMode = "grid",
+  isDesktopViewport = true,
   onDelete,
   onToggleFavorite,
   onAddToPlan,
@@ -169,7 +171,7 @@ export function RecipeCard({
                 : "Not made yet"}
             </p>
 
-            <div className="flex justify-end gap-2 md:hidden">
+            <div className={cn("flex justify-end gap-2", isDesktopViewport && "hidden")}>
               {onMarkAsMade && (
                 <button
                   type="button"
@@ -241,7 +243,7 @@ export function RecipeCard({
         </div>
 
         {/* Action icons — reference: check_circle, shopping_cart, calendar_today, divider, chevron_right */}
-        <div className="hidden md:flex items-center gap-1 flex-shrink-0">
+        <div className={cn("items-center gap-1 flex-shrink-0", isDesktopViewport ? "flex" : "hidden")}>
           {onMarkAsMade && (
             <button
               type="button"
@@ -415,10 +417,10 @@ export function RecipeCard({
                 )}
               </>
             ) : (
-              <span className="md:hidden" aria-hidden />
+              <span className={cn(isDesktopViewport && "hidden")} aria-hidden />
             )}
           </div>
-          <div className="flex-shrink-0 md:hidden">
+          <div className={cn("flex-shrink-0", isDesktopViewport && "hidden")}>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -472,7 +474,7 @@ export function RecipeCard({
           </div>
         </div>
         {/* Desktop: 4-button grid. Mobile: no separate action row */}
-        <div className="hidden md:grid grid-cols-4 gap-2">
+        <div className={cn("grid grid-cols-4 gap-2", !isDesktopViewport && "hidden")}>
           {onMarkAsMade && (
             <Button
               variant="outline"
@@ -560,7 +562,6 @@ export function RecipeCard({
     </Card>
   )
 }
-
 
 
 
