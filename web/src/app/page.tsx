@@ -15,25 +15,32 @@ import { getSupabase } from "@/lib/supabase/client"
 const VALID_TABS = ["recipes", "planner", "pantry", "shopping"] as const
 const STORAGE_KEY = "recipe-genie-active-tab"
 
-function getInitialTab(): string {
-  if (typeof window === "undefined") return "recipes"
+// SSR-safe: same value on server and first client paint to avoid hydration mismatch
+const DEFAULT_TAB = "recipes"
+
+function getStoredTab(): string {
+  if (typeof window === "undefined") return DEFAULT_TAB
   const stored = localStorage.getItem(STORAGE_KEY)
-  return stored && VALID_TABS.includes(stored as typeof VALID_TABS[number]) ? stored : "recipes"
+  return stored && VALID_TABS.includes(stored as (typeof VALID_TABS)[number])
+    ? stored
+    : DEFAULT_TAB
 }
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState(getInitialTab)
+  const [activeTab, setActiveTab] = useState(DEFAULT_TAB)
   const [authError, setAuthError] = useState<string | null>(null)
-  // Get auth context first so we can use isAuthenticated in useEffect
   const {
     user,
     loading,
     signOut,
     isAuthenticated,
   } = useAuthContext()
-
-  // First-run onboarding (only for authenticated users)
   const { showOnboarding, completeOnboarding } = useFirstRunOnboarding()
+
+  // Restore tab from localStorage after mount (avoids server/client mismatch)
+  useEffect(() => {
+    setActiveTab(getStoredTab())
+  }, [])
 
   // Persist active tab to localStorage
   useEffect(() => {
