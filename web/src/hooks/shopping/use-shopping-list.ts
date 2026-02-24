@@ -10,7 +10,7 @@ import { generateShoppingList } from "@/lib/shopping-list"
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY } from "./shared"
+import { SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 /**
  * Hook to fetch the shopping list
@@ -75,6 +75,7 @@ export function useGenerateShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
       const supabase = getSupabase()
 
@@ -159,6 +160,7 @@ export function useSaveShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (shoppingList: Partial<ShoppingList>) => {
       const supabase = getSupabase()
 
@@ -202,6 +204,7 @@ export function useClearShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async () => {
       const emptyList = {
         items: [],

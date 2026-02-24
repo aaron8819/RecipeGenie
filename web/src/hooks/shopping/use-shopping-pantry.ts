@@ -9,7 +9,7 @@ import type { ShoppingList, ShoppingItem, PantryItem } from "@/types/database"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, PANTRY_KEY } from "./shared"
+import { SHOPPING_KEY, PANTRY_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 /**
  * Hook to move an item from "already have" back to the shopping list
@@ -19,6 +19,7 @@ export function useMoveToShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
 
@@ -185,6 +186,7 @@ export function useMoveExcludedToShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
 
@@ -279,6 +281,7 @@ export function useAddToPantryAndRemove() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
 

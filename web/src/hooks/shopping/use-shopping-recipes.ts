@@ -11,7 +11,7 @@ import { mergeShoppingItems, removeRecipeByNameFromItems } from "@/lib/shopping-
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY } from "./shared"
+import { SHOPPING_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 /**
  * Hook to remove all items associated with a specific recipe
@@ -21,6 +21,7 @@ export function useRemoveRecipeItems() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (recipeName: string) => {
       // Use the unified remove function
       const filterItems = (items: ShoppingItem[]) => removeRecipeByNameFromItems(items, recipeName)
@@ -89,6 +90,7 @@ export function useAddToShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
       let recipes: Recipe[]
       let pantryItems: PantryItem[]

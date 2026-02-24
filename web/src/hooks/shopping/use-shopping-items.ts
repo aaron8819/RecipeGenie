@@ -10,7 +10,7 @@ import { ensureCategoryInfo } from "@/lib/shopping-list"
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY } from "./shared"
+import { SHOPPING_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 /**
  * Hook to add a manual item to the shopping list
@@ -21,6 +21,7 @@ export function useAddShoppingItem() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async ({ itemName, amount, unit }: { itemName: string; amount?: number; unit?: string }) => {
       const categoryOverrides =
         ((await getSupabase().from("user_config").select("category_overrides").single()).data as { category_overrides?: Record<string, string> } | null)?.category_overrides || {}
@@ -141,6 +142,7 @@ export function useRemoveShoppingItem() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (itemName: string) => {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -209,6 +211,7 @@ export function useCheckOffItem() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
 
@@ -292,6 +295,7 @@ export function useBulkCheckOff() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (itemsToCheck: ShoppingItem[]) => {
       const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
 
@@ -377,6 +381,7 @@ export function useReorderShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (newItems: ShoppingItem[]) => {
       const supabase = getSupabase()
       const { error: saveError } = await supabase

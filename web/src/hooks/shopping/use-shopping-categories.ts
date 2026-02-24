@@ -9,7 +9,7 @@ import type { ShoppingItem, UserConfig } from "@/types/database"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, CONFIG_KEY } from "./shared"
+import { SHOPPING_KEY, CONFIG_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 /**
  * Hook to save a category override for an item
@@ -81,6 +81,7 @@ export function useUpdateItemCategory() {
   const { user } = useAuthContext()
 
   return useMutation({
+    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async ({ itemName, newCategoryKey, items }: {
       itemName: string; newCategoryKey: string; items: ShoppingItem[]
     }) => {

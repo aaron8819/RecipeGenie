@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ShoppingList, ShoppingItem } from '@/types/database'
 import { SHOPPING_KEY } from '@/hooks/shopping/shared'
@@ -192,6 +192,57 @@ describe('useCheckOffItem', () => {
 
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
     expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(false)
+  })
+
+  it('should prevent lost updates when two check-off mutations overlap', async () => {
+    const { wrapper, queryClient } = createWrapper()
+    queryClient.setQueryData(
+      [...SHOPPING_KEY],
+      makeList({
+        items: [
+          makeItem('milk', { checked: false }),
+          makeItem('eggs', { checked: false }),
+        ],
+      })
+    )
+
+    let serverItems: ShoppingItem[] = [
+      makeItem('milk', { checked: false }),
+      makeItem('eggs', { checked: false }),
+    ]
+    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+    mockSupabase.from.mockImplementation(() => ({
+      select: vi.fn().mockReturnValue({
+        single: vi.fn().mockImplementation(async () => ({
+          data: { items: serverItems.map((item) => ({ ...item })) },
+          error: null,
+        })),
+      }),
+      update: vi.fn().mockImplementation((payload: { items: ShoppingItem[] }) => ({
+        eq: vi.fn().mockImplementation(async () => {
+          await delay(25)
+          serverItems = payload.items.map((item) => ({ ...item }))
+          return { data: null, error: null }
+        }),
+      })),
+    }))
+
+    const { result } = renderHook(() => useCheckOffItem(), { wrapper })
+
+    await act(async () => {
+      await Promise.all([
+        result.current.mutateAsync(makeItem('milk', { checked: false })),
+        result.current.mutateAsync(makeItem('eggs', { checked: false })),
+      ])
+    })
+
+    expect(serverItems.find((i) => i.item === 'milk')?.checked).toBe(true)
+    expect(serverItems.find((i) => i.item === 'eggs')?.checked).toBe(true)
+
+    const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+    expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(true)
+    expect(cached?.items.find((i) => i.item === 'eggs')?.checked).toBe(true)
   })
 })
 
