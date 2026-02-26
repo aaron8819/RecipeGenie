@@ -2,7 +2,7 @@
 
 > **When to read:** You're writing, debugging, or modifying E2E tests, or setting up Playwright fixtures and auth.
 
-*Last updated: 2026-02-08 (v2.13.1)*
+*Last updated: 2026-02-26 (v2.15.0)*
 
 Comprehensive Playwright test suite for Recipe Genie, covering authentication, navigation, recipes, meal planning, shopping lists, pantry management, responsive design, accessibility, and visual design.
 
@@ -93,6 +93,7 @@ npm run test:e2e:codegen
 | `recipes.spec.ts` | Recipe CRUD, add/edit modals, import from text, category management |
 | `meal-planner.spec.ts` | Plan generation, settings modal, day assignments, mark as made |
 | `shopping-list.spec.ts` | List generation, check off items, auto-collapse, add to pantry |
+| `shopping-list-mobile.spec.ts` | Mobile-specific shopping list flows (viewport 375px) |
 | `pantry.spec.ts` | Add/delete items, excluded keywords, clear all |
 | `responsive.spec.ts` | Mobile (375px, 390px, 414px), tablet (768px), desktop (1024px, 1440px) |
 | `accessibility.spec.ts` | WCAG 2.1 AA, axe-core checks, keyboard nav, focus indicators |

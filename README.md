@@ -5,22 +5,29 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 ## Features
 
 - **Recipe Management**: Store and organize your recipes by protein category
-  - Manual entry or import from plain text with automatic parsing
-  - Supports Unicode fractions, ranges, and various recipe formats
+  - Manual entry, import from plain text, or import from URL (JSON-LD / HTML scraping)
+  - Supports Unicode fractions, ranges, alternative ingredients ("X or Y"), and various recipe formats
   - Upload and display recipe images (JPG, PNG, WebP, max 5MB)
+  - Cook mode: step-by-step fullscreen view with wake lock
+  - Export recipes as JSON or plain text
+- **Recipe Sharing**: Share recipes with other users by exact email; recipient gets an owned copy
 - **Meal Planning**: Randomly generate weekly meal plans based on your preferences
+  - Save and reload named plan templates
+  - Calendar view with day assignments and swap/undo support
 - **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering, custom categories, and category ordering to match your store layout
-- **Pantry Tracking**: Mark items you have on hand to get only what you need to buy
+- **Pantry Tracking**: Mark items you have on hand; "What Can I Make?" shows recipes you can cook now
 - **Multi-User Support**: Each user has their own private data via Supabase Auth
 - **Responsive UI**: Desktop header with tab navigation; mobile bottom nav; Stitch design (Outfit, Playfair, sage/terracotta palette)
 - **Cloud Deployment**: Host on Vercel for access from anywhere
 
 ## Tech Stack
 
-- **Frontend**: Next.js 14 (App Router), React 18, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 15 (App Router), React 18, TypeScript, Tailwind CSS
 - **Backend**: Supabase (PostgreSQL + Row Level Security)
 - **State**: TanStack Query (React Query)
 - **UI**: Radix UI primitives with shadcn/ui styling
+- **Rate limiting**: Upstash Redis (`@upstash/ratelimit`)
+- **HTML parsing**: Cheerio (server-side recipe URL scraping)
 
 ## Quick Start
 
@@ -34,7 +41,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 1. Go to [supabase.com](https://supabase.com) and create a new project
 2. Once created, go to **SQL Editor** in the dashboard
-3. Run all migration files in order from `supabase/migrations/` (numbered `001` through `014`)
+3. Run all migration files in order from `supabase/migrations/` (numbered `001` through `016`)
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 5. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
 6. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npx tsx scripts/upload-default-recipe-images.ts` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
@@ -236,5 +243,7 @@ web/
 | `decisions.md` | Architectural Decision Records (ADRs 001–019) |
 | `supabase/SCHEMA.md` | Database schema — tables, RLS policies, migrations, query examples |
 | `docs/shopping-component.md` | Shopping list component deep-dive (architecture, data flow, testing) |
-| `docs/planner-component.md` | Meal planner component deep-dive (auto-assign, date handling, history) |
+| `docs/planner-component.md` | Meal planner component deep-dive (auto-assign, date handling, templates, history) |
+| `docs/recipes-component.md` | Recipes component deep-dive (CRUD, parser, URL import, cook mode, sharing) |
+| `docs/pantry-component.md` | Pantry component deep-dive (items, keywords, What Can I Make?) |
 | `web/tests/README.md` | E2E testing guide (Playwright setup, fixtures, debugging) |

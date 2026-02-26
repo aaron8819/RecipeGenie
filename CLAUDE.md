@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Recipe Genie is a weekly meal planning app. Users maintain recipes by category, generate randomized meal plans, get smart shopping lists with ingredient merging, and track what they've cooked.
 
-**Stack:** Next.js 14 (App Router) + TypeScript + Supabase (PostgreSQL/Auth/RLS/Storage) + TanStack Query v5 + Tailwind CSS + Radix UI/shadcn
+**Stack:** Next.js 15 (App Router) + TypeScript + Supabase (PostgreSQL/Auth/RLS/Storage) + TanStack Query v5 + Tailwind CSS + Radix UI/shadcn + Cheerio (server-side HTML parsing) + Upstash Redis (rate limiting)
 
 ## Commands
 
@@ -34,14 +34,15 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 
 **Key layers:**
 - `web/src/app/page.tsx` — Single-page app with tab navigation (Planner, Recipes, Pantry, Shopping)
-- `web/src/hooks/` — All data access via TanStack Query hooks (`useQuery` for reads, `useMutation` for writes). Shopping hooks are split into `hooks/shopping/` subdirectory with barrel export via `use-shopping.ts`
-- `web/src/lib/` — Pure business logic, no React dependencies. Core algorithms: `meal-planner.ts`, `shopping-list.ts`, `shopping-list-merging.ts`, `shopping-list-normalization.ts`, `recipe-parser.ts`
+- `web/src/hooks/` — All data access via TanStack Query hooks (`useQuery` for reads, `useMutation` for writes). Shopping hooks in `hooks/shopping/` (barrel via `use-shopping.ts`). Key hooks: `use-recipes.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`, `use-wake-lock.ts`
+- `web/src/lib/` — Pure business logic, no React dependencies. Core algorithms: `meal-planner.ts`, `shopping-list.ts`, `shopping-list-merging.ts`, `shopping-list-normalization.ts`, `recipe-parser.ts`, `recipe-url-parser.ts` (URL import/JSON-LD), `recipe-export.ts` (JSON/text export), `pantry-matcher.ts` (ingredient matching), `recipe-sharing.ts` (share lifecycle), `rate-limit.ts` (Upstash Redis), `url-safety.ts` (SSRF guard), `planner-utils.ts`, `planner-colors.ts`, `user-config.ts`
+- `web/src/app/api/` — Server-side API routes: `recipe-import/route.ts` (URL fetch + JSON-LD parse, rate-limited), `recipe-shares/` (create, inbox, sent, accept, decline routes)
 - `web/src/components/` — Organized by domain: `auth/`, `recipes/`, `planner/`, `pantry/`, `shopping/`, `layout/`, `ui/` (shadcn primitives)
 - `web/src/types/database.ts` — All Supabase table types
-- `web/src/lib/supabase/client.ts` — Singleton Supabase client
+- `web/src/lib/supabase/client.ts` — Singleton Supabase client; `admin.ts` — service-role client (server only)
 - `web/src/lib/auth-context.tsx` — Auth state provider (React Context, the one exception to "no Context API")
 
-**Supabase tables** (all scoped by `user_id` via RLS `auth.uid() = user_id`): `recipes`, `user_config`, `weekly_plans`, `pantry_items`, `recipe_history`, `shopping_list`. Schema details in `supabase/SCHEMA.md`.
+**Supabase tables** (all scoped by `user_id` via RLS `auth.uid() = user_id`): `recipes`, `user_config`, `weekly_plans`, `pantry_items`, `recipe_history`, `shopping_list`, `recipe_shares`, `plan_templates`. Schema details in `supabase/SCHEMA.md`.
 
 **Query key convention:** `['entity', userId, ...params]` — e.g., `['recipes', userId]`, `['planner', userId, weekDate]`
 
@@ -51,7 +52,13 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 
 **Shopping list** (`lib/shopping-list.ts` → `shopping-list-normalization.ts` → `shopping-list-merging.ts`): Aggregates ingredients, normalizes units, merges compatible units (e.g., cups + fl oz), stores incompatible in `additionalAmounts`. Pantry filter and keyword exclusion use exact case-insensitive matching ("pepper" ≠ "poblano pepper"). Category assignment: user overrides first, then defaults.
 
-**Recipe parser** (`lib/recipe-parser.ts`): Parses plain text into structured recipes. Handles Unicode fractions, ranges, parenthetical units, modifiers. Detects section headers (Ingredients/Instructions/Directions/Method/Steps).
+**Recipe parser** (`lib/recipe-parser.ts`): Parses plain text into structured recipes. Handles Unicode fractions, ranges, parenthetical units, modifiers, "X or Y" alternatives. Detects section headers (Ingredients/Instructions/Directions/Method/Steps).
+
+**URL import** (`lib/recipe-url-parser.ts`): Server-side URL fetch via `/api/recipe-import`. Extracts JSON-LD `Recipe` schema with Cheerio fallback. SSRF-guarded by `url-safety.ts` (blocks private IPs). Rate-limited via Upstash Redis (`lib/rate-limit.ts`).
+
+**Pantry matching** (`lib/pantry-matcher.ts`): Fuzzy ingredient-to-pantry matching for "What Can I Make?" feature. Checks primary item name and `alternatives[]`.
+
+**Recipe export** (`lib/recipe-export.ts`): Serializes recipes to JSON or plain-text format for download.
 
 ## Code Conventions
 
@@ -86,6 +93,10 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 - **User config fetch**: PGRST116 (not found) is expected for new users — `resolveUserConfig()` returns defaults
 - **Shopping per-item pending**: Never use `mutation.isPending` to disable all items in a list — track pending state per-item with a `Set<string>` of item keys; only disable the specific item being mutated
 - **Shopping pantry alternatives**: Pantry matching checks both primary item name AND `alternatives[]`; exclusion keyword matching only checks the primary name (alternatives cannot trigger exclusion)
+- **ingredientMap display strings**: `ingredientMap` stores `item` as the display string (e.g., "yogurt (or sour cream)"). Use `.entries()` to get the primary key for pantry/exclusion matching — never call `normalizeItemName()` on `ingredient.item` for these checks
+- **Undo toast pattern**: For pantry/planner destructive actions — delete immediately, undo re-inserts. For shopping list items — deferring delete to `onExpire` loses the action if the page is refreshed (component unmounts, timer cleared, `onExpire` never fires). Use immediate-delete for shopping too
+- **Rate limiting**: `lib/rate-limit.ts` uses `@upstash/ratelimit` with Upstash Redis. Requires `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars in production. Graceful fail-open in dev (missing env vars → no-op limiter)
+- **Admin client**: `lib/supabase/admin.ts` uses `SUPABASE_SERVICE_ROLE_KEY` — server-only. Never import in client components. Used for cross-user identity lookup (recipient email resolution in recipe shares)
 
 ## Doc Router — Read Before You Act
 
@@ -95,8 +106,8 @@ Before starting work, match your task to a doc below and read it first.
 |---------------------|------------|
 | Planner (components, hooks, lib, day assignments) | `docs/planner-component.md` |
 | Shopping (components, hooks, merging, normalization, hook tests) | `docs/shopping-component.md` |
-| Recipes (components, hooks, parser, CRUD, tags) | `docs/recipes-component.md` |
-| Pantry (components, hooks, excluded keywords) | `docs/pantry-component.md` |
+| Recipes (components, hooks, parser, CRUD, tags, cook mode, URL import, sharing) | `docs/recipes-component.md` |
+| Pantry (components, hooks, excluded keywords, What Can I Make?) | `docs/pantry-component.md` |
 | Database (schema, migrations, RLS, new tables/columns) | `supabase/SCHEMA.md` |
 | E2E tests (writing, debugging, fixtures) | `web/tests/README.md` |
 | Architectural decisions or major refactors | `decisions.md` |

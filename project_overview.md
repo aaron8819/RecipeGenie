@@ -47,7 +47,7 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  FRONTEND (Next.js 14 App Router)                                           │
+│  FRONTEND (Next.js 15 App Router)                                           │
 │                                                                             │
 │  src/app/page.tsx                                                           │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
@@ -76,6 +76,8 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 │  recipe_history                   Cooking history tracking                  │
 │  weekly_plans                     Plan persistence per week                 │
 │  shopping_list                    Current shopping list state               │
+│  recipe_shares                    Share lifecycle (pending/accepted/etc.)   │
+│  plan_templates                   Named reusable plan templates             │
 │                                                                             │
 │  Row Level Security: auth.uid() = user_id on all tables                     │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -98,16 +100,17 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 | Directory | Files | Responsibility |
 |-----------|-------|----------------|
 | `app/` | `layout.tsx`, `page.tsx` | Next.js App Router entry points, providers setup |
-| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx` | Recipe CRUD UI with text import parser and ingredient modifier support |
-| `components/planner/` | `meal-planner.tsx` | Week navigation, plan generation, history |
-| `components/pantry/` | `pantry-list.tsx` | Pantry items, excluded keywords |
+| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx`, `cook-mode.tsx`, `share-recipe-dialog.tsx`, `shared-recipes-inbox.tsx` | Recipe CRUD UI with text/URL import, cook mode, and sharing |
+| `components/planner/` | `meal-planner.tsx`, `save-template-dialog.tsx`, `load-template-dialog.tsx` | Week navigation, plan generation, templates, history |
+| `components/pantry/` | `pantry-list.tsx`, `what-can-i-make.tsx` | Pantry items, excluded keywords, ingredient matching |
 | `components/shopping/` | `shopping-list.tsx`, `shopping-settings-modal.tsx` | Shopping list display, scaling, drag-and-drop reordering, category management |
 | `components/ui/` | Various | Radix UI primitives (button, dialog, tabs, etc.) |
 | `components/` | `error-boundary.tsx` | Error boundary component for application resilience |
-| `hooks/` | `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts` | TanStack Query hooks for Supabase |
+| `hooks/` | `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`, `use-wake-lock.ts` | TanStack Query hooks for Supabase |
 | `hooks/shopping/` | Domain-focused modules | Shopping hooks split by domain (list, items, recipes, categories, config, pantry) |
-| `lib/supabase/` | `client.ts`, `server.ts` | Supabase client initialization (singleton pattern) |
-| `lib/` | `meal-planner.ts`, `planner-colors.ts`, `planner-utils.ts`, `user-config.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts` | Business logic (plan generation, planner colors/date helpers, user config defaults, list aggregation with normalization, category management, recipe text parsing with modifier extraction) |
+| `app/api/` | `recipe-import/route.ts`, `recipe-shares/` | Server-side API: URL recipe import (rate-limited, SSRF-guarded), share lifecycle routes |
+| `lib/supabase/` | `client.ts`, `server.ts`, `admin.ts` | Supabase clients: browser singleton, server SSR, service-role admin (server only) |
+| `lib/` | `meal-planner.ts`, `planner-colors.ts`, `planner-utils.ts`, `user-config.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts`, `recipe-url-parser.ts`, `recipe-export.ts`, `pantry-matcher.ts`, `recipe-sharing.ts`, `rate-limit.ts`, `url-safety.ts` | Business logic: plan generation, shopping aggregation, recipe parsing (text + URL), pantry matching, sharing, security utilities |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
 
 **Testing:** E2E tests in `web/tests/` (Playwright); unit tests in `hooks/__tests__/` and `lib/__tests__/` (Vitest). See README Testing section.
@@ -128,12 +131,14 @@ One-time import of legacy `data/*.json` files into Supabase. Uses service role k
 
 | Table | Schema | Purpose |
 |-------|--------|---------|
-| `recipes` | `id, user_id, name, category, servings, ingredients (JSONB with modifier support), instructions, favorite, created_at, updated_at` | Recipe collection |
+| `recipes` | `id, user_id, name, category, servings, ingredients (JSONB with item/amount/unit/modifier/alternatives/originalText), instructions, favorite, tags, image_url, created_at, updated_at` | Recipe collection |
 | `pantry_items` | `user_id, item (PK), created_at` | Items user has on hand |
 | `user_config` | `user_id (PK), categories[], default_selection, excluded_keywords[], history_exclusion_days, week_start_day, onboarding_completed_at, category_overrides, custom_categories[], category_order[], excluded_days[], preferred_days[], auto_assign_days` | User preferences |
 | `recipe_history` | `id, user_id, recipe_id (FK), date_made` | When recipes were cooked |
 | `weekly_plans` | `user_id, week_date (PK), recipe_ids[], day_assignments (JSONB), scale, generated_at` | Saved plans keyed by week start with day assignments |
 | `shopping_list` | `user_id (PK), items[], already_have[], excluded[], source_recipes[], scale, total_servings, custom_order, generated_at` | Current shopping list state |
+| `recipe_shares` | `id, sender_id, recipient_id, recipe_snapshot (JSONB), message, status, created_at, updated_at` | Share lifecycle — snapshot at creation, copy-on-accept |
+| `plan_templates` | `id, user_id, name, recipe_ids[], day_assignments (JSONB), created_at` | Named reusable plan templates |
 
 ### Client-Side State (TanStack Query)
 
@@ -182,7 +187,7 @@ CREATE POLICY "authenticated_full_access" ON recipes
 ### Client Keys
 
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Safe for browser (RLS restricts access)
-- `SUPABASE_SERVICE_ROLE_KEY`: Server-only, bypasses RLS (migration script only)
+- `SUPABASE_SERVICE_ROLE_KEY`: Server-only, bypasses RLS. Used by migration script and by the recipe-shares API route for cross-user email lookup via `lib/supabase/admin.ts`
 
 ---
 
@@ -270,6 +275,6 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-02-07 (v2.13.1)*
+*Last updated: 2026-02-26 (v2.15.0)*
 
 *See `changelog.md` for version history.*

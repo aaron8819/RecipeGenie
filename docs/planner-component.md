@@ -2,7 +2,7 @@
 
 > **When to read:** You're working on meal plan generation, week navigation, day assignments, recipe swapping, calendar view, plan settings, or history exclusion logic.
 
-**Last Updated:** 2026-02-08 (v2.13.1)
+**Last Updated:** 2026-02-26 (v2.15.0)
 
 ---
 
@@ -28,7 +28,10 @@
 | `components/planner/meal-planner.tsx` | ~2,100 | Main component — week nav, calendar view, category view, recipe cards |
 | `components/planner/plan-settings-modal.tsx` | — | Settings dialog — default categories, day rules, history exclusion |
 | `components/planner/add-recipe-to-plan-modal.tsx` | — | Modal for adding a recipe directly to the plan |
+| `components/planner/save-template-dialog.tsx` | — | Save current plan as a named reusable template |
+| `components/planner/load-template-dialog.tsx` | — | Browse and apply saved plan templates |
 | `hooks/use-planner.ts` | ~970 | TanStack Query hooks — 14 exported hooks for plan CRUD |
+| `hooks/use-plan-templates.ts` | — | TanStack Query hooks — template CRUD (`usePlanTemplates`, `useSavePlanTemplate`, `useDeletePlanTemplate`) |
 | `lib/meal-planner.ts` | ~180 | Business logic — plan generation, swap, auto-assign |
 | `lib/planner-utils.ts` | ~76 | Date helpers — local parsing, noon ISO, day-index conversion |
 | `lib/planner-colors.ts` | ~12 | Category hex color mapping |
@@ -89,6 +92,8 @@ meal-planner.tsx
 |   |   +-- Grouped by recipe category
 |   |
 |   +-- View Shopping List button
+|   +-- Save Template button -> SaveTemplateDialog
+|   +-- Load Template button -> LoadTemplateDialog
 |
 +-- PlanSettingsModal
 |   +-- Default Category Breakdown (save/load defaults)
@@ -119,7 +124,15 @@ meal-planner.tsx
 | `useMarkRecipeMade()` | Record in recipe_history (with date) |
 | `useSaveDayAssignments()` | Persist day assignments to DB |
 
-**Query keys:** `['planner', userId, weekDate]`, `['recipes', userId]`, `['recipe_history', userId]`, `['user_config', userId]`
+**Plan template hooks** (`hooks/use-plan-templates.ts`):
+
+| Hook | Purpose |
+|------|---------|
+| `usePlanTemplates()` | Fetch all saved templates for user |
+| `useSavePlanTemplate()` | Create or overwrite a named template from the current plan |
+| `useDeletePlanTemplate()` | Delete a template by ID |
+
+**Query keys:** `['planner', userId, weekDate]`, `['recipes', userId]`, `['recipe_history', userId]`, `['user_config', userId]`, `['plan_templates', userId]`
 
 ---
 
@@ -295,4 +308,4 @@ resolveUserConfig(data, error): UserConfig  // PGRST116 -> defaults, other error
 
 ---
 
-*Last updated: 2026-02-07 (v2.13.1)*
+*Last updated: 2026-02-26 (v2.15.0)*

@@ -1,8 +1,8 @@
 # Recipes Component Documentation
 
-> **When to read:** You're working on recipe CRUD, the recipe list/grid, recipe dialog (create/edit), recipe parser, tags, categories, favorites, or recipe images.
+> **When to read:** You're working on recipe CRUD, the recipe list/grid, recipe dialog (create/edit), recipe parser, URL import, tags, categories, favorites, recipe images, cook mode, or recipe sharing.
 
-**Last Updated:** 2026-02-08 (v2.13.1)
+**Last Updated:** 2026-02-26 (v2.15.0)
 
 ---
 
@@ -36,7 +36,10 @@
 | `components/recipes/index.ts` | 7 | Barrel exports |
 | `hooks/use-recipes.ts` | ~771 | TanStack Query hooks — 15 exported hooks for recipe CRUD |
 | `hooks/use-recipe-shares.ts` | ~170 | TanStack Query hooks for create/inbox/sent/accept/decline share flows |
+| `hooks/use-recipe-import.ts` | — | URL import state management — wraps the `/api/recipe-import` fetch, loading/error state |
 | `lib/recipe-parser.ts` | ~467 | Plain text → structured recipe parser |
+| `lib/recipe-url-parser.ts` | — | Server-side URL fetch + JSON-LD / Cheerio HTML extraction (used by API route) |
+| `lib/recipe-export.ts` | — | Serialize recipe to JSON or plain text for download |
 
 ### Quick Commands
 
@@ -230,9 +233,20 @@ Client-side OR logic: recipes with ANY selected tag pass the filter. Done client
 | Export | Purpose |
 |--------|---------|
 | `parseRecipeText(text)` | Main entry — returns `{ name, ingredients, instructions, servings?, warnings }` |
-| `parseIngredientLine(line)` | Single line → `{ item, amount, unit, modifier? }` |
+| `parseIngredientLine(line)` | Single line → `{ item, amount, unit, modifier?, alternatives? }` |
 
 Internal helpers: `findSectionIndex()`, `normalizeUnicode()`, `parseAmount()`, `extractUnit()`, `matchUnit()`, `extractModifier()`, `parseFraction()`
+
+### lib/recipe-url-parser.ts
+
+Server-side only (used by `/api/recipe-import`). Fetches URL, extracts JSON-LD `Recipe` schema first; falls back to Cheerio-based HTML scraping. SSRF-guarded before the fetch via `lib/url-safety.ts`.
+
+### lib/recipe-export.ts
+
+| Export | Purpose |
+|--------|---------|
+| `exportRecipeAsJson(recipe)` | Returns formatted JSON string |
+| `exportRecipeAsText(recipe)` | Returns human-readable plain-text |
 
 ### types/database.ts
 
@@ -302,4 +316,4 @@ interface Ingredient {
 
 ---
 
-*Last updated: 2026-02-08 (v2.13.1)*
+*Last updated: 2026-02-26 (v2.15.0)*

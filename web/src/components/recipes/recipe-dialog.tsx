@@ -28,6 +28,16 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -51,10 +61,29 @@ import { useDebouncedCallback } from "@/hooks/use-debounce"
 import { parseRecipeText, parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
 import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
-import { cn } from "@/lib/utils"
+import { cn, toFraction } from "@/lib/utils"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
+
+const COMMON_UNITS = [
+  "tsp", "tbsp", "cup", "oz", "fl oz", "lb",
+  "g", "kg", "ml", "l",
+  "pt", "qt", "gal",
+  "can", "clove", "head", "piece", "slice", "pinch", "dash", "pkg",
+]
+
+function parseAmountStr(str: string): number | null {
+  const trimmed = str.trim()
+  if (!trimmed) return null
+  if (trimmed.includes('/')) {
+    const [num, den] = trimmed.split('/').map((s) => parseFloat(s.trim()))
+    if (!isNaN(num) && !isNaN(den) && den !== 0) return num / den
+    return null
+  }
+  const n = parseFloat(trimmed)
+  return isNaN(n) ? null : n
+}
 
 interface RecipeDialogProps {
   open: boolean
@@ -424,6 +453,7 @@ export function RecipeDialog({
         message: `${blockingIssues.length} ingredient(s) have critical issues. Please fix them before saving.`,
         duration: 5000
       })
+      document.querySelector('[data-has-issues="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
 
@@ -486,6 +516,7 @@ export function RecipeDialog({
       onOpenChange(false)
     } catch (error) {
       console.error("Failed to save recipe:", error)
+      undoToast.show({ message: 'Failed to save recipe. Please try again.', duration: 6000 })
     }
   }
 
@@ -496,14 +527,45 @@ export function RecipeDialog({
 
   const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
 
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
+  const isDirty = !isEditing && (
+    name.trim() !== '' ||
+    ingredients.some((i) => i.item.trim() !== '') ||
+    instructions.trim() !== ''
+  )
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && isDirty) {
+      setShowDiscardConfirm(true)
+      return
+    }
+    onOpenChange(nextOpen)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <AlertDialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+          <AlertDialogDescription>
+            You have unsaved changes that will be lost. Are you sure you want to discard them?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep editing</AlertDialogCancel>
+          <AlertDialogAction onClick={() => { setShowDiscardConfirm(false); onOpenChange(false) }}>
+            Discard
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         hideCloseButton
         className={
           isEditing
             ? "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-2xl sm:rounded-3xl overflow-hidden bg-card h-[90vh] max-h-[90vh] flex flex-col"
-            : "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92vh] flex flex-col"
+            : "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92dvh] flex flex-col"
         }
       >
         <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
@@ -977,23 +1039,30 @@ Instructions:
         <DialogFooter
           className={
             isEditing
-              ? "px-4 sm:px-8 py-4 sm:py-6 bg-muted/50 dark:bg-zinc-900/50 border-t border-stone-200 dark:border-zinc-800 flex justify-end gap-3 flex-shrink-0"
-              : "px-4 sm:px-8 py-4 sm:py-6 border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex justify-end gap-3 flex-shrink-0"
+              ? "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] bg-muted/50 dark:bg-zinc-900/50 border-t border-stone-200 dark:border-zinc-800 flex flex-col items-end flex-shrink-0"
+              : "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col items-end flex-shrink-0"
           }
         >
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={!name.trim() || !category || !hasValidIngredients || isSubmitting}
-            title={!hasValidIngredients ? "Please add at least one ingredient" : undefined}
-          >
-            {isSubmitting ? (isUploadingImage ? "Uploading image..." : "Saving...") : isEditing ? "Save Changes" : "Add Recipe"}
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={!name.trim() || !category || !hasValidIngredients || isSubmitting}
+            >
+              {isSubmitting ? (isUploadingImage ? "Uploading image..." : "Saving...") : isEditing ? "Save Changes" : "Add Recipe"}
+            </Button>
+          </div>
+          {!hasValidIngredients && !isSubmitting && (
+            <p className="text-xs text-muted-foreground text-right mt-1">
+              Add at least one ingredient to save
+            </p>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   )
 }
 
@@ -1069,6 +1138,19 @@ function SortableIngredientRow({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  // Fix 1: local string state so users can type fractions like "1/2" before blur normalises
+  const [amountStr, setAmountStr] = useState(() =>
+    ingredient.amount != null ? toFraction(ingredient.amount) : ""
+  )
+  useEffect(() => {
+    setAmountStr(ingredient.amount != null ? toFraction(ingredient.amount) : "")
+  }, [ingredient.amount])
+
+  // Fix 2: show custom text input when the current unit isn't in COMMON_UNITS
+  const [showCustomUnit, setShowCustomUnit] = useState(
+    () => !!ingredient.unit && !COMMON_UNITS.includes(ingredient.unit)
+  )
+
   // Validation
   const issues = validateIngredient(ingredient)
   const hasIssues = issues.length > 0
@@ -1078,7 +1160,14 @@ function SortableIngredientRow({
   const dragHandle = isEditing || addRecipeModalLayout ? (
     <button
       type="button"
-      className={`touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground flex-shrink-0 ${editModeLayout ? "flex items-center justify-center w-full h-9" : editModeTwoColLayout ? "flex items-center justify-center" : addRecipeModalLayout ? "flex items-center justify-center text-lg" : "p-1 -ml-1"}`}
+      className={cn(
+        "touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground flex-shrink-0",
+        editModeLayout ? "flex items-center justify-center w-full h-9" :
+        editModeTwoColLayout ? "flex items-center justify-center" :
+        addRecipeModalLayout ? "flex items-center justify-center text-lg" :
+        "p-1 -ml-1",
+        !isWideViewport && "min-h-[44px] min-w-[44px]"
+      )}
       aria-label={`Reorder ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
       {...attributes}
       {...listeners}
@@ -1093,31 +1182,49 @@ function SortableIngredientRow({
         editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 text-center rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-16 text-center text-sm py-2 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 rounded-lg text-center bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-20",
         issues.includes('unit-without-amount') && "border-amber-400 dark:border-amber-500"
       )}
-      type="number"
-      step="0.25"
+      type="text"
+      inputMode="decimal"
       placeholder="Amt"
-      value={ingredient.amount ?? ""}
-      onChange={(e) =>
-        onIngredientChange(
-          index,
-          "amount",
-          e.target.value ? parseFloat(e.target.value) : null
-        )
-      }
+      value={amountStr}
+      onChange={(e) => setAmountStr(e.target.value)}
+      onBlur={() => {
+        const parsed = parseAmountStr(amountStr)
+        onIngredientChange(index, "amount", parsed)
+        setAmountStr(parsed != null ? toFraction(parsed) : "")
+      }}
     />
   )
-  const unitInput = (
+  const unitInputClass = cn(
+    editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none" : "w-24 border-input",
+    issues.includes('amount-without-unit') && "border-amber-400 dark:border-amber-500"
+  )
+  const unitInput = showCustomUnit ? (
     <Input
-      className={cn(
-        editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-24",
-        issues.includes('amount-without-unit') && "border-amber-400 dark:border-amber-500"
-      )}
+      className={unitInputClass}
       placeholder="Unit"
       value={ingredient.unit}
-      onChange={(e) =>
-        onIngredientChange(index, "unit", e.target.value)
-      }
+      onChange={(e) => onIngredientChange(index, "unit", e.target.value)}
+      autoFocus
     />
+  ) : (
+    <select
+      className={cn("cursor-pointer bg-transparent text-foreground", unitInputClass)}
+      value={ingredient.unit || ""}
+      onChange={(e) => {
+        if (e.target.value === "__custom__") {
+          setShowCustomUnit(true)
+          onIngredientChange(index, "unit", "")
+        } else {
+          onIngredientChange(index, "unit", e.target.value)
+        }
+      }}
+    >
+      <option value="">—</option>
+      {COMMON_UNITS.map((u) => (
+        <option key={u} value={u}>{u}</option>
+      ))}
+      <option value="__custom__">Other…</option>
+    </select>
   )
   const itemInput = (
     <Input
@@ -1135,7 +1242,7 @@ function SortableIngredientRow({
   const modifierInput = (
     <Input
       className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800 flex-shrink-0" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "w-32"}
-      placeholder="Modifier"
+      placeholder="prep (e.g. diced)"
       value={ingredient.modifier || ""}
       onChange={(e) =>
         onIngredientChange(index, "modifier", e.target.value || null)
@@ -1148,7 +1255,7 @@ function SortableIngredientRow({
       size="icon"
       onClick={() => onRemoveIngredient(index)}
       disabled={ingredients.length === 1}
-      className={editModeLayout ? "text-muted-foreground hover:text-destructive flex items-center justify-center h-9 w-9 rounded-lg" : editModeTwoColLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0" : addRecipeModalLayout ? "text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-lg p-0" : ""}
+      className={editModeLayout ? "text-muted-foreground hover:text-destructive flex items-center justify-center h-9 w-9 rounded-lg" : editModeTwoColLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0" : addRecipeModalLayout ? cn("text-muted-foreground hover:text-destructive transition-opacity flex-shrink-0 text-lg p-0", isWideViewport ? "opacity-0 group-hover:opacity-100" : "opacity-100") : ""}
       aria-label={`Delete ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
     >
       <Trash2 className="h-4 w-4" />
@@ -1160,6 +1267,7 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
+        data-has-issues={hasIssues ? "true" : undefined}
         className={cn(
           "bg-background dark:bg-zinc-900 border border-stone-100 dark:border-zinc-800 p-1.5 rounded-xl group relative",
           isDragging && "z-50",
@@ -1209,6 +1317,7 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
+        data-has-issues={hasIssues ? "true" : undefined}
         className={`flex flex-col gap-2 sm:flex-row sm:items-center group ${isDragging ? "z-50" : ""}`}
       >
         <div className="flex items-center gap-2 sm:flex-[3]">
@@ -1232,6 +1341,7 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
+        data-has-issues={hasIssues ? "true" : undefined}
         className={`grid grid-cols-[32px_2fr_0.8fr_1fr_1.5fr_32px] gap-3 items-center group px-1 ${isDragging ? "z-50" : ""}`}
       >
         {dragHandle}
@@ -1248,6 +1358,7 @@ function SortableIngredientRow({
     <div
       ref={setNodeRef}
       style={style}
+      data-has-issues={hasIssues ? "true" : undefined}
       className={`flex gap-2 items-center ${isDragging ? "z-50" : ""}`}
     >
       {dragHandle}
@@ -1312,7 +1423,9 @@ function RecipeFormContent({
 }: RecipeFormContentPropsWithImage) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -1536,8 +1649,8 @@ function RecipeFormContent({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
       {/* Left: lg:col-span-5 — Image, Name, Category, Servings, Tags */}
-      <div className="lg:col-span-5 border-r border-stone-100 dark:border-zinc-900 p-4 sm:p-8 space-y-6">
-        <div className="space-y-3">
+      <div className="lg:col-span-5 border-r border-stone-100 dark:border-zinc-900 p-4 sm:p-8 flex flex-col gap-6">
+        <div className="space-y-3 order-last lg:order-first">
           <h3 className={addLabelClass}>Recipe Image</h3>
           {hasImage ? (
             <div className="relative h-44 w-full overflow-hidden rounded-xl bg-muted">
@@ -1593,6 +1706,7 @@ function RecipeFormContent({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Grandma's Roast Chicken"
               className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary"
+              autoFocus
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -1690,7 +1804,7 @@ function RecipeFormContent({
           <button
             type="button"
             onClick={onAddIngredient}
-            className="mt-3 text-[10px] font-bold uppercase text-accent hover:text-primary transition-colors flex items-center gap-1"
+            className="mt-3 text-[10px] font-bold uppercase text-accent hover:text-primary transition-colors flex items-center gap-1 min-h-[44px] px-4 border border-dashed border-accent rounded-lg w-full justify-center"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Row

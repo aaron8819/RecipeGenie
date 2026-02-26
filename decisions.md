@@ -2,7 +2,7 @@
 
 > **When to read:** You're making a major architectural decision, proposing a refactor, or need context on why something was built a certain way.
 
-*Last updated: 2026-02-08 (v2.13.1)*
+*Last updated: 2026-02-26 (v2.15.0)*
 
 This document captures key architectural and design decisions for Recipe Genie, including rationale and tradeoffs.
 
@@ -394,35 +394,9 @@ This document captures key architectural and design decisions for Recipe Genie, 
 ---
 
 
-**Status:** Accepted (2026-01-16)
+## ADR-013: Guest Mode / Trial Access
 
-**Context:** Requiring users to sign up before trying the app creates friction and reduces conversion. Users want to explore the app's features before committing to creating an account.
-
-
-**Rationale:**
-- Reduces signup friction - users can try before committing
-- Demonstrates app value before requiring account creation
-- Uses React Query cache for seamless data management
-- Pre-populated with default recipes to show functionality
-- Clear messaging that data is session-only (lost on refresh)
-
-**Implementation:**
-
-**Tradeoffs:**
-- (+) Lowers barrier to entry
-- (+) Better user experience for exploration
-- (+) No backend changes required (uses existing hook patterns)
-- (-) Data is lost on page refresh (intentional, but may frustrate some users)
-- (-) No persistence across devices
-- (-) Additional complexity in hooks to support both modes
-
-**Risks:**
-- Users may not understand data is temporary
-- **Mitigation**: Clear UI messaging ("Your data will be saved locally in this browser")
-- Users may lose work if they forget to sign up
-- **Mitigation**: Prompt to sign up when they try to persist data
-
-**Future Considerations:**
+**Status:** Superseded — not implemented. App requires Supabase authentication. Guest mode was planned (2026-01-16) but never built; the auth-first model was retained.
 
 ---
 
@@ -707,3 +681,56 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - Add request logging or error tracking in `getSupabase()` if needed
 - Consider adding retry logic for network failures
 - Could add request/response interceptors for debugging
+
+---
+
+## ADR-020: Recipe Sharing (Copy-on-Accept)
+
+**Status:** Accepted (2026-02-14, v2.14.0)
+
+**Context:** Users want to share recipes with friends or family. Sharing must preserve recipient autonomy — edits by the sender should not affect the recipient's copy, and the sender's recipe collection should not be visible to others.
+
+**Decision:** Implement copy-on-accept sharing: when a recipient accepts a share, a new recipe row is created in their account from an immutable snapshot captured at share-creation time. There is no live sync.
+
+**Rationale:**
+- Immutable snapshots prevent surprise changes to the recipient's recipe
+- Recipient owns their copy — they can edit or delete without affecting the sender
+- Simple mental model: sharing is a gift, not a subscription
+- Exact-email recipient lookup avoids exposing a searchable user directory
+- `accept_recipe_share()` DB function atomically creates the copy and marks the share accepted
+
+**Implementation:**
+- `recipe_shares` table: `id`, `sender_id`, `recipient_id`, `recipe_snapshot` (JSONB), `status` (pending/accepted/declined/canceled), timestamps
+- `/api/recipe-shares/` routes: create, list inbox, list sent, accept, decline
+- Recipient email resolved server-side via `lib/supabase/admin.ts` (service-role); anon client cannot read `auth.users`
+- Share dialog: exact recipient email + optional message (max 300 chars)
+- Sent tab: live status tracking per outgoing share
+
+**Tradeoffs:**
+- (+) No surprise changes — recipient's copy is truly theirs
+- (+) No cross-user data dependencies after acceptance
+- (+) Simple data model — no sync machinery needed
+- (-) Declined/canceled shares cannot be re-sent without creating a new share
+- (-) Snapshot may be stale if sender edited the recipe after sharing
+
+---
+
+## ADR-021: Security Hardening (CSP Nonces, Rate Limiting, SSRF Guard)
+
+**Status:** Accepted (2026-02-14, v2.15.0)
+
+**Context:** Three attack surfaces needed hardening before wider deployment: (1) inline scripts lacked Content Security Policy coverage, (2) the URL import endpoint had no rate limiting, (3) the URL import endpoint could be used to probe internal network addresses (SSRF).
+
+**Decision:** Apply three targeted mitigations: CSP nonces via middleware, Upstash Redis rate limiting on the import route, and an SSRF guard that rejects private/loopback IPs.
+
+**Implementation:**
+- **CSP nonces**: `middleware.ts` generates a nonce per request, sets it on `x-nonce` request header and in the `Content-Security-Policy` response header. Root layout calls `headers()` to trigger Next.js 15's automatic nonce injection onto inline scripts. Both parts are required — nonce on request headers only, or layout headers() call only, each silently breaks the other.
+- **Rate limiting**: `lib/rate-limit.ts` wraps `@upstash/ratelimit`. `/api/recipe-import` enforces 10 requests/minute per IP. Graceful fail-open when `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are absent (dev mode). Fail-closed in production.
+- **SSRF guard**: `lib/url-safety.ts` resolves the import URL's hostname to IP addresses and rejects private ranges (127.x, 10.x, 172.16–31.x, 192.168.x, ::1) before any fetch is made.
+
+**Tradeoffs:**
+- (+) Nonces allow `'nonce-...'` CSP without `'unsafe-inline'`
+- (+) Rate limiting prevents abuse without requiring auth on the import endpoint
+- (+) SSRF guard blocks lateral movement to internal services
+- (-) Upstash Redis is a required production dependency for rate limiting
+- (-) CSP nonce setup requires both middleware and root layout changes; missing one silently breaks scripts

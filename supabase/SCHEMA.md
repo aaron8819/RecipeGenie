@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-02-08 (v2.13.1)*
+*Last updated: 2026-02-26 (v2.15.0)*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -54,27 +54,34 @@ Stores all recipe information including ingredients, instructions, and metadata.
 | `servings` | INTEGER | NOT NULL, DEFAULT 4 | Number of servings |
 | `favorite` | BOOLEAN | DEFAULT FALSE | Whether recipe is marked as favorite |
 | `tags` | TEXT[] | DEFAULT '{}' | Array of tags for the recipe |
-| `ingredients` | JSONB | NOT NULL, DEFAULT '[]' | Array of ingredient objects with `item`, `unit`, and `amount` |
+| `ingredients` | JSONB | NOT NULL, DEFAULT '[]' | Array of ingredient objects — see structure below |
 | `instructions` | TEXT[] | NOT NULL, DEFAULT '{}' | Array of instruction steps |
 | `image_url` | TEXT | NULL | URL or path to recipe image (Supabase Storage path or external URL) |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was created |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was last updated |
 
-**Example ingredient JSONB structure:**
+**Ingredient JSONB structure:**
 ```json
 [
   {
     "item": "chicken thighs",
     "unit": "lbs",
-    "amount": 1.5
+    "amount": 1.5,
+    "modifier": "bone-in",
+    "alternatives": [],
+    "originalText": "1.5 lbs bone-in chicken thighs"
   },
   {
-    "item": "garlic",
-    "unit": "cloves",
-    "amount": 3
+    "item": "Greek yogurt (or sour cream)",
+    "unit": "cup",
+    "amount": 0.5,
+    "alternatives": ["sour cream"],
+    "originalText": "½ cup Greek yogurt or sour cream"
   }
 ]
 ```
+
+All fields except `item`, `unit`, and `amount` are optional. `modifier` is a post-comma descriptor (e.g., "rinsed", "chopped"). `alternatives` are parsed from "X or Y" patterns; `item` stores the display string including the parenthetical "(or Y)". `originalText` captures the raw unparsed line for reference.
 
 ### pantry_items
 

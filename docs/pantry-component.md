@@ -1,8 +1,8 @@
 # Pantry Component Documentation
 
-> **When to read:** You're working on pantry items, excluded keywords, or the pantry-shopping integration (moving items between pantry and shopping list).
+> **When to read:** You're working on pantry items, excluded keywords, the pantry-shopping integration, or "What Can I Make?" ingredient matching.
 
-**Last Updated:** 2026-02-08 (v2.13.1)
+**Last Updated:** 2026-02-26 (v2.15.0)
 
 ---
 
@@ -26,9 +26,12 @@
 | File | Lines | Purpose |
 |------|-------|---------|
 | `components/pantry/pantry-list.tsx` | ~257 | Main component — two-column layout for pantry items + excluded keywords |
+| `components/pantry/what-can-i-make.tsx` | — | "What Can I Make?" panel — matches pantry against recipe ingredients |
 | `components/pantry/index.ts` | 2 | Barrel export |
 | `hooks/use-pantry.ts` | ~350 | TanStack Query hooks — 6 exported hooks for pantry CRUD |
+| `hooks/use-pantry-match.ts` | — | `usePantryMatch()` — runs fuzzy ingredient match against current pantry |
 | `hooks/shopping/use-shopping-pantry.ts` | ~292 | Shopping↔pantry integration hooks |
+| `lib/pantry-matcher.ts` | — | Fuzzy ingredient-to-pantry matching logic; checks primary item + `alternatives[]` |
 | `lib/shopping-list.ts` | — | `generateShoppingList()` uses pantry items for filtering |
 | `lib/shopping-categories.ts` | — | `getExcludedKeyword()` — exact match logic |
 
@@ -57,6 +60,12 @@ pantry-list.tsx
 |       +-- Add form (comma-separated input)
 |       +-- Tag pills with delete (X) buttons
 |       +-- Background refetch loader
+
+what-can-i-make.tsx
++-- WhatCanIMake (separate panel, rendered in Pantry tab)
+    +-- Triggers usePantryMatch() to score recipes
+    +-- Groups results: Can Make (100%), Almost (≥70%), etc.
+    +-- Click recipe → RecipeDetailDialog
 ```
 
 Two-column responsive grid (`md:grid-cols-2`). Pantry items use sage colors, excluded keywords use terracotta colors.
@@ -71,6 +80,14 @@ Two-column responsive grid (`md:grid-cols-2`). Pantry items use sage colors, exc
 | `useExcludedKeywords()` | `['user_config', 'excluded_keywords']` | Fetch keywords from user_config. PGRST116 → empty array. 30s staleTime. |
 | `useAddExcludedKeyword()` | mutation | Add keyword. Creates user_config row if none exists. |
 | `useRemoveExcludedKeyword()` | mutation | Remove keyword from array. |
+
+### Pantry Match Hook (hooks/use-pantry-match.ts)
+
+| Hook | Query Key | Purpose |
+|------|-----------|---------|
+| `usePantryMatch()` | (derived, no cache) | Scores all user recipes by how many ingredients are in pantry. Returns sorted results with `matchPercent` and `missingIngredients[]`. |
+
+Internally calls `pantryMatcher.matchRecipes(recipes, pantryItems)` from `lib/pantry-matcher.ts`. Checks primary ingredient `item` plus any `alternatives[]`.
 
 ### Shopping Integration Hooks (hooks/shopping/use-shopping-pantry.ts)
 
@@ -159,7 +176,16 @@ Shopping list shows "garlic" in main items
 - Subtle spinner in corner during background refetch
 - No blocking loaders after initial load
 
-### 4. Optimistic Updates
+### 4. What Can I Make?
+
+The `WhatCanIMake` panel (rendered in the Pantry tab) cross-references all user recipes against current pantry items:
+- Uses `lib/pantry-matcher.ts` to compute a match percentage per recipe
+- Checks primary ingredient name AND `alternatives[]` against pantry
+- Groups recipes: "Can Make" (100%), "Almost" (≥70%), "Missing a Few" (≥40%)
+- Excluded keywords do NOT affect matching — only pantry items count
+- Clicking a recipe opens the standard `RecipeDetailDialog`
+
+### 5. Optimistic Updates
 All six mutations follow the pattern:
 1. Cancel outgoing refetches
 2. Snapshot previous data
@@ -282,4 +308,4 @@ The pantry subsystem has no dedicated unit tests. Business logic is minimal (nor
 
 ---
 
-*Last updated: 2026-02-08 (v2.13.1)*
+*Last updated: 2026-02-26 (v2.15.0)*
