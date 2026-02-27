@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import Image from "next/image"
 import { Heart, History, UtensilsCrossed, CalendarPlus, Loader2, ChevronRight, ShoppingCart, Check, MoreVertical, Share2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -44,7 +45,7 @@ interface RecipeCardProps {
   isSharing?: boolean
 }
 
-export function RecipeCard({
+function RecipeCard({
   recipe,
   viewMode = "grid",
   isDesktopViewport = true,
@@ -565,5 +566,8 @@ export function RecipeCard({
   )
 }
 
-
+// Re-render only when props change — handlers from RecipeList are wrapped in
+// useCallback so this avoids a full list repaint on every state update.
+const RecipeCardMemo = memo(RecipeCard)
+export { RecipeCardMemo as RecipeCard }
 

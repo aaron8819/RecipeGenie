@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Inbox } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +20,7 @@ import {
   useToggleFavorite,
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
+import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { useRecipeHistory, useMarkRecipeAsMade, useUnmarkRecipeAsMade } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
@@ -113,19 +114,7 @@ import { MultiSelect } from "@/components/ui/multi-select"
 import { cn, getErrorMessage } from "@/lib/utils"
 
 export function RecipeList() {
-  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true
-    return window.matchMedia("(min-width: 768px)").matches
-  })
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const mq = window.matchMedia("(min-width: 768px)")
-    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
-    setIsDesktop(mq.matches)
-    mq.addEventListener("change", handler)
-    return () => mq.removeEventListener("change", handler)
-  }, [])
+  const isDesktop = useIsDesktop()
 
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
@@ -203,20 +192,20 @@ export function RecipeList() {
   }, [isLoadingWithNoData])
   const showSkeleton = isLoadingWithNoData && skeletonDelayed
 
-  const handleDelete = async (recipe: Recipe) => {
+  const handleDelete = useCallback(async (recipe: Recipe) => {
     if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
       await deleteRecipe.mutateAsync(recipe.id)
     }
-  }
+  }, [deleteRecipe])
 
-  const handleAddToShoppingList = async (recipe: Recipe) => {
+  const handleAddToShoppingList = useCallback(async (recipe: Recipe) => {
     setAddingToShoppingListId(recipe.id)
     try {
       const result = await addToShoppingList.mutateAsync({
         recipeIds: [recipe.id],
         scale: 1.0,
       })
-      
+
       const itemCount = result.added + result.merged
       showToast({
         message: `Added ${itemCount} ingredient${itemCount !== 1 ? "s" : ""} from "${recipe.name}" to shopping list`,
@@ -228,13 +217,13 @@ export function RecipeList() {
     } finally {
       setAddingToShoppingListId(null)
     }
-  }
+  }, [addToShoppingList, showToast])
 
-  const handleMarkAsMade = async (recipe: Recipe) => {
+  const handleMarkAsMade = useCallback(async (recipe: Recipe) => {
     setMarkingAsMadeId(recipe.id)
     try {
       await markAsMade.mutateAsync(recipe.id)
-      
+
       // Show undo toast after mutation succeeds
       showToast({
         message: `"${recipe.name}" marked as made`,
@@ -253,12 +242,22 @@ export function RecipeList() {
     } finally {
       setMarkingAsMadeId(null)
     }
-  }
+  }, [markAsMade, unmarkAsMade, showToast])
 
-  const handleShareRecipe = (recipe: Recipe) => {
+  const handleShareRecipe = useCallback((recipe: Recipe) => {
     setShareRecipe(recipe)
     setIsShareDialogOpen(true)
-  }
+  }, [])
+
+  const handleToggleFavorite = useCallback((r: Recipe) => {
+    toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
+  }, [toggleFavorite])
+
+  const handleTagClick = useCallback((tag: string) => {
+    if (!selectedTags.includes(tag)) {
+      setSelectedTags([...selectedTags, tag])
+    }
+  }, [selectedTags])
 
   const clearAllFilters = () => {
     setCategory(null)
@@ -543,19 +542,13 @@ export function RecipeList() {
                     viewMode={viewMode}
                     isDesktopViewport={isDesktop}
                     onDelete={handleDelete}
-                    onToggleFavorite={(r) =>
-                      toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
-                    }
+                    onToggleFavorite={handleToggleFavorite}
                     onAddToPlan={setAddToPlanRecipe}
                     onAddToShoppingList={handleAddToShoppingList}
                     onMarkAsMade={handleMarkAsMade}
                     onShare={handleShareRecipe}
                     onClick={setViewingRecipe}
-                    onTagClick={(tag) => {
-                      if (!selectedTags.includes(tag)) {
-                        setSelectedTags([...selectedTags, tag])
-                      }
-                    }}
+                    onTagClick={handleTagClick}
                     lastMade={stats?.lastMade ?? null}
                     timesMade={stats?.timesMade ?? 0}
                     isAddingToShoppingList={addingToShoppingListId === recipe.id}

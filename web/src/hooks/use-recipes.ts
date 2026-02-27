@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
@@ -65,10 +66,35 @@ export function useRecipes(options?: {
   select?: string
   limit?: number
 }) {
+  const { user } = useAuthContext()
+
   return useQuery({
     queryKey: buildRecipesKey(options),
     queryFn: async () => {
       const supabase = getSupabase()
+
+      // When tags are present, push the OR filter to the DB via RPC.
+      // Supabase .contains() is AND-only; the RPC uses && (array overlap) for OR.
+      if (options?.tags && options.tags.length > 0) {
+        if (!user) return []
+        const { data, error } = await supabase.rpc('filter_recipes_by_tags', {
+          p_user_id: user.id,
+          p_tags: options.tags,
+        })
+        if (error) throw error
+        let result = (data as Recipe[]) || []
+        // Apply any additional filters that the RPC does not handle.
+        if (options.category) result = result.filter((r) => r.category === options.category)
+        if (options.search) {
+          const q = options.search.toLowerCase()
+          result = result.filter((r) => r.name.toLowerCase().includes(q))
+        }
+        if (options.favoritesOnly) result = result.filter((r) => r.favorite)
+        if (options.limit !== undefined) result = result.slice(0, options.limit)
+        return result
+      }
+
+      // Default path: no tag filter — standard Supabase query with server-side filters.
       let query = supabase
         .from("recipes")
         .select(options?.select || "*")
@@ -92,19 +118,7 @@ export function useRecipes(options?: {
 
       const { data, error } = await query
       if (error) throw error
-      
-      // Filter by tags client-side for OR logic (recipes with ANY of the selected tags)
-      // Supabase contains() uses AND logic, so we filter for OR manually
-      let filteredData = (data as Recipe[]) || []
-      if (options?.tags && options.tags.length > 0) {
-        filteredData = filteredData.filter((recipe) => {
-          if (!recipe.tags || recipe.tags.length === 0) return false
-          // Check if recipe has at least one of the selected tags
-          return options.tags!.some((tag) => recipe.tags!.includes(tag))
-        })
-      }
-      
-      return filteredData
+      return (data as Recipe[]) || []
     },
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
@@ -493,69 +507,41 @@ export function useCategories() {
 }
 
 /**
- * Hook to fetch all unique tags from all recipes with counts
+ * Derives all unique tags from the recipes cache — no extra DB query.
  */
 export function useAllTags() {
-  const { user } = useAuthContext()
-
-  return useQuery({
-    queryKey: ["recipes", "all-tags"],
-    queryFn: async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipes")
-        .select("tags")
-        .eq("user_id", user!.id)
-
-      if (error) throw error
-
-      const allTags = new Set<string>()
-      ;(data || []).forEach((recipe: { tags: string[] | null }) => {
-        if (recipe.tags && Array.isArray(recipe.tags)) {
-          recipe.tags.forEach((tag) => allTags.add(tag))
-        }
-      })
-
-      return Array.from(allTags).sort()
-    },
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  })
+  const { data: recipes } = useRecipes()
+  const data = useMemo(() => {
+    const allTags = new Set<string>()
+    ;(recipes || []).forEach((recipe) => {
+      if (recipe.tags && Array.isArray(recipe.tags)) {
+        recipe.tags.forEach((tag) => allTags.add(tag))
+      }
+    })
+    return Array.from(allTags).sort()
+  }, [recipes])
+  return { data }
 }
 
 /**
- * Hook to fetch tags with usage counts
+ * Derives tags with usage counts from the recipes cache — no extra DB query.
  */
 export function useTagsWithCounts() {
-  const { user } = useAuthContext()
   const { data: recipes } = useRecipes()
-
-  return useQuery({
-    queryKey: ["recipes", "tags-with-counts", recipes?.length],
-    queryFn: async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipes")
-        .select("tags")
-        .eq("user_id", user!.id)
-
-      if (error) throw error
-
-      const tagCounts = new Map<string, number>()
-      ;(data || []).forEach((recipe: { tags: string[] | null }) => {
-        if (recipe.tags && Array.isArray(recipe.tags)) {
-          recipe.tags.forEach((tag) => {
-            tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1)
-          })
-        }
-      })
-
-      return Array.from(tagCounts.entries())
-        .map(([tag, count]) => ({ tag, count }))
-        .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
-    },
-    enabled: !!user,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-  })
+  const data = useMemo(() => {
+    const tagCounts = new Map<string, number>()
+    ;(recipes || []).forEach((recipe) => {
+      if (recipe.tags && Array.isArray(recipe.tags)) {
+        recipe.tags.forEach((tag) => {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1)
+        })
+      }
+    })
+    return Array.from(tagCounts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+  }, [recipes])
+  return { data }
 }
 
 /**
@@ -639,36 +625,12 @@ export function useRenameTag() {
   return useMutation({
     mutationFn: async ({ oldTag, newTag }: { oldTag: string; newTag: string }) => {
       const supabase = getSupabase()
-      // Fetch all recipes with the old tag
-      const { data: recipes, error: fetchError } = await supabase
-        .from("recipes")
-        .select("id, tags")
-        .eq("user_id", user!.id)
-        .contains("tags", [oldTag])
-
-      if (fetchError) throw fetchError
-
-      if (!recipes || recipes.length === 0) return 0
-
-      // Update each recipe's tags array
-      const updates = recipes.map((recipe) => {
-        const typedRecipe = recipe as { tags?: string[]; id: string }
-        const newTags = (typedRecipe.tags || []).map((t: string) => (t === oldTag ? newTag : t))
-        return supabase
-          .from("recipes")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({ tags: newTags })
-          .eq("id", typedRecipe.id)
-          .eq("user_id", user!.id)
+      const { error } = await supabase.rpc("rename_tag", {
+        p_user_id: user!.id,
+        p_old_tag: oldTag,
+        p_new_tag: newTag,
       })
-
-      const results = await Promise.all(updates)
-      const errors = results.filter((r) => r.error)
-      if (errors.length > 0) {
-        throw new Error(`Failed to update ${errors.length} recipes`)
-      }
-
-      return recipes.length
+      if (error) throw error
     },
     onSuccess: () => {
       // Invalidate all recipe queries and tag queries
@@ -689,48 +651,18 @@ export function useMergeTags() {
   return useMutation({
     mutationFn: async ({ sourceTags, targetTag }: { sourceTags: string[]; targetTag: string }) => {
       const supabase = getSupabase()
-      // Fetch all recipes for this user
-      const { data: allRecipes, error: fetchError } = await supabase
-        .from("recipes")
-        .select("id, tags")
-        .eq("user_id", user!.id)
-
-      if (fetchError) throw fetchError
-
-      // Filter recipes that have any of the source tags
-      const recipes = (allRecipes || []).filter((recipe) => {
-        const typedRecipe = recipe as { tags?: string[] }
-        const tags = typedRecipe.tags || []
-        return sourceTags.some((tag) => tags.includes(tag))
-      })
-
-      if (fetchError) throw fetchError
-
-      if (!recipes || recipes.length === 0) return 0
-
-      // Update each recipe's tags array
-      const updates = recipes.map((recipe) => {
-        const typedRecipe = recipe as { tags?: string[]; id: string }
-        const currentTags = typedRecipe.tags || []
-        // Remove source tags and add target tag if not already present
-        const newTags = currentTags
-          .filter((t: string) => !sourceTags.includes(t))
-          .concat(currentTags.includes(targetTag) ? [] : [targetTag])
-        return supabase
-          .from("recipes")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({ tags: newTags })
-          .eq("id", typedRecipe.id)
-          .eq("user_id", user!.id)
-      })
-
-      const results = await Promise.all(updates)
+      // One RPC call per source tag (O(S) requests instead of O(S*N))
+      const results = await Promise.all(
+        sourceTags.map((sourceTag) =>
+          supabase.rpc("merge_tags", {
+            p_user_id: user!.id,
+            p_source_tag: sourceTag,
+            p_target_tag: targetTag,
+          })
+        )
+      )
       const errors = results.filter((r) => r.error)
-      if (errors.length > 0) {
-        throw new Error(`Failed to update ${errors.length} recipes`)
-      }
-
-      return recipes.length
+      if (errors.length > 0) throw errors[0].error
     },
     onSuccess: () => {
       // Invalidate all recipe queries and tag queries
@@ -751,36 +683,11 @@ export function useDeleteTag() {
   return useMutation({
     mutationFn: async (tag: string) => {
       const supabase = getSupabase()
-      // Fetch all recipes with the tag
-      const { data: recipes, error: fetchError } = await supabase
-        .from("recipes")
-        .select("id, tags")
-        .eq("user_id", user!.id)
-        .contains("tags", [tag])
-
-      if (fetchError) throw fetchError
-
-      if (!recipes || recipes.length === 0) return 0
-
-      // Update each recipe's tags array
-      const updates = recipes.map((recipe) => {
-        const typedRecipe = recipe as { tags?: string[]; id: string }
-        const newTags = (typedRecipe.tags || []).filter((t: string) => t !== tag)
-        return supabase
-          .from("recipes")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({ tags: newTags })
-          .eq("id", typedRecipe.id)
-          .eq("user_id", user!.id)
+      const { error } = await supabase.rpc("delete_tag", {
+        p_user_id: user!.id,
+        p_tag: tag,
       })
-
-      const results = await Promise.all(updates)
-      const errors = results.filter((r) => r.error)
-      if (errors.length > 0) {
-        throw new Error(`Failed to update ${errors.length} recipes`)
-      }
-
-      return recipes.length
+      if (error) throw error
     },
     onSuccess: () => {
       // Invalidate all recipe queries and tag queries

@@ -163,31 +163,15 @@ export function useSaveShoppingList() {
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (shoppingList: Partial<ShoppingList>) => {
       const supabase = getSupabase()
-
-      // Check if list exists
-      const { data: existingList } = await supabase
+      // shopping_list.user_id is the PRIMARY KEY — upsert resolves in 1 RTT
+      const { error } = await supabase
         .from("shopping_list")
-        .select("user_id")
-        .eq("user_id", user!.id)
-        .maybeSingle()
-
-      if (existingList) {
-        // Update existing list
-        const { error } = await supabase
-          .from("shopping_list")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({ ...shoppingList, generated_at: new Date().toISOString() })
-          .eq("user_id", user!.id)
-        if (error) throw error
-      } else {
-        // Insert new list
-        const { error } = await supabase
-          .from("shopping_list")
-          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-          .insert({ ...shoppingList, user_id: user!.id, generated_at: new Date().toISOString() })
-        if (error) throw error
-      }
-
+        // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
+        .upsert(
+          { ...shoppingList, user_id: user!.id, generated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        )
+      if (error) throw error
       return shoppingList
     },
     onSuccess: () => {

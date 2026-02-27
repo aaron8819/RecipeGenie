@@ -1,8 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { LogOut, UtensilsCrossed, HelpCircle } from "lucide-react"
 import { OnboardingDialog } from "./onboarding-dialog"
+import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { cn } from "@/lib/utils"
 
 const NAV_TABS = [
@@ -32,19 +32,7 @@ export function Header({
   activeTab,
   onTabChange,
 }: HeaderProps) {
-  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true
-    return window.matchMedia("(min-width: 768px)").matches
-  })
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const mq = window.matchMedia("(min-width: 768px)")
-    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
-    setIsDesktop(mq.matches)
-    mq.addEventListener("change", handler)
-    return () => mq.removeEventListener("change", handler)
-  }, [])
+  const isDesktop = useIsDesktop()
 
   return (
     <>

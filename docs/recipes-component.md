@@ -26,7 +26,8 @@
 |------|-------|---------|
 | `components/recipes/recipe-list.tsx` | ~539 | Main container — filtering, sorting, search, dialog orchestration |
 | `components/recipes/recipe-card.tsx` | ~504 | Card display — grid and list view modes |
-| `components/recipes/recipe-dialog.tsx` | ~1,350 | Create/edit modal — manual entry + text/URL import |
+| `components/recipes/recipe-dialog.tsx` | ~1,350 | Create/edit modal — manual entry + text/URL import; dynamically imports `recipe-sortable-ingredients.tsx` |
+| `components/recipes/recipe-sortable-ingredients.tsx` | — | Extracted dnd-kit drag-and-drop row — dynamically imported to keep dnd-kit out of the initial bundle |
 | `components/recipes/recipe-detail-dialog.tsx` | ~290 | Read-only detail view with actions, cook mode entry |
 | `components/recipes/share-recipe-dialog.tsx` | ~170 | Share recipe modal (exact recipient email + optional note) |
 | `components/recipes/shared-recipes-inbox.tsx` | ~220 | Inbox/sent view for incoming/outgoing shares |
@@ -67,7 +68,7 @@ User creates/edits recipe
 
 User views recipes
   -> RecipeList fetches via useRecipes(filters)
-  -> Client-side tag filtering (OR logic, Supabase lacks OR for arrays)
+  -> Multi-tag filter calls filter_recipes_by_tags RPC (&& overlap = OR); single tag uses standard query
   -> RecipeCard renders grid or list view
   -> Click card -> RecipeDetailDialog (read-only view)
 ```
@@ -126,14 +127,14 @@ RecipeSettingsModal
 | `useDeleteRecipe()` | mutation | Delete with optimistic removal |
 | `useToggleFavorite()` | mutation | Toggle favorite boolean |
 | `useCategories()` | `['user_config', 'categories']` | User's categories in custom order. Infinity staleTime. |
-| `useAllTags()` | `['recipes', 'all-tags']` | All unique tags. 5-min staleTime. |
-| `useTagsWithCounts()` | `['recipes', 'tags-with-counts', len]` | Tags with usage counts, sorted desc |
+| `useAllTags()` | (derived) | All unique tags — derived from `useRecipes()` cache via `useMemo`. No extra DB call. |
+| `useTagsWithCounts()` | (derived) | Tags with usage counts, sorted desc — derived from `useRecipes()` cache via `useMemo`. No extra DB call. |
 | `useCategoryHasRecipes(name)` | (derived) | Check if category has recipes |
 | `useUpdateCategories()` | mutation | Update user categories (validates no empty/dupes) |
 | `useBulkUpdateRecipeCategories()` | mutation | Reassign recipes from old → new category |
-| `useRenameTag()` | mutation | Rename tag across all recipes |
-| `useMergeTags()` | mutation | Merge source tags into target |
-| `useDeleteTag()` | mutation | Delete tag from all recipes |
+| `useRenameTag()` | mutation | Rename tag via `rename_tag` RPC — single DB call, no per-recipe N+1 |
+| `useMergeTags()` | mutation | Merge source tags into target via `merge_tags` RPC — single DB call |
+| `useDeleteTag()` | mutation | Delete tag via `delete_tag` RPC — single DB call, no per-recipe N+1 |
 
 **Optimistic update pattern:** All mutations implement `onMutate` (snapshot + optimistic update), `onError` (rollback), `onSuccess` (refine), `onSettled` (full refetch). Uses `updateRecipeQuery()` helper to handle both `Recipe[]` and single `Recipe` query shapes.
 
@@ -171,7 +172,7 @@ RecipeSettingsModal
 
 ### Tag Filtering
 
-Client-side OR logic: recipes with ANY selected tag pass the filter. Done client-side because Supabase `.contains()` uses AND.
+Multi-tag filtering calls the `filter_recipes_by_tags` RPC which uses the `&&` array overlap operator (OR semantics — recipes with ANY selected tag pass). Single-tag filtering uses the standard `useRecipes()` query. The old client-side filter over the full dataset has been replaced.
 
 ---
 
@@ -186,7 +187,7 @@ Client-side OR logic: recipes with ANY selected tag pass the filter. Done client
 - **URL import flow:** Paste URL → server-side fetch/parse via `/api/recipe-import` → preview → apply & edit
 - **Live import preview (v2.15.0):** Two-column responsive layout with real-time preview (300ms debounced). Desktop shows side-by-side input/preview, mobile stacks vertically. Preview displays recipe name, stats (ingredient/step counts), warnings, first 8 ingredients, and first 3 steps. "Apply to Form" button pre-fills Manual tab.
 - **Import preview:** Scrollable preview area (warnings + name/servings/ingredients/instructions). No individual section scroll limits — entire preview scrolls as one unit within the tab.
-- **Ingredient management:** dnd-kit drag-reorder, inline editing (amount, unit, item, modifier). On mobile, ingredient rows stack into two rows (item + drag/delete on top, amt/unit/modifier below). Column headers hidden on mobile.
+- **Ingredient management:** dnd-kit drag-reorder, inline editing (amount, unit, item, modifier). The sortable row is in `recipe-sortable-ingredients.tsx`, dynamically imported by `recipe-dialog.tsx` to keep dnd-kit out of the initial bundle. On mobile, ingredient rows stack into two rows (item + drag/delete on top, amt/unit/modifier below). Column headers hidden on mobile.
 - **Ingredient validation (v2.15.0):** Real-time validation with amber ring indicators and warning icons. Blocking issues: missing-item, unit-without-amount. Soft warnings: amount-without-unit (allows "3 bananas"). Validation summary banner with issue count and auto-fix button. Pre-submit validation blocks on critical issues only.
 - **Alternative ingredients (v2.15.0):** Parser detects "X or Y" patterns (e.g., "Greek yogurt or sour cream"). Displays in recipe detail, cook mode, and shopping list as "(or sour cream)".
 - **Image upload:** JPG/PNG/WebP, max 5MB, auto-compressed >1MB to 2000px width
@@ -291,7 +292,7 @@ interface Ingredient {
 
 4. **Tag query cache key includes recipe count**: `['recipes', 'tags-with-counts', recipes?.length]` — busts cache when recipes change.
 
-5. **Ingredient drag-and-drop**: Uses `dnd-kit` with sortable indices. The `SortableIngredientRow` component wraps each row. Don't forget the `DndContext` + `SortableContext` wrapper.
+5. **Ingredient drag-and-drop**: Uses `dnd-kit` with sortable indices. The sortable row lives in `recipe-sortable-ingredients.tsx`, which is dynamically imported by `recipe-dialog.tsx` — do not move dnd-kit imports back into `recipe-dialog.tsx` or it re-enters the initial bundle. Don't forget the `DndContext` + `SortableContext` wrapper.
 
 6. **Image handling**: Upload goes to Supabase Storage via `uploadRecipeImage()`. Delete old image before uploading new one. Placeholder shows cooking emoji if no `image_url`.
 
@@ -316,4 +317,4 @@ interface Ingredient {
 
 ---
 
-*Last updated: 2026-02-26 (v2.15.0)*
+*Last updated: 2026-02-27 (v2.16.0)*

@@ -60,8 +60,10 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh session if expired
-  await supabase.auth.getUser()
+  // Refresh session cookie if expired. getSession() reads from the cookie with
+  // no network round-trip; use getUser() only in API routes / server actions
+  // where an authoritative server-side identity check is required.
+  await supabase.auth.getSession()
 
   // Add security headers (nonce already on request for layout; set on response for CSP)
   const headers = new Headers(response.headers);

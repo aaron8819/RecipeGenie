@@ -1,26 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import dynamic from "next/dynamic"
 import Image from "next/image"
-import { Plus, Trash2, FileText, PenTool, AlertTriangle, Check, ArrowLeft, GripVertical, Upload, X, Link, Loader2, List as ListIcon, ChefHat, AlertCircle, Wand2 } from "lucide-react"
-import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core"
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+import { Plus, FileText, PenTool, AlertTriangle, Check, ArrowLeft, Upload, X, Link, Loader2, List as ListIcon, ChefHat, AlertCircle, Wand2 } from "lucide-react"
+import type { DragEndEvent } from "@dnd-kit/core"
 import {
   Dialog,
   DialogContent,
@@ -66,24 +50,11 @@ import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
 
-const COMMON_UNITS = [
-  "tsp", "tbsp", "cup", "oz", "fl oz", "lb",
-  "g", "kg", "ml", "l",
-  "pt", "qt", "gal",
-  "can", "clove", "head", "piece", "slice", "pinch", "dash", "pkg",
-]
-
-function parseAmountStr(str: string): number | null {
-  const trimmed = str.trim()
-  if (!trimmed) return null
-  if (trimmed.includes('/')) {
-    const [num, den] = trimmed.split('/').map((s) => parseFloat(s.trim()))
-    if (!isNaN(num) && !isNaN(den) && den !== 0) return num / den
-    return null
-  }
-  const n = parseFloat(trimmed)
-  return isNaN(n) ? null : n
-}
+// Lazy-loaded so @dnd-kit (~60–90 KB gzipped) is excluded from the initial bundle
+const SortableIngredientList = dynamic(
+  () => import("./recipe-sortable-ingredients").then((m) => m.SortableIngredientList),
+  { ssr: false }
+)
 
 interface RecipeDialogProps {
   open: boolean
@@ -118,21 +89,6 @@ function validateIngredient(ingredient: Ingredient): string[] {
   return issues;
 }
 
-/**
- * Get human-readable message for validation issue
- */
-function getValidationMessage(issueCode: string): string {
-  switch (issueCode) {
-    case 'missing-item':
-      return 'Missing ingredient name';
-    case 'unit-without-amount':
-      return 'Unit specified without amount';
-    case 'amount-without-unit':
-      return 'Amount specified without unit';
-    default:
-      return 'Validation issue';
-  }
-}
 
 export function RecipeDialog({
   open,
@@ -1095,295 +1051,8 @@ interface RecipeFormContentProps {
   isWideViewport: boolean
 }
 
-// Sortable ingredient row component
-function SortableIngredientRow({
-  ingredient,
-  index,
-  onRemoveIngredient,
-  onIngredientChange,
-  ingredients,
-  isEditing,
-  editModeLayout,
-  editModeTwoColLayout,
-  addRecipeModalLayout,
-  isWideViewport,
-}: {
-  ingredient: Ingredient
-  index: number
-  onRemoveIngredient: (index: number) => void
-  onIngredientChange: (
-    index: number,
-    field: keyof Ingredient,
-    value: string | number | null
-  ) => void
-  ingredients: Ingredient[]
-  isEditing: boolean
-  editModeLayout?: boolean
-  editModeTwoColLayout?: boolean
-  addRecipeModalLayout?: boolean
-  isWideViewport?: boolean
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: index.toString() })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
-  // Fix 1: local string state so users can type fractions like "1/2" before blur normalises
-  const [amountStr, setAmountStr] = useState(() =>
-    ingredient.amount != null ? toFraction(ingredient.amount) : ""
-  )
-  useEffect(() => {
-    setAmountStr(ingredient.amount != null ? toFraction(ingredient.amount) : "")
-  }, [ingredient.amount])
-
-  // Fix 2: show custom text input when the current unit isn't in COMMON_UNITS
-  const [showCustomUnit, setShowCustomUnit] = useState(
-    () => !!ingredient.unit && !COMMON_UNITS.includes(ingredient.unit)
-  )
-
-  // Validation
-  const issues = validateIngredient(ingredient)
-  const hasIssues = issues.length > 0
-
-  const compactInput = editModeTwoColLayout
-  const addRecipeInput = addRecipeModalLayout
-  const dragHandle = isEditing || addRecipeModalLayout ? (
-    <button
-      type="button"
-      className={cn(
-        "touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground flex-shrink-0",
-        editModeLayout ? "flex items-center justify-center w-full h-9" :
-        editModeTwoColLayout ? "flex items-center justify-center" :
-        addRecipeModalLayout ? "flex items-center justify-center text-lg" :
-        "p-1 -ml-1",
-        !isWideViewport && "min-h-[44px] min-w-[44px]"
-      )}
-      aria-label={`Reorder ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
-      {...attributes}
-      {...listeners}
-    >
-      <GripVertical className="h-4 w-4" />
-    </button>
-  ) : null
-
-  const amountInput = (
-    <Input
-      className={cn(
-        editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 text-center rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-16 text-center text-sm py-2 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 rounded-lg text-center bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-20",
-        issues.includes('unit-without-amount') && "border-amber-400 dark:border-amber-500"
-      )}
-      type="text"
-      inputMode="decimal"
-      placeholder="Amt"
-      value={amountStr}
-      onChange={(e) => setAmountStr(e.target.value)}
-      onBlur={() => {
-        const parsed = parseAmountStr(amountStr)
-        onIngredientChange(index, "amount", parsed)
-        setAmountStr(parsed != null ? toFraction(parsed) : "")
-      }}
-    />
-  )
-  const unitInputClass = cn(
-    editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none" : "w-24 border-input",
-    issues.includes('amount-without-unit') && "border-amber-400 dark:border-amber-500"
-  )
-  const unitInput = showCustomUnit ? (
-    <Input
-      className={unitInputClass}
-      placeholder="Unit"
-      value={ingredient.unit}
-      onChange={(e) => onIngredientChange(index, "unit", e.target.value)}
-      autoFocus
-    />
-  ) : (
-    <select
-      className={cn("cursor-pointer bg-transparent text-foreground", unitInputClass)}
-      value={ingredient.unit || ""}
-      onChange={(e) => {
-        if (e.target.value === "__custom__") {
-          setShowCustomUnit(true)
-          onIngredientChange(index, "unit", "")
-        } else {
-          onIngredientChange(index, "unit", e.target.value)
-        }
-      }}
-    >
-      <option value="">—</option>
-      {COMMON_UNITS.map((u) => (
-        <option key={u} value={u}>{u}</option>
-      ))}
-      <option value="__custom__">Other…</option>
-    </select>
-  )
-  const itemInput = (
-    <Input
-      className={cn(
-        editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "flex-1 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "flex-1",
-        issues.includes('missing-item') && "border-amber-400 dark:border-amber-500"
-      )}
-      placeholder="Ingredient"
-      value={ingredient.item}
-      onChange={(e) =>
-        onIngredientChange(index, "item", e.target.value)
-      }
-    />
-  )
-  const modifierInput = (
-    <Input
-      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800 flex-shrink-0" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "w-32"}
-      placeholder="prep (e.g. diced)"
-      value={ingredient.modifier || ""}
-      onChange={(e) =>
-        onIngredientChange(index, "modifier", e.target.value || null)
-      }
-    />
-  )
-  const deleteButton = (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => onRemoveIngredient(index)}
-      disabled={ingredients.length === 1}
-      className={editModeLayout ? "text-muted-foreground hover:text-destructive flex items-center justify-center h-9 w-9 rounded-lg" : editModeTwoColLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0" : addRecipeModalLayout ? cn("text-muted-foreground hover:text-destructive transition-opacity flex-shrink-0 text-lg p-0", isWideViewport ? "opacity-0 group-hover:opacity-100" : "opacity-100") : ""}
-      aria-label={`Delete ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
-    >
-      <Trash2 className="h-4 w-4" />
-    </Button>
-  )
-
-  if (addRecipeModalLayout) {
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        data-has-issues={hasIssues ? "true" : undefined}
-        className={cn(
-          "bg-background dark:bg-zinc-900 border border-stone-100 dark:border-zinc-800 p-1.5 rounded-xl group relative",
-          isDragging && "z-50",
-          hasIssues && "ring-2 ring-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20"
-        )}
-      >
-        {/* Validation indicator */}
-        {hasIssues && (
-          <div
-            className="absolute -top-2 -right-2 z-10"
-            title={issues.map(getValidationMessage).join(', ')}
-          >
-            <div className="bg-amber-500 text-white rounded-full p-1 shadow-sm">
-              <AlertCircle className="h-3.5 w-3.5" />
-            </div>
-          </div>
-        )}
-        {isWideViewport ? (
-          <div className="grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 items-center">
-            {dragHandle}
-            {itemInput}
-            {amountInput}
-            {unitInput}
-            {modifierInput}
-            {deleteButton}
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              {dragHandle}
-              <div className="flex-1 min-w-0">{itemInput}</div>
-              {deleteButton}
-            </div>
-            <div className="flex items-center gap-2 pl-6">
-              {amountInput}
-              {unitInput}
-              {modifierInput}
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (editModeTwoColLayout) {
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        data-has-issues={hasIssues ? "true" : undefined}
-        className={`flex flex-col gap-2 sm:flex-row sm:items-center group ${isDragging ? "z-50" : ""}`}
-      >
-        <div className="flex items-center gap-2 sm:flex-[3]">
-          {dragHandle}
-          <div className="flex-1 min-w-0">
-            {itemInput}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 pl-6 sm:pl-0 sm:flex-[2]">
-          {amountInput}
-          {unitInput}
-          {modifierInput}
-          {deleteButton}
-        </div>
-      </div>
-    )
-  }
-
-  if (editModeLayout) {
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        data-has-issues={hasIssues ? "true" : undefined}
-        className={`grid grid-cols-[32px_2fr_0.8fr_1fr_1.5fr_32px] gap-3 items-center group px-1 ${isDragging ? "z-50" : ""}`}
-      >
-        {dragHandle}
-        {itemInput}
-        {amountInput}
-        {unitInput}
-        {modifierInput}
-        {deleteButton}
-      </div>
-    )
-  }
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      data-has-issues={hasIssues ? "true" : undefined}
-      className={`flex gap-2 items-center ${isDragging ? "z-50" : ""}`}
-    >
-      {dragHandle}
-      {itemInput}
-      {amountInput}
-      {unitInput}
-      {modifierInput}
-      {deleteButton}
-    </div>
-  )
-}
-
-// Drag overlay for ingredient
-function IngredientDragOverlay({ ingredient }: { ingredient: Ingredient }) {
-  return (
-    <div className="flex gap-2 items-center bg-card border rounded-lg p-2 shadow-lg">
-      <GripVertical className="h-4 w-4 text-muted-foreground" />
-      <span className="flex-1 text-sm">
-        {ingredient.amount && ingredient.unit
-          ? `${ingredient.amount} ${ingredient.unit} ${ingredient.item}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`
-          : `${ingredient.item || "Ingredient"}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`}
-      </span>
-    </div>
-  )
-}
+// SortableIngredientRow and IngredientDragOverlay have been moved to
+// recipe-sortable-ingredients.tsx (lazy-loaded via next/dynamic above).
 
 interface RecipeFormContentPropsWithImage extends RecipeFormContentProps {
   imagePreview?: string | null
@@ -1421,30 +1090,6 @@ function RecipeFormContent({
   fileInputRef,
   handleAutoFix,
 }: RecipeFormContentPropsWithImage) {
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 150, tolerance: 5 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string)
-  }
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveId(null)
-    onReorderIngredients(event)
-  }
-
-  const activeIngredient = activeId
-    ? ingredients[parseInt(activeId)]
-    : null
-
-  const ingredientIds = ingredients.map((_, i) => i.toString())
   const hasImage = !!(imagePreview || imageUrl)
 
   // Edit Recipe: 2-col layout per reference/recipemodal_editmode_redesign
@@ -1588,37 +1233,13 @@ function RecipeFormContent({
               </div>
             )}
 
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={ingredientIds}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="space-y-2 max-h-[280px] sm:max-h-[350px] overflow-y-auto pr-2 scrollbar-recipe-dialog">
-                  {ingredients.map((ingredient, index) => (
-                    <SortableIngredientRow
-                      key={index}
-                      ingredient={ingredient}
-                      index={index}
-                      onRemoveIngredient={onRemoveIngredient}
-                      onIngredientChange={onIngredientChange}
-                      ingredients={ingredients}
-                      isEditing={true}
-                      editModeTwoColLayout
-                    />
-                  ))}
-                </div>
-              </SortableContext>
-              <DragOverlay>
-                {activeIngredient ? (
-                  <IngredientDragOverlay ingredient={activeIngredient} />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+            <SortableIngredientList
+              ingredients={ingredients}
+              editModeTwoColLayout
+              onReorderIngredients={onReorderIngredients}
+              onRemoveIngredient={onRemoveIngredient}
+              onIngredientChange={onIngredientChange}
+            />
             <button
               type="button"
               onClick={onAddIngredient}
@@ -1759,48 +1380,14 @@ function RecipeFormContent({
       <div className="lg:col-span-7 p-4 sm:p-8 space-y-8">
         <div className="space-y-4">
           <h3 className={addLabelClass}>Ingredients</h3>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={ingredientIds}
-              strategy={verticalListSortingStrategy}
-            >
-              <div className="space-y-2">
-                {isWideViewport && (
-                  <div className="grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 px-2 text-[9px] font-bold uppercase text-stone-400 dark:text-stone-500">
-                    <span aria-hidden="true" />
-                    <span>Ingredient</span>
-                    <span>Amt</span>
-                    <span>Unit</span>
-                    <span>Modifier</span>
-                    <span aria-hidden="true" />
-                  </div>
-                )}
-                {ingredients.map((ingredient, index) => (
-                  <SortableIngredientRow
-                    key={index}
-                    ingredient={ingredient}
-                    index={index}
-                    onRemoveIngredient={onRemoveIngredient}
-                    onIngredientChange={onIngredientChange}
-                    ingredients={ingredients}
-                    isEditing={true}
-                    addRecipeModalLayout
-                    isWideViewport={isWideViewport}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-            <DragOverlay>
-              {activeIngredient ? (
-                <IngredientDragOverlay ingredient={activeIngredient} />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
+          <SortableIngredientList
+            ingredients={ingredients}
+            addRecipeModalLayout
+            isWideViewport={isWideViewport}
+            onReorderIngredients={onReorderIngredients}
+            onRemoveIngredient={onRemoveIngredient}
+            onIngredientChange={onIngredientChange}
+          />
           <button
             type="button"
             onClick={onAddIngredient}

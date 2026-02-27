@@ -1,12 +1,33 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import dynamic from "next/dynamic"
 import { Loader2 } from "lucide-react"
+import { useQueryClient } from "@tanstack/react-query"
 import { RecipeList } from "@/components/recipes"
-import { PantryList } from "@/components/pantry"
-import { MealPlanner } from "@/components/planner"
-import { ShoppingListView } from "@/components/shopping"
 import { AuthForm } from "@/components/auth/auth-form"
+import { useRecipes } from "@/hooks/use-recipes"
+
+// Non-default tabs are lazily mounted: components (and their query hooks) are not
+// instantiated until the user first activates that tab, eliminating the 10+ concurrent
+// Supabase queries that previously fired on every page load.
+const TabLoader = () => (
+  <div className="flex-1 flex items-center justify-center">
+    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+  </div>
+)
+const MealPlanner = dynamic(
+  () => import("@/components/planner").then((m) => m.MealPlanner),
+  { ssr: false, loading: TabLoader }
+)
+const PantryList = dynamic(
+  () => import("@/components/pantry").then((m) => m.PantryList),
+  { ssr: false, loading: TabLoader }
+)
+const ShoppingListView = dynamic(
+  () => import("@/components/shopping").then((m) => m.ShoppingListView),
+  { ssr: false, loading: TabLoader }
+)
 import { Header, BottomNav, FirstRunOnboarding } from "@/components/layout"
 import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
@@ -28,6 +49,9 @@ function getStoredTab(): string {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState(DEFAULT_TAB)
+  // Tracks which tabs have been activated at least once. A tab is only mounted
+  // (and its queries started) on first visit; after that it stays in the DOM.
+  const [visited, setVisited] = useState<Set<string>>(() => new Set([DEFAULT_TAB]))
   const [authError, setAuthError] = useState<string | null>(null)
   const {
     user,
@@ -37,10 +61,112 @@ export default function Home() {
   } = useAuthContext()
   const { showOnboarding, completeOnboarding } = useFirstRunOnboarding()
 
+  // Prefetch non-active tab data once the Recipes data has loaded.
+  const queryClient = useQueryClient()
+  const { data: recipes } = useRecipes()
+  // Use a ref so the idle callback always sees the latest visited set without
+  // adding visited to the effect's dependency array (which would re-run on every tab switch).
+  const visitedRef = useRef(visited)
+  visitedRef.current = visited
+  const prefetchFiredRef = useRef(false)
+
+  useEffect(() => {
+    // Only fire once, only after primary data is available and user is authenticated.
+    if (!recipes || !user || prefetchFiredRef.current) return
+    prefetchFiredRef.current = true
+
+    // Skip on slow connections to avoid wasting limited bandwidth.
+    const nav = navigator as Navigator & { connection?: { effectiveType?: string } }
+    const eff = nav.connection?.effectiveType
+    if (eff === '2g' || eff === 'slow-2g') return
+
+    const userId = user.id  // capture for async closures
+
+    const prefetch = () => {
+      const supabase = getSupabase()
+
+      if (!visitedRef.current.has('planner')) {
+        void queryClient.prefetchQuery({
+          queryKey: ['user_config'],
+          queryFn: async () => {
+            const { data, error } = await supabase.from('user_config').select('*').single()
+            if (error && error.code !== 'PGRST116') throw error
+            return data
+          },
+          staleTime: 30_000,
+        })
+        const cutoff = new Date()
+        cutoff.setDate(cutoff.getDate() - 14)
+        void queryClient.prefetchQuery({
+          queryKey: ['recipe_history'],
+          queryFn: async () => {
+            const { data, error } = await supabase
+              .from('recipe_history')
+              .select('recipe_id, date_made')
+              .eq('user_id', userId)
+              .gte('date_made', cutoff.toISOString())
+              .order('date_made', { ascending: false })
+              .limit(500)
+            if (error) throw error
+            return data
+          },
+          staleTime: 30_000,
+        })
+      }
+
+      if (!visitedRef.current.has('pantry')) {
+        void queryClient.prefetchQuery({
+          queryKey: ['pantry'],
+          queryFn: async () => {
+            const { data, error } = await supabase
+              .from('pantry_items')
+              .select('*')
+              .order('item', { ascending: true })
+            if (error) throw error
+            return data
+          },
+          staleTime: 30_000,
+        })
+      }
+
+      if (!visitedRef.current.has('shopping')) {
+        void queryClient.prefetchQuery({
+          queryKey: ['shopping_list'],
+          queryFn: async () => {
+            const { data, error } = await supabase
+              .from('shopping_list')
+              .select('*')
+              .maybeSingle()
+            if (error) throw error
+            return data
+          },
+          staleTime: 30_000,
+        })
+      }
+    }
+
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(prefetch, { timeout: 2000 })
+    } else {
+      setTimeout(prefetch, 0)
+    }
+  }, [recipes, user, queryClient])
+
+  // Changes the active tab and marks it as visited so its component is mounted.
+  const activateTab = useCallback((tab: string) => {
+    setActiveTab(tab)
+    setVisited((prev) => {
+      if (prev.has(tab)) return prev
+      const next = new Set(prev)
+      next.add(tab)
+      return next
+    })
+  }, [])
+
   // Restore tab from localStorage after mount (avoids server/client mismatch)
   useEffect(() => {
-    setActiveTab(getStoredTab())
-  }, [])
+    activateTab(getStoredTab())
+  }, [activateTab])
 
   // Persist active tab to localStorage
   useEffect(() => {
@@ -150,7 +276,7 @@ export default function Home() {
         userEmail={user?.email}
         onSignOut={handleSignOut}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={activateTab}
       />
 
       <div className="container relative mx-auto flex-1 min-h-0 w-full max-w-full px-4 py-4 overflow-hidden flex flex-col">
@@ -172,7 +298,8 @@ export default function Home() {
           }
           aria-hidden={activeTab !== "planner"}
         >
-          <MealPlanner />
+          {/* Only mount once first visited — eliminates queries on page load */}
+          {visited.has("planner") && <MealPlanner />}
         </div>
         <div
           className={
@@ -182,7 +309,7 @@ export default function Home() {
           }
           aria-hidden={activeTab !== "pantry"}
         >
-          <PantryList />
+          {visited.has("pantry") && <PantryList />}
         </div>
         <div
           className={
@@ -192,11 +319,11 @@ export default function Home() {
           }
           aria-hidden={activeTab !== "shopping"}
         >
-          <ShoppingListView />
+          {visited.has("shopping") && <ShoppingListView />}
         </div>
       </div>
 
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNav activeTab={activeTab} onTabChange={activateTab} />
 
       {/* First-run onboarding for authenticated users only */}
       {isAuthenticated && (

@@ -26,37 +26,52 @@ export function shouldClearQueriesOnAuthEvent(
   return !!previousSession && !nextSession && event !== 'SIGNED_OUT'
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+// initialSession: pass the server-read session to skip the client-side getSession()
+// round-trip. Provide Session (authenticated), null (known unauthenticated), or
+// omit (undefined) to fall back to the original client-side fetch.
+export function AuthProvider({
+  children,
+  initialSession,
+}: {
+  children: ReactNode
+  initialSession?: Session | null
+}) {
+  const hasInitialSession = initialSession !== undefined
+  const [user, setUser] = useState<User | null>(hasInitialSession ? (initialSession?.user ?? null) : null)
+  const [session, setSession] = useState<Session | null>(hasInitialSession ? (initialSession ?? null) : null)
+  // If the server provided the session (even null), we already know auth state — no loading needed.
+  const [loading, setLoading] = useState(!hasInitialSession)
   const queryClient = useQueryClient()
-  const sessionRef = useRef<Session | null>(null)
+  // Initialise ref from server session so onAuthStateChange sees the correct previous value.
+  const sessionRef = useRef<Session | null>(initialSession ?? null)
+  // Capture prop at mount so the effect dep array stays stable (no object-identity churn).
+  const initialSessionRef = useRef(initialSession)
 
   useEffect(() => {
     const supabase = getSupabase()
 
-    // Get initial session
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
-        sessionRef.current = session
-        setSession(session)
-        setUser(session?.user ?? null)
-        setLoading(false)
-      })
-      .catch((error) => {
-        console.error("Failed to fetch session:", error)
-        // Still exit loading state to prevent app freeze
-        setLoading(false)
-      })
+    // Skip client-side session fetch when the server already provided it.
+    // initialSessionRef.current is undefined only when the prop was omitted.
+    if (initialSessionRef.current === undefined) {
+      supabase.auth.getSession()
+        .then(({ data: { session } }) => {
+          sessionRef.current = session
+          setSession(session)
+          setUser(session?.user ?? null)
+          setLoading(false)
+        })
+        .catch((error) => {
+          console.error("Failed to fetch session:", error)
+          // Still exit loading state to prevent app freeze
+          setLoading(false)
+        })
+    }
 
-    // Listen for auth changes
+    // Listen for auth changes (sign in, sign out, token refresh)
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      // Handle session expiry: if we had a session but now don't, and it's not a sign out
       const previousSession = sessionRef.current
-      const hasSession = !!session
 
       setSession(session)
       setUser(session?.user ?? null)

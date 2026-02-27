@@ -1,0 +1,16 @@
+{
+  "name": "Recipe Genie",
+  "short_name": "Recipe Genie",
+  "description": "Meal planning and recipe management made easy",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf8f4",
+  "theme_color": "#3d5a2e",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

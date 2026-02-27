@@ -2,11 +2,18 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useState } from "react"
+import type { Session } from "@supabase/supabase-js"
 import { AuthProvider } from "@/lib/auth-context"
 import { UndoToastProvider } from "@/components/ui/undo-toast"
 import { ErrorBoundary } from "@/components/error-boundary"
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  initialSession,
+}: {
+  children: React.ReactNode
+  initialSession: Session | null
+}) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -22,7 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
+        <AuthProvider initialSession={initialSession}>
           <UndoToastProvider>{children}</UndoToastProvider>
         </AuthProvider>
       </QueryClientProvider>

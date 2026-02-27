@@ -27,5 +27,7 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json(data || []);
+  const response = NextResponse.json(data || []);
+  response.headers.set('Cache-Control', 'private, max-age=15');
+  return response;
 }

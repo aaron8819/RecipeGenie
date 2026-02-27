@@ -99,19 +99,20 @@ Recipe Genie solves a common household problem: "What should we cook this week, 
 
 | Directory | Files | Responsibility |
 |-----------|-------|----------------|
-| `app/` | `layout.tsx`, `page.tsx` | Next.js App Router entry points, providers setup |
-| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx`, `cook-mode.tsx`, `share-recipe-dialog.tsx`, `shared-recipes-inbox.tsx` | Recipe CRUD UI with text/URL import, cook mode, and sharing |
+| `app/` | `layout.tsx`, `page.tsx`, `loading.tsx` | Next.js App Router entry points, providers setup; `loading.tsx` is a skeleton shell that prevents blank page during server render |
+| `components/recipes/` | `recipe-list.tsx`, `recipe-card.tsx`, `recipe-dialog.tsx`, `recipe-sortable-ingredients.tsx`, `cook-mode.tsx`, `share-recipe-dialog.tsx`, `shared-recipes-inbox.tsx` | Recipe CRUD UI with text/URL import, cook mode, and sharing; `recipe-sortable-ingredients.tsx` extracts dnd-kit for dynamic import |
 | `components/planner/` | `meal-planner.tsx`, `save-template-dialog.tsx`, `load-template-dialog.tsx` | Week navigation, plan generation, templates, history |
 | `components/pantry/` | `pantry-list.tsx`, `what-can-i-make.tsx` | Pantry items, excluded keywords, ingredient matching |
 | `components/shopping/` | `shopping-list.tsx`, `shopping-settings-modal.tsx` | Shopping list display, scaling, drag-and-drop reordering, category management |
 | `components/ui/` | Various | Radix UI primitives (button, dialog, tabs, etc.) |
 | `components/` | `error-boundary.tsx` | Error boundary component for application resilience |
-| `hooks/` | `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`, `use-wake-lock.ts` | TanStack Query hooks for Supabase |
+| `hooks/` | `use-recipes.ts`, `use-planner.ts`, `use-pantry.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`, `use-wake-lock.ts`, `use-is-desktop.ts` | TanStack Query hooks for Supabase; `use-is-desktop.ts` is the canonical SSR-safe breakpoint hook |
 | `hooks/shopping/` | Domain-focused modules | Shopping hooks split by domain (list, items, recipes, categories, config, pantry) |
 | `app/api/` | `recipe-import/route.ts`, `recipe-shares/` | Server-side API: URL recipe import (rate-limited, SSRF-guarded), share lifecycle routes |
 | `lib/supabase/` | `client.ts`, `server.ts`, `admin.ts` | Supabase clients: browser singleton, server SSR, service-role admin (server only) |
 | `lib/` | `meal-planner.ts`, `planner-colors.ts`, `planner-utils.ts`, `user-config.ts`, `shopping-list.ts`, `shopping-list-normalization.ts`, `shopping-list-merging.ts`, `shopping-categories.ts`, `recipe-parser.ts`, `recipe-url-parser.ts`, `recipe-export.ts`, `pantry-matcher.ts`, `recipe-sharing.ts`, `rate-limit.ts`, `url-safety.ts` | Business logic: plan generation, shopping aggregation, recipe parsing (text + URL), pantry matching, sharing, security utilities |
 | `types/` | `database.ts` | TypeScript types for Supabase tables |
+| `public/` | `manifest.json` | Static assets; web app manifest enables PWA install prompt (theme: sage, standalone display) |
 
 **Testing:** E2E tests in `web/tests/` (Playwright); unit tests in `hooks/__tests__/` and `lib/__tests__/` (Vitest). See README Testing section.
 
@@ -275,6 +276,6 @@ For UI changes:
 
 ---
 
-*Last updated: 2026-02-26 (v2.15.0)*
+*Last updated: 2026-02-27 (v2.16.0)*
 
 *See `changelog.md` for version history.*

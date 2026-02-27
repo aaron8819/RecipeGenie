@@ -82,16 +82,22 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
  */
 export function useRecipeHistory() {
   const { user } = useAuthContext()
+  const { data: config } = useUserConfig()
+  const daysBack = config?.history_exclusion_days ?? 14
 
   return useQuery({
     queryKey: [...HISTORY_KEY],
     queryFn: async () => {
       const supabase = getSupabase()
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - daysBack)
       const { data, error } = await supabase
         .from("recipe_history")
-        .select("*")
+        .select("recipe_id, date_made")
         .eq("user_id", user!.id)
+        .gte("date_made", cutoff.toISOString())
         .order("date_made", { ascending: false })
+        .limit(500)
 
       if (error) throw error
       return data as RecipeHistory[]
@@ -196,31 +202,28 @@ export function useGenerateMealPlan() {
     mutationFn: async ({ weekDate, selection }: { weekDate: string; selection: Record<string, number> }) => {
       const supabase = getSupabase()
 
-      const { data: recipes, error: recipesError } = await supabase
-        .from("recipes")
-        .select("id, category")
-        .eq("user_id", user!.id)
+      // Fetch all inputs in parallel — none depends on another
+      const [
+        { data: recipes, error: recipesError },
+        { data: history, error: historyError },
+        { data: config },
+        { data: existingPlan },
+      ] = await Promise.all([
+        supabase.from("recipes").select("id, category, name").eq("user_id", user!.id),
+        supabase.from("recipe_history").select("recipe_id, date_made").eq("user_id", user!.id),
+        supabase
+          .from("user_config")
+          .select("history_exclusion_days, excluded_days, preferred_days, auto_assign_days, enabled_planner_categories")
+          .single(),
+        supabase
+          .from("weekly_plans")
+          .select("*")
+          .eq("user_id", user!.id)
+          .eq("week_date", weekDate)
+          .maybeSingle(),
+      ])
       if (recipesError) throw recipesError
-
-      const { data: history, error: historyError } = await supabase
-        .from("recipe_history")
-        .select("recipe_id, date_made")
-        .eq("user_id", user!.id)
       if (historyError) throw historyError
-
-      // Get full config for planner settings
-      const { data: config } = await supabase
-        .from("user_config")
-        .select("history_exclusion_days, excluded_days, preferred_days, auto_assign_days, enabled_planner_categories")
-        .single()
-
-      // Check if plan already exists to preserve made recipes
-      const { data: existingPlan } = await supabase
-        .from("weekly_plans")
-        .select("*")
-        .eq("user_id", user!.id)
-        .eq("week_date", weekDate)
-        .maybeSingle()
 
       const typedPlan = existingPlan as WeeklyPlan | null
       const madeRecipeIds = typedPlan?.made_recipe_ids || []
@@ -329,9 +332,11 @@ export function useSwapRecipe() {
       weekDate: string; oldRecipeId: string; category: string; excludeIds: string[]
     }) => {
       const supabase = getSupabase()
+      // Only id, category, and name are needed by getSwapRecipe for selection.
+      // Full recipe data is re-fetched by useWeeklyPlanRecipes after invalidation.
       const { data: recipes, error: recipesError } = await supabase
         .from("recipes")
-        .select("*")
+        .select("id, category, name")
         .eq("user_id", user!.id)
       if (recipesError) throw recipesError
 
@@ -423,35 +428,26 @@ export function useSaveWeeklyPlan() {
         .eq("week_date", weekDate)
         .maybeSingle()
 
-      // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
-      if (existingPlan) {
-        // Update existing plan
-        const { error } = await supabase
-          .from("weekly_plans")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({
+      // idx_weekly_plans_user_date is a unique index on (user_id, week_date); explicit
+      // onConflict columns let PostgREST resolve the ON CONFLICT clause in 1 RTT.
+      // The SELECT above is still needed to preserve made_recipe_ids and day_assignments.
+      const typedExisting = existingPlan as WeeklyPlan | null
+      const { error } = await supabase
+        .from("weekly_plans")
+        // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
+        .upsert(
+          {
+            user_id: user!.id,
+            week_date: weekDate,
             recipe_ids: recipeIds,
             scale: scale || 1.0,
-            made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
-            day_assignments: (existingPlan as WeeklyPlan).day_assignments || null,
+            made_recipe_ids: typedExisting?.made_recipe_ids || [],
+            day_assignments: typedExisting?.day_assignments || null,
             generated_at: new Date().toISOString(),
-          })
-          .eq("user_id", user!.id)
-          .eq("week_date", weekDate)
-        if (error) throw error
-      } else {
-        // Insert new plan
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-        const { error } = await supabase.from("weekly_plans").insert({
-          user_id: user!.id,
-          week_date: weekDate,
-          recipe_ids: recipeIds,
-          day_assignments: null,
-          scale: scale || 1.0,
-          generated_at: new Date().toISOString(),
-        })
-        if (error) throw error
-      }
+          },
+          { onConflict: 'user_id,week_date' }
+        )
+      if (error) throw error
 
       return { weekDate, recipeIds }
     },
@@ -491,35 +487,26 @@ export function useAddRecipeToPlan() {
         ...(dayOfWeek !== undefined ? { [recipeId]: dayOfWeek } : {}),
       }
 
-      // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
-      if (existingPlan) {
-        // Update existing plan
-        const { error } = await supabase
-          .from("weekly_plans")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({
+      // The SELECT above is load-bearing (reads currentIds, day_assignments, scale, made_recipe_ids).
+      // Replace the if/else write with a single upsert — idx_weekly_plans_user_date unique index
+      // on (user_id, week_date) is resolvable when columns are passed explicitly to onConflict.
+      const typedExistingPlan = existingPlan as WeeklyPlan | null
+      const { error } = await supabase
+        .from("weekly_plans")
+        // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
+        .upsert(
+          {
+            user_id: user!.id,
+            week_date: weekDate,
             recipe_ids: [...currentIds, recipeId],
-            day_assignments: mergedDayAssignments,
-            scale: (existingPlan as WeeklyPlan).scale || 1.0,
-            made_recipe_ids: (existingPlan as WeeklyPlan).made_recipe_ids || [],
+            day_assignments: Object.keys(mergedDayAssignments).length > 0 ? mergedDayAssignments : null,
+            scale: typedExistingPlan?.scale || 1.0,
+            made_recipe_ids: typedExistingPlan?.made_recipe_ids || [],
             generated_at: new Date().toISOString(),
-          })
-          .eq("user_id", user!.id)
-          .eq("week_date", weekDate)
-        if (error) throw error
-      } else {
-        // Insert new plan
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-        const { error } = await supabase.from("weekly_plans").insert({
-          user_id: user!.id,
-          week_date: weekDate,
-          recipe_ids: [...currentIds, recipeId],
-          day_assignments: Object.keys(mergedDayAssignments).length > 0 ? mergedDayAssignments : null,
-          scale: 1.0,
-          generated_at: new Date().toISOString(),
-        })
-        if (error) throw error
-      }
+          },
+          { onConflict: 'user_id,week_date' }
+        )
+      if (error) throw error
 
       return { weekDate, recipeId }
     },

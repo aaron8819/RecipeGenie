@@ -71,6 +71,21 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 - **Supabase type workaround:** Use `@ts-expect-error` for known Supabase TypeScript inference issues where update params infer as `never`
 - **Commits:** Conventional commits — `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
 
+## Performance Conventions
+
+Patterns established during the 2026-02-27 performance audit. Treat these as hard rules — they exist because the naive alternative had measurable cost.
+
+- **Middleware auth**: Use `getSession()` in `middleware.ts` — zero Supabase RTT. Reserve `getUser()` for API routes that require verified server-side identity.
+- **Initial auth hydration**: Pass `initialSession` from the server layout to `AuthProvider` via `Providers`. Never block the first render on a client-side `getSession()` call — `loading` must initialize as `false` when a session is pre-hydrated.
+- **Error toasts**: Every `catch` block in a mutation or async handler must show a user-visible toast. Silent failures are bugs.
+- **Tag mutations**: Use `supabase.rpc()` for `rename_tag`, `delete_tag`, `merge_tags`. Never loop per-recipe — N+1 updates are banned for bulk tag operations.
+- **Read-then-write banned**: Use `.upsert()` with explicit `onConflict` instead of fetch → conditional insert/update. Keys: `'user_id'` for `shopping_list`, `'user_id,week_date'` for `weekly_plans` (unique index, not constraint — must be explicit).
+- **Heavy library dynamic import**: `@dnd-kit` and other large libraries must be dynamically imported (`next/dynamic`) and kept out of the initial bundle. The extracted file is `recipe-sortable-ingredients.tsx`.
+- **Tab lazy-mounting**: Non-default tabs (`MealPlanner`, `PantryList`, `ShoppingListView`) are mounted on first visit only, tracked via a `visited` Set. Do not revert to always-mounting all tabs — each tab mounts its own queries.
+- **Breakpoint detection**: `hooks/use-is-desktop.ts` is the canonical SSR-safe `matchMedia` hook. Do not add new `window.matchMedia` listeners directly in components.
+
+---
+
 ## Testing
 
 **Unit tests** (Vitest, `__tests__/` directories co-located with source):

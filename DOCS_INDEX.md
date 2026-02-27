@@ -62,4 +62,4 @@ Located in [`docs/archive/`](docs/archive/):
 
 ---
 
-*Last updated: 2026-02-26 (v2.15.0)*
+*Last updated: 2026-02-27 (v2.16.0)*
