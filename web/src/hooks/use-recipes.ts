@@ -88,7 +88,9 @@ export function useRecipes(options?: {
         if (options.category) result = result.filter((r) => r.category === options.category)
         if (options.search) {
           const q = options.search.toLowerCase()
-          result = result.filter((r) => r.name.toLowerCase().includes(q))
+          result = result.filter(
+            (r) => r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)
+          )
         }
         if (options.favoritesOnly) result = result.filter((r) => r.favorite)
         if (options.limit !== undefined) result = result.slice(0, options.limit)
@@ -106,7 +108,7 @@ export function useRecipes(options?: {
       }
 
       if (options?.search) {
-        query = query.ilike("name", `%${options.search}%`)
+        query = query.or(`name.ilike.%${options.search}%,category.ilike.%${options.search}%`)
       }
 
       if (options?.favoritesOnly) {

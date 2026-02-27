@@ -95,9 +95,7 @@ function sortRecipes(
       case "name":
         return compareNames(a.name, b.name)
       case "newest":
-        // Assuming recipes have created_at or we use id as proxy
-        // If you have created_at in your Recipe type, use that instead
-        return (b.id || "").localeCompare(a.id || "")
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       default:
         return 0
     }
@@ -266,6 +264,7 @@ export function RecipeList() {
     setSearch("")
   }
 
+  const isFiltered = !!search || !!category || favoritesOnly || selectedTags.length > 0
 
   const pillOutline =
     "flex items-center gap-2 px-3 md:px-4 py-2 md:py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-full font-medium transition-all text-xs md:text-sm hover:bg-slate-100 dark:hover:bg-slate-600 hover:border-slate-300 dark:hover:border-slate-500 hover:text-slate-800 dark:hover:text-slate-100"
@@ -276,7 +275,7 @@ export function RecipeList() {
       <div className="relative mb-6 md:mb-8 p-1">
         <Search className="absolute left-4 md:left-5 top-1/2 -translate-y-1/2 h-4 w-4 md:h-5 md:w-5 text-slate-400 dark:text-slate-500 pointer-events-none" />
         <Input
-          placeholder="Search recipes by name, ingredient, or cuisine..."
+          placeholder="Search recipes by name or cuisine..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full h-auto py-3.5 md:py-5 pl-10 md:pl-12 pr-4 md:pr-5 text-sm md:text-base bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary rounded-2xl placeholder:text-slate-400 outline-none transition-all"
@@ -428,7 +427,7 @@ export function RecipeList() {
             }}
             disabled={displayRecipes.length === 0}
             className={cn(pillOutline, "shrink-0")}
-            title="Export all recipes as JSON"
+            title={isFiltered ? "Export filtered recipes as JSON" : "Export all recipes as JSON"}
           >
             <Download className="h-4 w-4 shrink-0" />
             Export
