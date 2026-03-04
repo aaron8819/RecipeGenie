@@ -120,7 +120,7 @@ RecipeSettingsModal
 
 | Hook | Query Key | Purpose |
 |------|-----------|---------|
-| `useRecipes(options?)` | `['recipes', options]` | Fetch with filters (category, search, favorites, tags). 30s staleTime. |
+| `useRecipes(options?)` | `['recipes', options]` | Fetch with filters (category, search, favorites, tags). `search` matches recipe name and category (case-insensitive). 30s staleTime. |
 | `useRecipe(id)` | `['recipes', id]` | Fetch single recipe by ID |
 | `useCreateRecipe()` | mutation | Create with optimistic update. Auto-generates ID from name. |
 | `useUpdateRecipe()` | mutation | Update with optimistic update |
