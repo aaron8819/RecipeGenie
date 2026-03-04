@@ -95,23 +95,33 @@ export default function Home() {
           },
           staleTime: 30_000,
         })
-        const cutoff = new Date()
-        cutoff.setDate(cutoff.getDate() - 14)
-        void queryClient.prefetchQuery({
-          queryKey: ['recipe_history'],
-          queryFn: async () => {
-            const { data, error } = await supabase
-              .from('recipe_history')
-              .select('recipe_id, date_made')
-              .eq('user_id', userId)
-              .gte('date_made', cutoff.toISOString())
-              .order('date_made', { ascending: false })
-              .limit(500)
-            if (error) throw error
-            return data
-          },
-          staleTime: 30_000,
-        })
+        void (async () => {
+          const { data: config, error: configError } = await supabase
+            .from('user_config')
+            .select('history_exclusion_days')
+            .single()
+          if (configError && configError.code !== 'PGRST116') throw configError
+
+          const daysBack = (config as { history_exclusion_days?: number } | null)?.history_exclusion_days ?? 14
+          const cutoff = new Date()
+          cutoff.setDate(cutoff.getDate() - daysBack)
+
+          await queryClient.prefetchQuery({
+            queryKey: ['recipe_history', 'recent', daysBack],
+            queryFn: async () => {
+              const { data, error } = await supabase
+                .from('recipe_history')
+                .select('recipe_id, date_made')
+                .eq('user_id', userId)
+                .gte('date_made', cutoff.toISOString())
+                .order('date_made', { ascending: false })
+                .limit(500)
+              if (error) throw error
+              return data
+            },
+            staleTime: 30_000,
+          })
+        })()
       }
 
       if (!visitedRef.current.has('pantry')) {

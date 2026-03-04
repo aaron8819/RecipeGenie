@@ -155,6 +155,8 @@ Tracks when recipes were made by users.
 | `user_id` | UUID | FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the history entry |
 | `date_made` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Date and time when recipe was made |
 
+**Retention note:** `recipe_history.recipe_id` is intentionally stored as a plain text identifier rather than an enforced foreign key so history survives recipe deletion.
+
 ### weekly_plans
 
 Stores weekly meal plans for users.
@@ -387,6 +389,17 @@ marks the share as accepted. Function is idempotent and returns existing
 
 **Language:** `plpgsql SECURITY DEFINER`
 
+### get_recipe_history_stats(p_user_id UUID)
+
+Returns per-recipe aggregate history for UI surfaces that only need counts and the most recent cook date.
+
+**Parameters:**
+- `p_user_id` (UUID) - The user whose history should be aggregated
+
+**Returns:** `TABLE(recipe_id TEXT, times_made INTEGER, last_made TIMESTAMPTZ)`
+
+**Language:** `sql STABLE SECURITY DEFINER`
+
 ## Triggers
 
 ### update_recipes_updated_at
@@ -433,6 +446,8 @@ auth.users (Supabase Auth)
   └── recipe_shares (sender_user_id/recipient_user_id → auth.users.id)
 ```
 
+`recipe_history.recipe_id` remains a logical link to recipes, but it is not enforced as a foreign key so historical rows are retained when recipes are deleted.
+
 ### Foreign Key Relationships
 
 1. **recipes.user_id** → `auth.users(id)` ON DELETE CASCADE
@@ -445,7 +460,9 @@ auth.users (Supabase Auth)
 8. **recipe_shares.sender_user_id** → `auth.users(id)` ON DELETE CASCADE
 9. **recipe_shares.recipient_user_id** → `auth.users(id)` ON DELETE CASCADE
 
-All foreign keys use `ON DELETE CASCADE`, meaning if a user is deleted, all their associated data is automatically deleted.
+All enforced foreign keys use `ON DELETE CASCADE`, meaning if a user is deleted, all their associated data is automatically deleted.
+
+`recipe_history.recipe_id` is intentionally excluded from the enforced foreign key list so recipe deletions do not erase historical reporting data.
 
 ## Migration History
 
@@ -467,6 +484,10 @@ The schema has evolved through the following migrations:
 14. **014_default_recipe_images_uuid_suffix.sql** - Updated default image mapping to handle recipe ID UUID suffixes and backfilled existing records
 15. **015_plan_templates.sql** - Added reusable meal plan templates table
 16. **016_recipe_sharing.sql** - Added `recipe_shares` table, sharing RLS policies, and `accept_recipe_share()` copy-on-accept function
+17. **017_add_enabled_planner_categories.sql** - Added planner category enable/disable settings
+18. **018_tag_rpc_functions.sql** - Added bulk tag-management RPC functions
+19. **020_filter_recipes_by_tags.sql** - Added OR-based tag filtering RPC for recipe searches
+20. **021_recipe_history_stats_and_retention.sql** - Added aggregate history stats RPC and preserved history after recipe deletion
 
 ## Query Examples
 

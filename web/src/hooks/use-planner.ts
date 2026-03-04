@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { Recipe, RecipeHistory, WeeklyPlan, UserConfig } from "@/types/database"
+import type { Recipe, RecipeHistory, RecipeHistoryStatsRow, WeeklyPlan, UserConfig } from "@/types/database"
 import { generateMealPlan, getSwapRecipe, autoAssignDays } from "@/lib/meal-planner"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
@@ -11,8 +11,22 @@ import { useCategories } from "./use-recipes"
 
 const WEEKLY_PLANS_KEY = ["weekly_plans"]
 const HISTORY_KEY = ["recipe_history"]
+const RECENT_HISTORY_KEY = [...HISTORY_KEY, "recent"]
+const HISTORY_STATS_KEY = [...HISTORY_KEY, "stats"]
 const CONFIG_KEY = ["user_config"]
 const RECIPES_KEY = ["recipes"]
+
+export function getRecipeHistoryQueryKey() {
+  return [...HISTORY_KEY]
+}
+
+export function getRecentRecipeHistoryQueryKey(daysBack: number) {
+  return [...RECENT_HISTORY_KEY, daysBack]
+}
+
+export function getRecipeHistoryStatsQueryKey() {
+  return [...HISTORY_STATS_KEY]
+}
 
 /**
  * Hook to fetch weekly plan for a specific week
@@ -82,11 +96,34 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
  */
 export function useRecipeHistory() {
   const { user } = useAuthContext()
+
+  return useQuery({
+    queryKey: getRecipeHistoryQueryKey(),
+    queryFn: async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("recipe_history")
+        .select("*")
+        .eq("user_id", user!.id)
+        .order("date_made", { ascending: false })
+
+      if (error) throw error
+      return data as RecipeHistory[]
+    },
+    enabled: !!user,
+  })
+}
+
+/**
+ * Hook to fetch only recent recipe history used for planner recency behavior.
+ */
+export function useRecentRecipeHistory() {
+  const { user } = useAuthContext()
   const { data: config } = useUserConfig()
   const daysBack = config?.history_exclusion_days ?? 14
 
   return useQuery({
-    queryKey: [...HISTORY_KEY],
+    queryKey: getRecentRecipeHistoryQueryKey(daysBack),
     queryFn: async () => {
       const supabase = getSupabase()
       const cutoff = new Date()
@@ -101,6 +138,28 @@ export function useRecipeHistory() {
 
       if (error) throw error
       return data as RecipeHistory[]
+    },
+    enabled: !!user,
+  })
+}
+
+/**
+ * Hook to fetch aggregate history stats for all recipes.
+ */
+export function useRecipeHistoryStats() {
+  const { user } = useAuthContext()
+
+  return useQuery({
+    queryKey: getRecipeHistoryStatsQueryKey(),
+    queryFn: async () => {
+      const supabase = getSupabase()
+      // @ts-expect-error - RPC not yet reflected in generated Supabase client types
+      const { data, error } = await supabase.rpc("get_recipe_history_stats", {
+        p_user_id: user!.id,
+      })
+
+      if (error) throw error
+      return (data as RecipeHistoryStatsRow[]) || []
     },
     enabled: !!user,
   })
@@ -202,15 +261,13 @@ export function useGenerateMealPlan() {
     mutationFn: async ({ weekDate, selection }: { weekDate: string; selection: Record<string, number> }) => {
       const supabase = getSupabase()
 
-      // Fetch all inputs in parallel — none depends on another
+      // Fetch everything except history first so the history query can use the configured window.
       const [
         { data: recipes, error: recipesError },
-        { data: history, error: historyError },
-        { data: config },
+        { data: config, error: configError },
         { data: existingPlan },
       ] = await Promise.all([
         supabase.from("recipes").select("id, category, name").eq("user_id", user!.id),
-        supabase.from("recipe_history").select("recipe_id, date_made").eq("user_id", user!.id),
         supabase
           .from("user_config")
           .select("history_exclusion_days, excluded_days, preferred_days, auto_assign_days, enabled_planner_categories")
@@ -223,7 +280,7 @@ export function useGenerateMealPlan() {
           .maybeSingle(),
       ])
       if (recipesError) throw recipesError
-      if (historyError) throw historyError
+      if (configError && configError.code !== "PGRST116") throw configError
 
       const typedPlan = existingPlan as WeeklyPlan | null
       const madeRecipeIds = typedPlan?.made_recipe_ids || []
@@ -248,6 +305,18 @@ export function useGenerateMealPlan() {
         auto_assign_days?: boolean
         enabled_planner_categories?: string[] | null
       } | null
+      const historyExclusionDays = typedConfig?.history_exclusion_days || 7
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - historyExclusionDays)
+
+      const { data: history, error: historyError } = await supabase
+        .from("recipe_history")
+        .select("recipe_id, date_made")
+        .eq("user_id", user!.id)
+        .gte("date_made", cutoff.toISOString())
+        .order("date_made", { ascending: false })
+
+      if (historyError) throw historyError
 
       const enabledCategories = typedConfig?.enabled_planner_categories
       let filteredSelection = selection
@@ -264,7 +333,7 @@ export function useGenerateMealPlan() {
         recipesToGenerate,
         history as RecipeHistory[],
         filteredSelection,
-        (config as { history_exclusion_days?: number } | null)?.history_exclusion_days || 7
+        historyExclusionDays
       )
 
       // Combine preserved recipes with newly generated ones

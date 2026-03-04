@@ -259,6 +259,16 @@ export interface Database {
         }
         Returns: string
       }
+      get_recipe_history_stats: {
+        Args: {
+          p_user_id: string
+        }
+        Returns: {
+          recipe_id: string
+          times_made: number
+          last_made: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
@@ -309,6 +319,12 @@ export interface RecipeShareSnapshot {
   image_url: string | null
 }
 
+export interface RecipeHistoryStats {
+  recipe_id: string
+  times_made: number
+  last_made: string
+}
+
 export type Recipe = Database["public"]["Tables"]["recipes"]["Row"]
 export type RecipeInsert = Database["public"]["Tables"]["recipes"]["Insert"]
 export type RecipeUpdate = Database["public"]["Tables"]["recipes"]["Update"]
@@ -316,6 +332,7 @@ export type RecipeUpdate = Database["public"]["Tables"]["recipes"]["Update"]
 export type PantryItem = Database["public"]["Tables"]["pantry_items"]["Row"]
 export type UserConfig = Database["public"]["Tables"]["user_config"]["Row"]
 export type RecipeHistory = Database["public"]["Tables"]["recipe_history"]["Row"]
+export type RecipeHistoryStatsRow = RecipeHistoryStats
 export type WeeklyPlan = Database["public"]["Tables"]["weekly_plans"]["Row"]
 export type ShoppingList = Database["public"]["Tables"]["shopping_list"]["Row"]
 export type RecipeShare = Database["public"]["Tables"]["recipe_shares"]["Row"]

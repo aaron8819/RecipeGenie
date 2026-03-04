@@ -21,38 +21,12 @@ import {
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
-import { useRecipeHistory, useMarkRecipeAsMade, useUnmarkRecipeAsMade } from "@/hooks/use-planner"
+import { useRecipeHistoryStats, useMarkRecipeAsMade, useUnmarkRecipeAsMade } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { downloadRecipesAsJson } from "@/lib/recipe-export"
-import type { Recipe, RecipeHistory } from "@/types/database"
-
-interface RecipeStats {
-  lastMade: string | null
-  timesMade: number
-}
-
-/**
- * Get stats (last made date + times made count) for each recipe from history
- */
-function getRecipeStatsMap(history: RecipeHistory[] | undefined): Map<string, RecipeStats> {
-  const statsMap = new Map<string, RecipeStats>()
-  if (!history) return statsMap
-
-  // History is already sorted by date_made DESC, so first occurrence is most recent
-  for (const entry of history) {
-    const existing = statsMap.get(entry.recipe_id)
-    if (existing) {
-      existing.timesMade += 1
-    } else {
-      statsMap.set(entry.recipe_id, {
-        lastMade: entry.date_made,
-        timesMade: 1,
-      })
-    }
-  }
-  return statsMap
-}
+import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
+import type { Recipe } from "@/types/database"
 
 type SortOption = "timesMade" | "lastMade" | "name" | "newest"
 
@@ -158,7 +132,7 @@ export function RecipeList() {
   const { data: categories } = useCategories()
   const { data: allTags = [] } = useAllTags()
   const { data: tagCounts = [] } = useTagsWithCounts()
-  const { data: history } = useRecipeHistory()
+  const { data: historyStats } = useRecipeHistoryStats()
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
   const addToShoppingList = useAddToShoppingList()
@@ -167,7 +141,7 @@ export function RecipeList() {
   const { show: showToast } = useUndoToast()
 
   // Build a map of recipe_id -> stats (last made + times made)
-  const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
+  const statsMap = useMemo(() => getRecipeStatsMap(historyStats), [historyStats])
   
   // Show cached data immediately even while fetching (stale-while-revalidate)
   const displayRecipes = useMemo(() => recipes || [], [recipes])

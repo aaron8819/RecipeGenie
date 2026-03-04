@@ -59,7 +59,8 @@ import {
   useMarkRecipeMade,
   useRemoveRecipeFromPlan,
   useAddRecipeToPlan,
-  useRecipeHistory,
+  useRecentRecipeHistory,
+  useRecipeHistoryStats,
   useSaveDayAssignments,
   usePlannerCategories,
   getWeekStartDate,
@@ -81,6 +82,7 @@ import {
   buildUnassignedDayPriority,
   getUnassignedDayOfWeek,
 } from "@/lib/planner-utils"
+import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { cn } from "@/lib/utils"
 import { getSupabase } from "@/lib/supabase/client"
 import {
@@ -118,36 +120,6 @@ function getLastMadeMap(history: RecipeHistory[] | undefined): Map<string, strin
     }
   }
   return lastMadeMap
-}
-
-/**
- * Recipe stats interface
- */
-interface RecipeStats {
-  lastMade: string | null
-  timesMade: number
-}
-
-/**
- * Get stats (last made date + times made count) for each recipe from history
- */
-function getRecipeStatsMap(history: RecipeHistory[] | undefined): Map<string, RecipeStats> {
-  const statsMap = new Map<string, RecipeStats>()
-  if (!history) return statsMap
-
-  // History is already sorted by date_made DESC, so first occurrence is most recent
-  for (const entry of history) {
-    const existing = statsMap.get(entry.recipe_id)
-    if (existing) {
-      existing.timesMade += 1
-    } else {
-      statsMap.set(entry.recipe_id, {
-        lastMade: entry.date_made,
-        timesMade: 1,
-      })
-    }
-  }
-  return statsMap
 }
 
 /**
@@ -1206,7 +1178,8 @@ export function MealPlanner() {
   }, [])
 
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
-  const { data: history } = useRecipeHistory()
+  const { data: history } = useRecentRecipeHistory()
+  const { data: historyStats } = useRecipeHistoryStats()
   const { data: allCategories } = useCategories()
   const plannerCategories = usePlannerCategories()
   const { data: allRecipes } = useRecipes({ select: "id", limit: 1 })
@@ -1226,7 +1199,7 @@ export function MealPlanner() {
   const lastMadeMap = getLastMadeMap(history)
   
   // Build a map of recipe_id -> stats (last made + times made)
-  const statsMap = useMemo(() => getRecipeStatsMap(history), [history])
+  const statsMap = useMemo(() => getRecipeStatsMap(historyStats), [historyStats])
 
   // Sync to current week when config first loads (user's week_start_day)
   const hasSyncedInitialWeekRef = useRef(false)
