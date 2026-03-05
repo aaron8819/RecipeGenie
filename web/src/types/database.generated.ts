@@ -6,375 +6,508 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
-      recipes: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          category: string
-          servings: number
-          favorite: boolean
-          tags: string[]
-          ingredients: Json
-          instructions: string[]
-          image_url: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id?: string
-          name: string
-          category: string
-          servings?: number
-          favorite?: boolean
-          tags?: string[]
-          ingredients?: Json
-          instructions?: string[]
-          image_url?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          category?: string
-          servings?: number
-          favorite?: boolean
-          tags?: string[]
-          ingredients?: Json
-          instructions?: string[]
-          image_url?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
       pantry_items: {
         Row: {
-          user_id: string
+          created_at: string | null
           item: string
-          created_at: string
+          user_id: string
         }
         Insert: {
-          user_id?: string
+          created_at?: string | null
           item: string
-          created_at?: string
+          user_id: string
         }
         Update: {
-          user_id?: string
+          created_at?: string | null
           item?: string
-          created_at?: string
-        }
-      }
-      user_config: {
-        Row: {
-          user_id: string
-          categories: string[]
-          default_selection: Json
-          excluded_keywords: string[]
-          history_exclusion_days: number
-          week_start_day: number
-          onboarding_completed_at: string | null
-          category_overrides: Json
-          custom_categories: Json
-          category_order: string[] | null
-          excluded_days: number[]
-          preferred_days: number[] | null
-          auto_assign_days: boolean
-          enabled_planner_categories: string[] | null
-        }
-        Insert: {
           user_id?: string
-          categories?: string[]
-          default_selection?: Json
-          excluded_keywords?: string[]
-          history_exclusion_days?: number
-          week_start_day?: number
-          onboarding_completed_at?: string | null
-          category_overrides?: Json
-          custom_categories?: Json
-          category_order?: string[] | null
-          excluded_days?: number[]
-          preferred_days?: number[] | null
-          auto_assign_days?: boolean
-          enabled_planner_categories?: string[] | null
         }
-        Update: {
-          user_id?: string
-          categories?: string[]
-          default_selection?: Json
-          excluded_keywords?: string[]
-          history_exclusion_days?: number
-          week_start_day?: number
-          onboarding_completed_at?: string | null
-          category_overrides?: Json
-          custom_categories?: Json
-          category_order?: string[] | null
-          excluded_days?: number[]
-          preferred_days?: number[] | null
-          auto_assign_days?: boolean
-          enabled_planner_categories?: string[] | null
-        }
-      }
-      recipe_history: {
-        Row: {
-          id: number
-          user_id: string
-          recipe_id: string
-          date_made: string
-        }
-        Insert: {
-          id?: number
-          user_id?: string
-          recipe_id: string
-          date_made?: string
-        }
-        Update: {
-          id?: number
-          user_id?: string
-          recipe_id?: string
-          date_made?: string
-        }
-      }
-      weekly_plans: {
-        Row: {
-          user_id: string
-          week_date: string
-          recipe_ids: string[]
-          made_recipe_ids: string[]
-          day_assignments: Json | null
-          scale: number
-          generated_at: string
-        }
-        Insert: {
-          user_id?: string
-          week_date: string
-          recipe_ids?: string[]
-          made_recipe_ids?: string[]
-          day_assignments?: Json | null
-          scale?: number
-          generated_at?: string
-        }
-        Update: {
-          user_id?: string
-          week_date?: string
-          recipe_ids?: string[]
-          made_recipe_ids?: string[]
-          day_assignments?: Json | null
-          scale?: number
-          generated_at?: string
-        }
-      }
-      shopping_list: {
-        Row: {
-          user_id: string
-          items: Json
-          already_have: Json
-          excluded: Json
-          source_recipes: string[]
-          scale: number
-          total_servings: number
-          custom_order: boolean
-          generated_at: string
-        }
-        Insert: {
-          user_id?: string
-          items?: Json
-          already_have?: Json
-          excluded?: Json
-          source_recipes?: string[]
-          scale?: number
-          total_servings?: number
-          custom_order?: boolean
-          generated_at?: string
-        }
-        Update: {
-          user_id?: string
-          items?: Json
-          already_have?: Json
-          excluded?: Json
-          source_recipes?: string[]
-          scale?: number
-          total_servings?: number
-          custom_order?: boolean
-          generated_at?: string
-        }
+        Relationships: []
       }
       plan_templates: {
         Row: {
+          category_selection: Json | null
+          created_at: string | null
+          day_assignments: Json | null
           id: string
-          user_id: string
           name: string
           recipe_ids: string[]
-          day_assignments: Json | null
-          category_selection: Json | null
-          created_at: string
-          updated_at: string
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
+          category_selection?: Json | null
+          created_at?: string | null
+          day_assignments?: Json | null
           id?: string
-          user_id?: string
           name: string
           recipe_ids?: string[]
-          day_assignments?: Json | null
-          category_selection?: Json | null
-          created_at?: string
-          updated_at?: string
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
+          category_selection?: Json | null
+          created_at?: string | null
+          day_assignments?: Json | null
           id?: string
-          user_id?: string
           name?: string
           recipe_ids?: string[]
-          day_assignments?: Json | null
-          category_selection?: Json | null
-          created_at?: string
-          updated_at?: string
+          updated_at?: string | null
+          user_id?: string
         }
+        Relationships: []
+      }
+      recipe_history: {
+        Row: {
+          date_made: string
+          id: number
+          recipe_id: string
+          user_id: string
+        }
+        Insert: {
+          date_made?: string
+          id?: never
+          recipe_id: string
+          user_id: string
+        }
+        Update: {
+          date_made?: string
+          id?: never
+          recipe_id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       recipe_shares: {
         Row: {
-          id: string
-          sender_user_id: string
-          sender_email: string
-          recipient_user_id: string
-          recipient_email: string
-          source_recipe_id: string
-          source_recipe_snapshot: Json
-          message: string | null
-          status: "pending" | "accepted" | "declined" | "canceled"
           accepted_recipe_id: string | null
           created_at: string
-          responded_at: string | null
-        }
-        Insert: {
-          id?: string
-          sender_user_id: string
-          sender_email: string
-          recipient_user_id: string
+          id: string
+          message: string | null
           recipient_email: string
+          recipient_user_id: string
+          responded_at: string | null
+          sender_email: string
+          sender_user_id: string
           source_recipe_id: string
           source_recipe_snapshot: Json
-          message?: string | null
-          status?: "pending" | "accepted" | "declined" | "canceled"
+          status: string
+        }
+        Insert: {
           accepted_recipe_id?: string | null
           created_at?: string
+          id?: string
+          message?: string | null
+          recipient_email: string
+          recipient_user_id: string
           responded_at?: string | null
+          sender_email: string
+          sender_user_id: string
+          source_recipe_id: string
+          source_recipe_snapshot: Json
+          status?: string
         }
         Update: {
-          id?: string
-          sender_user_id?: string
-          sender_email?: string
-          recipient_user_id?: string
-          recipient_email?: string
-          source_recipe_id?: string
-          source_recipe_snapshot?: Json
-          message?: string | null
-          status?: "pending" | "accepted" | "declined" | "canceled"
           accepted_recipe_id?: string | null
           created_at?: string
+          id?: string
+          message?: string | null
+          recipient_email?: string
+          recipient_user_id?: string
           responded_at?: string | null
+          sender_email?: string
+          sender_user_id?: string
+          source_recipe_id?: string
+          source_recipe_snapshot?: Json
+          status?: string
         }
+        Relationships: []
+      }
+      recipes: {
+        Row: {
+          category: string
+          created_at: string | null
+          favorite: boolean | null
+          id: string
+          image_url: string | null
+          ingredients: Json
+          instructions: string[]
+          name: string
+          servings: number
+          tags: string[] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          favorite?: boolean | null
+          id: string
+          image_url?: string | null
+          ingredients?: Json
+          instructions?: string[]
+          name: string
+          servings?: number
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          favorite?: boolean | null
+          id?: string
+          image_url?: string | null
+          ingredients?: Json
+          instructions?: string[]
+          name?: string
+          servings?: number
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      shopping_list: {
+        Row: {
+          already_have: Json | null
+          custom_order: boolean | null
+          excluded: Json | null
+          generated_at: string | null
+          items: Json | null
+          scale: number | null
+          source_recipes: string[] | null
+          total_servings: number | null
+          user_id: string
+        }
+        Insert: {
+          already_have?: Json | null
+          custom_order?: boolean | null
+          excluded?: Json | null
+          generated_at?: string | null
+          items?: Json | null
+          scale?: number | null
+          source_recipes?: string[] | null
+          total_servings?: number | null
+          user_id: string
+        }
+        Update: {
+          already_have?: Json | null
+          custom_order?: boolean | null
+          excluded?: Json | null
+          generated_at?: string | null
+          items?: Json | null
+          scale?: number | null
+          source_recipes?: string[] | null
+          total_servings?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_config: {
+        Row: {
+          auto_assign_days: boolean | null
+          categories: string[] | null
+          category_order: Json | null
+          category_overrides: Json | null
+          custom_categories: Json | null
+          default_selection: Json | null
+          enabled_planner_categories: string[] | null
+          excluded_days: number[] | null
+          excluded_keywords: string[] | null
+          history_exclusion_days: number | null
+          onboarding_completed_at: string | null
+          preferred_days: number[] | null
+          user_id: string
+          week_start_day: number | null
+        }
+        Insert: {
+          auto_assign_days?: boolean | null
+          categories?: string[] | null
+          category_order?: Json | null
+          category_overrides?: Json | null
+          custom_categories?: Json | null
+          default_selection?: Json | null
+          enabled_planner_categories?: string[] | null
+          excluded_days?: number[] | null
+          excluded_keywords?: string[] | null
+          history_exclusion_days?: number | null
+          onboarding_completed_at?: string | null
+          preferred_days?: number[] | null
+          user_id: string
+          week_start_day?: number | null
+        }
+        Update: {
+          auto_assign_days?: boolean | null
+          categories?: string[] | null
+          category_order?: Json | null
+          category_overrides?: Json | null
+          custom_categories?: Json | null
+          default_selection?: Json | null
+          enabled_planner_categories?: string[] | null
+          excluded_days?: number[] | null
+          excluded_keywords?: string[] | null
+          history_exclusion_days?: number | null
+          onboarding_completed_at?: string | null
+          preferred_days?: number[] | null
+          user_id?: string
+          week_start_day?: number | null
+        }
+        Relationships: []
+      }
+      weekly_plans: {
+        Row: {
+          day_assignments: Json | null
+          generated_at: string | null
+          made_recipe_ids: string[] | null
+          recipe_ids: string[]
+          scale: number | null
+          user_id: string
+          week_date: string
+        }
+        Insert: {
+          day_assignments?: Json | null
+          generated_at?: string | null
+          made_recipe_ids?: string[] | null
+          recipe_ids?: string[]
+          scale?: number | null
+          user_id: string
+          week_date: string
+        }
+        Update: {
+          day_assignments?: Json | null
+          generated_at?: string | null
+          made_recipe_ids?: string[] | null
+          recipe_ids?: string[]
+          scale?: number | null
+          user_id?: string
+          week_date?: string
+        }
+        Relationships: []
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      accept_recipe_share: {
-        Args: {
-          p_share_id: string
-        }
-        Returns: string
-      }
+      accept_recipe_share: { Args: { p_share_id: string }; Returns: string }
       delete_tag: {
-        Args: {
-          p_user_id: string
-          p_tag: string
-        }
+        Args: { p_tag: string; p_user_id: string }
         Returns: undefined
       }
       filter_recipes_by_tags: {
-        Args: {
-          p_user_id: string
-          p_tags: string[]
+        Args: { p_tags: string[]; p_user_id: string }
+        Returns: {
+          category: string
+          created_at: string | null
+          favorite: boolean | null
+          id: string
+          image_url: string | null
+          ingredients: Json
+          instructions: string[]
+          name: string
+          servings: number
+          tags: string[] | null
+          updated_at: string | null
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "recipes"
+          isOneToOne: false
+          isSetofReturn: true
         }
-        Returns: Database["public"]["Tables"]["recipes"]["Row"][]
       }
       get_recipe_history_stats: {
-        Args: {
-          p_user_id: string
-        }
+        Args: { p_user_id: string }
         Returns: {
+          last_made: string
           recipe_id: string
           times_made: number
-          last_made: string
         }[]
       }
-      merge_tags: {
-        Args: {
-          p_user_id: string
-          p_source_tag: string
-          p_target_tag: string
-        }
+      insert_default_recipes_for_user: {
+        Args: { p_user_id: string }
         Returns: undefined
       }
-      rename_tag: {
-        Args: {
-          p_user_id: string
-          p_old_tag: string
-          p_new_tag: string
-        }
+      merge_tags: {
+        Args: { p_source_tag: string; p_target_tag: string; p_user_id: string }
         Returns: undefined
       }
       move_shopping_item_to_pantry: {
         Args: {
-          p_item_name: string
           p_item_index: number
-          p_pantry_qty: number | null
-          p_pantry_unit: string | null
+          p_item_name: string
+          p_pantry_qty: number
+          p_pantry_unit: string
         }
         Returns: {
-          removed_item: Json
           pantry_item: Json
-          shopping_list_updated_at: string
           pantry_was_inserted: boolean
+          removed_item: Json
+          shopping_list_updated_at: string
+        }[]
+      }
+      rename_tag: {
+        Args: { p_new_tag: string; p_old_tag: string; p_user_id: string }
+        Returns: undefined
+      }
+      toggle_shopping_item_checked: {
+        Args: { p_item_name: string }
+        Returns: {
+          checked: boolean
+          item_name: string
+          updated_at: string
         }[]
       }
       toggle_weekly_recipe_made: {
         Args: {
+          p_date_made?: string
+          p_is_made_for_week: boolean
           p_recipe_id: string
           p_week_date: string
-          p_is_made_for_week: boolean
-          p_date_made?: string | null
         }
         Returns: {
           action: string
+          history_date_made: string
+          made_recipe_ids: string[]
           recipe_id: string
           week_date: string
-          made_recipe_ids: string[]
-          history_date_made: string | null
-        }[]
-      }
-      toggle_shopping_item_checked: {
-        Args: {
-          p_item_name: string
-        }
-        Returns: {
-          item_name: string
-          checked: boolean
-          updated_at: string
         }[]
       }
     }
     Enums: {
       [_ in never]: never
     }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }
 
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const
 
