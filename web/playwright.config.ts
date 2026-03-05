@@ -5,18 +5,10 @@ const smokeTestMatch = [
   '**/recipes.spec.ts',
   '**/meal-planner.spec.ts',
   '**/shopping-list.spec.ts',
+  '**/smoke-critical-flow.spec.ts',
 ]
 
-const smokeGrep = new RegExp(
-  [
-    'should navigate to main app after successful sign in',
-    'should save recipe and close modal',
-    'should generate meal plan when recipes exist',
-    'should add recipe ingredients to shopping list',
-    'should check off item on click',
-    'should persist checked state after page reload',
-  ].join('|')
-)
+const smokeGrep = /@smoke/
 
 /**
  * Recipe Genie Playwright E2E Test Configuration

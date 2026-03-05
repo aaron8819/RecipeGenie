@@ -50,7 +50,14 @@ npm run test:e2e
 npm run test:e2e:smoke
 ```
 
-Smoke scope covers the critical path through auth, recipe creation, meal planner, and shopping list flows.
+Smoke tests are selected by explicit `@smoke` tags in test titles.
+
+### Validate smoke selection (tripwire)
+```bash
+npm run test:e2e:smoke:list
+```
+
+This command lists smoke tests and fails if fewer than 5 are selected.
 
 ### Run full cross-browser matrix
 ```bash

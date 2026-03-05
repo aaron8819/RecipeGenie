@@ -144,7 +144,7 @@ test.describe('Meal Planner', () => {
       await navigateToTab('planner')
     })
 
-    test('should generate meal plan when recipes exist', async ({ page }) => {
+    test('should generate meal plan when recipes exist @smoke', async ({ page }) => {
       await page.setViewportSize(VIEWPORTS.desktop)
 
       // Increment a category that matches our sample recipe (Chicken)
@@ -705,7 +705,7 @@ test.describe('Meal Planner', () => {
       await expect(addToCartButton).toBeVisible()
     })
 
-    test('should add recipe ingredients to shopping list', async ({ page, navigateToTab }) => {
+    test('should add recipe ingredients to shopping list @smoke', async ({ page, navigateToTab }) => {
       // Target the main Add to Cart button (has visible text, not just title)
       const addToCartButton = page.locator('button').filter({ hasText: 'Add to Cart' }).first()
 
