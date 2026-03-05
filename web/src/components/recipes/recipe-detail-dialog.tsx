@@ -165,7 +165,7 @@ export function RecipeDetailDialog({
                 <button
                   type="button"
                   onClick={() =>
-                    toggleFavorite.mutate({ id: recipe.id, favorite: recipe.favorite })
+                    toggleFavorite.mutate({ id: recipe.id, favorite: !!recipe.favorite })
                   }
                   className="p-2 rounded-full hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
                   aria-label={recipe.favorite ? "Remove from favorites" : "Add to favorites"}
@@ -173,7 +173,7 @@ export function RecipeDetailDialog({
                   <Heart
                     className={cn(
                       "h-6 w-6",
-                      recipe.favorite
+                      !!recipe.favorite
                         ? "fill-terracotta-500 text-terracotta-500"
                         : "text-stone-400 dark:text-zinc-500"
                     )}
@@ -303,5 +303,4 @@ export function RecipeDetailDialog({
     </Dialog>
   )
 }
-
 

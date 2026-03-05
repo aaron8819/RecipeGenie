@@ -68,8 +68,11 @@ function sortRecipes(
       }
       case "name":
         return compareNames(a.name, b.name)
-      case "newest":
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      case "newest": {
+        const createdAtA = a.created_at ? new Date(a.created_at).getTime() : 0
+        const createdAtB = b.created_at ? new Date(b.created_at).getTime() : 0
+        return createdAtB - createdAtA
+      }
       default:
         return 0
     }
@@ -222,7 +225,7 @@ export function RecipeList() {
   }, [])
 
   const handleToggleFavorite = useCallback((r: Recipe) => {
-    toggleFavorite.mutate({ id: r.id, favorite: r.favorite })
+    toggleFavorite.mutate({ id: r.id, favorite: !!r.favorite })
   }, [toggleFavorite])
 
   const handleTagClick = useCallback((tag: string) => {

@@ -164,8 +164,8 @@ export function useCreateRecipe() {
   const { user } = useAuthContext()
 
   return useMutation({
-    mutationFn: async (recipe: RecipeInsert) => {
-      const id = recipe.id || sanitizeRecipeNameForStorage(recipe.name)
+    mutationFn: async (recipe: Omit<RecipeInsert, "id" | "user_id">) => {
+      const id = sanitizeRecipeNameForStorage(recipe.name)
       const now = new Date().toISOString()
 
       const supabase = getSupabase()
@@ -188,7 +188,7 @@ export function useCreateRecipe() {
       const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
 
       // Create optimistic recipe
-      const id = recipe.id || recipe.name.toLowerCase().replace(/\s+/g, "-")
+      const id = recipe.name.toLowerCase().replace(/\s+/g, "-")
       const now = new Date().toISOString()
       const optimisticRecipe: Recipe = {
         id,

@@ -175,7 +175,9 @@ export function ShoppingSettingsModal({
   const undoToast = useUndoToast()
 
   const customCategories = config?.custom_categories ?? EMPTY_CUSTOM_CATEGORIES
-  const categoryOrder = config?.category_order ?? null
+  const categoryOrder = Array.isArray(config?.category_order)
+    ? config.category_order.filter((value): value is string => typeof value === "string")
+    : null
   const categoryOverrides = config?.category_overrides ?? EMPTY_OVERRIDES
 
   // Get all categories with current ordering

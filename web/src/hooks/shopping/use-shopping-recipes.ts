@@ -226,7 +226,7 @@ export function useAddToShoppingList() {
         }
       )
 
-      const mergedSourceRecipes = [...new Set([...currentList.source_recipes, ...recipeIds])]
+      const mergedSourceRecipes = [...new Set([...(currentList.source_recipes || []), ...recipeIds])]
 
       const shoppingListData: Partial<ShoppingList> = {
         items: updatedItems,

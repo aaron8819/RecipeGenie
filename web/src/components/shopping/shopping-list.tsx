@@ -1152,9 +1152,13 @@ export function ShoppingListView() {
 
   // Get ordered categories (with custom categories and custom ordering)
   const orderedCategories = useMemo(() => {
+    const categoryOrder = Array.isArray(config?.category_order)
+      ? config.category_order.filter((value): value is string => typeof value === "string")
+      : null
+
     return getAllShoppingCategories(
       config?.custom_categories || null,
-      config?.category_order || null
+      categoryOrder
     )
   }, [config?.custom_categories, config?.category_order])
 

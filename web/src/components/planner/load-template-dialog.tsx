@@ -180,9 +180,9 @@ export function LoadTemplateDialog({
                                 </span>
                               )}
                               <span>
-                                {new Date(
-                                  template.created_at
-                                ).toLocaleDateString()}
+                                {template.created_at
+                                  ? new Date(template.created_at).toLocaleDateString()
+                                  : "Unknown date"}
                               </span>
                             </div>
                           </button>
