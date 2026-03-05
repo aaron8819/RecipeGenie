@@ -787,7 +787,7 @@ test.describe('Shopping List - Pantry Restore Flow', () => {
 
     const btnVisible = await addToPantryBtn.isVisible().catch(() => false)
     if (!btnVisible) {
-      test.skip()
+      test.skip(/* ISSUE-LEGACY-SKIP-001 EXPIRES 2026-06-30 */)
       return
     }
 
@@ -845,7 +845,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
 
       const organizeVisible = await organizeButton.isVisible().catch(() => false)
       if (!organizeVisible) {
-        test.skip()
+        test.skip(/* ISSUE-LEGACY-SKIP-002 EXPIRES 2026-06-30 */)
         return
       }
 
@@ -860,7 +860,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
         .catch(() => null)
 
       if (!firstItemName?.trim()) {
-        test.skip()
+        test.skip(/* ISSUE-LEGACY-SKIP-003 EXPIRES 2026-06-30 */)
         return
       }
       // Use just the first word to increase chance of exact match against normalized item name
@@ -884,7 +884,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
 
       if (!(await keywordInput.isVisible().catch(() => false))) {
         await page.keyboard.press('Escape')
-        test.skip()
+        test.skip(/* ISSUE-LEGACY-SKIP-004 EXPIRES 2026-06-30 */)
         return
       }
 
@@ -898,7 +898,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
     }
 
     if (!hasExcluded) {
-      test.skip()
+      test.skip(/* ISSUE-LEGACY-SKIP-005 EXPIRES 2026-06-30 */)
       return
     }
 
@@ -943,7 +943,7 @@ test.describe('Shopping List - Rapid Interactions', () => {
 
     const count = await checkboxes.count()
     if (count < 3) {
-      test.skip()
+      test.skip(/* ISSUE-LEGACY-SKIP-006 EXPIRES 2026-06-30 */)
       return
     }
 
