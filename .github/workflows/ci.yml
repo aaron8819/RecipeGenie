@@ -28,3 +28,6 @@ jobs:
 
       - name: Enforce test.skip Policy
         run: npm run check:no-new-test-skip
+
+      - name: Enforce @ts-expect-error Baseline
+        run: npm run check:no-new-ts-expect-error
