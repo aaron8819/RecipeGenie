@@ -107,23 +107,24 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Supabase Types Baseline
 
-From `web/`, regenerate the Supabase TypeScript baseline with:
+To regenerate the Supabase TypeScript baseline using the same local workflow CI validates against:
 
 ```bash
+npx supabase start
+npx supabase db reset --local
+cd web
 npm run db:types:regen
 ```
 
-This command uses Supabase CLI project-id generation and requires `SUPABASE_ACCESS_TOKEN` (or prior `supabase login`) in your shell.
-It updates `web/src/types/database.generated.ts` only.
+This updates `web/src/types/database.generated.ts` from the local Supabase schema.
 
-For deterministic local schema/type parity checks against an ephemeral local database:
+Then run the deterministic schema/type parity check:
 
 ```bash
-cd web
 npm run db:types:check
 ```
 
-This generates types to a temporary file and fails if they differ from `src/types/database.generated.ts`.
+`db:types:check` is CI-equivalent: it generates to a temporary file and fails if it differs from `src/types/database.generated.ts`.
 
 ## Deployment to Vercel
 
