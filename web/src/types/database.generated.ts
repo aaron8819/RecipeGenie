@@ -331,6 +331,20 @@ export interface Database {
         }
         Returns: undefined
       }
+      move_shopping_item_to_pantry: {
+        Args: {
+          p_item_name: string
+          p_item_index: number
+          p_pantry_qty: number | null
+          p_pantry_unit: string | null
+        }
+        Returns: {
+          removed_item: Json
+          pantry_item: Json
+          shopping_list_updated_at: string
+          pantry_was_inserted: boolean
+        }[]
+      }
       toggle_shopping_item_checked: {
         Args: {
           p_item_name: string

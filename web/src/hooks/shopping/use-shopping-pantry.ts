@@ -5,6 +5,7 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useRef } from "react"
 import type { ShoppingList, ShoppingItem, PantryItem } from "@/types/database"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
 import { useAuthContext } from "@/lib/auth-context"
@@ -279,122 +280,123 @@ export function useMoveExcludedToShoppingList() {
 export function useAddToPantryAndRemove() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const resolvedItemIndexes = useRef(new WeakMap<ShoppingItem, number>())
+
+  const resolveShoppingItemIndex = (items: ShoppingItem[], input: ShoppingItem): number => {
+    const itemIndex = (input as ShoppingItem & { itemIndex?: number }).itemIndex
+    if (typeof itemIndex === "number") {
+      const candidate = items[itemIndex]
+      if (!candidate) throw new Error("Shopping item index out of bounds")
+      if (candidate.item !== input.item) throw new Error("Item mismatch")
+      return itemIndex
+    }
+
+    const matchingIndexes = items
+      .map((candidate, idx) => ({ candidate, idx }))
+      .filter(({ candidate }) =>
+        candidate.item === input.item &&
+        candidate.amount === input.amount &&
+        candidate.unit === input.unit &&
+        candidate.categoryKey === input.categoryKey &&
+        candidate.categoryOrder === input.categoryOrder
+      )
+      .map(({ idx }) => idx)
+
+    if (matchingIndexes.length === 1) return matchingIndexes[0]
+    if (matchingIndexes.length === 0) {
+      throw new Error(`Shopping item not found: ${input.item}`)
+    }
+    throw new Error(`Ambiguous shopping item match: ${input.item}. Provide itemIndex.`)
+  }
 
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
       const normalizedItem = item.item.toLowerCase().trim()
-
       const supabase = getSupabase()
 
-      // Track whether we added a new pantry item (vs duplicate)
-      let addedToPantry = false
-
-      // Add to pantry
-      const { error: pantryError } = await supabase
-        .from("pantry_items")
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-        .insert({ user_id: user!.id, item: normalizedItem })
-        .select()
-        .single()
-
-      // If item already exists in pantry, that's okay - just continue
-      if (pantryError && pantryError.code !== "23505") { // 23505 is unique violation
-        throw pantryError
+      const resolvedIndex = resolvedItemIndexes.current.get(item)
+      if (resolvedIndex === undefined) {
+        throw new Error("Unable to resolve shopping item index for pantry move")
       }
-      addedToPantry = !pantryError // True if insert succeeded (no error)
 
-      // Remove from shopping list items and add to already_have
-      const { data: currentList, error: fetchError } = await supabase
-        .from("shopping_list")
-        .select("items, already_have")
-        .single()
-
-      if (fetchError) {
-        // Attempt rollback — track error so caller can surface it
-        if (addedToPantry) {
-          const { error: rollbackErr } = await supabase
-            .from("pantry_items")
-            .delete()
-            .eq("user_id", user!.id)
-            .eq("item", normalizedItem)
-          const err = new Error(`Failed to load shopping list: ${fetchError.message}`)
-          if (rollbackErr) {
-            err.cause = new Error(`Pantry rollback also failed: ${rollbackErr.message}`)
+      const rpcClient = supabase as unknown as {
+        rpc: (
+          fn: "move_shopping_item_to_pantry",
+          args: {
+            p_item_name: string
+            p_item_index: number
+            p_pantry_qty: number | null
+            p_pantry_unit: string | null
           }
-          throw err
-        }
-        throw fetchError
+        ) => Promise<{
+          data: Array<{
+            removed_item: {
+              item?: string
+              amount?: number
+              unit?: string
+              categoryKey?: string
+              categoryOrder?: number
+            } | null
+            pantry_item: {
+              user_id: string
+              item: string
+              created_at: string
+            } | null
+            shopping_list_updated_at: string
+            pantry_was_inserted: boolean
+          }> | null
+          error: { message: string } | null
+        }>
       }
 
-      const typedList = currentList as { items?: ShoppingItem[]; already_have?: ShoppingItem[] } | null
-      const currentItems = typedList?.items || []
-      const alreadyHave = typedList?.already_have || []
+      const { data, error } = await rpcClient.rpc("move_shopping_item_to_pantry", {
+        p_item_name: item.item,
+        p_item_index: resolvedIndex,
+        p_pantry_qty: item.amount,
+        p_pantry_unit: item.unit || null,
+      })
 
-      // Remove from items
-      const updatedItems = currentItems.filter((i) => i.item.toLowerCase() !== normalizedItem)
+      resolvedItemIndexes.current.delete(item)
 
-      // Add to already_have (preserving all item properties)
-      // Check if item already exists in already_have
-      const existingInAlreadyHave = alreadyHave.find((i) => i.item.toLowerCase() === normalizedItem)
-      const updatedAlreadyHave = existingInAlreadyHave
-        ? alreadyHave // Item already in already_have, keep as is
-        : [...alreadyHave, item] // Add item to already_have
+      if (error) throw error
 
-      const { error: saveError } = await supabase
-        .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update({
-          items: updatedItems,
-          already_have: updatedAlreadyHave,
-        })
-        .eq("user_id", user!.id)
+      const row = data?.[0]
+      if (!row) throw new Error(`Failed to move item to pantry: ${item.item}`)
 
-      if (saveError) {
-        // Attempt rollback — track error so caller can surface it
-        if (addedToPantry) {
-          const { error: rollbackErr } = await supabase
-            .from("pantry_items")
-            .delete()
-            .eq("user_id", user!.id)
-            .eq("item", normalizedItem)
-          const err = new Error(`Failed to save shopping list: ${saveError.message}`)
-          if (rollbackErr) {
-            err.cause = new Error(`Pantry rollback also failed: ${rollbackErr.message}`)
-          }
-          throw err
-        }
-        throw saveError
+      return {
+        itemName: normalizedItem,
+        wasAdded: row.pantry_was_inserted,
+        removedItem: row.removed_item,
+        pantryItem: row.pantry_item,
+        shoppingListUpdatedAt: row.shopping_list_updated_at,
+        itemIndex: resolvedIndex,
       }
-      return { itemName: normalizedItem, wasAdded: addedToPantry }
     },
-    // Optimistic update
     onMutate: async (item) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
       await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
 
-      // Snapshot previous values for rollback
       const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
       const previousPantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY])
 
       const normalizedItem = item.item.toLowerCase().trim()
+      const resolvedIndex = resolveShoppingItemIndex(previousList?.items || [], item)
+      resolvedItemIndexes.current.set(item, resolvedIndex)
 
-      // Optimistically remove from shopping list items and add to already_have
       queryClient.setQueryData<ShoppingList>(
         [...SHOPPING_KEY],
         (old) => {
           if (!old) return old
           const alreadyHave = old.already_have || []
-          // Check if item already exists in already_have
           const existingInAlreadyHave = alreadyHave.find((i) => i.item.toLowerCase() === normalizedItem)
           const updatedAlreadyHave = existingInAlreadyHave
-            ? alreadyHave // Item already in already_have, keep as is
-            : [...alreadyHave, item] // Add item to already_have
+            ? alreadyHave
+            : [...alreadyHave, item]
 
           return {
             ...old,
-            items: old.items.filter((i) => i.item.toLowerCase() !== normalizedItem),
+            items: old.items.filter((_, idx) => idx !== resolvedIndex),
             already_have: updatedAlreadyHave,
           }
         }
@@ -418,7 +420,7 @@ export function useAddToPantryAndRemove() {
       return { previousList, previousPantry }
     },
     onError: (err, item, context) => {
-      // Rollback on error
+      resolvedItemIndexes.current.delete(item)
       if (context?.previousList) {
         queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
       }
@@ -426,10 +428,59 @@ export function useAddToPantryAndRemove() {
         queryClient.setQueryData([...PANTRY_KEY], context.previousPantry)
       }
     },
-    onSuccess: () => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
-      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
+    onSuccess: (result) => {
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY],
+        (old) => {
+          if (!old) return old
+
+          const existingAlreadyHave = old.already_have || []
+          const normalized = result.itemName.toLowerCase().trim()
+          const alreadyExists = existingAlreadyHave.some((i) => i.item.toLowerCase() === normalized)
+          const removed = result.removedItem
+          const mergedRemovedItem = removed
+            ? {
+                item: removed.item || result.itemName,
+                amount: removed.amount ?? null,
+                unit: removed.unit || "",
+                categoryKey: removed.categoryKey || "",
+                categoryOrder: removed.categoryOrder ?? 5,
+                sources: [{ recipeId: "", recipeName: "Manual" }],
+              }
+            : null
+
+          return {
+            ...old,
+            generated_at: result.shoppingListUpdatedAt,
+            already_have: !alreadyExists && mergedRemovedItem
+              ? [...existingAlreadyHave, mergedRemovedItem]
+              : existingAlreadyHave,
+          }
+        }
+      )
+
+      if (result.pantryItem) {
+        const pantryItem = result.pantryItem
+        queryClient.setQueryData<PantryItem[]>(
+          [...PANTRY_KEY],
+          (old) => {
+            const pantryRow: PantryItem = {
+              user_id: pantryItem.user_id,
+              item: pantryItem.item,
+              created_at: pantryItem.created_at,
+            }
+            if (!old) return [pantryRow]
+            const existingIndex = old.findIndex((p) => p.item === pantryRow.item)
+            if (existingIndex === -1) {
+              return [...old, pantryRow].sort((a, b) => a.item.localeCompare(b.item))
+            }
+            const next = [...old]
+            next[existingIndex] = pantryRow
+            return next
+          }
+        )
+      }
     },
   })
 }
+
