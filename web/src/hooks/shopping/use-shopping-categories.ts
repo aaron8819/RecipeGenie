@@ -43,8 +43,6 @@ export function useSaveCategoryOverride() {
         const updateSupabase = getSupabase()
         const { error: saveError } = await updateSupabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          // This is a known issue with Supabase type inference in certain contexts
           .update({ category_overrides: updatedOverrides })
           .eq("user_id", user!.id)
         if (saveError) throw saveError
@@ -53,8 +51,6 @@ export function useSaveCategoryOverride() {
         const insertSupabase = getSupabase()
         const { error: saveError } = await insertSupabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-          // This is a known issue with Supabase type inference in certain contexts
           .insert({
             user_id: user!.id,
             category_overrides: updatedOverrides,
@@ -98,8 +94,6 @@ export function useUpdateItemCategory() {
       const supabase = getSupabase()
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        // This is a known issue with Supabase type inference in certain contexts
         .update({ items: updatedItems, custom_order: true })
         .eq("user_id", user!.id)
 
@@ -111,3 +105,4 @@ export function useUpdateItemCategory() {
     },
   })
 }
+

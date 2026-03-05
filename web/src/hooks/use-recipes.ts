@@ -77,7 +77,6 @@ export function useRecipes(options?: {
       // Supabase .contains() is AND-only; the RPC uses && (array overlap) for OR.
       if (options?.tags && options.tags.length > 0) {
         if (!user) return []
-        // @ts-expect-error — filter_recipes_by_tags RPC not yet in generated Supabase types
         const { data, error } = await supabase.rpc('filter_recipes_by_tags', {
           p_user_id: user.id,
           p_tags: options.tags,
@@ -171,7 +170,6 @@ export function useCreateRecipe() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
         .insert({ ...recipe, id, user_id: user!.id })
         .select()
         .single()
@@ -278,7 +276,6 @@ export function useUpdateRecipe() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update(normalizedUpdates)
         .eq("id", id)
         .eq("user_id", user!.id)
@@ -412,7 +409,6 @@ export function useToggleFavorite() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ favorite: !favorite })
         .eq("id", id)
         .eq("user_id", user!.id)
@@ -602,7 +598,6 @@ export function useBulkUpdateRecipeCategories() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ category: newCategory })
         .eq("user_id", user!.id)
         .eq("category", oldCategory)
@@ -628,7 +623,6 @@ export function useRenameTag() {
   return useMutation({
     mutationFn: async ({ oldTag, newTag }: { oldTag: string; newTag: string }) => {
       const supabase = getSupabase()
-      // @ts-expect-error — rename_tag RPC not yet in generated Supabase types
       const { error } = await supabase.rpc("rename_tag", {
         p_user_id: user!.id,
         p_old_tag: oldTag,
@@ -658,7 +652,6 @@ export function useMergeTags() {
       // One RPC call per source tag (O(S) requests instead of O(S*N))
       const results = await Promise.all(
         sourceTags.map((sourceTag) =>
-          // @ts-expect-error — merge_tags RPC not yet in generated Supabase types
           supabase.rpc("merge_tags", {
             p_user_id: user!.id,
             p_source_tag: sourceTag,
@@ -688,7 +681,6 @@ export function useDeleteTag() {
   return useMutation({
     mutationFn: async (tag: string) => {
       const supabase = getSupabase()
-      // @ts-expect-error — delete_tag RPC not yet in generated Supabase types
       const { error } = await supabase.rpc("delete_tag", {
         p_user_id: user!.id,
         p_tag: tag,
@@ -703,3 +695,4 @@ export function useDeleteTag() {
     },
   })
 }
+

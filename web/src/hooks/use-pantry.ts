@@ -50,8 +50,7 @@ export function useAddPantryItem() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("pantry_items")
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-        .insert({ user_id: user?.id, item: normalizedItem })
+        .insert({ user_id: user!.id, item: normalizedItem })
         .select()
         .single()
 
@@ -69,7 +68,7 @@ export function useAddPantryItem() {
       const normalizedItem = itemName.toLowerCase().trim()
       const now = new Date().toISOString()
       const optimisticItem: PantryItem = {
-        user_id: user?.id || "",
+        user_id: user!.id || "",
         item: normalizedItem,
         created_at: now,
       }
@@ -226,7 +225,6 @@ export function useAddExcludedKeyword() {
         // Update existing config
         const { error } = await supabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
           .update({ excluded_keywords: [...currentKeywords, normalizedKeyword] })
           .eq("user_id", user!.id)
         if (error) throw error
@@ -234,9 +232,8 @@ export function useAddExcludedKeyword() {
         // Insert new config (shouldn't happen normally, but handle it)
         const { error } = await supabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
           .insert({
-            user_id: user?.id,
+            user_id: user!.id,
             excluded_keywords: [normalizedKeyword],
             categories: [...DEFAULT_RECIPE_CATEGORIES],
             default_selection: { ...DEFAULT_RECIPE_SELECTION },
@@ -315,7 +312,6 @@ export function useRemoveExcludedKeyword() {
 
       const { error } = await supabase
         .from("user_config")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ excluded_keywords: updatedKeywords })
         .eq("user_id", user!.id)
 
@@ -354,3 +350,5 @@ export function useRemoveExcludedKeyword() {
     },
   })
 }
+
+
