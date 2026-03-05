@@ -213,34 +213,49 @@ export function useCheckOffItem() {
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
-      const normalizedItem = item.item.toLowerCase().trim()
-
       const supabase = getSupabase()
-      const { data: currentList, error: fetchError } = await supabase
-        .from("shopping_list")
-        .select("items")
-        .single()
+      const rpcClient = supabase as unknown as {
+        rpc: (
+          fn: "toggle_shopping_item_checked",
+          args: { p_user_id: string; p_item_name: string }
+        ) => Promise<{
+          data: Array<{
+            user_id: string
+            item_name: string
+            checked: boolean | null
+            updated_at: string
+          }> | null
+          error: { message: string } | null
+        }>
+      }
 
-      if (fetchError) throw fetchError
+      const { data, error } = await rpcClient.rpc("toggle_shopping_item_checked", {
+        p_user_id: user!.id,
+        p_item_name: item.item,
+      })
 
-      const typedList = currentList as { items?: ShoppingItem[] } | null
-      const currentItems = typedList?.items || []
-      const updatedItems = currentItems.map((i) =>
-        i.item.toLowerCase() === normalizedItem
-          ? { ...i, checked: !i.checked }
-          : i
-      )
+      if (error) throw error
 
-      const { error: saveError } = await supabase
-        .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update({
-          items: updatedItems,
-        })
-        .eq("user_id", user!.id)
+      const rpcRows = data as
+        | Array<{
+            user_id: string
+            item_name: string
+            checked: boolean | null
+            updated_at: string
+          }>
+        | null
 
-      if (saveError) throw saveError
-      return updatedItems.find((i) => i.item.toLowerCase() === normalizedItem) || item
+      const row = rpcRows?.[0]
+      if (!row || row.checked === null) {
+        throw new Error(`Shopping item not found: ${item.item}`)
+      }
+
+      return {
+        user_id: row.user_id,
+        item_name: row.item_name,
+        checked: row.checked,
+        updated_at: row.updated_at,
+      }
     },
     // Optimistic update
     onMutate: async (item) => {
@@ -279,9 +294,22 @@ export function useCheckOffItem() {
         queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
       }
     },
-    onSuccess: () => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+    onSuccess: (result) => {
+      const normalizedItem = result.item_name.toLowerCase().trim()
+      queryClient.setQueryData<ShoppingList>(
+        [...SHOPPING_KEY],
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            items: old.items.map((i) =>
+              i.item.toLowerCase().trim() === normalizedItem
+                ? { ...i, checked: result.checked }
+                : i
+            ),
+          }
+        }
+      )
     },
   })
 }
