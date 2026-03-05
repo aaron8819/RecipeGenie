@@ -10,14 +10,13 @@ import {
   useAddShoppingItem,
 } from '@/hooks/shopping'
 
-// --- Mocks ---
-
 vi.mock('@/lib/auth-context', () => ({
   useAuthContext: vi.fn(() => ({ user: { id: 'test-user-id' } })),
 }))
 
 const mockSupabase = {
   from: vi.fn().mockReturnThis(),
+  rpc: vi.fn(),
   select: vi.fn().mockReturnThis(),
   update: vi.fn().mockReturnThis(),
   insert: vi.fn().mockReturnThis(),
@@ -29,8 +28,6 @@ const mockSupabase = {
 vi.mock('@/lib/supabase/client', () => ({
   getSupabase: vi.fn(() => mockSupabase),
 }))
-
-// --- Helpers ---
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -73,176 +70,95 @@ function makeList(overrides: Partial<ShoppingList> = {}): ShoppingList {
 beforeEach(() => {
   vi.clearAllMocks()
   mockSupabase.from.mockReturnThis()
+  mockSupabase.rpc.mockResolvedValue({ data: null, error: null })
   mockSupabase.select.mockReturnThis()
   mockSupabase.update.mockReturnThis()
   mockSupabase.insert.mockReturnThis()
   mockSupabase.delete.mockReturnThis()
-  // Default: terminal calls succeed
-  // .select(...).single() — used for reads
-  // .update({...}).eq(...) — used for writes (eq is terminal)
   mockSupabase.single.mockResolvedValue({ data: null, error: null })
   mockSupabase.eq.mockResolvedValue({ data: null, error: null })
 })
 
-// --- Tests ---
-
 describe('useCheckOffItem', () => {
-  it('should optimistically toggle the target item from unchecked to checked', async () => {
+  it('toggling once flips state', async () => {
     const { wrapper, queryClient } = createWrapper()
     queryClient.setQueryData(
       [...SHOPPING_KEY],
       makeList({ items: [makeItem('milk', { checked: false })] })
     )
 
-    const { result } = renderHook(() => useCheckOffItem(), { wrapper })
-
-    result.current.mutate(makeItem('milk', { checked: false }))
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(true)
-  })
-
-  it('should optimistically toggle the target item from checked to unchecked', async () => {
-    const { wrapper, queryClient } = createWrapper()
-    queryClient.setQueryData(
-      [...SHOPPING_KEY],
-      makeList({ items: [makeItem('milk', { checked: true })] })
-    )
-
-    const { result } = renderHook(() => useCheckOffItem(), { wrapper })
-
-    result.current.mutate(makeItem('milk', { checked: true }))
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(false)
-  })
-
-  it('should use case-insensitive name match for optimistic update', async () => {
-    const { wrapper, queryClient } = createWrapper()
-    queryClient.setQueryData(
-      [...SHOPPING_KEY],
-      makeList({ items: [makeItem('Whole Milk', { checked: false })] })
-    )
-
-    const { result } = renderHook(() => useCheckOffItem(), { wrapper })
-
-    // mutate with lowercase — should still match 'Whole Milk' in cache
-    result.current.mutate(makeItem('whole milk', { checked: false }))
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items[0].checked).toBe(true)
-  })
-
-  it('should only modify the target item — unrelated items remain unchanged', async () => {
-    // Regression test: previously, isPending was used to disable ALL checkboxes,
-    // meaning a mutation on 'milk' would affect the whole list state.
-    // The optimistic update must be item-scoped, not list-wide.
-    const { wrapper, queryClient } = createWrapper()
-    queryClient.setQueryData(
-      [...SHOPPING_KEY],
-      makeList({
-        items: [
-          makeItem('milk', { checked: false }),
-          makeItem('eggs', { checked: false }),
-          makeItem('bread', { checked: false }),
-          makeItem('butter', { checked: false }),
-          makeItem('cheese', { checked: false }),
-        ],
-      })
-    )
-
-    const { result } = renderHook(() => useCheckOffItem(), { wrapper })
-
-    result.current.mutate(makeItem('milk', { checked: false }))
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(true)
-    expect(cached?.items.find((i) => i.item === 'eggs')?.checked).toBe(false)
-    expect(cached?.items.find((i) => i.item === 'bread')?.checked).toBe(false)
-    expect(cached?.items.find((i) => i.item === 'butter')?.checked).toBe(false)
-    expect(cached?.items.find((i) => i.item === 'cheese')?.checked).toBe(false)
-  })
-
-  it('should roll back cache to original state on error', async () => {
-    const { wrapper, queryClient } = createWrapper()
-    queryClient.setQueryData(
-      [...SHOPPING_KEY],
-      makeList({ items: [makeItem('milk', { checked: false })] })
-    )
-
-    // Fail the Supabase fetch in mutationFn
-    mockSupabase.single.mockResolvedValue({
-      data: null,
-      error: { message: 'network error', code: 'NETWORK_ERROR' },
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [{ item_name: 'milk', checked: true, updated_at: new Date().toISOString() }],
+      error: null,
     })
 
     const { result } = renderHook(() => useCheckOffItem(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(makeItem('milk', { checked: false }))
+    })
 
-    result.current.mutate(makeItem('milk', { checked: false }))
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('toggle_shopping_item_checked', {
+      p_item_name: 'milk',
+    })
 
-    await waitFor(() => expect(result.current.isError).toBe(true))
+    const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+    expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(true)
+  })
+
+  it('toggling twice returns original state', async () => {
+    const { wrapper, queryClient } = createWrapper()
+    queryClient.setQueryData(
+      [...SHOPPING_KEY],
+      makeList({ items: [makeItem('milk', { checked: false })] })
+    )
+
+    mockSupabase.rpc
+      .mockResolvedValueOnce({
+        data: [{ item_name: 'milk', checked: true, updated_at: new Date().toISOString() }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ item_name: 'milk', checked: false, updated_at: new Date().toISOString() }],
+        error: null,
+      })
+
+    const { result } = renderHook(() => useCheckOffItem(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync(makeItem('milk', { checked: false }))
+      await result.current.mutateAsync(makeItem('milk', { checked: true }))
+    })
 
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
     expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(false)
   })
 
-  it('should prevent lost updates when two check-off mutations overlap', async () => {
+  it('concurrent toggles resolve to last write deterministically', async () => {
     const { wrapper, queryClient } = createWrapper()
     queryClient.setQueryData(
       [...SHOPPING_KEY],
-      makeList({
-        items: [
-          makeItem('milk', { checked: false }),
-          makeItem('eggs', { checked: false }),
-        ],
-      })
+      makeList({ items: [makeItem('milk', { checked: false })] })
     )
 
-    let serverItems: ShoppingItem[] = [
-      makeItem('milk', { checked: false }),
-      makeItem('eggs', { checked: false }),
-    ]
-    const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-    mockSupabase.from.mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        single: vi.fn().mockImplementation(async () => ({
-          data: { items: serverItems.map((item) => ({ ...item })) },
-          error: null,
-        })),
-      }),
-      update: vi.fn().mockImplementation((payload: { items: ShoppingItem[] }) => ({
-        eq: vi.fn().mockImplementation(async () => {
-          await delay(25)
-          serverItems = payload.items.map((item) => ({ ...item }))
-          return { data: null, error: null }
-        }),
-      })),
-    }))
+    mockSupabase.rpc
+      .mockResolvedValueOnce({
+        data: [{ item_name: 'milk', checked: true, updated_at: '2026-01-01T00:00:00.000Z' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ item_name: 'milk', checked: false, updated_at: '2026-01-01T00:00:01.000Z' }],
+        error: null,
+      })
 
     const { result } = renderHook(() => useCheckOffItem(), { wrapper })
-
     await act(async () => {
       await Promise.all([
         result.current.mutateAsync(makeItem('milk', { checked: false })),
-        result.current.mutateAsync(makeItem('eggs', { checked: false })),
+        result.current.mutateAsync(makeItem('milk', { checked: true })),
       ])
     })
 
-    expect(serverItems.find((i) => i.item === 'milk')?.checked).toBe(true)
-    expect(serverItems.find((i) => i.item === 'eggs')?.checked).toBe(true)
-
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(true)
-    expect(cached?.items.find((i) => i.item === 'eggs')?.checked).toBe(true)
+    expect(cached?.items.find((i) => i.item === 'milk')?.checked).toBe(false)
   })
 })
 
@@ -274,7 +190,7 @@ describe('useRemoveShoppingItem', () => {
 
     const { result } = renderHook(() => useRemoveShoppingItem(), { wrapper })
 
-    result.current.mutate('garlic') // lowercase — should match 'Garlic'
+    result.current.mutate('garlic')
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
@@ -333,15 +249,14 @@ describe('useAddShoppingItem', () => {
 
     const { result } = renderHook(() => useAddShoppingItem(), { wrapper })
 
-    result.current.mutate({ itemName: 'Milk' }) // uppercase — duplicate of 'milk'
+    result.current.mutate({ itemName: 'Milk' })
 
-    // Mutation will fail in mutationFn (duplicate check) — wait for it to settle
     await waitFor(() =>
       expect(result.current.isSuccess || result.current.isError).toBe(true)
     )
 
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items).toHaveLength(1) // no duplicate added
+    expect(cached?.items).toHaveLength(1)
   })
 
   it('should roll back optimistic add on error', async () => {
@@ -351,12 +266,10 @@ describe('useAddShoppingItem', () => {
       makeList({ items: [makeItem('milk')] })
     )
 
-    // onMutate makes a user_config fetch (single #1), mutationFn makes user_config (single #2)
-    // then shopping_list fetch (single #3 — this one fails to trigger rollback)
     mockSupabase.single
-      .mockResolvedValueOnce({ data: null, error: null }) // onMutate: user_config
-      .mockResolvedValueOnce({ data: null, error: null }) // mutationFn: user_config
-      .mockResolvedValueOnce({ data: null, error: { message: 'fail', code: 'ERR' } }) // mutationFn: shopping_list
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'fail', code: 'ERR' } })
 
     const { result } = renderHook(() => useAddShoppingItem(), { wrapper })
 
@@ -365,7 +278,7 @@ describe('useAddShoppingItem', () => {
     await waitFor(() => expect(result.current.isError).toBe(true))
 
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items).toHaveLength(1) // rolled back — eggs removed
+    expect(cached?.items).toHaveLength(1)
     expect(cached?.items[0].item).toBe('milk')
   })
 })

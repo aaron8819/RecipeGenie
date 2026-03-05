@@ -91,7 +91,7 @@ test.describe('Authentication', () => {
       await expect(errorMessage).toBeVisible()
     })
 
-    test('should navigate to main app after successful sign in', async ({ page }) => {
+    test('should navigate to main app after successful sign in @smoke', async ({ page }) => {
       await page.goto('/')
 
       // Sign in with test user

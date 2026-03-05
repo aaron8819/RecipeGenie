@@ -161,7 +161,7 @@ test.describe('Shopping List', () => {
       await addItemsToShoppingList(page, navigateToTab)
     })
 
-    test('should check off item on click', async ({ page }) => {
+    test('should check off item on click @smoke', async ({ page }) => {
       // Verify items were added to the shopping list
       const checkboxCount = await page.locator('[data-checkbox="true"]').count()
       console.log(`Found ${checkboxCount} checkbox(es) in shopping list`)
@@ -726,7 +726,7 @@ test.describe('Shopping List - Persistence', () => {
     await addItemsToShoppingList(page, navigateToTab)
   })
 
-  test('should persist checked state after page reload', async ({ page, navigateToTab }) => {
+  test('should persist checked state after page reload @smoke', async ({ page, navigateToTab }) => {
     const checkboxes = page.locator('[data-checkbox="true"]')
     await checkboxes.first().waitFor({ state: 'visible', timeout: 8000 })
 
@@ -787,7 +787,7 @@ test.describe('Shopping List - Pantry Restore Flow', () => {
 
     const btnVisible = await addToPantryBtn.isVisible().catch(() => false)
     if (!btnVisible) {
-      test.skip()
+      test.skip(/* ISSUE-LEGACY-SKIP-001 EXPIRES 2026-06-30 */)
       return
     }
 
@@ -845,7 +845,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
 
       const organizeVisible = await organizeButton.isVisible().catch(() => false)
       if (!organizeVisible) {
-        test.skip()
+        test.skip(/* ISSUE-LEGACY-SKIP-002 EXPIRES 2026-06-30 */)
         return
       }
 
@@ -860,7 +860,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
         .catch(() => null)
 
       if (!firstItemName?.trim()) {
-        test.skip()
+        test.skip(/* ISSUE-LEGACY-SKIP-003 EXPIRES 2026-06-30 */)
         return
       }
       // Use just the first word to increase chance of exact match against normalized item name
@@ -884,7 +884,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
 
       if (!(await keywordInput.isVisible().catch(() => false))) {
         await page.keyboard.press('Escape')
-        test.skip()
+        test.skip(/* ISSUE-LEGACY-SKIP-004 EXPIRES 2026-06-30 */)
         return
       }
 
@@ -898,7 +898,7 @@ test.describe('Shopping List - Excluded Restore Flow', () => {
     }
 
     if (!hasExcluded) {
-      test.skip()
+      test.skip(/* ISSUE-LEGACY-SKIP-005 EXPIRES 2026-06-30 */)
       return
     }
 
@@ -943,7 +943,7 @@ test.describe('Shopping List - Rapid Interactions', () => {
 
     const count = await checkboxes.count()
     if (count < 3) {
-      test.skip()
+      test.skip(/* ISSUE-LEGACY-SKIP-006 EXPIRES 2026-06-30 */)
       return
     }
 

@@ -45,6 +45,29 @@ test.describe('My unauthenticated tests', () => {
 npm run test:e2e
 ```
 
+### Run smoke tests (critical flow, Chromium-only)
+```bash
+npm run test:e2e:smoke
+```
+
+Smoke tests are selected by explicit `@smoke` tags in test titles.
+
+### Validate smoke selection (tripwire)
+```bash
+npm run test:e2e:smoke:list
+```
+
+This command lists smoke tests and fails if fewer than 5 are selected.
+
+### Run full cross-browser matrix
+```bash
+npm run test:e2e:full
+```
+
+### `test.skip` Policy
+Use `test.skip` only with an inline ticket token (for example: `test.skip(/* ISSUE-123 */)`).
+CI runs `npm run check:no-new-test-skip` and fails on any `test.skip` without an `ISSUE-` token unless it is in the temporary legacy allowlist.
+
 ### Run tests with UI mode (recommended for development)
 ```bash
 npm run test:e2e:ui
@@ -168,7 +191,10 @@ The Playwright config is CI-ready:
 ### GitHub Actions Example
 ```yaml
 - name: Run E2E Tests
-  run: npm run test:e2e
+  run: npm run test:e2e:smoke
+
+- name: Run full E2E matrix
+  run: npm run test:e2e:full
   env:
     CI: true
 ```

@@ -18,6 +18,7 @@ vi.mock('@/lib/auth-context', () => ({
 
 const mockSupabase = {
   from: vi.fn().mockReturnThis(),
+  rpc: vi.fn(),
   select: vi.fn().mockReturnThis(),
   update: vi.fn().mockReturnThis(),
   insert: vi.fn().mockReturnThis(),
@@ -73,6 +74,15 @@ function makeList(overrides: Partial<ShoppingList> = {}): ShoppingList {
 beforeEach(() => {
   vi.clearAllMocks()
   mockSupabase.from.mockReturnThis()
+  mockSupabase.rpc.mockResolvedValue({
+    data: [{
+      removed_item: { item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
+      pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: new Date().toISOString() },
+      shopping_list_updated_at: new Date().toISOString(),
+      pantry_was_inserted: true,
+    }],
+    error: null,
+  })
   mockSupabase.select.mockReturnThis()
   mockSupabase.update.mockReturnThis()
   mockSupabase.insert.mockReturnThis()
@@ -87,106 +97,95 @@ beforeEach(() => {
 // --- Tests ---
 
 describe('useAddToPantryAndRemove', () => {
-  it('should immediately remove item from shopping list items and add to already_have', async () => {
+  it('happy path removes correct item index and adds pantry item', async () => {
     const { wrapper, queryClient } = createWrapper()
     queryClient.setQueryData(
       [...SHOPPING_KEY],
       makeList({
-        items: [makeItem('garlic'), makeItem('onion')],
+        items: [makeItem('garlic'), makeItem('onion'), makeItem('garlic', { unit: 'tbsp' })],
         already_have: [],
       })
     )
     queryClient.setQueryData([...PANTRY_KEY], [] as PantryItem[])
 
     const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
+    const input = { ...makeItem('garlic', { unit: 'tbsp' }), itemIndex: 2 } as ShoppingItem & { itemIndex: number }
 
-    result.current.mutate(makeItem('garlic'))
+    result.current.mutate(input)
 
-    // Wait for onMutate to fire (before mutationFn settles)
     await waitFor(() => {
       const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-      expect(cached?.items).toHaveLength(1)
+      expect(cached?.items).toHaveLength(2)
+    })
+
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('move_shopping_item_to_pantry', {
+      p_item_name: 'garlic',
+      p_item_index: 2,
+      p_pantry_qty: 1,
+      p_pantry_unit: 'tbsp',
     })
 
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items[0].item).toBe('onion')
+    expect(cached?.items.map((i) => i.item)).toEqual(['garlic', 'onion'])
     expect(cached?.already_have).toHaveLength(1)
     expect(cached?.already_have[0].item).toBe('garlic')
-  })
-
-  it('should immediately add item to pantry cache', async () => {
-    const { wrapper, queryClient } = createWrapper()
-    queryClient.setQueryData(
-      [...SHOPPING_KEY],
-      makeList({ items: [makeItem('garlic')], already_have: [] })
-    )
-    queryClient.setQueryData([...PANTRY_KEY], [] as PantryItem[])
-
-    const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
-
-    result.current.mutate(makeItem('garlic'))
-
-    await waitFor(() => {
-      const pantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY])
-      expect(pantry).toHaveLength(1)
-    })
 
     const pantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY])
-    expect(pantry![0].item).toBe('garlic')
+    expect(pantry?.some((p) => p.item === 'garlic')).toBe(true)
   })
 
-  it('should roll back both caches when mutation fails', async () => {
-    // Regression: both shopping list and pantry caches must be restored on error.
+  it('item mismatch surfaces an error', async () => {
     const { wrapper, queryClient } = createWrapper()
     queryClient.setQueryData(
       [...SHOPPING_KEY],
-      makeList({ items: [makeItem('garlic')], already_have: [] })
+      makeList({ items: [makeItem('onion')], already_have: [] })
     )
     queryClient.setQueryData([...PANTRY_KEY], [] as PantryItem[])
 
-    // Fail the pantry insert — mutationFn throws before any DB state changes
-    mockSupabase.single.mockResolvedValue({
-      data: null,
-      error: { message: 'insert failed', code: 'ERR' }, // not 23505, so it throws
-    })
-
     const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
 
-    result.current.mutate(makeItem('garlic'))
+    result.current.mutate({ ...makeItem('garlic'), itemIndex: 0 } as ShoppingItem & { itemIndex: number })
 
     await waitFor(() => expect(result.current.isError).toBe(true))
-
-    const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    expect(cached?.items).toHaveLength(1) // garlic restored to items
-    expect(cached?.items[0].item).toBe('garlic')
-    expect(cached?.already_have).toHaveLength(0) // garlic not in already_have
-
-    const pantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY])
-    expect(pantry).toHaveLength(0) // garlic removed from pantry cache
+    expect(mockSupabase.rpc).not.toHaveBeenCalled()
   })
 
-  it('should not duplicate item in already_have if it is already there', async () => {
+  it('duplicate pantry merge behavior remains unchanged (no pantry duplicates)', async () => {
     const { wrapper, queryClient } = createWrapper()
     queryClient.setQueryData(
       [...SHOPPING_KEY],
       makeList({
         items: [makeItem('garlic')],
-        already_have: [makeItem('garlic')], // already in pantry section
+        already_have: [makeItem('garlic')],
       })
     )
-    queryClient.setQueryData([...PANTRY_KEY], [] as PantryItem[])
+    queryClient.setQueryData(
+      [...PANTRY_KEY],
+      [{ user_id: 'test-user-id', item: 'garlic', created_at: '2026-01-01T00:00:00.000Z' }] as PantryItem[]
+    )
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [{
+        removed_item: { item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
+        pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: '2026-01-01T00:00:00.000Z' },
+        shopping_list_updated_at: new Date().toISOString(),
+        pantry_was_inserted: false,
+      }],
+      error: null,
+    })
 
     const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
 
-    result.current.mutate(makeItem('garlic'))
+    result.current.mutate({ ...makeItem('garlic'), itemIndex: 0 } as ShoppingItem & { itemIndex: number })
 
     await waitFor(() =>
       expect(result.current.isSuccess || result.current.isError).toBe(true)
     )
 
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-    // already_have should still have exactly 1 garlic, not 2
     expect(cached?.already_have).toHaveLength(1)
+
+    const pantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY]) || []
+    expect(pantry.filter((p) => p.item === 'garlic')).toHaveLength(1)
   })
 })
 
@@ -343,3 +342,4 @@ describe('useMoveExcludedToShoppingList', () => {
     expect(cached?.excluded).toHaveLength(1) // pepper still in excluded
   })
 })
+

@@ -1,5 +1,15 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const smokeTestMatch = [
+  '**/authentication.spec.ts',
+  '**/recipes.spec.ts',
+  '**/meal-planner.spec.ts',
+  '**/shopping-list.spec.ts',
+  '**/smoke-critical-flow.spec.ts',
+]
+
+const smokeGrep = /@smoke/
+
 /**
  * Recipe Genie Playwright E2E Test Configuration
  * @see https://playwright.dev/docs/test-configuration
@@ -53,6 +63,14 @@ export default defineConfig({
 
   /* Configure projects for major browsers */
   projects: [
+    /* Smoke suite: critical end-to-end flow on Chromium only */
+    {
+      name: 'smoke',
+      testMatch: smokeTestMatch,
+      grep: smokeGrep,
+      use: { ...devices['Desktop Chrome'] },
+    },
+
     /* Desktop browsers */
     {
       name: 'chromium',
