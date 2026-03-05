@@ -64,6 +64,10 @@ This command lists smoke tests and fails if fewer than 5 are selected.
 npm run test:e2e:full
 ```
 
+### `test.skip` Policy
+Use `test.skip` only with an inline ticket token (for example: `test.skip(/* ISSUE-123 */)`).
+CI runs `npm run check:no-new-test-skip` and fails on any `test.skip` without an `ISSUE-` token unless it is in the temporary legacy allowlist.
+
 ### Run tests with UI mode (recommended for development)
 ```bash
 npm run test:e2e:ui
