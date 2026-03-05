@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-02-26 (v2.15.0)*
+*Last updated: 2026-03-05 (v2.15.1)*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -32,7 +32,7 @@ The Recipe Genie database is designed for multi-user support with complete data 
 ### Baseline-First Migration Strategy
 
 - Canonical bootstrap migration: `supabase/migrations/001_baseline.sql`
-- Legacy historical migrations: `supabase/migrations/012_*.sql` through `021_*.sql`
+- Legacy historical migrations: `supabase/migrations/012_*.sql` through `026_*.sql`
 - Historical migrations are kept for audit/history but are no longer the source of truth for fresh environments.
 - New migrations must be created incrementally on top of the baseline schema.
 
@@ -121,6 +121,9 @@ Stores user-specific configuration and preferences.
 | `excluded_days` | INTEGER[] | DEFAULT '{}' | Day indices (0-6) to exclude from meal placement. 0=Sunday, 1=Monday, etc. |
 | `preferred_days` | INTEGER[] | DEFAULT NULL | Preferred day indices (0-6) for meal placement, or null for no preference |
 | `auto_assign_days` | BOOLEAN | DEFAULT TRUE | Whether to automatically assign days to recipes when generating a meal plan |
+
+Canonical default planner categories are: `chicken`, `beef`, `turkey`, `lamb`, `vegetarian`.
+Legacy default `steak` values are normalized to `beef` by migration `026_normalize_legacy_steak_defaults.sql`.
 
 **Example category_overrides JSONB:**
 ```json
@@ -476,7 +479,7 @@ All enforced foreign keys use `ON DELETE CASCADE`, meaning if a user is deleted,
 The repository now uses a baseline-first bootstrap strategy:
 
 1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap.
-2. **012-021** - Legacy historical migrations retained in version control (incomplete earlier history means they are no longer authoritative for clean bootstrap).
+2. **012-026** - Legacy historical migrations retained in version control (incomplete earlier history means they are no longer authoritative for clean bootstrap).
 
 Legacy notes:
 - Historical migrations are preserved for context and backward auditability.
@@ -505,6 +508,11 @@ Pre-baseline historical evolution (for context only):
 18. **018_tag_rpc_functions.sql** - Added bulk tag-management RPC functions
 19. **020_filter_recipes_by_tags.sql** - Added OR-based tag filtering RPC for recipe searches
 20. **021_recipe_history_stats_and_retention.sql** - Added aggregate history stats RPC and preserved history after recipe deletion
+21. **022_atomic_toggle_shopping_item.sql** - Added atomic RPC for shopping item checked toggle with row lock + idempotent no-op return
+22. **023_toggle_shopping_item_checked_auth_uid.sql** - Tightened shopping toggle RPC to use authenticated user context
+23. **024_atomic_add_pantry_and_remove_shopping.sql** - Added atomic RPC for pantry add + shopping removal
+24. **025_atomic_mark_recipe_made.sql** - Added atomic weekly made/unmade toggle RPC for planner/history consistency
+25. **026_normalize_legacy_steak_defaults.sql** - Normalized known legacy default `steak` category payloads in `user_config` to canonical `beef`
 
 ## Query Examples
 
