@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { PantryItem } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
+import { DEFAULT_RECIPE_CATEGORIES, DEFAULT_RECIPE_SELECTION, DEFAULT_USER_CONFIG } from "@/lib/user-config"
 
 const PANTRY_KEY = ["pantry"]
 const CONFIG_KEY = ["user_config"]
@@ -237,11 +238,11 @@ export function useAddExcludedKeyword() {
           .insert({
             user_id: user?.id,
             excluded_keywords: [normalizedKeyword],
-            categories: ["chicken", "turkey", "steak", "beef", "lamb", "vegetarian"],
-            default_selection: { chicken: 2, turkey: 1, steak: 1 },
-            category_overrides: {},
-            history_exclusion_days: 10,
-            week_start_day: 1,
+            categories: [...DEFAULT_RECIPE_CATEGORIES],
+            default_selection: { ...DEFAULT_RECIPE_SELECTION },
+            category_overrides: { ...DEFAULT_USER_CONFIG.category_overrides },
+            history_exclusion_days: DEFAULT_USER_CONFIG.history_exclusion_days,
+            week_start_day: DEFAULT_USER_CONFIG.week_start_day,
           })
         if (error) throw error
       }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { DEFAULT_USER_CONFIG, resolveUserConfig } from "@/lib/user-config"
+import { DEFAULT_RECIPE_CATEGORIES, DEFAULT_RECIPE_SELECTION, DEFAULT_USER_CONFIG, resolveUserConfig } from "@/lib/user-config"
 
 describe("user-config", () => {
   it("returns defaults when config row is missing", () => {
@@ -17,5 +17,14 @@ describe("user-config", () => {
       null
     )
     expect(config.week_start_day).toBe(0)
+  })
+
+  it("uses canonical beef defaults and no legacy steak defaults", () => {
+    expect(DEFAULT_RECIPE_CATEGORIES).toContain("beef")
+    expect(DEFAULT_RECIPE_CATEGORIES).not.toContain("steak")
+    expect(DEFAULT_RECIPE_SELECTION.beef).toBe(1)
+    expect(DEFAULT_RECIPE_SELECTION.steak).toBeUndefined()
+    expect(DEFAULT_USER_CONFIG.categories).toEqual(DEFAULT_RECIPE_CATEGORIES)
+    expect(DEFAULT_USER_CONFIG.default_selection).toEqual(DEFAULT_RECIPE_SELECTION)
   })
 })

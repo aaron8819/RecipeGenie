@@ -1,9 +1,18 @@
 import type { UserConfig } from "@/types/database"
 
+export const DEFAULT_RECIPE_CATEGORIES = ["chicken", "beef", "turkey", "lamb", "vegetarian"]
+export const DEFAULT_RECIPE_SELECTION: Record<string, number> = {
+  chicken: 2,
+  beef: 1,
+  turkey: 1,
+  lamb: 1,
+  vegetarian: 1,
+}
+
 export const DEFAULT_USER_CONFIG: UserConfig = {
   user_id: "",
-  categories: ["chicken", "turkey", "steak", "beef", "lamb", "vegetarian"],
-  default_selection: { chicken: 2, turkey: 1, steak: 1 },
+  categories: [...DEFAULT_RECIPE_CATEGORIES],
+  default_selection: { ...DEFAULT_RECIPE_SELECTION },
   excluded_keywords: [],
   history_exclusion_days: 10,
   week_start_day: 1,

@@ -9,6 +9,7 @@ import type { ShoppingItem, UserConfig } from "@/types/database"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
+import { DEFAULT_RECIPE_CATEGORIES, DEFAULT_RECIPE_SELECTION, DEFAULT_USER_CONFIG } from "@/lib/user-config"
 import { SHOPPING_KEY, CONFIG_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 /**
@@ -57,11 +58,11 @@ export function useSaveCategoryOverride() {
           .insert({
             user_id: user!.id,
             category_overrides: updatedOverrides,
-            categories: ["chicken", "turkey", "steak", "beef", "lamb", "vegetarian"],
-            default_selection: { chicken: 2, turkey: 1, steak: 1 },
-            excluded_keywords: [],
-            history_exclusion_days: 10,
-            week_start_day: 1,
+            categories: [...DEFAULT_RECIPE_CATEGORIES],
+            default_selection: { ...DEFAULT_RECIPE_SELECTION },
+            excluded_keywords: [...DEFAULT_USER_CONFIG.excluded_keywords],
+            history_exclusion_days: DEFAULT_USER_CONFIG.history_exclusion_days,
+            week_start_day: DEFAULT_USER_CONFIG.week_start_day,
           })
         if (saveError) throw saveError
       }
