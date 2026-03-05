@@ -89,7 +89,10 @@ export default function Home() {
         void queryClient.prefetchQuery({
           queryKey: ['user_config'],
           queryFn: async () => {
-            const { data, error } = await supabase.from('user_config').select('*').single()
+            const { data, error } = await supabase
+              .from('user_config')
+              .select('auto_assign_days,categories,category_order,category_overrides,custom_categories,default_selection,enabled_planner_categories,excluded_days,excluded_keywords,history_exclusion_days,onboarding_completed_at,preferred_days,user_id,week_start_day')
+              .single()
             if (error && error.code !== 'PGRST116') throw error
             return data
           },
@@ -130,7 +133,7 @@ export default function Home() {
           queryFn: async () => {
             const { data, error } = await supabase
               .from('pantry_items')
-              .select('*')
+              .select('created_at,item,user_id')
               .order('item', { ascending: true })
             if (error) throw error
             return data
@@ -145,7 +148,7 @@ export default function Home() {
           queryFn: async () => {
             const { data, error } = await supabase
               .from('shopping_list')
-              .select('*')
+              .select('already_have,custom_order,excluded,generated_at,items,scale,source_recipes,total_servings,user_id')
               .maybeSingle()
             if (error) throw error
             return data
