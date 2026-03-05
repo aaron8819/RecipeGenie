@@ -41,10 +41,25 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 1. Go to [supabase.com](https://supabase.com) and create a new project
 2. Once created, go to **SQL Editor** in the dashboard
-3. Run all migration files in order from `supabase/migrations/` (numbered `001` through `016`)
+3. Apply the canonical baseline migration: `supabase/migrations/001_baseline.sql`
 4. Go to **Authentication > Providers** and ensure Email auth is enabled
 5. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
 6. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npx tsx scripts/upload-default-recipe-images.ts` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
+
+### Schema Bootstrap Strategy
+
+- Canonical bootstrap is baseline-first via `supabase/migrations/001_baseline.sql`.
+- Historical `012+` migration files are retained as legacy records (the earlier `001-011` history is incomplete in version control and is intentionally not reconstructed).
+- New schema changes must be added as incremental migrations after the baseline.
+
+For local Supabase CLI workflows, use:
+
+```bash
+supabase start
+supabase db reset
+```
+
+This should rebuild from the baseline-forward migration chain deterministically.
 
 ### 2. Configure Environment
 

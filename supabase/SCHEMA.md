@@ -29,6 +29,13 @@ This document describes the complete database schema for the Recipe Genie applic
 
 The Recipe Genie database is designed for multi-user support with complete data isolation between users. All tables include a `user_id` column that references `auth.users(id)`, and Row Level Security (RLS) policies ensure users can only access their own data.
 
+### Baseline-First Migration Strategy
+
+- Canonical bootstrap migration: `supabase/migrations/001_baseline.sql`
+- Legacy historical migrations: `supabase/migrations/012_*.sql` through `021_*.sql`
+- Historical migrations are kept for audit/history but are no longer the source of truth for fresh environments.
+- New migrations must be created incrementally on top of the baseline schema.
+
 The schema supports:
 - Recipe storage with ingredients, instructions, and images
 - Pantry item management
@@ -466,7 +473,17 @@ All enforced foreign keys use `ON DELETE CASCADE`, meaning if a user is deleted,
 
 ## Migration History
 
-The schema has evolved through the following migrations:
+The repository now uses a baseline-first bootstrap strategy:
+
+1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap.
+2. **012-021** - Legacy historical migrations retained in version control (incomplete earlier history means they are no longer authoritative for clean bootstrap).
+
+Legacy notes:
+- Historical migrations are preserved for context and backward auditability.
+- Fresh environments should start from the baseline and then apply only new incremental migrations added after it.
+- Missing historical `001-011` incremental files are intentionally not reconstructed.
+
+Pre-baseline historical evolution (for context only):
 
 1. **001_initial_schema.sql** - Initial single-user schema with all core tables
 2. **002_add_category_overrides.sql** - Added `category_overrides` to `user_config` for custom shopping list categorization
