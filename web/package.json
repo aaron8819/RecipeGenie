@@ -17,6 +17,7 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
     "test:e2e:codegen": "playwright codegen localhost:3000",
+    "db:types:regen": "npx supabase gen types typescript --project-id eyaoahwzixqetjgfghsh --schema public > src/types/database.generated.ts",
     "migrate": "npx tsx scripts/migrate.ts",
     "create-test-account": "npx tsx scripts/create-test-account.ts"
   },

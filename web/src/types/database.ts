@@ -1,282 +1,13 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+// NOTE: This file is hand-written. Do not overwrite with Supabase type generation.
+// Generated output lives in database.generated.ts.
+import type {
+  Database as GeneratedDatabase,
+  Json as GeneratedJson,
+} from "./database.generated"
 
-export interface Database {
-  public: {
-    Tables: {
-      recipes: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          category: string
-          servings: number
-          favorite: boolean
-          tags: string[]
-          ingredients: Ingredient[]
-          instructions: string[]
-          image_url: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string  // Optional - generated from name if not provided
-          user_id?: string // Optional - will be set by RLS/trigger
-          name: string
-          category: string
-          servings?: number
-          favorite?: boolean
-          tags?: string[]
-          ingredients?: Ingredient[]
-          instructions?: string[]
-          image_url?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          category?: string
-          servings?: number
-          favorite?: boolean
-          tags?: string[]
-          ingredients?: Ingredient[]
-          instructions?: string[]
-          image_url?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      pantry_items: {
-        Row: {
-          user_id: string
-          item: string
-          created_at: string
-        }
-        Insert: {
-          user_id?: string // Optional - will be set by RLS/trigger
-          item: string
-          created_at?: string
-        }
-        Update: {
-          user_id?: string
-          item?: string
-          created_at?: string
-        }
-      }
-      user_config: {
-        Row: {
-          user_id: string
-          categories: string[]
-          default_selection: Record<string, number>
-          excluded_keywords: string[]
-          history_exclusion_days: number
-          week_start_day: number
-          onboarding_completed_at: string | null
-          category_overrides: Record<string, string>
-          custom_categories: CustomShoppingCategory[]
-          category_order: string[] | null
-          excluded_days: number[]
-          preferred_days: number[] | null
-          auto_assign_days: boolean
-          enabled_planner_categories: string[] | null
-        }
-        Insert: {
-          user_id?: string // Optional - will be set by RLS/trigger
-          categories?: string[]
-          default_selection?: Record<string, number>
-          excluded_keywords?: string[]
-          history_exclusion_days?: number
-          week_start_day?: number
-          onboarding_completed_at?: string | null
-          category_overrides?: Record<string, string>
-          custom_categories?: CustomShoppingCategory[]
-          category_order?: string[] | null
-          excluded_days?: number[]
-          preferred_days?: number[] | null
-          auto_assign_days?: boolean
-          enabled_planner_categories?: string[] | null
-        }
-        Update: {
-          user_id?: string
-          categories?: string[]
-          default_selection?: Record<string, number>
-          excluded_keywords?: string[]
-          history_exclusion_days?: number
-          week_start_day?: number
-          onboarding_completed_at?: string | null
-          category_overrides?: Record<string, string>
-          custom_categories?: CustomShoppingCategory[]
-          category_order?: string[] | null
-          excluded_days?: number[]
-          preferred_days?: number[] | null
-          auto_assign_days?: boolean
-          enabled_planner_categories?: string[] | null
-        }
-      }
-      recipe_history: {
-        Row: {
-          id: number
-          user_id: string
-          recipe_id: string
-          date_made: string
-        }
-        Insert: {
-          id?: number
-          user_id?: string // Optional - will be set by RLS/trigger
-          recipe_id: string
-          date_made?: string
-        }
-        Update: {
-          id?: number
-          user_id?: string
-          recipe_id?: string
-          date_made?: string
-        }
-      }
-      weekly_plans: {
-        Row: {
-          user_id: string
-          week_date: string
-          recipe_ids: string[]
-          made_recipe_ids: string[]
-          day_assignments: Record<string, number> | null
-          scale: number
-          generated_at: string
-        }
-        Insert: {
-          user_id?: string // Optional - will be set by RLS/trigger
-          week_date: string
-          recipe_ids?: string[]
-          made_recipe_ids?: string[]
-          day_assignments?: Record<string, number> | null
-          scale?: number
-          generated_at?: string
-        }
-        Update: {
-          user_id?: string
-          week_date?: string
-          recipe_ids?: string[]
-          made_recipe_ids?: string[]
-          day_assignments?: Record<string, number> | null
-          scale?: number
-          generated_at?: string
-        }
-      }
-      shopping_list: {
-        Row: {
-          user_id: string
-          items: ShoppingItem[]
-          already_have: ShoppingItem[]
-          excluded: ShoppingItem[]
-          source_recipes: string[]
-          scale: number
-          total_servings: number
-          custom_order: boolean
-          generated_at: string
-        }
-        Insert: {
-          user_id?: string // Optional - will be set by RLS/trigger
-          items?: ShoppingItem[]
-          already_have?: ShoppingItem[]
-          excluded?: ShoppingItem[]
-          source_recipes?: string[]
-          scale?: number
-          total_servings?: number
-          custom_order?: boolean
-          generated_at?: string
-        }
-        Update: {
-          user_id?: string
-          items?: ShoppingItem[]
-          already_have?: ShoppingItem[]
-          excluded?: ShoppingItem[]
-          source_recipes?: string[]
-          scale?: number
-          total_servings?: number
-          custom_order?: boolean
-          generated_at?: string
-        }
-      }
-      recipe_shares: {
-        Row: {
-          id: string
-          sender_user_id: string
-          sender_email: string
-          recipient_user_id: string
-          recipient_email: string
-          source_recipe_id: string
-          source_recipe_snapshot: RecipeShareSnapshot
-          message: string | null
-          status: "pending" | "accepted" | "declined" | "canceled"
-          accepted_recipe_id: string | null
-          created_at: string
-          responded_at: string | null
-        }
-        Insert: {
-          id?: string
-          sender_user_id: string
-          sender_email: string
-          recipient_user_id: string
-          recipient_email: string
-          source_recipe_id: string
-          source_recipe_snapshot: RecipeShareSnapshot
-          message?: string | null
-          status?: "pending" | "accepted" | "declined" | "canceled"
-          accepted_recipe_id?: string | null
-          created_at?: string
-          responded_at?: string | null
-        }
-        Update: {
-          id?: string
-          sender_user_id?: string
-          sender_email?: string
-          recipient_user_id?: string
-          recipient_email?: string
-          source_recipe_id?: string
-          source_recipe_snapshot?: RecipeShareSnapshot
-          message?: string | null
-          status?: "pending" | "accepted" | "declined" | "canceled"
-          accepted_recipe_id?: string | null
-          created_at?: string
-          responded_at?: string | null
-        }
-      }
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      accept_recipe_share: {
-        Args: {
-          p_share_id: string
-        }
-        Returns: string
-      }
-      get_recipe_history_stats: {
-        Args: {
-          p_user_id: string
-        }
-        Returns: {
-          recipe_id: string
-          times_made: number
-          last_made: string
-        }[]
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-  }
-}
+export type Database = GeneratedDatabase
+export type Json = GeneratedJson
 
-// Application types
 export interface CustomShoppingCategory {
   id: string
   name: string
@@ -301,11 +32,8 @@ export interface ShoppingItem {
   categoryOrder: number
   sources?: { recipeId?: string; recipeName: string }[]
   shoppingCategory?: string
-  // Additional amounts when units can't be converted (e.g., "1/3 cup + 4 oz")
   additionalAmounts?: { amount: number; unit: string }[]
-  // Checked state - persists across page refreshes, resets on "Complete Shopping" or "Clear"
   checked?: boolean
-  // Keyword that caused this item to be excluded (only present for excluded items)
   excludedBy?: string
 }
 
@@ -325,27 +53,79 @@ export interface RecipeHistoryStats {
   last_made: string
 }
 
-export type Recipe = Database["public"]["Tables"]["recipes"]["Row"]
-export type RecipeInsert = Database["public"]["Tables"]["recipes"]["Insert"]
-export type RecipeUpdate = Database["public"]["Tables"]["recipes"]["Update"]
+type RecipeBase = Database["public"]["Tables"]["recipes"]["Row"]
+export type Recipe = Omit<RecipeBase, "ingredients"> & {
+  ingredients: Ingredient[]
+}
+
+type RecipeInsertBase = Database["public"]["Tables"]["recipes"]["Insert"]
+export type RecipeInsert = Omit<RecipeInsertBase, "ingredients"> & {
+  ingredients?: Ingredient[]
+}
+
+type RecipeUpdateBase = Database["public"]["Tables"]["recipes"]["Update"]
+export type RecipeUpdate = Omit<RecipeUpdateBase, "ingredients"> & {
+  ingredients?: Ingredient[]
+}
 
 export type PantryItem = Database["public"]["Tables"]["pantry_items"]["Row"]
-export type UserConfig = Database["public"]["Tables"]["user_config"]["Row"]
+
+type UserConfigBase = Database["public"]["Tables"]["user_config"]["Row"]
+export type UserConfig = Omit<
+  UserConfigBase,
+  "default_selection" | "category_overrides" | "custom_categories"
+> & {
+  default_selection: Record<string, number>
+  category_overrides: Record<string, string>
+  custom_categories: CustomShoppingCategory[]
+}
+
 export type RecipeHistory = Database["public"]["Tables"]["recipe_history"]["Row"]
 export type RecipeHistoryStatsRow = RecipeHistoryStats
-export type WeeklyPlan = Database["public"]["Tables"]["weekly_plans"]["Row"]
-export type ShoppingList = Database["public"]["Tables"]["shopping_list"]["Row"]
-export type RecipeShare = Database["public"]["Tables"]["recipe_shares"]["Row"]
-export type RecipeShareInsert = Database["public"]["Tables"]["recipe_shares"]["Insert"]
-export type RecipeShareUpdate = Database["public"]["Tables"]["recipe_shares"]["Update"]
 
-export interface PlanTemplate {
-  id: string
-  user_id: string
-  name: string
-  recipe_ids: string[]
+type WeeklyPlanBase = Database["public"]["Tables"]["weekly_plans"]["Row"]
+export type WeeklyPlan = Omit<WeeklyPlanBase, "day_assignments"> & {
+  day_assignments: Record<string, number> | null
+}
+
+type ShoppingListBase = Database["public"]["Tables"]["shopping_list"]["Row"]
+export type ShoppingList = Omit<
+  ShoppingListBase,
+  "items" | "already_have" | "excluded"
+> & {
+  items: ShoppingItem[]
+  already_have: ShoppingItem[]
+  excluded: ShoppingItem[]
+}
+
+type RecipeShareBase = Database["public"]["Tables"]["recipe_shares"]["Row"]
+export type RecipeShare = Omit<RecipeShareBase, "source_recipe_snapshot"> & {
+  source_recipe_snapshot: RecipeShareSnapshot
+}
+
+type RecipeShareInsertBase =
+  Database["public"]["Tables"]["recipe_shares"]["Insert"]
+export type RecipeShareInsert = Omit<
+  RecipeShareInsertBase,
+  "source_recipe_snapshot"
+> & {
+  source_recipe_snapshot: RecipeShareSnapshot
+}
+
+type RecipeShareUpdateBase =
+  Database["public"]["Tables"]["recipe_shares"]["Update"]
+export type RecipeShareUpdate = Omit<
+  RecipeShareUpdateBase,
+  "source_recipe_snapshot"
+> & {
+  source_recipe_snapshot?: RecipeShareSnapshot
+}
+
+type PlanTemplateBase = Database["public"]["Tables"]["plan_templates"]["Row"]
+export type PlanTemplate = Omit<
+  PlanTemplateBase,
+  "day_assignments" | "category_selection"
+> & {
   day_assignments: Record<string, number> | null
   category_selection: Record<string, number> | null
-  created_at: string
-  updated_at: string
 }

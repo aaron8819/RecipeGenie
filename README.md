@@ -90,6 +90,17 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 - **Unit tests (Vitest):** `npm run test` or `npm run test:watch`. Tests live in `src/hooks/__tests__/`, `src/lib/__tests__/`, and similar.
 - **E2E tests (Playwright):** `npm run test:e2e`. Requires the dev server (`npm run dev`). Optional: run global setup once to persist auth state for authenticated E2E tests (`playwright/.auth/`). Other scripts: `test:e2e:ui`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:report`, `test:e2e:codegen`.
 
+## Supabase Types Baseline
+
+From `web/`, regenerate the Supabase TypeScript baseline with:
+
+```bash
+npm run db:types:regen
+```
+
+This command uses Supabase CLI project-id generation and requires `SUPABASE_ACCESS_TOKEN` (or prior `supabase login`) in your shell.
+It updates `web/src/types/database.generated.ts` only.
+
 ## Deployment to Vercel
 
 ### 1. Push to GitHub
