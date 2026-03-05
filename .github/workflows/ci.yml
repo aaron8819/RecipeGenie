@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  check-no-new-test-skip:
+  quality-guards:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -31,3 +31,104 @@ jobs:
 
       - name: Enforce @ts-expect-error Baseline
         run: npm run check:no-new-ts-expect-error
+
+  migration-smoke-and-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Install Web Dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Start Local Supabase
+        run: supabase start
+
+      - name: Reset Local Database
+        run: supabase db reset --local
+
+      - name: Assert Required Tables and Functions
+        shell: bash
+        run: |
+          ASSERT_SQL="$(cat <<'SQL'
+          DO $$
+          DECLARE
+            missing_tables text[];
+            missing_functions text[];
+          BEGIN
+            SELECT array_agg(t.table_name)
+            INTO missing_tables
+            FROM (VALUES
+              ('recipes'),
+              ('weekly_plans'),
+              ('shopping_list'),
+              ('pantry_items'),
+              ('recipe_shares'),
+              ('plan_templates'),
+              ('user_config')
+            ) AS t(table_name)
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM information_schema.tables it
+              WHERE it.table_schema = 'public'
+                AND it.table_name = t.table_name
+            );
+
+            SELECT array_agg(f.function_name)
+            INTO missing_functions
+            FROM (VALUES
+              ('filter_recipes_by_tags'),
+              ('rename_tag'),
+              ('merge_tags'),
+              ('delete_tag')
+            ) AS f(function_name)
+            WHERE NOT EXISTS (
+              SELECT 1
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname = f.function_name
+            );
+
+            IF missing_tables IS NOT NULL THEN
+              RAISE EXCEPTION 'Missing required tables: %', missing_tables;
+            END IF;
+
+            IF missing_functions IS NOT NULL THEN
+              RAISE EXCEPTION 'Missing required functions: %', missing_functions;
+            END IF;
+          END $$;
+          SQL
+          )"
+
+          if supabase db --help | grep -q '\<query\>'; then
+            printf '%s\n' "$ASSERT_SQL" | supabase db query --local
+          else
+            DB_CONTAINER="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)"
+            if [ -z "$DB_CONTAINER" ]; then
+              echo "Could not locate local Supabase DB container."
+              exit 1
+            fi
+            docker exec "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "$ASSERT_SQL"
+          fi
+
+      - name: Check Deterministic Schema-Type Drift
+        working-directory: web
+        run: npm run db:types:check
+
+      - name: Stop Local Supabase
+        if: always()
+        run: supabase stop --no-backup

@@ -116,6 +116,15 @@ npm run db:types:regen
 This command uses Supabase CLI project-id generation and requires `SUPABASE_ACCESS_TOKEN` (or prior `supabase login`) in your shell.
 It updates `web/src/types/database.generated.ts` only.
 
+For deterministic local schema/type parity checks against an ephemeral local database:
+
+```bash
+cd web
+npm run db:types:check
+```
+
+This generates types to a temporary file and fails if they differ from `src/types/database.generated.ts`.
+
 ## Deployment to Vercel
 
 ### 1. Push to GitHub
