@@ -345,6 +345,21 @@ export interface Database {
           pantry_was_inserted: boolean
         }[]
       }
+      toggle_weekly_recipe_made: {
+        Args: {
+          p_recipe_id: string
+          p_week_date: string
+          p_is_made_for_week: boolean
+          p_date_made?: string | null
+        }
+        Returns: {
+          action: string
+          recipe_id: string
+          week_date: string
+          made_recipe_ids: string[]
+          history_date_made: string | null
+        }[]
+      }
       toggle_shopping_item_checked: {
         Args: {
           p_item_name: string

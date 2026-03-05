@@ -806,84 +806,50 @@ export function useUnmarkRecipeAsMade() {
  */
 export function useMarkRecipeMade() {
   const queryClient = useQueryClient()
-  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ recipeId, weekDate, isMadeForWeek, dateMade }: {
       recipeId: string; weekDate: string; isMadeForWeek: boolean; dateMade?: string
     }) => {
-      // Use provided dateMade or default to current date/time
-      const dateToUse = dateMade || new Date().toISOString()
-
       const supabase = getSupabase()
+      const rpcClient = supabase as unknown as {
+        rpc: (
+          fn: "toggle_weekly_recipe_made",
+          args: {
+            p_recipe_id: string
+            p_week_date: string
+            p_is_made_for_week: boolean
+            p_date_made: string | null
+          }
+        ) => Promise<{
+          data: Array<{
+            action: "marked" | "unmarked"
+            recipe_id: string
+            week_date: string
+            made_recipe_ids: string[]
+            history_date_made: string | null
+          }> | null
+          error: { message: string } | null
+        }>
+      }
 
-      if (isMadeForWeek) {
-        const { data: recentHistory, error: historyError } = await supabase
-          .from("recipe_history")
-          .select("id")
-          .eq("user_id", user!.id)
-          .eq("recipe_id", recipeId)
-          .order("date_made", { ascending: false })
-          .limit(1)
-          .single()
+      const { data, error } = await rpcClient.rpc("toggle_weekly_recipe_made", {
+        p_recipe_id: recipeId,
+        p_week_date: weekDate,
+        p_is_made_for_week: isMadeForWeek,
+        p_date_made: dateMade || null,
+      })
 
-        if (historyError && historyError.code !== "PGRST116") throw historyError
+      if (error) throw error
 
-        if (recentHistory) {
-          const { error: deleteError } = await supabase
-            .from("recipe_history")
-            .delete()
-            .eq("user_id", user!.id)
-            .eq("id", (recentHistory as { id: number }).id)
-          if (deleteError) throw deleteError
-        }
+      const row = data?.[0]
+      if (!row) throw new Error(`Failed to toggle recipe made state: ${recipeId}`)
 
-        const { data: plan, error: planError } = await supabase
-          .from("weekly_plans")
-          .select("made_recipe_ids")
-          .eq("user_id", user!.id)
-          .eq("week_date", weekDate)
-          .single()
-
-        if (planError) throw planError
-
-        const typedPlan = plan as { made_recipe_ids?: string[] } | null
-        const { error: updateError } = await supabase
-          .from("weekly_plans")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({ made_recipe_ids: (typedPlan?.made_recipe_ids || []).filter((id) => id !== recipeId) })
-          .eq("user_id", user!.id)
-          .eq("week_date", weekDate)
-
-        if (updateError) throw updateError
-        return { action: "unmarked", recipeId, weekDate }
-      } else {
-        const { error: insertError } = await supabase
-          .from("recipe_history")
-          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-        .insert({ user_id: user!.id, recipe_id: recipeId, date_made: dateToUse })
-
-        if (insertError) throw insertError
-
-        const { data: plan, error: planError } = await supabase
-          .from("weekly_plans")
-          .select("made_recipe_ids")
-          .eq("user_id", user!.id)
-          .eq("week_date", weekDate)
-          .single()
-
-        if (planError) throw planError
-
-        const typedPlan = plan as { made_recipe_ids?: string[] } | null
-        const { error: updateError } = await supabase
-          .from("weekly_plans")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({ made_recipe_ids: [...(typedPlan?.made_recipe_ids || []), recipeId] })
-          .eq("user_id", user!.id)
-          .eq("week_date", weekDate)
-
-        if (updateError) throw updateError
-        return { action: "marked", recipeId, weekDate }
+      return {
+        action: row.action,
+        recipeId: row.recipe_id,
+        weekDate: row.week_date,
+        madeRecipeIds: row.made_recipe_ids,
       }
     },
 
@@ -927,7 +893,6 @@ export function useMarkRecipeMade() {
     },
 
     onSettled: (_, __, variables) => {
-      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
       queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
     },
