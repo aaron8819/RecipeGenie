@@ -37,7 +37,6 @@ test.describe('Recipe Management', () => {
     })
 
     test('should show empty state when no recipes exist', async ({ page }) => {
-      // In guest mode with no recipes, should show empty state
       const emptyState = page.getByText(/no recipes yet|add your first recipe/i)
       await expect(emptyState.first()).toBeVisible()
     })

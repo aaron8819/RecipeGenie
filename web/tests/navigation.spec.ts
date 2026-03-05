@@ -57,10 +57,9 @@ test.describe('Navigation', () => {
     })
 
     test('should display user avatar with initials', async ({ page }) => {
-      // In guest mode, should show "G"
-      const avatar = page.locator('[title="Guest"]')
+      const avatar = page.locator('[title*="@"]')
       await expect(avatar).toBeVisible()
-      await expect(avatar).toHaveText('G')
+      await expect(avatar).toContainText(/[A-Z]{2}/)
     })
 
     test('should display help icon that opens onboarding dialog', async ({ page }) => {
@@ -224,13 +223,6 @@ test.describe('Navigation', () => {
       await navigateToTab('shopping')
       await page.reload()
       await page.waitForLoadState('networkidle')
-
-      // May need to re-enter guest mode after reload
-      const guestButton = page.getByRole('button', { name: /try as guest/i })
-      if (await guestButton.isVisible()) {
-        await guestButton.click()
-        await page.waitForTimeout(300)
-      }
 
       // Check if shopping tab content is visible (may vary by implementation)
       // The stored tab should be 'shopping'

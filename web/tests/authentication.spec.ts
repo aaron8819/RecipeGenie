@@ -124,70 +124,6 @@ test.describe('Authentication', () => {
     })
   })
 
-  test.describe('Guest Mode', () => {
-    // Use empty storage state to see auth form for guest mode tests
-    test.use({ storageState: { cookies: [], origins: [] } })
-
-    test('should enter guest mode when clicking Try as Guest', async ({ page }) => {
-      await page.goto('/')
-      await page.waitForLoadState('networkidle')
-
-      const guestButton = page.getByRole('button', { name: /try as guest/i })
-      await expect(guestButton).toBeVisible()
-      await guestButton.click()
-
-      // Should see main app with guest mode banner
-      await expect(page.locator('nav, header')).toBeVisible()
-    })
-
-    test('should display guest mode warning banner', async ({ page, enterGuestMode }) => {
-      await enterGuestMode()
-
-      // Check for guest mode banner
-      const banner = page.getByText(/guest mode/i)
-      await expect(banner).toBeVisible()
-    })
-
-    test('should show G initial in avatar for guest user', async ({ page, enterGuestMode }) => {
-      await enterGuestMode()
-
-      // Look for avatar with "G" initial
-      const avatar = page.locator('[title="Guest"]')
-      await expect(avatar).toBeVisible()
-      await expect(avatar).toHaveText('G')
-    })
-
-    test('should show sign up CTA in guest mode', async ({ page, enterGuestMode }) => {
-      await enterGuestMode()
-
-      // Check for sign up call to action
-      const signUpCta = page.getByRole('button', { name: /sign up to save/i })
-      await expect(signUpCta).toBeVisible()
-    })
-
-    test('should navigate to sign up form when clicking sign up CTA', async ({ page, enterGuestMode }) => {
-      await enterGuestMode()
-
-      // Click sign up CTA
-      const signUpCta = page.getByRole('button', { name: /sign up to save/i })
-      await signUpCta.click()
-
-      // Should see sign up form
-      await expect(page.getByRole('button', { name: /sign up/i })).toBeVisible()
-    })
-
-    test('should exit guest mode and return to auth form', async ({ page, enterGuestMode }) => {
-      await enterGuestMode()
-
-      // Find and click exit button
-      const exitButton = page.getByRole('button', { name: /exit/i }).first()
-      await exitButton.click()
-
-      // Should return to auth form
-      await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible()
-    })
-  })
-
   test.describe('Authenticated User Session', () => {
     // Uses authenticated state from global setup
     test('should show user initials in avatar', async ({ page, setupAuth }) => {
@@ -198,14 +134,6 @@ test.describe('Authentication', () => {
       const avatar = page.locator('[title*="@"]')
       await expect(avatar).toBeVisible()
       await expect(avatar).toHaveText('AA')
-    })
-
-    test('should NOT show guest mode banner for authenticated user', async ({ page, setupAuth }) => {
-      await setupAuth()
-
-      // Guest mode banner should not be visible
-      const guestBanner = page.locator('.bg-amber-50')
-      await expect(guestBanner).not.toBeVisible()
     })
 
     test('should persist session on page refresh', async ({ page, setupAuth }) => {

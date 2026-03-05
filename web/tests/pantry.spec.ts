@@ -241,17 +241,9 @@ test.describe('Pantry Management', () => {
       await page.keyboard.press('Enter')
       await page.waitForTimeout(300)
 
-      // In guest mode, data is stored in session/localStorage
-      // Refresh should maintain data (within same session)
+      // Refresh should maintain data in the same authenticated session.
       await page.reload()
       await page.waitForLoadState('networkidle')
-
-      // May need to re-enter guest mode
-      const guestButton = page.getByRole('button', { name: /try as guest/i })
-      if (await guestButton.isVisible()) {
-        await guestButton.click()
-        await page.waitForTimeout(300)
-      }
 
       // Navigate back to pantry
       const viewport = page.viewportSize()
@@ -262,7 +254,7 @@ test.describe('Pantry Management', () => {
         await page.locator('header.md\\:fixed').getByRole('button', { name: /pantry/i }).click()
       }
 
-      // Item may or may not persist depending on guest storage implementation
+      await expect(page.getByText('Persistent Item', { exact: true })).toBeVisible()
     })
   })
 

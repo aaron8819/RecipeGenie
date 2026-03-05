@@ -437,28 +437,4 @@ test.describe('Visual Design - Stitch Theme', () => {
     })
   })
 
-  test.describe('Guest Mode Banner Styling', () => {
-    test('should display amber-colored guest mode banner', async ({ page, setupAuth }) => {
-      await setupAuth()
-
-      const banner = page.locator('.bg-amber-50, [class*="amber"]').first()
-      await expect(banner).toBeVisible()
-
-      const hasAmberBg = await banner.evaluate((el) => {
-        const bg = window.getComputedStyle(el).backgroundColor
-        // Amber-50 is a light yellow/orange
-        return bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)'
-      })
-
-      expect(hasAmberBg).toBeTruthy()
-    })
-
-    test('should display warning icon in guest banner', async ({ page, setupAuth }) => {
-      await setupAuth()
-
-      const banner = page.locator('.bg-amber-50, [class*="amber"]').first()
-      const icon = banner.locator('svg')
-      await expect(icon).toBeVisible()
-    })
-  })
 })

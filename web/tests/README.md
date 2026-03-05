@@ -111,7 +111,7 @@ npm run test:e2e:codegen
 
 | File | Coverage |
 |------|----------|
-| `authentication.spec.ts` | Sign up, sign in, sign out, guest mode, session persistence |
+| `authentication.spec.ts` | Sign up, sign in, sign out, session persistence |
 | `navigation.spec.ts` | Desktop header, mobile bottom nav, tab switching, active indicators |
 | `recipes.spec.ts` | Recipe CRUD, add/edit modals, import from text, category management |
 | `meal-planner.spec.ts` | Plan generation, settings modal, day assignments, mark as made |
@@ -127,7 +127,6 @@ npm run test:e2e:codegen
 The `fixtures.ts` file provides reusable helpers:
 
 - `setupAuth()` - Navigate to app with authenticated session (uses global setup)
-- `enterGuestMode()` - Enter guest mode from auth screen (clears session first)
 - `signIn(email?, password?)` - Sign in with credentials
 - `signOut()` - Sign out of current session
 - `navigateToTab(tab)` - Navigate to planner/recipes/shopping/pantry
@@ -136,21 +135,13 @@ The `fixtures.ts` file provides reusable helpers:
 - `getActiveTab()` - Get name of active tab
 - `isMobileViewport()` - Check if on mobile viewport
 
-### Authenticated vs Guest Testing
+### Authenticated Testing
 
 Most tests use `setupAuth()` which reuses the authenticated session from global setup:
 ```typescript
 test('my authenticated test', async ({ page, setupAuth }) => {
   await setupAuth()  // Already logged in
   // ... test authenticated features
-})
-```
-
-For guest mode testing, use `enterGuestMode()`:
-```typescript
-test('my guest test', async ({ page, enterGuestMode }) => {
-  await enterGuestMode()  // Clears session, enters guest mode
-  // ... test guest features
 })
 ```
 
@@ -205,7 +196,7 @@ The Playwright config is CI-ready:
 2. **Wait for elements** using Playwright's auto-waiting
 3. **Use descriptive test names** that explain the expected behavior
 4. **Group related tests** with `describe` blocks
-5. **Test both guest and authenticated flows** where relevant
+5. **Test authenticated and unauthenticated flows** where relevant
 6. **Test all major viewports** for responsive features
 7. **Check accessibility** with axe-core
 
@@ -232,8 +223,8 @@ The Playwright config is CI-ready:
 import { test, expect, VIEWPORTS } from './fixtures'
 
 test.describe('My Feature', () => {
-  test.beforeEach(async ({ page, enterGuestMode }) => {
-    await enterGuestMode()
+  test.beforeEach(async ({ setupAuth }) => {
+    await setupAuth()
   })
 
   test('should do something', async ({ page }) => {

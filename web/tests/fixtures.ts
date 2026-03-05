@@ -94,8 +94,6 @@ async function dismissOnboardingModal(page: import('@playwright/test').Page) {
 export interface RecipeGenieFixtures {
   /** Set up authenticated session - navigates to app (already logged in via global setup) */
   setupAuth: () => Promise<void>
-  /** Enter guest mode from the auth screen (for guest-specific tests) */
-  enterGuestMode: () => Promise<void>
   /** Sign in with test credentials */
   signIn: (email?: string, password?: string) => Promise<void>
   /** Sign out of the current session */
@@ -171,28 +169,6 @@ export const test = base.extend<RecipeGenieFixtures>({
       await dismissOnboardingModal(page)
     }
     await use(setup)
-  },
-
-  enterGuestMode: async ({ page }, use) => {
-    const enterGuest = async () => {
-      // Clear storage state to start fresh
-      await page.context().clearCookies()
-      await page.evaluate(() => localStorage.clear())
-
-      await page.goto('/')
-      await page.waitForLoadState('networkidle')
-
-      // Click the "Try as Guest" button
-      const guestButton = page.getByRole('button', { name: /try as guest/i })
-      await guestButton.click()
-
-      // Wait for the main app to load
-      await page.waitForSelector('nav, header', { state: 'visible' })
-
-      // Handle onboarding modal if it appears
-      await dismissOnboardingModal(page)
-    }
-    await use(enterGuest)
   },
 
   signIn: async ({ page }, use) => {
