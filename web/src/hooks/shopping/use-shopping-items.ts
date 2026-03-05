@@ -208,7 +208,6 @@ export function useRemoveShoppingItem() {
  */
 export function useCheckOffItem() {
   const queryClient = useQueryClient()
-  const { user } = useAuthContext()
 
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
@@ -217,10 +216,9 @@ export function useCheckOffItem() {
       const rpcClient = supabase as unknown as {
         rpc: (
           fn: "toggle_shopping_item_checked",
-          args: { p_user_id: string; p_item_name: string }
+          args: { p_item_name: string }
         ) => Promise<{
           data: Array<{
-            user_id: string
             item_name: string
             checked: boolean | null
             updated_at: string
@@ -230,7 +228,6 @@ export function useCheckOffItem() {
       }
 
       const { data, error } = await rpcClient.rpc("toggle_shopping_item_checked", {
-        p_user_id: user!.id,
         p_item_name: item.item,
       })
 
@@ -238,7 +235,6 @@ export function useCheckOffItem() {
 
       const rpcRows = data as
         | Array<{
-            user_id: string
             item_name: string
             checked: boolean | null
             updated_at: string
@@ -251,7 +247,6 @@ export function useCheckOffItem() {
       }
 
       return {
-        user_id: row.user_id,
         item_name: row.item_name,
         checked: row.checked,
         updated_at: row.updated_at,

@@ -333,11 +333,9 @@ export interface Database {
       }
       toggle_shopping_item_checked: {
         Args: {
-          p_user_id: string
           p_item_name: string
         }
         Returns: {
-          user_id: string
           item_name: string
           checked: boolean
           updated_at: string

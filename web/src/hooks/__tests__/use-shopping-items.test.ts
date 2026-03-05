@@ -88,7 +88,7 @@ describe('useCheckOffItem', () => {
     )
 
     mockSupabase.rpc.mockResolvedValueOnce({
-      data: [{ user_id: 'test-user-id', item_name: 'milk', checked: true, updated_at: new Date().toISOString() }],
+      data: [{ item_name: 'milk', checked: true, updated_at: new Date().toISOString() }],
       error: null,
     })
 
@@ -98,7 +98,6 @@ describe('useCheckOffItem', () => {
     })
 
     expect(mockSupabase.rpc).toHaveBeenCalledWith('toggle_shopping_item_checked', {
-      p_user_id: 'test-user-id',
       p_item_name: 'milk',
     })
 
@@ -115,11 +114,11 @@ describe('useCheckOffItem', () => {
 
     mockSupabase.rpc
       .mockResolvedValueOnce({
-        data: [{ user_id: 'test-user-id', item_name: 'milk', checked: true, updated_at: new Date().toISOString() }],
+        data: [{ item_name: 'milk', checked: true, updated_at: new Date().toISOString() }],
         error: null,
       })
       .mockResolvedValueOnce({
-        data: [{ user_id: 'test-user-id', item_name: 'milk', checked: false, updated_at: new Date().toISOString() }],
+        data: [{ item_name: 'milk', checked: false, updated_at: new Date().toISOString() }],
         error: null,
       })
 
@@ -142,11 +141,11 @@ describe('useCheckOffItem', () => {
 
     mockSupabase.rpc
       .mockResolvedValueOnce({
-        data: [{ user_id: 'test-user-id', item_name: 'milk', checked: true, updated_at: '2026-01-01T00:00:00.000Z' }],
+        data: [{ item_name: 'milk', checked: true, updated_at: '2026-01-01T00:00:00.000Z' }],
         error: null,
       })
       .mockResolvedValueOnce({
-        data: [{ user_id: 'test-user-id', item_name: 'milk', checked: false, updated_at: '2026-01-01T00:00:01.000Z' }],
+        data: [{ item_name: 'milk', checked: false, updated_at: '2026-01-01T00:00:01.000Z' }],
         error: null,
       })
 
