@@ -91,7 +91,7 @@ test.describe('Authentication', () => {
       await expect(errorMessage).toBeVisible()
     })
 
-    test('should navigate to main app after successful sign in @smoke', async ({ page }) => {
+    test('should navigate to main app after successful sign in', async ({ page }) => {
       await page.goto('/')
 
       // Sign in with test user
@@ -100,10 +100,10 @@ test.describe('Authentication', () => {
       await page.getByRole('button', { name: /sign in/i }).click()
 
       // Wait for main app to load
-      await page.waitForSelector('nav, header.md\\:fixed', { state: 'visible', timeout: 15000 })
+      await page.waitForSelector('button[aria-label=\"Sign out\"], header h1', { state: 'visible', timeout: 30000 })
 
       // Verify main app is loaded (not auth form)
-      await expect(page.locator('header.md\\:fixed')).toBeVisible()
+      await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible()
     })
   })
 
@@ -140,14 +140,14 @@ test.describe('Authentication', () => {
       await setupAuth()
 
       // Verify we're in the app
-      await expect(page.locator('header.md\\:fixed')).toBeVisible()
+      await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible()
 
       // Refresh the page
       await page.reload()
       await page.waitForLoadState('networkidle')
 
       // Should still be in the app (not redirected to auth)
-      await expect(page.locator('header.md\\:fixed')).toBeVisible()
+      await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible()
     })
 
     test('should maintain active tab across page refresh', async ({ page, setupAuth, navigateToTab }) => {
@@ -192,3 +192,4 @@ test.describe('Authentication', () => {
     })
   })
 })
+

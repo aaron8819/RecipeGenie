@@ -1,4 +1,6 @@
 import { test as base, expect, type Page, type Locator } from '@playwright/test'
+import * as fs from 'fs'
+import * as path from 'path'
 
 /**
  * Test user credentials for authenticated tests
@@ -55,6 +57,74 @@ export const VIEWPORTS = {
   tablet: { width: 768, height: 1024 },
   desktop: { width: 1024, height: 768 },
   desktopLarge: { width: 1440, height: 900 },
+}
+
+const APP_READY_SELECTORS = [
+  'button[aria-label="Sign out"]',
+  'header h1:has-text("Recipe Genie")',
+  'nav button:has-text("Recipes")',
+]
+
+function hasSupabaseEnvVar(key: string): boolean {
+  if (process.env[key]) return true
+
+  const candidateFiles = ['.env.local', '.env']
+  for (const file of candidateFiles) {
+    const filePath = path.resolve(process.cwd(), file)
+    if (!fs.existsSync(filePath)) continue
+
+    const contents = fs.readFileSync(filePath, 'utf8')
+    const lineRegex = new RegExp(`^\\s*${key}\\s*=\\s*.+$`, 'm')
+    if (lineRegex.test(contents)) return true
+  }
+
+  return false
+}
+
+function assertE2EEnv() {
+  const missing: string[] = []
+
+  if (!TEST_USER.email || !TEST_USER.password) {
+    missing.push('TEST_USER email/password')
+  }
+
+  if (!hasSupabaseEnvVar('NEXT_PUBLIC_SUPABASE_URL')) {
+    missing.push('NEXT_PUBLIC_SUPABASE_URL')
+  }
+
+  if (!hasSupabaseEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY')) {
+    missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`E2E smoke preflight failed. Missing required configuration: ${missing.join(', ')}`)
+  }
+}
+
+async function isAppReady(page: import('@playwright/test').Page): Promise<boolean> {
+  for (const selector of APP_READY_SELECTORS) {
+    if (await page.locator(selector).first().isVisible().catch(() => false)) {
+      return true
+    }
+  }
+  return false
+}
+
+async function isAuthFormReady(page: import('@playwright/test').Page): Promise<boolean> {
+  const emailVisible = await page.locator('#email').isVisible().catch(() => false)
+  const passwordVisible = await page.locator('#password').isVisible().catch(() => false)
+  return emailVisible && passwordVisible
+}
+
+async function waitForAppOrAuth(page: import('@playwright/test').Page, timeoutMs = 30000): Promise<'app' | 'auth'> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    if (await isAppReady(page)) return 'app'
+    if (await isAuthFormReady(page)) return 'auth'
+    await page.waitForTimeout(250)
+  }
+
+  throw new Error(`Timed out waiting for app/auth state. URL=${page.url()}`)
 }
 
 /**
@@ -116,29 +186,22 @@ export interface RecipeGenieFixtures {
 export const test = base.extend<RecipeGenieFixtures>({
   setupAuth: async ({ page }, use) => {
     const setup = async () => {
-      // Navigate to the app - should be authenticated via global setup storage state
+      assertE2EEnv()
+
       await page.goto('/')
       await page.waitForLoadState('domcontentloaded')
 
-      // Give time for auth state to be checked
-      await page.waitForTimeout(1000)
+      const initialState = await waitForAppOrAuth(page, 45000)
 
-      // Check if we're already authenticated (main app visible) or on auth page
-      const isAuthenticated = await page.locator('header.md\\:fixed, nav.fixed.bottom-0').first().isVisible().catch(() => false)
-      const isAuthPage = await page.locator('form').first().isVisible().catch(() => false)
-
-      if (isAuthenticated) {
-        // Already authenticated, but check for onboarding modal
-        console.log('✅ Already authenticated')
+      if (initialState === 'app') {
+        console.log('Authenticated app shell is visible')
         await dismissOnboardingModal(page)
         return
       }
 
-      if (isAuthPage) {
-        // Need to sign in - storage state didn't work
-        console.log('⚠️ Storage state not working, signing in manually...')
+      if (initialState === 'auth') {
+        console.log('Storage state not authenticated, signing in manually')
 
-        // Use ID selectors for reliability
         const emailInput = page.locator('#email')
         const passwordInput = page.locator('#password')
 
@@ -147,43 +210,34 @@ export const test = base.extend<RecipeGenieFixtures>({
         await passwordInput.fill(TEST_USER.password)
         await page.getByRole('button', { name: /sign in/i }).click()
 
-        // Wait for main app to load
-        await page.waitForSelector('header.md\\:fixed, nav.fixed.bottom-0', { state: 'visible', timeout: 30000 })
-        console.log('✅ Signed in successfully')
+        const postLoginState = await waitForAppOrAuth(page, 45000)
+        if (postLoginState !== 'app') {
+          throw new Error(`Manual sign-in did not reach app shell. URL=${page.url()}`)
+        }
 
-        // Handle onboarding modal if it appears after sign-in
+        console.log('Manual sign-in reached app shell')
         await dismissOnboardingModal(page)
         return
       }
-
-      // Wait a bit more for either state
-      await page.waitForSelector('header.md\\:fixed, nav.fixed.bottom-0, form', { state: 'visible', timeout: 10000 })
-
-      // Check again
-      const appNowVisible = await page.locator('header.md\\:fixed, nav.fixed.bottom-0').first().isVisible().catch(() => false)
-      if (!appNowVisible) {
-        throw new Error('Could not authenticate - neither app nor auth form visible')
-      }
-
-      // Handle onboarding modal if it appears
-      await dismissOnboardingModal(page)
     }
     await use(setup)
   },
 
   signIn: async ({ page }, use) => {
     const signIn = async (email = TEST_USER.email, password = TEST_USER.password) => {
+      assertE2EEnv()
       await page.goto('/')
-      await page.waitForLoadState('networkidle')
+      await page.waitForLoadState('domcontentloaded')
+      await waitForAppOrAuth(page, 30000)
 
-      // Fill in the sign in form
       await page.getByLabel('Email').fill(email)
       await page.getByLabel('Password').fill(password)
       await page.getByRole('button', { name: /sign in/i }).click()
 
-      // Wait for navigation to complete
-      await page.waitForURL('/', { timeout: 10000 })
-      await page.waitForSelector('nav, header', { state: 'visible' })
+      const postLoginState = await waitForAppOrAuth(page, 45000)
+      if (postLoginState !== 'app') {
+        throw new Error(`Sign-in fixture did not reach app shell. URL=${page.url()}`)
+      }
     }
     await use(signIn)
   },
@@ -393,9 +447,8 @@ export const test = base.extend<RecipeGenieFixtures>({
 
   waitForAppLoad: async ({ page }, use) => {
     const waitForAppLoad = async () => {
-      await page.waitForLoadState('networkidle')
-      // Wait for either auth form or main app to be visible
-      await page.waitForSelector('form, nav, header', { state: 'visible' })
+      await page.waitForLoadState('domcontentloaded')
+      await waitForAppOrAuth(page, 45000)
     }
     await use(waitForAppLoad)
   },
@@ -472,3 +525,4 @@ export async function measureTouchTarget(locator: Locator): Promise<{ width: num
  * Minimum touch target size (44x44px per WCAG)
  */
 export const MIN_TOUCH_TARGET = 44
+

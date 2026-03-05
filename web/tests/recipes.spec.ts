@@ -191,7 +191,7 @@ test.describe('Recipe Management', () => {
       await expect(page.locator('[role="dialog"]')).toBeHidden()
     })
 
-    test('should save recipe and close modal @smoke', async ({ page, addRecipe }) => {
+    test('should save recipe and close modal', async ({ page, addRecipe }) => {
       await addRecipe(SAMPLE_RECIPE)
 
       // Modal should close
@@ -505,3 +505,4 @@ test.describe('Recipe Management', () => {
     })
   })
 })
+

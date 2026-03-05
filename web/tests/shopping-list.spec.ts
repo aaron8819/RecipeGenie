@@ -161,7 +161,7 @@ test.describe('Shopping List', () => {
       await addItemsToShoppingList(page, navigateToTab)
     })
 
-    test('should check off item on click @smoke', async ({ page }) => {
+    test('should check off item on click', async ({ page }) => {
       // Verify items were added to the shopping list
       const checkboxCount = await page.locator('[data-checkbox="true"]').count()
       console.log(`Found ${checkboxCount} checkbox(es) in shopping list`)
@@ -726,7 +726,7 @@ test.describe('Shopping List - Persistence', () => {
     await addItemsToShoppingList(page, navigateToTab)
   })
 
-  test('should persist checked state after page reload @smoke', async ({ page, navigateToTab }) => {
+  test('should persist checked state after page reload', async ({ page, navigateToTab }) => {
     const checkboxes = page.locator('[data-checkbox="true"]')
     await checkboxes.first().waitFor({ state: 'visible', timeout: 8000 })
 
@@ -984,3 +984,4 @@ test.describe('Shopping List - Rapid Interactions', () => {
     }
   })
 })
+
