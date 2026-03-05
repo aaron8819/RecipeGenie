@@ -45,6 +45,18 @@ test.describe('My unauthenticated tests', () => {
 npm run test:e2e
 ```
 
+### Run smoke tests (critical flow, Chromium-only)
+```bash
+npm run test:e2e:smoke
+```
+
+Smoke scope covers the critical path through auth, recipe creation, meal planner, and shopping list flows.
+
+### Run full cross-browser matrix
+```bash
+npm run test:e2e:full
+```
+
 ### Run tests with UI mode (recommended for development)
 ```bash
 npm run test:e2e:ui
@@ -168,7 +180,10 @@ The Playwright config is CI-ready:
 ### GitHub Actions Example
 ```yaml
 - name: Run E2E Tests
-  run: npm run test:e2e
+  run: npm run test:e2e:smoke
+
+- name: Run full E2E matrix
+  run: npm run test:e2e:full
   env:
     CI: true
 ```
