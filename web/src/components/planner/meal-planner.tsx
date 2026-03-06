@@ -64,8 +64,6 @@ import {
   useRecipeHistoryStats,
   useSaveDayAssignments,
   usePlannerCategories,
-  getWeekStartDate,
-  navigateWeek,
 } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
@@ -77,7 +75,6 @@ import { getCategoryHexColor } from "@/lib/planner-colors"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import {
   parseLocalDate,
-  parseLocalCalendarDate,
   toLocalNoonISOString,
   dayIndexToDayOfWeek,
   buildUnassignedDayPriority,
@@ -85,6 +82,20 @@ import {
 } from "@/lib/planner-utils"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { cn } from "@/lib/utils"
+import {
+  formatLocalISODate,
+  formatWeekLabel,
+  getDayOfWeekForWeekIndex,
+  getThisAndNextWeekStarts,
+  getWeekDays,
+  getWeekDayIndexForDate,
+  getWeekStartDate,
+  isDateInWeekRange,
+  navigateWeek,
+  resolveEffectiveMobileWeekTab,
+  resolveWeekDateForMobileTab,
+  type MobileWeekTab,
+} from "./meal-planner.utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -131,32 +142,6 @@ function getLastMadeMap(history: RecipeHistory[] | undefined): Map<string, strin
  * @param weekStartDate - Start date of the week (YYYY-MM-DD)
  * @returns true if the calendar date of dateStr falls within the week (inclusive)
  */
-function isDateInWeekRange(dateStr: string, weekStartDate: string): boolean {
-  if (!dateStr || !weekStartDate) return false
-
-  const date = parseLocalCalendarDate(dateStr)
-  if (!date) return false
-
-  // Parse weekStartDate as YYYY-MM-DD in local time
-  const parts = weekStartDate.split("-").map(Number)
-  const ys = parts[0]
-  const ms = parts[1]
-  const ds = parts[2]
-  if (isNaN(ys) || isNaN(ms) || isNaN(ds)) return false
-  const weekStart = new Date(ys, ms - 1, ds)
-  const weekEnd = new Date(weekStart)
-  weekEnd.setDate(weekEnd.getDate() + 6)
-
-  return date >= weekStart && date <= weekEnd
-}
-
-function formatLocalISODate(date: Date): string {
-  const year = date.getFullYear()
-  const month = `${date.getMonth() + 1}`.padStart(2, "0")
-  const day = `${date.getDate()}`.padStart(2, "0")
-  return `${year}-${month}-${day}`
-}
-
 const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
 
 /**
@@ -221,36 +206,8 @@ function CategoryPill({ category, count, onIncrement, onDecrement }: CategoryPil
   )
 }
 
-type MobileWeekTab = "today" | "thisWeek" | "nextWeek"
 type RecipeDayAssignments = Record<string, number> // recipe_id -> dayIndex (0-6)
 type WeekAssignments = Record<string, RecipeDayAssignments> // week_date -> RecipeDayAssignments
-
-/**
- * Parse YYYY-MM-DD as local calendar date (avoid UTC shift from new Date(str)).
- */
-/**
- * Get array of day objects for a week
- */
-function getWeekDays(weekStartDate: string, weekStartDay: number = 1): Array<{ date: Date; dayName: string; dayNumber: number }> {
-  if (!weekStartDate) return []
-  
-  const startDate = parseLocalDate(weekStartDate)
-  const days: Array<{ date: Date; dayName: string; dayNumber: number }> = []
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-  
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(startDate)
-    date.setDate(date.getDate() + i)
-    const dayIndex = date.getDay()
-    days.push({
-      date,
-      dayName: dayNames[dayIndex],
-      dayNumber: date.getDate(),
-    })
-  }
-  
-  return days
-}
 
 function EmptySlot({ onAdd, desktop }: { onAdd: () => void; desktop?: boolean }) {
   if (desktop) {
@@ -1146,8 +1103,8 @@ export function MealPlanner() {
 
   // Get week days for calendar view (needed early for handleMarkMade)
   const weekDays = useMemo(() => {
-    return getWeekDays(currentWeekDate, config?.week_start_day || 1)
-  }, [currentWeekDate, config?.week_start_day])
+    return getWeekDays(currentWeekDate)
+  }, [currentWeekDate])
 
   // Mobile: filter to today only when "Today" tab, else all days
   const mobileDays = useMemo(() => {
@@ -1161,12 +1118,7 @@ export function MealPlanner() {
   // Compute effective tab based on currentWeekDate to keep visual indicator in sync
   // This prevents tab/date desync when using chevron navigation beyond this/next week
   const effectiveTab = useMemo((): MobileWeekTab | null => {
-    if (mobileWeekTab === "today") return "today"
-    const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
-    const nextWeekStart = navigateWeek(thisWeekStart, "next")
-    if (currentWeekDate === thisWeekStart) return "thisWeek"
-    if (currentWeekDate === nextWeekStart) return "nextWeek"
-    return null // No tab matches (viewing a different week)
+    return resolveEffectiveMobileWeekTab(mobileWeekTab, currentWeekDate, config?.week_start_day || 1)
   }, [currentWeekDate, mobileWeekTab, config?.week_start_day])
 
   const scrollToDay = useCallback((date: Date) => {
@@ -1226,8 +1178,7 @@ export function MealPlanner() {
     markUserNavigated()
     const next = navigateWeek(currentWeekDate, "prev")
     setCurrentWeekDate(next)
-    const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
-    const nextWeekStart = navigateWeek(thisWeekStart, "next")
+    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
     if (next === thisWeekStart) setMobileWeekTab("thisWeek")
     else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
   }
@@ -1236,8 +1187,7 @@ export function MealPlanner() {
     markUserNavigated()
     const next = navigateWeek(currentWeekDate, "next")
     setCurrentWeekDate(next)
-    const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
-    const nextWeekStart = navigateWeek(thisWeekStart, "next")
+    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
     if (next === thisWeekStart) setMobileWeekTab("thisWeek")
     else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
   }
@@ -1245,10 +1195,7 @@ export function MealPlanner() {
   const handleMobileWeekTab = (tab: MobileWeekTab) => {
     markUserNavigated()
     setMobileWeekTab(tab)
-    const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
-    const nextWeekStart = navigateWeek(thisWeekStart, "next")
-    if (tab === "today" || tab === "thisWeek") setCurrentWeekDate(thisWeekStart)
-    else if (tab === "nextWeek") setCurrentWeekDate(nextWeekStart)
+    setCurrentWeekDate(resolveWeekDateForMobileTab(tab, config?.week_start_day || 1))
   }
 
   const handleGeneratePlan = () => {
@@ -1488,16 +1435,6 @@ export function MealPlanner() {
     }
   }, [currentWeekDate, recipeDayAssignments, saveDayAssignments, config?.week_start_day])
 
-  const formatWeekLabel = (dateStr: string) => {
-    if (!dateStr) return ""
-    const date = parseLocalDate(dateStr)
-    const endDate = new Date(date)
-    endDate.setDate(endDate.getDate() + 6)
-
-    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }
-    return `${date.toLocaleDateString("en-US", options)} - ${endDate.toLocaleDateString("en-US", options)}`
-  }
-
   const categories = allCategories || config?.categories || []
   const totalMeals = Object.values(selection).reduce((sum, n) => sum + n, 0)
 
@@ -1518,8 +1455,7 @@ export function MealPlanner() {
   const getRecipesByDay = useCallback((dayIndex: number): Recipe[] => {
     if (!displayedRecipes) return []
 
-    const day = weekDays[dayIndex]
-    const dayOfWeek = day ? day.date.getDay() : dayIndex
+    const dayOfWeek = getDayOfWeekForWeekIndex(weekDays, dayIndex)
 
     // Get recipes explicitly assigned to this day-of-week
     const assignedRecipes = displayedRecipes.filter(
@@ -1564,7 +1500,7 @@ export function MealPlanner() {
     if (Number.isNaN(targetDayIndex)) return
     if (!weekDays[targetDayIndex]) return
 
-    const targetDayOfWeek = weekDays[targetDayIndex].date.getDay()
+    const targetDayOfWeek = getDayOfWeekForWeekIndex(weekDays, targetDayIndex)
     if (recipeDayAssignments[recipeId] === targetDayOfWeek) return
 
     handleMoveToDay(recipeId, targetDayIndex)
@@ -1646,8 +1582,7 @@ export function MealPlanner() {
                         const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
                         setCurrentWeekDate(weekStart)
                         setIsDatePickerOpenMobile(false)
-                          const thisWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
-                          const nextWeekStart = navigateWeek(thisWeekStart, "next")
+                          const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
                           if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
                           else if (weekStart === nextWeekStart) setMobileWeekTab("nextWeek")
                         }
@@ -2091,7 +2026,7 @@ export function MealPlanner() {
               )}
               <div className="space-y-10" ref={mobileDaysContainerRef}>
                 {mobileDays.map((day) => {
-                  const dayIndex = weekDays.findIndex((w) => w.date.toDateString() === day.date.toDateString())
+                  const dayIndex = getWeekDayIndexForDate(weekDays, day.date)
                   const dayRecipes = getRecipesByDay(dayIndex >= 0 ? dayIndex : 0)
                   return (
                     <MobileDayColumn
