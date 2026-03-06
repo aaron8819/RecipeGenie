@@ -50,18 +50,29 @@ import {
   useUpdateShoppingConfig,
   useAddToPantryAndRemove,
 } from "@/hooks/use-shopping"
-import { SHOPPING_CATEGORIES, getAllShoppingCategories, getCategoryByKey } from "@/lib/shopping-categories"
+import { SHOPPING_CATEGORIES, getCategoryByKey } from "@/lib/shopping-categories"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
-import type { ShoppingItem, ShoppingList, Recipe } from "@/types/database"
+import type { ShoppingItem, Recipe } from "@/types/database"
 import { toFraction, cn } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
-import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
 import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import { useRecipe, useRecipes, useCategories } from "@/hooks/use-recipes"
+import {
+  buildCategoryViewModel,
+  createDisplayShoppingList,
+  deriveCheckedPartition,
+  deriveOrderedCategories,
+  deriveSortableItemIds,
+  deriveUniqueRecipeNames,
+  deriveVisibleShoppingItems,
+  groupItemsByCategory,
+  mergeAlreadyHaveItems,
+  sortItemsWithinGroups,
+} from "./shopping-list.selectors"
 
 // Color palette for recipe source tags (excluding grey which is reserved for Manual)
 const RECIPE_COLORS = [
@@ -1052,63 +1063,11 @@ export function ShoppingListView() {
   )
 
   // Show cached data immediately even while fetching (stale-while-revalidate)
-  const displayShoppingList = shoppingList || {
-    user_id: "",
-    items: [],
-    already_have: [],
-    excluded: [],
-    source_recipes: [],
-    scale: 1.0,
-    total_servings: 0,
-    custom_order: false,
-    generated_at: new Date().toISOString(),
-  } as ShoppingList
+  const displayShoppingList = createDisplayShoppingList(shoppingList)
   
   // Merge duplicate items in already_have by name (e.g., multiple "garlic" entries)
   const mergedAlreadyHave = useMemo(() => {
-    const alreadyHave = displayShoppingList.already_have || []
-    if (alreadyHave.length === 0) return []
-    
-    const itemMap = new Map<string, ShoppingItem>()
-    
-    for (const item of alreadyHave) {
-      const key = item.item.toLowerCase()
-      const existing = itemMap.get(key)
-      
-      if (existing) {
-        // Merge sources
-        const existingSources = existing.sources || []
-        const newSources = item.sources || []
-        const sourceSet = new Set(existingSources.map((s) => s.recipeName))
-        const combinedSources = [...existingSources]
-        for (const source of newSources) {
-          if (!sourceSet.has(source.recipeName)) {
-            combinedSources.push(source)
-          }
-        }
-        
-        // Merge amounts
-        const mergeResult = mergeAmounts(existing.amount, existing.unit, item.amount, item.unit)
-        if (mergeResult) {
-          itemMap.set(key, {
-            ...existing,
-            amount: roundForDisplay(mergeResult.amount),
-            unit: mergeResult.unit,
-            sources: combinedSources,
-          })
-        } else {
-          // Units incompatible, keep existing but combine sources
-          itemMap.set(key, {
-            ...existing,
-            sources: combinedSources,
-          })
-        }
-      } else {
-        itemMap.set(key, item)
-      }
-    }
-    
-    return Array.from(itemMap.values())
+    return mergeAlreadyHaveItems(displayShoppingList.already_have || [])
   }, [displayShoppingList.already_have])
   
   // Only show loading on initial load with no cached data
@@ -1116,56 +1075,34 @@ export function ShoppingListView() {
 
   // Filter items for pending deletions
   const filteredItems = useMemo(() => {
-    if (pendingClearList) return []
-    let items = displayShoppingList?.items || []
-
-    // Filter out single pending item deletion
-    if (pendingItemDeletion) {
-      items = items.filter(item => item.item !== pendingItemDeletion)
-    }
-
-    // Filter out items from pending recipe deletion
-    if (pendingRecipeDeletion) {
-      items = items.filter(item => {
-        if (!item.sources) return true
-        // Remove if all sources are from the pending recipe
-        const nonPendingSources = item.sources.filter(s => s.recipeName !== pendingRecipeDeletion)
-        return nonPendingSources.length > 0 || item.sources.length === 0
-      })
-    }
-
-    return items
+    return deriveVisibleShoppingItems({
+      items: displayShoppingList?.items || [],
+      pendingClearList,
+      pendingItemDeletion,
+      pendingRecipeDeletion,
+    })
   }, [displayShoppingList?.items, pendingItemDeletion, pendingRecipeDeletion, pendingClearList])
 
   // Group items by category
   const groupedItems = useMemo(() => {
-    return filteredItems.reduce(
-      (acc, item) => {
-        const category = item.categoryKey || "misc"
-        if (!acc[category]) acc[category] = []
-        acc[category].push(item)
-        return acc
-      },
-      {} as Record<string, ShoppingItem[]>
-    )
+    return sortItemsWithinGroups(groupItemsByCategory(filteredItems))
   }, [filteredItems])
 
   // Get ordered categories (with custom categories and custom ordering)
   const orderedCategories = useMemo(() => {
-    const categoryOrder = Array.isArray(config?.category_order)
-      ? config.category_order.filter((value): value is string => typeof value === "string")
-      : null
-
-    return getAllShoppingCategories(
-      config?.custom_categories || null,
-      categoryOrder
-    )
+    return deriveOrderedCategories({
+      customCategories: config?.custom_categories,
+      categoryOrder: config?.category_order,
+    })
   }, [config?.custom_categories, config?.category_order])
+
+  const categoryViewModels = useMemo(() => {
+    return buildCategoryViewModel(groupedItems, orderedCategories)
+  }, [groupedItems, orderedCategories])
 
   // Check if all items are checked
   const allItemsChecked = useMemo(() => {
-    if (!filteredItems || filteredItems.length === 0) return false
-    return filteredItems.every(item => item.checked === true)
+    return deriveCheckedPartition(filteredItems).allChecked
   }, [filteredItems])
 
   // Auto-collapse categories when all items are checked (only if not manually expanded)
@@ -1216,28 +1153,17 @@ export function ShoppingListView() {
   // Use index-based IDs to ensure uniqueness while preserving drag-and-drop functionality
   // Format: "idx-{index}" to avoid conflicts with item names that contain hyphens
   const allItemIds = useMemo(() => {
-    return filteredItems.map((item, idx) => `idx-${idx}`)
+    return deriveSortableItemIds(filteredItems)
   }, [filteredItems])
 
   // Get unique recipe names from active items only (excluding "Manual" and pending deletions)
   // Only show recipe tags when there are active unchecked items
   const uniqueRecipes = useMemo(() => {
-    if (pendingClearList) return []
-    const items = shoppingList?.items || []
-    // Only show recipes for active items, not checked ones
-    if (items.length === 0) return []
-
-    const recipeSet = new Set<string>()
-    for (const item of items) {
-      if (item.sources) {
-        for (const source of item.sources) {
-          if (source.recipeName !== "Manual" && source.recipeName !== pendingRecipeDeletion) {
-            recipeSet.add(source.recipeName)
-          }
-        }
-      }
-    }
-    return Array.from(recipeSet).sort()
+    return deriveUniqueRecipeNames({
+      items: shoppingList?.items || [],
+      pendingRecipeDeletion,
+      pendingClearList,
+    })
   }, [shoppingList?.items, pendingRecipeDeletion, pendingClearList])
 
   // Create a color mapping that assigns a unique color per recipe when possible.
@@ -1699,9 +1625,8 @@ export function ShoppingListView() {
                     itemToGlobalIndex.set(item, idx)
                   }
                 })
-                return orderedCategories.map((categoryData) => {
-                  const items = groupedItems[categoryData.key]
-                  if (!items || items.length === 0) return null
+                return categoryViewModels.map((categoryData) => {
+                  const items = categoryData.items
 
                   // Check if this category is a valid drop target
                   const isDragTarget = activeItem &&
@@ -1709,8 +1634,6 @@ export function ShoppingListView() {
                     activeItem.categoryKey !== categoryData.key
 
                   const isCollapsed = collapsedCategories.has(categoryData.key)
-                  const checkedCount = items.filter(item => item.checked).length
-
                   const CategoryIcon = categoryData.key === "produce" ? Leaf : Package
                   return (
                     <Card
@@ -1731,7 +1654,7 @@ export function ShoppingListView() {
                           {categoryData.isCustom && (
                             <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded normal-case">Custom</span>
                           )}
-                          <span className="text-[10px] font-medium px-2 py-0.5 bg-accent-green/20 text-primary rounded-full uppercase tracking-tighter">{checkedCount}/{items.length}</span>
+                          <span className="text-[10px] font-medium px-2 py-0.5 bg-accent-green/20 text-primary rounded-full uppercase tracking-tighter">{categoryData.checkedCount}/{categoryData.totalCount}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             {items.length > 1 && (
