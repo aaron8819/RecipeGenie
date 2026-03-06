@@ -1,0 +1,189 @@
+import { describe, expect, it } from "vitest"
+
+import {
+  applyParsedRecipeToFormValues,
+  buildNewRecipeDialogFormValues,
+  buildRecipeSubmissionData,
+  clampRecipeServings,
+  isNewRecipeDialogDirty,
+} from "../recipe-dialog.defaults"
+import {
+  autoFixIngredients,
+  countBlockingIngredientIssues,
+  countIngredientsWithIssues,
+  validateIngredient,
+} from "../recipe-dialog.validation"
+import {
+  IMPORT_TEXT_REQUIRED_ERROR,
+  IMPORT_URL_INVALID_ERROR,
+  parseRecipeImportPreview,
+  parseRecipeImportText,
+  toParsedRecipeImport,
+  validateRecipeImportUrl,
+} from "../recipe-import.parser"
+
+describe("recipe dialog validation helpers", () => {
+  it("validates missing items and inconsistent amount/unit pairs", () => {
+    expect(validateIngredient({ item: "", amount: null, unit: "" })).toEqual([
+      "missing-item",
+    ])
+    expect(validateIngredient({ item: "Flour", amount: null, unit: "cups" })).toEqual([
+      "unit-without-amount",
+    ])
+    expect(validateIngredient({ item: "Bananas", amount: 3, unit: "" })).toEqual([
+      "amount-without-unit",
+    ])
+  })
+
+  it("auto-fixes unit without amount by defaulting to 1", () => {
+    const result = autoFixIngredients([
+      { item: "Flour", amount: null, unit: "cups" },
+    ])
+
+    expect(result.ingredients[0]).toMatchObject({ item: "Flour", amount: 1, unit: "cups" })
+    expect(result.fixedCount).toBe(1)
+  })
+
+  it("counts issue totals and blocking issues separately", () => {
+    const ingredients = [
+      { item: "", amount: null, unit: "" },
+      { item: "Flour", amount: null, unit: "cups" },
+      { item: "Bananas", amount: 3, unit: "" },
+    ]
+
+    expect(countIngredientsWithIssues(ingredients)).toBe(3)
+    expect(countBlockingIngredientIssues(ingredients)).toBe(2)
+  })
+})
+
+describe("recipe import helpers", () => {
+  it("returns the required text error for blank imports", () => {
+    expect(parseRecipeImportText("   ")).toEqual({
+      parsedRecipe: null,
+      error: IMPORT_TEXT_REQUIRED_ERROR,
+    })
+  })
+
+  it("parses live preview safely", () => {
+    expect(parseRecipeImportPreview("   ")).toBeNull()
+    expect(
+      parseRecipeImportPreview("Toast\n\nIngredients:\n1 slice bread\n\nInstructions:\nToast it")
+    ).toMatchObject({
+      name: "Toast",
+      ingredients: [{ item: "bread", amount: 1, unit: "slice" }],
+    })
+  })
+
+  it("validates URL imports and maps extracted URL results", () => {
+    expect(validateRecipeImportUrl("notaurl")).toEqual({
+      normalizedUrl: null,
+      error: IMPORT_URL_INVALID_ERROR,
+    })
+    expect(validateRecipeImportUrl(" https://example.com/recipe ")).toEqual({
+      normalizedUrl: "https://example.com/recipe",
+      error: null,
+    })
+    expect(
+      toParsedRecipeImport({
+        name: "Soup",
+        ingredients: [{ item: "water", amount: 1, unit: "cup" }],
+        instructions: ["Boil"],
+        servings: 2,
+        imageUrl: "https://example.com/soup.jpg",
+        warnings: ["warning"],
+      })
+    ).toEqual({
+      name: "Soup",
+      ingredients: [{ item: "water", amount: 1, unit: "cup" }],
+      instructions: ["Boil"],
+      servings: 2,
+      warnings: ["warning"],
+    })
+  })
+})
+
+describe("recipe dialog defaults helpers", () => {
+  it("builds new form defaults and submission payloads", () => {
+    const defaults = buildNewRecipeDialogFormValues(["dinner"])
+
+    expect(defaults).toEqual({
+      name: "",
+      category: "dinner",
+      servings: 4,
+      tags: [],
+      ingredients: [{ item: "", amount: null, unit: "" }],
+      instructions: "",
+      imageUrl: null,
+    })
+
+    expect(
+      buildRecipeSubmissionData({
+        ...defaults,
+        name: "  Soup  ",
+        tags: ["easy"],
+        ingredients: [
+          { item: " water ", amount: 1, unit: "cup" },
+          { item: "", amount: null, unit: "" },
+        ],
+        instructions: " Boil \n\n Serve ",
+      })
+    ).toEqual({
+      name: "Soup",
+      category: "dinner",
+      servings: 4,
+      tags: ["easy"],
+      ingredients: [{ item: " water ", amount: 1, unit: "cup" }],
+      instructions: ["Boil", "Serve"],
+      image_url: null,
+    })
+  })
+
+  it("applies parsed preview values without overwriting missing fields", () => {
+    expect(
+      applyParsedRecipeToFormValues(
+        {
+          name: "Fallback",
+          category: "dinner",
+          servings: 4,
+          tags: [],
+          ingredients: [{ item: "Eggs", amount: 2, unit: "" }],
+          instructions: "Cook",
+          imageUrl: null,
+        },
+        {
+          name: "",
+          ingredients: [{ item: "Bread", amount: 1, unit: "slice" }],
+          instructions: [],
+          warnings: [],
+        }
+      )
+    ).toEqual({
+      name: "Fallback",
+      category: "dinner",
+      servings: 4,
+      tags: [],
+      ingredients: [{ item: "Bread", amount: 1, unit: "slice" }],
+      instructions: "Cook",
+      imageUrl: null,
+    })
+  })
+
+  it("detects dirty state and clamps servings", () => {
+    expect(
+      isNewRecipeDialogDirty({
+        name: "",
+        ingredients: [{ item: "", amount: null, unit: "" }],
+        instructions: "",
+      })
+    ).toBe(false)
+    expect(
+      isNewRecipeDialogDirty({
+        name: "",
+        ingredients: [{ item: "Flour", amount: null, unit: "" }],
+        instructions: "",
+      })
+    ).toBe(true)
+    expect(clampRecipeServings(0)).toBe(1)
+    expect(clampRecipeServings(101)).toBe(100)
+  })
+})

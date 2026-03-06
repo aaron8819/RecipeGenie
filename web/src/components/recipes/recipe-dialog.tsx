@@ -42,13 +42,35 @@ import {
 import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from "@/hooks/use-recipes"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
-import { parseRecipeText, parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
+import type { ParsedRecipe } from "@/lib/recipe-parser"
 import { TagInput } from "@/components/ui/tag-input"
 import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
 import { cn, toFraction } from "@/lib/utils"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
+import {
+  applyParsedRecipeToFormValues,
+  buildEditingRecipeDialogFormValues,
+  buildNewRecipeDialogFormValues,
+  buildRecipeSubmissionData,
+  clampRecipeServings,
+  hasValidRecipeIngredients,
+  isNewRecipeDialogDirty,
+} from "./recipe-dialog.defaults"
+import {
+  getImportErrorMessage,
+  IMPORT_URL_FAILURE_ERROR,
+  parseRecipeImportPreview,
+  parseRecipeImportText,
+  toParsedRecipeImport,
+  validateRecipeImportUrl,
+} from "./recipe-import.parser"
+import {
+  autoFixIngredients,
+  countBlockingIngredientIssues,
+  countIngredientsWithIssues,
+} from "./recipe-dialog.validation"
 
 // Lazy-loaded so @dnd-kit (~60–90 KB gzipped) is excluded from the initial bundle
 const SortableIngredientList = dynamic(
@@ -62,31 +84,6 @@ interface RecipeDialogProps {
   recipe?: Recipe
   categories: string[]
   onRecipeCreated?: (recipe: Recipe) => void
-}
-
-/**
- * Validate an ingredient for common issues
- * Returns array of issue codes for UI rendering
- */
-function validateIngredient(ingredient: Ingredient): string[] {
-  const issues: string[] = [];
-
-  // Missing item name
-  if (!ingredient.item || !ingredient.item.trim()) {
-    issues.push('missing-item');
-  }
-
-  // Unit specified but no amount
-  if (ingredient.unit && ingredient.unit.trim() && !ingredient.amount) {
-    issues.push('unit-without-amount');
-  }
-
-  // Amount specified but no unit (only flag if amount > 0)
-  if (ingredient.amount && ingredient.amount > 0 && !ingredient.unit?.trim()) {
-    issues.push('amount-without-unit');
-  }
-
-  return issues;
 }
 
 
@@ -144,13 +141,14 @@ export function RecipeDialog({
   // Reset form when dialog opens/closes or recipe changes
   useEffect(() => {
     if (open && recipe) {
-      setName(recipe.name)
-      setCategory(recipe.category)
-      setServings(recipe.servings)
-      setTags(recipe.tags || [])
-      setIngredients(recipe.ingredients || [])
-      setInstructions((recipe.instructions || []).join("\n"))
-      setImageUrl(recipe.image_url || null)
+      const formValues = buildEditingRecipeDialogFormValues(recipe)
+      setName(formValues.name)
+      setCategory(formValues.category)
+      setServings(formValues.servings)
+      setTags(formValues.tags)
+      setIngredients(formValues.ingredients)
+      setInstructions(formValues.instructions)
+      setImageUrl(formValues.imageUrl)
       setImageFile(null)
       setImagePreview(null)
       setMode("manual")
@@ -160,13 +158,14 @@ export function RecipeDialog({
       setImportStep('input')
       setParsedPreview(null)
     } else if (open && !recipe) {
-      setName("")
-      setCategory(categories[0] || "")
-      setServings(4)
-      setTags([])
-      setIngredients([{ item: "", amount: null, unit: "" }])
-      setInstructions("")
-      setImageUrl(null)
+      const formValues = buildNewRecipeDialogFormValues(categories)
+      setName(formValues.name)
+      setCategory(formValues.category)
+      setServings(formValues.servings)
+      setTags(formValues.tags)
+      setIngredients(formValues.ingredients)
+      setInstructions(formValues.instructions)
+      setImageUrl(formValues.imageUrl)
       setImageFile(null)
       setImagePreview(null)
       setMode("manual")
@@ -215,94 +214,64 @@ export function RecipeDialog({
 
   // Debounced live preview parser
   const debouncedParse = useDebouncedCallback(((text: string) => {
-    if (!text.trim()) {
-      setLivePreview(null);
-      return;
-    }
-
-    try {
-      const parsed = parseRecipeText(text);
-      setLivePreview(parsed);
-    } catch (error) {
-      console.error('Live preview parse error:', error);
-      setLivePreview(null);
-    }
+    setLivePreview(parseRecipeImportPreview(text))
   }) as (...args: unknown[]) => void, 300);
 
   const handleParseImport = () => {
-    if (!importText.trim()) {
-      setParseError("Please paste some recipe text to import")
+    const result = parseRecipeImportText(importText)
+
+    if (!result.parsedRecipe) {
+      setParseError(result.error)
       return
     }
 
-    try {
-      const parsed = parseRecipeText(importText)
-      setParsedPreview(parsed)
-      setParseError(null)
-      setImportStep('preview')
-    } catch (error) {
-      setParseError(
-        error instanceof Error
-          ? error.message
-          : "Failed to parse recipe. Please check the format and try again."
-      )
-    }
+    setParsedPreview(result.parsedRecipe)
+    setParseError(null)
+    setImportStep('preview')
   }
 
   const handleUrlImport = async () => {
-    if (!importUrl.trim()) {
-      setParseError('Please enter a recipe URL')
-      return
-    }
+    const validation = validateRecipeImportUrl(importUrl)
 
-    try {
-      new URL(importUrl.trim())
-    } catch {
-      setParseError('Please enter a valid URL')
+    if (!validation.normalizedUrl) {
+      setParseError(validation.error)
       return
     }
 
     setParseError(null)
     try {
-      const result = await importFromUrl.mutateAsync(
-        importUrl.trim()
-      )
-      setParsedPreview({
-        name: result.name,
-        ingredients: result.ingredients,
-        instructions: result.instructions,
-        servings: result.servings,
-        warnings: result.warnings,
-      })
+      const result = await importFromUrl.mutateAsync(validation.normalizedUrl)
+      setParsedPreview(toParsedRecipeImport(result))
       // Store the extracted image URL for later
       if (result.imageUrl) {
         setImageUrl(result.imageUrl)
       }
       setImportStep('preview')
     } catch (err) {
-      setParseError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to import recipe from URL'
-      )
+      setParseError(getImportErrorMessage(err, IMPORT_URL_FAILURE_ERROR))
     }
   }
 
   const handleApplyPreview = () => {
     if (!parsedPreview) return
 
-    if (parsedPreview.name) {
-      setName(parsedPreview.name)
-    }
-    if (parsedPreview.servings) {
-      setServings(parsedPreview.servings)
-    }
-    if (parsedPreview.ingredients.length > 0) {
-      setIngredients(parsedPreview.ingredients)
-    }
-    if (parsedPreview.instructions.length > 0) {
-      setInstructions(parsedPreview.instructions.join("\n"))
-    }
+    const formValues = applyParsedRecipeToFormValues(
+      {
+        name,
+        category,
+        servings,
+        tags,
+        ingredients,
+        instructions,
+        imageUrl,
+      },
+      parsedPreview
+    )
+
+    setName(formValues.name)
+    setServings(formValues.servings)
+    setIngredients(formValues.ingredients)
+    setInstructions(formValues.instructions)
 
     // Switch to manual mode to allow editing
     setMode("manual")
@@ -317,50 +286,17 @@ export function RecipeDialog({
 
   // Handle auto-fix for validation issues
   const handleAutoFix = useCallback(() => {
-    const fixed = ingredients.map((ing) => {
-      const issues = validateIngredient(ing);
+    const result = autoFixIngredients(ingredients)
 
-      if (issues.length === 0) return ing;
+    setIngredients(result.ingredients)
 
-      // Try parsing the item field for structured data
-      if (ing.item && (issues.includes('amount-without-unit') || issues.includes('unit-without-amount'))) {
-        const parsed = parseIngredientLine(ing.item);
-
-        if (parsed.item && parsed.item !== ing.item) {
-          return {
-            ...ing,
-            amount: parsed.amount !== null ? parsed.amount : ing.amount,
-            unit: parsed.unit || ing.unit,
-            item: parsed.item,
-            modifier: parsed.modifier || ing.modifier,
-          };
-        }
-      }
-
-      // Unit without amount → default to 1
-      if (issues.includes('unit-without-amount') && !ing.amount) {
-        return { ...ing, amount: 1 };
-      }
-
-      return ing;
-    });
-
-    setIngredients(fixed);
-
-    // Count fixed items
-    const fixedCount = fixed.filter((f, i) => {
-      const before = validateIngredient(ingredients[i]).length;
-      const after = validateIngredient(f).length;
-      return after < before;
-    }).length;
-
-    if (fixedCount > 0) {
+    if (result.fixedCount > 0) {
       undoToast.show({
-        message: `Auto-fixed ${fixedCount} ingredient(s)`,
+        message: `Auto-fixed ${result.fixedCount} ingredient(s)`,
         duration: 3000
-      });
+      })
     }
-  }, [ingredients, setIngredients, undoToast]);
+  }, [ingredients, setIngredients, undoToast])
 
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -398,29 +334,16 @@ export function RecipeDialog({
 
   const handleSubmit = async () => {
     // P3: Validate ingredients before submitting (only blocking issues)
-    const blockingIssues = ingredients.filter(ing => {
-      const issues = validateIngredient(ing)
-      // Only block on truly invalid cases, not "amount-without-unit" (e.g., "3 bananas" is valid)
-      return issues.some(issue => issue === 'missing-item' || issue === 'unit-without-amount')
-    })
+    const blockingIssuesCount = countBlockingIngredientIssues(ingredients)
 
-    if (blockingIssues.length > 0) {
+    if (blockingIssuesCount > 0) {
       undoToast.show({
-        message: `${blockingIssues.length} ingredient(s) have critical issues. Please fix them before saving.`,
+        message: `${blockingIssuesCount} ingredient(s) have critical issues. Please fix them before saving.`,
         duration: 5000
       })
       document.querySelector('[data-has-issues="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       return
     }
-
-    // Filter out empty ingredients
-    const validIngredients = ingredients.filter((i) => i.item.trim())
-
-    // Parse instructions into array
-    const instructionLines = instructions
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line)
 
     try {
       let finalImageUrl = imageUrl
@@ -450,15 +373,15 @@ export function RecipeDialog({
         }
       }
 
-      const recipeData = {
-        name: name.trim(),
+      const recipeData = buildRecipeSubmissionData({
+        name,
         category,
         servings,
-        tags: tags || [], // Ensure tags is always an array, never null/undefined
-        ingredients: validIngredients,
-        instructions: instructionLines,
-        image_url: finalImageUrl,
-      }
+        tags,
+        ingredients,
+        instructions,
+        imageUrl: finalImageUrl,
+      })
 
       if (isEditing) {
         await updateRecipe.mutateAsync({
@@ -479,16 +402,16 @@ export function RecipeDialog({
   const isSubmitting = createRecipe.isPending || updateRecipe.isPending || isUploadingImage
 
   // Check if there's at least one valid ingredient
-  const hasValidIngredients = ingredients.some((i) => i.item.trim())
+  const hasValidIngredients = hasValidRecipeIngredients(ingredients)
 
   const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
 
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
-  const isDirty = !isEditing && (
-    name.trim() !== '' ||
-    ingredients.some((i) => i.item.trim() !== '') ||
-    instructions.trim() !== ''
-  )
+  const isDirty = !isEditing && isNewRecipeDialogDirty({
+    name,
+    ingredients,
+    instructions,
+  })
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isDirty) {
       setShowDiscardConfirm(true)
@@ -1180,7 +1103,7 @@ function RecipeFormContent({
                   onChange={(e) => {
                     const val = parseInt(e.target.value)
                     if (isNaN(val)) setServings(1)
-                    else setServings(Math.min(100, Math.max(1, val)))
+                    else setServings(clampRecipeServings(val))
                   }}
                   className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
                 />
@@ -1207,7 +1130,7 @@ function RecipeFormContent({
             <Label className="text-sm font-semibold text-primary mb-4 block">Ingredients</Label>
 
             {/* Validation Summary */}
-            {ingredients.some(ing => validateIngredient(ing).length > 0) && (
+            {countIngredientsWithIssues(ingredients) > 0 && (
               <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
@@ -1216,7 +1139,7 @@ function RecipeFormContent({
                       Ingredient Validation Issues
                     </div>
                     <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
-                      {ingredients.filter(ing => validateIngredient(ing).length > 0).length} ingredient(s) need attention. Check highlighted fields.
+                      {countIngredientsWithIssues(ingredients)} ingredient(s) need attention. Check highlighted fields.
                     </p>
                     <Button
                       type="button"
@@ -1356,7 +1279,7 @@ function RecipeFormContent({
                 onChange={(e) => {
                   const val = parseInt(e.target.value)
                   if (isNaN(val)) setServings(1)
-                  else setServings(Math.min(100, Math.max(1, val)))
+                  else setServings(clampRecipeServings(val))
                 }}
                 className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
               />
