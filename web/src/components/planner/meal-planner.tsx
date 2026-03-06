@@ -69,7 +69,7 @@ import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useCategories, useToggleFavorite, useRecipes } from "@/hooks/use-recipes"
 import { EmptyState } from "@/components/ui/empty-state"
-import { CalendarDays, BookOpen, Save, FolderOpen } from "lucide-react"
+import { BookOpen, Save, FolderOpen } from "lucide-react"
 import { getTagClassName, getTagColor } from "@/lib/tag-colors"
 import { getCategoryHexColor } from "@/lib/planner-colors"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
@@ -78,7 +78,6 @@ import {
   toLocalNoonISOString,
   dayIndexToDayOfWeek,
   buildUnassignedDayPriority,
-  getUnassignedDayOfWeek,
 } from "@/lib/planner-utils"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { cn } from "@/lib/utils"
@@ -90,12 +89,30 @@ import {
   getWeekDays,
   getWeekDayIndexForDate,
   getWeekStartDate,
-  isDateInWeekRange,
   navigateWeek,
   resolveEffectiveMobileWeekTab,
   resolveWeekDateForMobileTab,
   type MobileWeekTab,
 } from "./meal-planner.utils"
+import {
+  deriveActiveRecipeOverlay,
+  derivePlannerProgress,
+  deriveTotalMeals,
+  filterTemplateLoadData,
+  groupRecipesByPlannerDay,
+  isRecipeMadeForWeek,
+  normalizeStoredDayAssignments,
+} from "./meal-planner.selectors"
+import {
+  PlannerActionBar,
+  PlannerDaySection,
+  PlannerDesktopWeekShell,
+  PlannerEmptyWeekPanel,
+  PlannerMobileHeader,
+  PlannerMobileTabBar,
+  PlannerMobileWeekStrip,
+  PlannerSectionShell,
+} from "./meal-planner-components"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -380,31 +397,32 @@ function DayColumn({
   const extraRecipes = dayRecipes.slice(1)
 
   return (
-    <div
+    <PlannerDaySection
       ref={setNodeRef}
       className={cn(
         "space-y-3 rounded-2xl transition-colors",
         isOver && "bg-primary/5 ring-2 ring-primary/30"
       )}
+      header={
+        <>
+          <p
+            className={cn(
+              "text-[10px] uppercase tracking-widest font-bold",
+              isToday ? "text-primary dark:text-emerald-400" : "text-slate-400"
+            )}
+          >
+            {day.dayName}
+          </p>
+          <p className={cn("text-2xl font-display font-bold", isToday && "text-primary dark:text-emerald-400")}>
+            {day.dayNumber}
+          </p>
+        </>
+      }
+      headerClassName={cn(
+        "text-center pb-2",
+        isToday && "border-b-4 border-primary dark:border-emerald-500"
+      )}
     >
-      <div
-        className={cn(
-          "text-center pb-2",
-          isToday && "border-b-4 border-primary dark:border-emerald-500"
-        )}
-      >
-        <p
-          className={cn(
-            "text-[10px] uppercase tracking-widest font-bold",
-            isToday ? "text-primary dark:text-emerald-400" : "text-slate-400"
-          )}
-        >
-          {day.dayName}
-        </p>
-        <p className={cn("text-2xl font-display font-bold", isToday && "text-primary dark:text-emerald-400")}>
-          {day.dayNumber}
-        </p>
-      </div>
       {mainRecipe ? (
         <div className="space-y-2">
           <FlipRecipeCard key={`day-${dayIndex}-slot-0`} recipe={mainRecipe} slotKey={`day-${dayIndex}-slot-0`}>
@@ -467,7 +485,7 @@ function DayColumn({
       ) : (
         <EmptySlot onAdd={() => onAddMeal(dayIndex)} desktop />
       )}
-    </div>
+    </PlannerDaySection>
   )
 }
 
@@ -517,17 +535,10 @@ function MobileDayColumn({
   const dayNameLong = day.date.toLocaleDateString("en-US", { weekday: "long" })
 
   return (
-    <section
+    <PlannerDaySection
+      as="section"
       className="space-y-4"
-      data-day-index={dayIndex}
-      data-day-date={formatLocalISODate(day.date)}
-    >
-      <div
-        className={cn(
-          "flex items-baseline justify-between pb-2",
-          isToday ? "border-b-2 border-primary/20 dark:border-emerald-500/20" : "border-b border-slate-100 dark:border-slate-800"
-        )}
-      >
+      header={
         <h2
           className={cn(
             "text-xl font-display font-bold",
@@ -536,7 +547,14 @@ function MobileDayColumn({
         >
           {dayNameLong} <span className="text-slate-400 font-normal ml-1">{day.dayNumber}</span>
         </h2>
-      </div>
+      }
+      headerClassName={cn(
+        "flex items-baseline justify-between pb-2",
+        isToday ? "border-b-2 border-primary/20 dark:border-emerald-500/20" : "border-b border-slate-100 dark:border-slate-800"
+      )}
+      data-day-index={dayIndex}
+      data-day-date={formatLocalISODate(day.date)}
+    >
       {dayRecipes.length > 0 ? (
         dayRecipes.map((recipe, slotIdx) => (
           <FlipRecipeCard
@@ -569,7 +587,7 @@ function MobileDayColumn({
       ) : (
         <EmptySlot onAdd={() => onAddMeal(dayIndex)} />
       )}
-    </section>
+    </PlannerDaySection>
   )
 }
 
@@ -1073,20 +1091,11 @@ export function MealPlanner() {
       try {
         const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
         if (stored) {
-          const parsed = JSON.parse(stored)
-          if (parsed && typeof parsed === "object" && parsed.version === 2 && parsed.weeks) {
-            return parsed.weeks[currentWeekDate] || {}
-          }
-          const allAssignments: WeekAssignments = parsed
-          const legacyAssignments = allAssignments[currentWeekDate] || {}
-          // Legacy localStorage stored week-grid indices; convert to absolute day-of-week
-          const weekStartDay = config?.week_start_day ?? 1
-          return Object.fromEntries(
-            Object.entries(legacyAssignments).map(([recipeId, dayIndex]) => [
-              recipeId,
-              dayIndexToDayOfWeek(dayIndex, weekStartDay),
-            ])
-          )
+          return normalizeStoredDayAssignments({
+            storedAssignments: JSON.parse(stored),
+            currentWeekDate,
+            weekStartDay: config?.week_start_day ?? 1,
+          })
         }
       } catch {
         // Ignore parse errors
@@ -1246,44 +1255,32 @@ export function MealPlanner() {
   const handleLoadTemplate = async (template: PlanTemplate) => {
     if (!currentWeekDate) return
     try {
-      // Filter out deleted recipes
       const recipeIds = await fetchRecipeIds.mutateAsync()
-      const existingRecipeIds = new Set(recipeIds)
-      const validIds = template.recipe_ids.filter(
-        (id) => existingRecipeIds.has(id)
-      )
-      const missing =
-        template.recipe_ids.length - validIds.length
+      const filteredTemplate = filterTemplateLoadData({
+        template,
+        existingRecipeIds: new Set(recipeIds),
+      })
 
       await saveWeeklyPlan.mutateAsync({
         weekDate: currentWeekDate,
-        recipeIds: validIds,
+        recipeIds: filteredTemplate.recipeIds,
       })
 
-      // Apply day assignments if present
-      if (template.day_assignments) {
-        // Filter assignments to only include valid recipes
-        const validAssignments = Object.fromEntries(
-          Object.entries(template.day_assignments)
-            .filter(([id]) => existingRecipeIds.has(id))
-        )
-        setLocalDayAssignments(validAssignments)
+      if (filteredTemplate.dayAssignments) {
+        setLocalDayAssignments(filteredTemplate.dayAssignments)
         saveDayAssignments.mutate({
           weekDate: currentWeekDate,
-          dayAssignments: validAssignments,
+          dayAssignments: filteredTemplate.dayAssignments,
         })
       }
 
-      // Apply category selection if present
-      if (template.category_selection) {
-        setSelection(
-          template.category_selection as Record<string, number>
-        )
+      if (filteredTemplate.categorySelection) {
+        setSelection(filteredTemplate.categorySelection)
       }
 
       let msg = `Template "${template.name}" loaded`
-      if (missing > 0) {
-        msg += ` (${missing} deleted recipe${missing !== 1 ? 's' : ''} removed)`
+      if (filteredTemplate.missingCount > 0) {
+        msg += ` (${filteredTemplate.missingCount} deleted recipe${filteredTemplate.missingCount !== 1 ? 's' : ''} removed)`
       }
       undoToast.show({ message: msg, duration: 4000 })
     } catch (error) {
@@ -1436,14 +1433,14 @@ export function MealPlanner() {
   }, [currentWeekDate, recipeDayAssignments, saveDayAssignments, config?.week_start_day])
 
   const categories = allCategories || config?.categories || []
-  const totalMeals = Object.values(selection).reduce((sum, n) => sum + n, 0)
+  const totalMeals = deriveTotalMeals(selection)
 
   const displayedRecipes = recipes
-  const activeRecipe = activeRecipeId
-    ? (displayedRecipes || []).find((r) => r.id === activeRecipeId) || null
-    : null
-  const activeRecipeImageUrl = activeRecipe ? getRecipeImageUrl(activeRecipe.image_url) : null
-  const activeRecipeUnoptimized = activeRecipeImageUrl ? !activeRecipeImageUrl.includes(".supabase.co") : false
+  const activeRecipeOverlay = useMemo(() => deriveActiveRecipeOverlay({
+    recipes: displayedRecipes,
+    activeRecipeId,
+  }), [displayedRecipes, activeRecipeId])
+  const activeRecipe = activeRecipeOverlay?.recipe ?? null
 
   // Build day priority for distributing unassigned recipes (preferred first, then available)
   const unassignedDayPriority = useMemo(
@@ -1451,29 +1448,16 @@ export function MealPlanner() {
     [config?.excluded_days, config?.preferred_days]
   )
 
-  // Get recipes assigned to each day
+  const recipesByDay = useMemo(() => groupRecipesByPlannerDay({
+    recipes: displayedRecipes,
+    recipeDayAssignments,
+    weekDayNumbers: weekDays.map((day) => day.date.getDay()),
+    unassignedDayPriority,
+  }), [displayedRecipes, recipeDayAssignments, weekDays, unassignedDayPriority])
+
   const getRecipesByDay = useCallback((dayIndex: number): Recipe[] => {
-    if (!displayedRecipes) return []
-
-    const dayOfWeek = getDayOfWeekForWeekIndex(weekDays, dayIndex)
-
-    // Get recipes explicitly assigned to this day-of-week
-    const assignedRecipes = displayedRecipes.filter(
-      recipe => recipeDayAssignments[recipe.id] === dayOfWeek
-    )
-    
-    // Distribute unassigned recipes evenly across days using stable ID-based hash
-    // This ensures recipes don't shift days when other recipes are added/removed
-    const unassignedForThisDay = displayedRecipes.filter((recipe) => {
-      // Only include if it's unassigned AND the stable hash maps to this day
-      if (recipeDayAssignments[recipe.id] !== undefined) return false
-      const assignedDayOfWeek = getUnassignedDayOfWeek(recipe.id, unassignedDayPriority)
-      return assignedDayOfWeek === dayOfWeek
-    })
-    
-    // Combine assigned recipes with unassigned recipes for this day
-    return [...assignedRecipes, ...unassignedForThisDay]
-  }, [displayedRecipes, recipeDayAssignments, weekDays, unassignedDayPriority])
+    return recipesByDay[dayIndex] || []
+  }, [recipesByDay])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -1510,120 +1494,100 @@ export function MealPlanner() {
   const currentWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
   const isCurrentWeek = currentWeekDate === currentWeekStart
 
-  // Calculate progress (made recipes / total recipes)
-  const progress = useMemo(() => {
-    if (!displayedRecipes || displayedRecipes.length === 0) return { made: 0, total: 0, percentage: 0 }
-    
-    const madeCount = displayedRecipes.filter(recipe => {
-      const isManuallyMarked = weeklyPlan?.made_recipe_ids?.includes(recipe.id) || false
-      const lastMade = lastMadeMap.get(recipe.id)
-      const isMadeInWeek = lastMade ? isDateInWeekRange(lastMade, currentWeekDate) : false
-      return isManuallyMarked || isMadeInWeek
-    }).length
-    
-    return {
-      made: madeCount,
-      total: displayedRecipes.length,
-      percentage: displayedRecipes.length > 0 ? Math.round((madeCount / displayedRecipes.length) * 100) : 0,
-    }
-  }, [displayedRecipes, weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
+  const progress = useMemo(() => derivePlannerProgress({
+    recipes: displayedRecipes,
+    currentWeekDate,
+    madeRecipeIds: weeklyPlan?.made_recipe_ids,
+    lastMadeMap,
+  }), [displayedRecipes, weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
 
-  // Helper to check if recipe is made
   const isRecipeMade = useCallback((recipe: Recipe): boolean => {
-    const isManuallyMarked = weeklyPlan?.made_recipe_ids?.includes(recipe.id) || false
-    const lastMade = lastMadeMap.get(recipe.id)
-    const isMadeInWeek = lastMade ? isDateInWeekRange(lastMade, currentWeekDate) : false
-    return isManuallyMarked || isMadeInWeek
+    return isRecipeMadeForWeek({
+      recipeId: recipe.id,
+      currentWeekDate,
+      madeRecipeIds: weeklyPlan?.made_recipe_ids,
+      lastMadeMap,
+    })
   }, [weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
 
   const plannerContent = (
     <div className="space-y-6 pb-6">
       {/* Mobile: compact schedule (planner_mobile_redesign) */}
       {!isDesktop && (
-      <div className="space-y-4">
-        <div className="bg-card-cream rounded-xl p-4 shadow-sm border border-border-muted">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <span className="text-sm font-semibold text-primary">{formatWeekLabel(currentWeekDate)}</span>
-            {mobileWeekTab !== "today" && (
-              <div className="flex gap-1">
+      <PlannerMobileHeader
+        weekLabel={formatWeekLabel(currentWeekDate)}
+        showControls={mobileWeekTab !== "today"}
+        progressLabel={`${progress.made} of ${progress.total} meals`}
+        progressValue={progress.percentage}
+        controls={
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={handlePrevWeek}
+              className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+              aria-label="Previous week"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNextWeek}
+              className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+              aria-label="Next week"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <Popover open={isDatePickerOpenMobile} onOpenChange={setIsDatePickerOpenMobile}>
+              <PopoverTrigger asChild>
                 <button
                   type="button"
-                  onClick={handlePrevWeek}
                   className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
-                  aria-label="Previous week"
+                  title="Pick a date to jump to that week"
+                  aria-label="Open calendar to pick a week"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <CalendarIcon className="h-4 w-4" />
                 </button>
-                <button
-                  type="button"
-                  onClick={handleNextWeek}
-                  className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
-                  aria-label="Next week"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-                <Popover open={isDatePickerOpenMobile} onOpenChange={setIsDatePickerOpenMobile}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
-                      title="Pick a date to jump to that week"
-                      aria-label="Open calendar to pick a week"
-                    >
-                      <CalendarIcon className="h-4 w-4" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="end">
-                    <Calendar
-                      selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
-                      onSelect={(date) => {
-                      if (date) {
-                        markUserNavigated()
-                        const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
-                        setCurrentWeekDate(weekStart)
-                        setIsDatePickerOpenMobile(false)
-                          const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
-                          if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
-                          else if (weekStart === nextWeekStart) setMobileWeekTab("nextWeek")
-                        }
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            )}
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <Calendar
+                  selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
+                  onSelect={(date) => {
+                  if (date) {
+                    markUserNavigated()
+                    const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
+                    setCurrentWeekDate(weekStart)
+                    setIsDatePickerOpenMobile(false)
+                      const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
+                      if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
+                      else if (weekStart === nextWeekStart) setMobileWeekTab("nextWeek")
+                    }
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-xs">
-              <span className="text-primary/80">Weekly Progress</span>
-              <span className="font-bold text-primary">{progress.made} of {progress.total} meals</span>
-            </div>
-            <div className="w-full bg-white/80 h-2 rounded-full overflow-hidden border border-border-muted">
-              <div
-                className="bg-primary h-full transition-all duration-300"
-                style={{ width: `${progress.percentage}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       )}
       {/* Desktop: Current Schedule + Quick Meal Mix — Stitch 2-col layout */}
       {isDesktop && (
       <div className="grid grid-cols-12 gap-6">
         {/* Current Schedule */}
-        <div className="lg:col-span-4 bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-stone-100 dark:border-zinc-800">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-1">
-                Current Schedule
-              </p>
-              <h2 className="text-2xl font-display text-slate-800 dark:text-white">
-                {formatWeekLabel(currentWeekDate)}
-              </h2>
-            </div>
-            <div className="flex gap-1">
+        <PlannerSectionShell
+          className="lg:col-span-4"
+          headerClassName="flex items-center justify-between mb-6"
+          header={
+            <>
+              <div>
+                <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-1">
+                  Current Schedule
+                </p>
+                <h2 className="text-2xl font-display text-slate-800 dark:text-white">
+                  {formatWeekLabel(currentWeekDate)}
+                </h2>
+              </div>
+              <div className="flex gap-1">
               <button
                 type="button"
                 onClick={handlePrevWeek}
@@ -1665,8 +1629,10 @@ export function MealPlanner() {
                   />
                 </PopoverContent>
               </Popover>
-            </div>
-          </div>
+              </div>
+            </>
+          }
+        >
           <div className="space-y-4">
             <div className="flex justify-between items-end">
               <span className="text-sm font-medium">Weekly Progress</span>
@@ -1684,23 +1650,28 @@ export function MealPlanner() {
               You&apos;re on track to hit your nutrition goals!
             </p>
           </div>
-        </div>
+        </PlannerSectionShell>
 
         {/* Quick Meal Mix */}
-        <div className="lg:col-span-8 bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-stone-100 dark:border-zinc-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Quick Meal Mix
-            </h3>
-            <button
-              type="button"
-              onClick={() => setIsSettingsModalOpen(true)}
-              className="text-primary text-sm font-medium hover:underline"
-            >
-              Settings
-            </button>
-          </div>
+        <PlannerSectionShell
+          className="lg:col-span-8"
+          headerClassName="flex items-center justify-between mb-4"
+          header={
+            <>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                Quick Meal Mix
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="text-primary text-sm font-medium hover:underline"
+              >
+                Settings
+              </button>
+            </>
+          }
+        >
           <div className="flex flex-wrap gap-4">
             {plannerCategories.map((category: string) => (
               <CategoryPill
@@ -1736,34 +1707,22 @@ export function MealPlanner() {
               </Button>
             </div>
           </div>
-        </div>
+        </PlannerSectionShell>
       </div>
       )}
 
       {/* Week navigation (mobile) + Add to Cart */}
-      <div className="space-y-4 -mt-3 lg:mt-0">
-      <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4">
-        {/* Mobile: Today | This Week | Next Week (ref: planner_mobile_redesign) */}
-        {!isDesktop && (
-        <nav className="flex border-b border-border-muted">
-          {(["today", "thisWeek", "nextWeek"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => handleMobileWeekTab(tab)}
-              className={cn(
-                "flex-1 py-3 text-xs font-bold border-b-2 transition-colors",
-                effectiveTab === tab
-                  ? "text-primary border-primary"
-                  : "text-primary/60 border-transparent"
-              )}
-            >
-              {tab === "today" ? "Today" : tab === "thisWeek" ? "This Week" : "Next Week"}
-            </button>
-          ))}
-        </nav>
-        )}
-        <div className="flex items-center gap-2 lg:ml-auto shrink-0 overflow-x-auto pb-1 lg:pb-0 scrollbar-thin">
+      <PlannerActionBar
+        leading={!isDesktop ? (
+          <PlannerMobileTabBar
+            tabs={[
+              { key: "today", label: "Today", isActive: effectiveTab === "today", onClick: () => handleMobileWeekTab("today") },
+              { key: "thisWeek", label: "This Week", isActive: effectiveTab === "thisWeek", onClick: () => handleMobileWeekTab("thisWeek") },
+              { key: "nextWeek", label: "Next Week", isActive: effectiveTab === "nextWeek", onClick: () => handleMobileWeekTab("nextWeek") },
+            ]}
+          />
+        ) : undefined}
+      >
           <Button
             onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
             disabled={!hasAnyRecipes}
@@ -1816,8 +1775,7 @@ export function MealPlanner() {
             <FolderOpen className="h-4 w-4 mr-2" />
             {isDesktop ? "Load Template" : "Load"}
           </Button>
-        </div>
-      </div>
+      </PlannerActionBar>
 
       {planLoading ? (
         <p className="text-muted-foreground text-center py-8">Loading...</p>
@@ -1832,14 +1790,7 @@ export function MealPlanner() {
             <>
               {/* Mobile: category selection + Generate Plan when week has no meals */}
               {!isDesktop && (
-              <div className="flex flex-col items-center py-8 px-4">
-                <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
-                  <CalendarDays className="h-5 w-5 text-muted-foreground shrink-0" />
-                  Plan your week
-                </h3>
-                <p className="text-muted-foreground max-w-sm mb-6 text-center">
-                  Select how many meals you want for each category, then generate a meal plan.
-                </p>
+              <PlannerEmptyWeekPanel>
                 <div className="w-full max-w-md flex flex-wrap gap-3 justify-center mb-6">
                   {plannerCategories.map((category: string) => (
                     <CategoryPill
@@ -1884,20 +1835,11 @@ export function MealPlanner() {
                     <span className="ml-2">Generate Plan</span>
                   </Button>
                 </div>
-              </div>
+              </PlannerEmptyWeekPanel>
               )}
               {/* Desktop: calendar week with Add meal on each day */}
             {isDesktop && (
-            <div className="flex items-start gap-2">
-                <button
-                  type="button"
-                  onClick={handlePrevWeek}
-                  className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
-                  aria-label="Previous week"
-                >
-                  <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
-                </button>
-                <div className="flex-1 min-w-0 grid grid-cols-7 gap-4">
+            <PlannerDesktopWeekShell onPrevious={handlePrevWeek} onNext={handleNextWeek}>
                   {weekDays.map((day, dayIndex) => {
                     const today = new Date()
                     const isToday = day.date.toDateString() === today.toDateString()
@@ -1924,18 +1866,9 @@ export function MealPlanner() {
                         isToday={isToday}
                         statsMap={statsMap}
                       />
-                    )
+                      )
                   })}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleNextWeek}
-                  className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
-                  aria-label="Next week"
-                >
-                  <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
-                </button>
-              </div>
+            </PlannerDesktopWeekShell>
               )}
             </>
           )
@@ -1943,16 +1876,7 @@ export function MealPlanner() {
           <>
             {/* Desktop: Calendar View (7-day grid) with week navigation */}
             {isDesktop && (
-            <div className="flex items-start gap-2">
-              <button
-                type="button"
-                onClick={handlePrevWeek}
-                className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
-                aria-label="Previous week"
-              >
-                <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
-              </button>
-              <div className="flex-1 min-w-0 grid grid-cols-7 gap-4">
+            <PlannerDesktopWeekShell onPrevious={handlePrevWeek} onNext={handleNextWeek}>
                 {weekDays.map((day, dayIndex) => {
                   const dayRecipes = getRecipesByDay(dayIndex)
                   const today = new Date()
@@ -1982,47 +1906,26 @@ export function MealPlanner() {
                     />
                   )
                 })}
-              </div>
-              <button
-                type="button"
-                onClick={handleNextWeek}
-                className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
-                aria-label="Next week"
-              >
-                <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
-              </button>
-            </div>
+            </PlannerDesktopWeekShell>
             )}
 
             {/* Mobile: calendar view — Stitch calendarview_redesign_mobile: week strip + day sections */}
             {!isDesktop && (
             <div className="space-y-6">
               {mobileWeekTab !== "today" && (
-                <div className="flex items-center justify-between overflow-x-auto scrollbar-hide gap-4 py-2">
-                  {weekDays.map((d) => {
+                <PlannerMobileWeekStrip
+                  days={weekDays.map((d) => {
                     const isToday = d.date.toDateString() === new Date().toDateString()
-                    return (
-                      <div key={d.date.toISOString()} className={cn("flex flex-col items-center min-w-[50px] relative flex-shrink-0")}>
-                        <span className={cn("text-[10px] uppercase tracking-widest font-bold", isToday ? "text-primary dark:text-emerald-400" : "text-slate-400")}>
-                          {d.dayName}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => scrollToDay(d.date)}
-                          className={cn(
-                            "text-lg font-display font-medium transition-colors",
-                            isToday && "font-bold text-primary dark:text-emerald-400",
-                            !isToday && "text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-emerald-300"
-                          )}
-                          aria-label={`Scroll to ${d.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
-                        >
-                          {d.dayNumber}
-                        </button>
-                        {isToday && <span className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary dark:bg-emerald-400 rounded-full" />}
-                      </div>
-                    )
+                    return {
+                      key: d.date.toISOString(),
+                      shortLabel: d.dayName,
+                      dayNumber: d.dayNumber,
+                      isToday,
+                      ariaLabel: `Scroll to ${d.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`,
+                      onSelect: () => scrollToDay(d.date),
+                    }
                   })}
-                </div>
+                />
               )}
               <div className="space-y-10" ref={mobileDaysContainerRef}>
                 {mobileDays.map((day) => {
@@ -2057,8 +1960,6 @@ export function MealPlanner() {
 
           </>
         )}
-      </div>
-
       {/* Recipe Detail Dialog */}
       <RecipeDetailDialog
         open={!!viewingRecipe}
@@ -2166,13 +2067,13 @@ export function MealPlanner() {
         {activeRecipe ? (
           <div className="pointer-events-none w-[220px] rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden">
             <div className="relative h-20 w-full">
-              {activeRecipeImageUrl ? (
+              {activeRecipeOverlay?.imageUrl ? (
                 <Image
-                  src={activeRecipeImageUrl}
+                  src={activeRecipeOverlay.imageUrl}
                   alt={activeRecipe.name}
                   fill
                   sizes="220px"
-                  unoptimized={activeRecipeUnoptimized}
+                  unoptimized={activeRecipeOverlay.unoptimized}
                   draggable={false}
                   className="object-cover"
                 />

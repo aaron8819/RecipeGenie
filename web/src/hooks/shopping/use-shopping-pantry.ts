@@ -10,7 +10,18 @@ import type { ShoppingList, ShoppingItem, PantryItem } from "@/types/database"
 import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, PANTRY_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import {
+  cancelQueriesAndSnapshot,
+  cancelQueriesAndSnapshotMany,
+  invalidateQuery,
+  reconcileQueryData,
+  rollbackQueryData,
+  rollbackQueryDataMany,
+  setOptimisticQueryData,
+  SHOPPING_KEY,
+  PANTRY_KEY,
+  SHOPPING_LIST_WRITE_SCOPE_ID,
+} from "./shared"
 
 /**
  * Hook to move an item from "already have" back to the shopping list
@@ -96,17 +107,15 @@ export function useMoveToShoppingList() {
     },
     // Optimistic update
     onMutate: async (item) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
-
-      // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+      const { previousData: previousList } =
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
       const normalizedItem = item.item.toLowerCase().trim()
 
       // Optimistically update cache
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      setOptimisticQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
 
@@ -167,14 +176,10 @@ export function useMoveToShoppingList() {
       return { previousList }
     },
     onError: (err, item, context) => {
-      // Rollback on error
-      if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
-      }
+      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
     },
     onSuccess: () => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return invalidateQuery(queryClient, SHOPPING_KEY)
     },
   })
 }
@@ -225,17 +230,15 @@ export function useMoveExcludedToShoppingList() {
     },
     // Optimistic update
     onMutate: async (item) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
-
-      // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+      const { previousData: previousList } =
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
       const normalizedItem = item.item.toLowerCase().trim()
 
       // Optimistically update cache
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      setOptimisticQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
 
@@ -261,14 +264,10 @@ export function useMoveExcludedToShoppingList() {
       return { previousList }
     },
     onError: (err, item, context) => {
-      // Rollback on error
-      if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
-      }
+      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
     },
     onSuccess: () => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return invalidateQuery(queryClient, SHOPPING_KEY)
     },
   })
 }
@@ -374,18 +373,21 @@ export function useAddToPantryAndRemove() {
       }
     },
     onMutate: async (item) => {
-      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
-      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
-
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
-      const previousPantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY])
+      const { previousList, previousPantry } = await cancelQueriesAndSnapshotMany<{
+        previousList: ShoppingList
+        previousPantry: PantryItem[]
+      }>(queryClient, {
+        previousList: SHOPPING_KEY,
+        previousPantry: PANTRY_KEY,
+      })
 
       const normalizedItem = item.item.toLowerCase().trim()
       const resolvedIndex = resolveShoppingItemIndex(previousList?.items || [], item)
       resolvedItemIndexes.current.set(item, resolvedIndex)
 
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      setOptimisticQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
           const alreadyHave = old.already_have || []
@@ -408,8 +410,9 @@ export function useAddToPantryAndRemove() {
         item: normalizedItem,
         created_at: now,
       }
-      queryClient.setQueryData<PantryItem[]>(
-        [...PANTRY_KEY],
+      setOptimisticQueryData<PantryItem[]>(
+        queryClient,
+        PANTRY_KEY,
         (old) => {
           if (!old) return [optimisticItem]
           if (old.some((p) => p.item === normalizedItem)) return old
@@ -421,16 +424,22 @@ export function useAddToPantryAndRemove() {
     },
     onError: (err, item, context) => {
       resolvedItemIndexes.current.delete(item)
-      if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
-      }
-      if (context?.previousPantry) {
-        queryClient.setQueryData([...PANTRY_KEY], context.previousPantry)
-      }
+      rollbackQueryDataMany(
+        queryClient,
+        {
+          previousList: SHOPPING_KEY,
+          previousPantry: PANTRY_KEY,
+        },
+        {
+          previousList: context?.previousList,
+          previousPantry: context?.previousPantry,
+        }
+      )
     },
     onSuccess: (result) => {
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      reconcileQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
 
@@ -461,8 +470,9 @@ export function useAddToPantryAndRemove() {
 
       if (result.pantryItem) {
         const pantryItem = result.pantryItem
-        queryClient.setQueryData<PantryItem[]>(
-          [...PANTRY_KEY],
+        reconcileQueryData<PantryItem[]>(
+          queryClient,
+          PANTRY_KEY,
           (old) => {
             const pantryRow: PantryItem = {
               user_id: pantryItem.user_id,

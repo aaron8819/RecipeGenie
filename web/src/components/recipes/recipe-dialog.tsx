@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import dynamic from "next/dynamic"
-import Image from "next/image"
-import { Plus, FileText, PenTool, AlertTriangle, Check, ArrowLeft, Upload, X, Link, Loader2, List as ListIcon, ChefHat, AlertCircle, Wand2 } from "lucide-react"
+import { FileText, PenTool, X } from "lucide-react"
 import type { DragEndEvent } from "@dnd-kit/core"
 import {
   Dialog,
@@ -23,16 +22,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Tabs,
   TabsList,
@@ -43,18 +32,23 @@ import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from 
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
 import type { ParsedRecipe } from "@/lib/recipe-parser"
-import { TagInput } from "@/components/ui/tag-input"
 import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
-import { cn, toFraction } from "@/lib/utils"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
+import {
+  RecipeDialogActions,
+  RecipeIngredientsSection,
+  RecipeImageField,
+  RecipeInstructionsSection,
+  RecipeImportSection,
+  RecipeMetadataSection,
+} from "./recipe-dialog-components"
 import {
   applyParsedRecipeToFormValues,
   buildEditingRecipeDialogFormValues,
   buildNewRecipeDialogFormValues,
   buildRecipeSubmissionData,
-  clampRecipeServings,
   hasValidRecipeIngredients,
   isNewRecipeDialogDirty,
 } from "./recipe-dialog.defaults"
@@ -62,7 +56,6 @@ import {
   getImportErrorMessage,
   IMPORT_URL_FAILURE_ERROR,
   parseRecipeImportPreview,
-  parseRecipeImportText,
   toParsedRecipeImport,
   validateRecipeImportUrl,
 } from "./recipe-import.parser"
@@ -216,19 +209,6 @@ export function RecipeDialog({
   const debouncedParse = useDebouncedCallback(((text: string) => {
     setLivePreview(parseRecipeImportPreview(text))
   }) as (...args: unknown[]) => void, 300);
-
-  const handleParseImport = () => {
-    const result = parseRecipeImportText(importText)
-
-    if (!result.parsedRecipe) {
-      setParseError(result.error)
-      return
-    }
-
-    setParsedPreview(result.parsedRecipe)
-    setParseError(null)
-    setImportStep('preview')
-  }
 
   const handleUrlImport = async () => {
     const validation = validateRecipeImportUrl(importUrl)
@@ -496,357 +476,36 @@ export function RecipeDialog({
               </DialogClose>
             </div>
             <TabsContent value="import" className="space-y-4 mt-0 flex-1 overflow-y-auto pb-6 sm:pb-8 px-4 sm:px-8 scrollbar-recipe-dialog data-[state=inactive]:hidden">
-              {importStep === 'input' ? (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* LEFT COLUMN: Input */}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="import-url">Import from URL</Label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Link className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            id="import-url"
-                            value={importUrl}
-                            onChange={(e) => {
-                              setImportUrl(e.target.value)
-                              setParseError(null)
-                            }}
-                            placeholder="https://www.example.com/recipe..."
-                            className="pl-9 font-mono text-sm"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                handleUrlImport()
-                              }
-                            }}
-                          />
-                        </div>
-                        <Button
-                          onClick={handleUrlImport}
-                          disabled={importFromUrl.isPending}
-                          className="shrink-0"
-                        >
-                          {importFromUrl.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Importing...
-                            </>
-                          ) : (
-                            'Import'
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="relative flex items-center gap-4 py-1">
-                      <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
-                      <span className="text-xs text-muted-foreground font-medium">or paste text</span>
-                      <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="import-text">Paste Recipe Text</Label>
-                      <Textarea
-                        id="import-text"
-                        value={importText}
-                        onChange={(e) => {
-                          setImportText(e.target.value)
-                          setParseError(null)
-                          debouncedParse(e.target.value)
-                        }}
-                        placeholder={`Example:
-Chocolate Chip Cookies
-Makes 24 cookies
-
-Ingredients:
-2 cups all-purpose flour
-1 tsp baking soda
-1 cup butter, softened
-3/4 cup granulated sugar
-2 large eggs
-2 cups chocolate chips
-
-Instructions:
-1. Preheat oven to 375°F
-2. Mix flour and baking soda in a bowl
-3. Cream butter and sugar until fluffy
-4. Add eggs and mix well
-5. Gradually add flour mixture
-6. Stir in chocolate chips
-7. Drop rounded tablespoons onto baking sheet
-8. Bake for 9-11 minutes`}
-                        rows={20}
-                        className="font-mono text-sm resize-none"
-                      />
-                      {parseError && (
-                        <p className="text-sm text-destructive" role="alert" aria-live="assertive">{parseError}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* RIGHT COLUMN: Live Preview */}
-                  <div className="space-y-4">
-                    <Label className="text-sm font-semibold">Live Preview</Label>
-
-                    {livePreview ? (
-                      <div className="bg-muted/30 border border-border rounded-xl p-6 space-y-6 h-full">
-                        {/* Recipe Name */}
-                        <div>
-                          <div className="text-xs uppercase text-muted-foreground mb-1 font-semibold tracking-wide">
-                            Recipe Name
-                          </div>
-                          <div className="font-serif text-2xl text-primary font-medium">
-                            {livePreview.name}
-                          </div>
-                          {livePreview.servings && (
-                            <div className="text-sm text-muted-foreground mt-1">
-                              Serves {livePreview.servings}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Quick Stats */}
-                        <div className="flex gap-6 text-sm">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                              <ChefHat className="h-4 w-4 text-primary" />
-                            </div>
-                            <div>
-                              <div className="font-bold text-lg">
-                                {livePreview.ingredients.length}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                ingredient{livePreview.ingredients.length !== 1 ? 's' : ''}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                              <ListIcon className="h-4 w-4 text-primary" />
-                            </div>
-                            <div>
-                              <div className="font-bold text-lg">
-                                {livePreview.instructions.length}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                step{livePreview.instructions.length !== 1 ? 's' : ''}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Warnings */}
-                        {livePreview.warnings.length > 0 && (
-                          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-                            <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-xs font-bold uppercase tracking-wide mb-2">
-                              <AlertTriangle className="h-4 w-4" />
-                              Parsing Notes
-                            </div>
-                            <ul className="text-sm text-amber-700 dark:text-amber-400 space-y-1">
-                              {livePreview.warnings.slice(0, 4).map((warning, i) => (
-                                <li key={i} className="flex items-start gap-2">
-                                  <span className="text-amber-500 mt-0.5">•</span>
-                                  <span>{warning}</span>
-                                </li>
-                              ))}
-                              {livePreview.warnings.length > 4 && (
-                                <li className="text-xs italic text-amber-600">
-                                  +{livePreview.warnings.length - 4} more warning{livePreview.warnings.length - 4 !== 1 ? 's' : ''}
-                                </li>
-                              )}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Ingredient Preview */}
-                        {livePreview.ingredients.length > 0 && (
-                          <div>
-                            <div className="text-xs uppercase text-muted-foreground mb-3 font-semibold tracking-wide">
-                              Ingredients Preview
-                            </div>
-                            <div className="space-y-2 text-sm bg-background/50 rounded-lg p-3 max-h-48 overflow-y-auto">
-                              {livePreview.ingredients.slice(0, 8).map((ing, i) => (
-                                <div key={i} className="flex gap-3 items-start">
-                                  <span className="text-muted-foreground font-mono text-xs min-w-[70px] text-right flex-shrink-0 mt-0.5">
-                                    {ing.amount !== null ? `${ing.amount} ${ing.unit}`.trim() : '—'}
-                                  </span>
-                                  <span className="flex-1">
-                                    {ing.item}
-                                    {ing.modifier && (
-                                      <span className="text-muted-foreground text-xs">, {ing.modifier}</span>
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
-                              {livePreview.ingredients.length > 8 && (
-                                <div className="text-xs text-muted-foreground italic text-center pt-2 border-t">
-                                  +{livePreview.ingredients.length - 8} more ingredient{livePreview.ingredients.length - 8 !== 1 ? 's' : ''}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Instructions Preview */}
-                        {livePreview.instructions.length > 0 && (
-                          <div>
-                            <div className="text-xs uppercase text-muted-foreground mb-3 font-semibold tracking-wide">
-                              Instructions Preview
-                            </div>
-                            <div className="space-y-2 text-sm bg-background/50 rounded-lg p-3 max-h-32 overflow-y-auto">
-                              {livePreview.instructions.slice(0, 3).map((step, i) => (
-                                <div key={i} className="flex gap-2 items-start">
-                                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
-                                    {i + 1}
-                                  </span>
-                                  <span className="flex-1 leading-relaxed">
-                                    {step.length > 100 ? `${step.substring(0, 100)}...` : step}
-                                  </span>
-                                </div>
-                              ))}
-                              {livePreview.instructions.length > 3 && (
-                                <div className="text-xs text-muted-foreground italic text-center pt-2 border-t">
-                                  +{livePreview.instructions.length - 3} more step{livePreview.instructions.length - 3 !== 1 ? 's' : ''}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Apply Button */}
-                        <Button
-                          type="button"
-                          onClick={() => {
-                            if (livePreview) {
-                              setParsedPreview(livePreview);
-                              setName(livePreview.name);
-                              setIngredients(livePreview.ingredients);
-                              setInstructions(livePreview.instructions.join('\n'));
-                              setServings(livePreview.servings || 4);
-                              setMode('manual');
-                            }
-                          }}
-                          className="w-full"
-                          size="lg"
-                          disabled={
-                            !livePreview ||
-                            livePreview.warnings.some(w =>
-                              w.includes("No ingredients") || w.includes("No instructions")
-                            )
-                          }
-                        >
-                          <Check className="h-4 w-4 mr-2" />
-                          Apply to Form
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="bg-muted/10 border-2 border-dashed border-muted-foreground/20 rounded-xl p-12 flex flex-col items-center justify-center text-center h-full min-h-[500px]">
-                        <FileText className="h-16 w-16 text-muted-foreground/30 mb-4" />
-                        <p className="text-sm text-muted-foreground font-medium mb-1">
-                          Paste recipe text to see live preview
-                        </p>
-                        <p className="text-xs text-muted-foreground/70 max-w-[280px]">
-                          Your recipe will be parsed in real-time as you type
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* Preview State */
-                <div className="space-y-4">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleBackToInput}
-                    className="mb-2"
-                  >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Back to Edit
-                  </Button>
-
-                  {/* Warnings */}
-                  {parsedPreview?.warnings && parsedPreview.warnings.length > 0 && (
-                    <div
-                      className="bg-amber-50 border border-amber-200 rounded-lg p-3"
-                      role="alert"
-                      aria-live="polite"
-                    >
-                      <div className="flex items-center gap-2 text-amber-800 text-sm font-medium mb-2">
-                        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-                        Parsing Notes
-                      </div>
-                      <ul className="text-sm text-amber-700 space-y-1">
-                        {parsedPreview.warnings.map((warning, i) => (
-                          <li key={i}>• {warning}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Preview Card */}
-                  <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Name</div>
-                      <div className="font-medium">{parsedPreview?.name || "—"}</div>
-                    </div>
-
-                    {parsedPreview?.servings && (
-                      <div>
-                        <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Servings</div>
-                        <div>{parsedPreview.servings}</div>
-                      </div>
-                    )}
-
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                        Ingredients ({parsedPreview?.ingredients?.length || 0})
-                      </div>
-                      {parsedPreview?.ingredients && parsedPreview.ingredients.length > 0 ? (
-                        <ul className="text-sm space-y-1">
-                          {parsedPreview.ingredients.map((ing, i) => (
-                            <li key={i} className="flex gap-2">
-                              <span className="text-muted-foreground">
-                                {ing.amount ? `${ing.amount} ${ing.unit || ""}`.trim() : "—"}
-                              </span>
-                              <span>
-                                {ing.item}
-                                {ing.modifier && (
-                                  <span className="text-muted-foreground">, {ing.modifier}</span>
-                                )}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="text-sm text-muted-foreground italic">No ingredients found</div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-                        Instructions ({parsedPreview?.instructions?.length || 0} steps)
-                      </div>
-                      {parsedPreview?.instructions && parsedPreview.instructions.length > 0 ? (
-                        <ol className="text-sm space-y-1 list-decimal list-inside">
-                          {parsedPreview.instructions.map((step, i) => (
-                            <li key={i}>{step}</li>
-                          ))}
-                        </ol>
-                      ) : (
-                        <div className="text-sm text-muted-foreground italic">No instructions found</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <Button onClick={handleApplyPreview} className="w-full">
-                    <Check className="h-4 w-4 mr-2" />
-                    Apply & Edit Recipe
-                  </Button>
-                </div>
-              )}
+              <RecipeImportSection
+                importStep={importStep}
+                importUrl={importUrl}
+                importText={importText}
+                parseError={parseError}
+                livePreview={livePreview}
+                parsedPreview={parsedPreview}
+                isImportingFromUrl={importFromUrl.isPending}
+                onImportUrlChange={(value) => {
+                  setImportUrl(value)
+                  setParseError(null)
+                }}
+                onImportTextChange={(value) => {
+                  setImportText(value)
+                  setParseError(null)
+                  debouncedParse(value)
+                }}
+                onImportUrl={handleUrlImport}
+                onApplyLivePreview={() => {
+                  if (!livePreview) return
+                  setParsedPreview(livePreview)
+                  setName(livePreview.name)
+                  setIngredients(livePreview.ingredients)
+                  setInstructions(livePreview.instructions.join("\n"))
+                  setServings(livePreview.servings || 4)
+                  setMode("manual")
+                }}
+                onBackToInput={handleBackToInput}
+                onApplyPreview={handleApplyPreview}
+              />
             </TabsContent>
 
             <TabsContent value="manual" className="mt-0 flex-1 overflow-y-auto min-h-0 scrollbar-recipe-dialog data-[state=inactive]:hidden">
@@ -922,17 +581,14 @@ Instructions:
               : "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col items-end flex-shrink-0"
           }
         >
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={!name.trim() || !category || !hasValidIngredients || isSubmitting}
-            >
-              {isSubmitting ? (isUploadingImage ? "Uploading image..." : "Saving...") : isEditing ? "Save Changes" : "Add Recipe"}
-            </Button>
-          </div>
+          <RecipeDialogActions
+            isEditing={isEditing}
+            isSubmitting={isSubmitting}
+            isUploadingImage={isUploadingImage}
+            canSubmit={!!name.trim() && !!category && hasValidIngredients && !isSubmitting}
+            onCancel={() => onOpenChange(false)}
+            onSubmit={handleSubmit}
+          />
           {!hasValidIngredients && !isSubmitting && (
             <p className="text-xs text-muted-foreground text-right mt-1">
               Add at least one ingredient to save
@@ -1013,7 +669,7 @@ function RecipeFormContent({
   fileInputRef,
   handleAutoFix,
 }: RecipeFormContentPropsWithImage) {
-  const hasImage = !!(imagePreview || imageUrl)
+  const ingredientIssueCount = countIngredientsWithIssues(ingredients)
 
   // Edit Recipe: 2-col layout per reference/recipemodal_editmode_redesign
   if (isEditing) {
@@ -1021,141 +677,38 @@ function RecipeFormContent({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
         {/* Left: Image, Name, Category, Servings, Tags */}
         <div className="space-y-6 sm:space-y-8">
-          <div className="relative">
-            <Label className="block text-sm font-semibold text-primary mb-2">Recipe Image</Label>
-            {hasImage ? (
-              <div className="relative aspect-video overflow-hidden rounded-2xl bg-muted">
-                <Image
-                  src={imagePreview || imageUrl || ""}
-                  alt="Recipe"
-                  fill
-                  className="object-cover"
-                  unoptimized={imageUrl ? !imageUrl.includes("supabase.co") : false}
-                />
-                {onRemoveImage && (
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2"
-                    onClick={onRemoveImage}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
-            ) : fileInputRef && onImageSelect ? (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full aspect-video rounded-2xl border-2 border-dashed border-stone-200 dark:border-zinc-700 flex flex-col items-center justify-center bg-muted/50 dark:bg-zinc-900/50 hover:bg-muted dark:hover:bg-zinc-900 transition-colors text-muted-foreground hover:text-primary group/up"
-              >
-                <Upload className="h-12 w-12 sm:h-14 sm:w-14 text-stone-300 dark:text-zinc-600 group-hover/up:text-primary transition-colors" />
-                <span className="mt-2 text-sm font-medium">Upload Image</span>
-                <span className="text-xs uppercase tracking-wider mt-1">JPG, PNG, WebP. Max 5MB</span>
-              </button>
-            ) : null}
-            {fileInputRef && onImageSelect && (
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
-                onChange={onImageSelect}
-                className="hidden"
-              />
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="name-edit" className="block text-sm font-semibold text-primary mb-2">Recipe Name</Label>
-              <Input
-                id="name-edit"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Enter recipe name"
-                className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary focus:border-primary py-3"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="block text-sm font-semibold text-primary mb-2">Category</Label>
-                <Select value={category} onValueChange={setCategory}>
-                  <SelectTrigger className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat} value={cat} className="capitalize">
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="block text-sm font-semibold text-primary mb-2">Servings</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={servings}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value)
-                    if (isNaN(val)) setServings(1)
-                    else setServings(clampRecipeServings(val))
-                  }}
-                  className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <Label className="block text-sm font-semibold text-primary mb-2">Tags</Label>
-            <TagInput
-              value={tags}
-              onChange={setTags}
-              suggestions={allTags}
-              tagCounts={tagCounts}
-              placeholder="Add another tag..."
-              showAddIconInInput
-            />
-          </div>
+          <RecipeImageField
+            variant="edit"
+            imagePreview={imagePreview}
+            imageUrl={imageUrl}
+            onImageSelect={onImageSelect}
+            onRemoveImage={onRemoveImage}
+            fileInputRef={fileInputRef}
+          />
+          <RecipeMetadataSection
+            variant="edit"
+            name={name}
+            onNameChange={setName}
+            category={category}
+            onCategoryChange={setCategory}
+            servings={servings}
+            onServingsChange={setServings}
+            tags={tags}
+            onTagsChange={setTags}
+            allTags={allTags}
+            tagCounts={tagCounts}
+            categories={categories}
+          />
         </div>
 
-        {/* Right: Ingredients, Instructions — recipemodal_editmode_redesign */}
+        {/* Right: Ingredients, Instructions - recipemodal_editmode_redesign */}
         <div className="space-y-6 sm:space-y-8 flex flex-col min-h-0">
-          <div>
-            <Label className="text-sm font-semibold text-primary mb-4 block">Ingredients</Label>
-
-            {/* Validation Summary */}
-            {countIngredientsWithIssues(ingredients) > 0 && (
-              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="font-semibold text-amber-900 dark:text-amber-200 text-sm mb-1">
-                      Ingredient Validation Issues
-                    </div>
-                    <p className="text-xs text-amber-700 dark:text-amber-400 mb-2">
-                      {countIngredientsWithIssues(ingredients)} ingredient(s) need attention. Check highlighted fields.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAutoFix}
-                      className="text-xs h-7"
-                    >
-                      <Wand2 className="h-3 w-3 mr-1.5" />
-                      Attempt Auto-Fix
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
+          <RecipeIngredientsSection
+            variant="edit"
+            ingredientIssueCount={ingredientIssueCount}
+            onAutoFix={handleAutoFix}
+            onAddIngredient={onAddIngredient}
+          >
             <SortableIngredientList
               ingredients={ingredients}
               editModeTwoColLayout
@@ -1163,146 +716,51 @@ function RecipeFormContent({
               onRemoveIngredient={onRemoveIngredient}
               onIngredientChange={onIngredientChange}
             />
-            <button
-              type="button"
-              onClick={onAddIngredient}
-              className="mt-3 text-xs font-bold text-primary flex items-center hover:opacity-80 transition-opacity"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              ADD INGREDIENT
-            </button>
-          </div>
+          </RecipeIngredientsSection>
 
-          <div className="flex-1 flex flex-col min-h-0">
-            <Label htmlFor="instructions-edit" className="block text-sm font-semibold text-primary mb-2">Instructions</Label>
-            <Textarea
-              id="instructions-edit"
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Step by step process..."
-              className="flex-1 min-h-[180px] sm:min-h-[200px] w-full rounded-2xl bg-background border-stone-200 dark:border-zinc-800 focus:ring-primary focus:border-primary resize-none leading-relaxed px-5 py-4"
-            />
-          </div>
+          <RecipeInstructionsSection
+            variant="edit"
+            instructions={instructions}
+            onInstructionsChange={setInstructions}
+          />
         </div>
       </div>
     )
   }
 
   // Add Recipe manual: 2-col layout per reference/addrecipemodal_redesign
-  const addLabelClass = "text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent"
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
-      {/* Left: lg:col-span-5 — Image, Name, Category, Servings, Tags */}
+      {/* Left: lg:col-span-5 - Image, Name, Category, Servings, Tags */}
       <div className="lg:col-span-5 border-r border-stone-100 dark:border-zinc-900 p-4 sm:p-8 flex flex-col gap-6">
-        <div className="space-y-3 order-last lg:order-first">
-          <h3 className={addLabelClass}>Recipe Image</h3>
-          {hasImage ? (
-            <div className="relative h-44 w-full overflow-hidden rounded-xl bg-muted">
-              <Image
-                src={imagePreview || imageUrl || ""}
-                alt="Recipe"
-                fill
-                className="object-cover"
-                unoptimized={imageUrl ? !imageUrl.includes("supabase.co") : false}
-              />
-              {onRemoveImage && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-2 right-2"
-                  onClick={onRemoveImage}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          ) : fileInputRef && onImageSelect ? (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full h-44 rounded-xl border-2 border-dashed border-stone-200 dark:border-zinc-800 flex flex-col items-center justify-center bg-muted/50 dark:bg-zinc-900/50 hover:border-accent transition-all cursor-pointer group/up"
-            >
-              <div className="p-3 rounded-full bg-stone-50 dark:bg-zinc-800 mb-2 group-hover/up:scale-110 transition-transform">
-                <Upload className="h-6 w-6 text-stone-400 dark:text-stone-500" />
-              </div>
-              <p className="text-sm font-semibold text-stone-600 dark:text-stone-300">Upload Image</p>
-              <p className="text-[10px] text-stone-400 dark:text-stone-500 mt-0.5">JPG, PNG, WebP (Max 5MB)</p>
-            </button>
-          ) : null}
-          {fileInputRef && onImageSelect && (
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
-              onChange={onImageSelect}
-              className="hidden"
-            />
-          )}
-        </div>
+        <RecipeImageField
+          variant="add"
+          imagePreview={imagePreview}
+          imageUrl={imageUrl}
+          onImageSelect={onImageSelect}
+          onRemoveImage={onRemoveImage}
+          fileInputRef={fileInputRef}
+        />
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label className={addLabelClass}>Recipe Name</label>
-            <Input
-              id="name-add"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Grandma's Roast Chicken"
-              className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary"
-              autoFocus
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className={addLabelClass}>Category</label>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat} value={cat} className="capitalize">
-                      {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className={addLabelClass}>Servings</label>
-              <Input
-                type="number"
-                min={1}
-                max={100}
-                value={servings}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value)
-                  if (isNaN(val)) setServings(1)
-                  else setServings(clampRecipeServings(val))
-                }}
-                className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <label className={addLabelClass}>Tags</label>
-            <TagInput
-              value={tags}
-              onChange={setTags}
-              suggestions={allTags}
-              tagCounts={tagCounts}
-              placeholder="Add tag..."
-              showAddIconInInput
-            />
-          </div>
-        </div>
+        <RecipeMetadataSection
+          variant="add"
+          name={name}
+          onNameChange={setName}
+          category={category}
+          onCategoryChange={setCategory}
+          servings={servings}
+          onServingsChange={setServings}
+          tags={tags}
+          onTagsChange={setTags}
+          allTags={allTags}
+          tagCounts={tagCounts}
+          categories={categories}
+        />
       </div>
 
-      {/* Right: lg:col-span-7 — Ingredients, Instructions */}
+      {/* Right: lg:col-span-7 - Ingredients, Instructions */}
       <div className="lg:col-span-7 p-4 sm:p-8 space-y-8">
-        <div className="space-y-4">
-          <h3 className={addLabelClass}>Ingredients</h3>
+        <RecipeIngredientsSection variant="add" onAddIngredient={onAddIngredient}>
           <SortableIngredientList
             ingredients={ingredients}
             addRecipeModalLayout
@@ -1311,26 +769,13 @@ function RecipeFormContent({
             onRemoveIngredient={onRemoveIngredient}
             onIngredientChange={onIngredientChange}
           />
-          <button
-            type="button"
-            onClick={onAddIngredient}
-            className="mt-3 text-[10px] font-bold uppercase text-accent hover:text-primary transition-colors flex items-center gap-1 min-h-[44px] px-4 border border-dashed border-accent rounded-lg w-full justify-center"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Row
-          </button>
-        </div>
+        </RecipeIngredientsSection>
 
-        <div className="space-y-4">
-          <label htmlFor="instructions-add" className={`${addLabelClass} block`}>Instructions</label>
-          <Textarea
-            id="instructions-add"
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            placeholder={"Step 1: Preheat oven to 400°F...\nStep 2: Season the chicken generously..."}
-            className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-4 text-sm min-h-[160px] resize-none focus:ring-2 focus:ring-primary"
-          />
-        </div>
+        <RecipeInstructionsSection
+          variant="add"
+          instructions={instructions}
+          onInstructionsChange={setInstructions}
+        />
       </div>
     </div>
   )

@@ -10,7 +10,15 @@ import { ensureCategoryInfo } from "@/lib/shopping-list"
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import {
+  cancelQueriesAndSnapshot,
+  invalidateQuery,
+  reconcileQueryData,
+  rollbackQueryData,
+  setOptimisticQueryData,
+  SHOPPING_KEY,
+  SHOPPING_LIST_WRITE_SCOPE_ID,
+} from "./shared"
 
 /**
  * Hook to add a manual item to the shopping list
@@ -68,11 +76,8 @@ export function useAddShoppingItem() {
     },
     // Optimistic update
     onMutate: async ({ itemName, amount, unit }) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
-
-      // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+      const { previousData: previousList } =
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
       // Get category overrides for optimistic item creation
       const categoryOverrides =
@@ -91,8 +96,9 @@ export function useAddShoppingItem() {
       )
 
       // Optimistically update cache
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      setOptimisticQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) {
             return {
@@ -121,14 +127,10 @@ export function useAddShoppingItem() {
       return { previousList }
     },
     onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
-      }
+      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
     },
     onSuccess: () => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return invalidateQuery(queryClient, SHOPPING_KEY)
     },
   })
 }
@@ -168,15 +170,13 @@ export function useRemoveShoppingItem() {
     },
     // Optimistic update
     onMutate: async (itemName) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
-
-      // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+      const { previousData: previousList } =
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
       // Optimistically remove from cache
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      setOptimisticQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
           return {
@@ -189,14 +189,10 @@ export function useRemoveShoppingItem() {
       return { previousList }
     },
     onError: (err, itemName, context) => {
-      // Rollback on error
-      if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
-      }
+      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
     },
     onSuccess: () => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return invalidateQuery(queryClient, SHOPPING_KEY)
     },
   })
 }
@@ -254,17 +250,15 @@ export function useCheckOffItem() {
     },
     // Optimistic update
     onMutate: async (item) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
-
-      // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+      const { previousData: previousList } =
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
       const normalizedItem = item.item.toLowerCase().trim()
 
       // Optimistically update cache
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      setOptimisticQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
           const currentItems = old.items || []
@@ -284,15 +278,13 @@ export function useCheckOffItem() {
       return { previousList }
     },
     onError: (err, item, context) => {
-      // Rollback on error
-      if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
-      }
+      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
     },
     onSuccess: (result) => {
       const normalizedItem = result.item_name.toLowerCase().trim()
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      reconcileQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
           return {
@@ -353,17 +345,15 @@ export function useBulkCheckOff() {
     },
     // Optimistic update
     onMutate: async (itemsToCheck) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: SHOPPING_KEY })
-
-      // Snapshot previous value for rollback
-      const previousList = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
+      const { previousData: previousList } =
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
       const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
 
       // Optimistically update cache
-      queryClient.setQueryData<ShoppingList>(
-        [...SHOPPING_KEY],
+      setOptimisticQueryData<ShoppingList>(
+        queryClient,
+        SHOPPING_KEY,
         (old) => {
           if (!old) return old
           const currentItems = old.items || []
@@ -384,14 +374,10 @@ export function useBulkCheckOff() {
       return { previousList }
     },
     onError: (err, itemsToCheck, context) => {
-      // Rollback on error
-      if (context?.previousList) {
-        queryClient.setQueryData([...SHOPPING_KEY], context.previousList)
-      }
+      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
     },
     onSuccess: () => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return invalidateQuery(queryClient, SHOPPING_KEY)
     },
   })
 }
@@ -417,7 +403,7 @@ export function useReorderShoppingList() {
       return newItems
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return invalidateQuery(queryClient, SHOPPING_KEY)
     },
   })
 }

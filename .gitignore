@@ -61,3 +61,6 @@ blob-report/
 images/
 reference/
 web/docs/
+supabase/.branches/
+supabase/.temp/
+tmp_public_schema.sql

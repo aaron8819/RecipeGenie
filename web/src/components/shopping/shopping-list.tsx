@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
-import { Plus, Trash2, Package, Ban, Check, CheckCheck, Copy, GripVertical, X, Settings, Loader2, ChevronDown, ChevronUp, Leaf, Sparkles, MoreVertical } from "lucide-react"
+import { Plus, Trash2, Package, Ban, Check, CheckCheck, Copy, GripVertical, X, Settings, Loader2, ChevronUp, Leaf, Sparkles, MoreVertical } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -25,14 +25,7 @@ import {
 import { CSS } from "@dnd-kit/utilities"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   useShoppingList,
   useAddShoppingItem,
@@ -73,111 +66,16 @@ import {
   mergeAlreadyHaveItems,
   sortItemsWithinGroups,
 } from "./shopping-list.selectors"
+import {
+  formatShoppingItemAmount,
+  getRecipeColor,
+  getRecipeColorIndex,
+  ShoppingCategorySection,
+  ShoppingItemRow,
+  ShoppingStateSection,
+  SourceTag,
+} from "./shopping-list-components"
 
-// Color palette for recipe source tags (excluding grey which is reserved for Manual)
-const RECIPE_COLORS = [
-  { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
-  { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-200" },
-  { bg: "bg-amber-100", text: "text-amber-700", border: "border-amber-200" },
-  { bg: "bg-violet-100", text: "text-violet-700", border: "border-violet-200" },
-  { bg: "bg-rose-100", text: "text-rose-700", border: "border-rose-200" },
-  { bg: "bg-cyan-100", text: "text-cyan-700", border: "border-cyan-200" },
-  { bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200" },
-  { bg: "bg-indigo-100", text: "text-indigo-700", border: "border-indigo-200" },
-  { bg: "bg-pink-100", text: "text-pink-700", border: "border-pink-200" },
-  { bg: "bg-teal-100", text: "text-teal-700", border: "border-teal-200" },
-]
-
-// Generate a consistent color index from a string
-function getColorIndex(str: string): number {
-  let hash = 0
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return Math.abs(hash) % RECIPE_COLORS.length
-}
-
-// Source tag component (for item rows) - with tap-to-expand for truncated names
-function SourceTag({
-  recipeName,
-  recipeId,
-  colorIndex,
-  onClick,
-  className,
-}: {
-  recipeName: string
-  recipeId?: string
-  colorIndex?: number
-  onClick?: () => void
-  className?: string
-}) {
-  const isManual = recipeName === "Manual"
-
-  if (isManual) {
-    return (
-      <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200", className)}>
-        Manual
-      </span>
-    )
-  }
-
-  const index = colorIndex !== undefined ? colorIndex : getColorIndex(recipeName)
-  const colors = RECIPE_COLORS[index % RECIPE_COLORS.length]
-
-  // Truncate long recipe names
-  const isTruncated = recipeName.length > 20
-  const displayName = isTruncated ? recipeName.slice(0, 18) + "…" : recipeName
-
-  const baseClasses = `inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium border ${colors.bg} ${colors.text} ${colors.border}`
-  const clickableClasses = onClick ? "cursor-pointer hover:opacity-80 active:opacity-70 transition-opacity" : "cursor-default"
-
-  const tagContent = (
-    <span
-      className={cn(baseClasses, clickableClasses, className)}
-      onClick={onClick}
-      title={onClick ? `Click to view ${recipeName}` : recipeName}
-    >
-      {displayName}
-    </span>
-  )
-
-  // If not truncated, just show the tag
-  if (!isTruncated) {
-    return tagContent
-  }
-
-  // If truncated, wrap in popover for tap-to-expand on mobile
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <span
-          className={cn(baseClasses, "cursor-pointer", className)}
-          title={recipeName}
-        >
-          {displayName}
-        </span>
-      </PopoverTrigger>
-      <PopoverContent side="top" className="text-sm p-2 w-auto max-w-[200px]">
-        <div className="flex items-center gap-2">
-          <span>{recipeName}</span>
-          {onClick && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onClick()
-              }}
-              className="text-xs text-primary hover:underline"
-            >
-              View recipe
-            </button>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-// Recipe tag with remove button (for header "Recipes in list" section). Optional onClick to view recipe.
 function RecipeTag({ 
   recipeName, 
   onRemove, 
@@ -191,8 +89,8 @@ function RecipeTag({
   isRemoving: boolean
   colorIndex?: number
 }) {
-  const index = colorIndex !== undefined ? colorIndex : getColorIndex(recipeName)
-  const colors = RECIPE_COLORS[index % RECIPE_COLORS.length]
+  const index = colorIndex !== undefined ? colorIndex : getRecipeColorIndex(recipeName)
+  const colors = getRecipeColor(index)
   
   // Truncate long recipe names
   const displayName = recipeName.length > 25 ? recipeName.slice(0, 23) + "…" : recipeName
@@ -251,51 +149,15 @@ function SwipeableItem({
   isDragging?: boolean
   showSwipeHint?: boolean
 }) {
-  const isChecked = item.checked || false
   const [swipeOffset, setSwipeOffset] = useState(0)
   const [isSwiping, setIsSwiping] = useState(false)
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
   const touchStartTime = useRef<number | null>(null)
   const itemRef = useRef<HTMLDivElement>(null)
-      const SWIPE_THRESHOLD = 100 // Minimum swipe distance to reveal buttons
-      const DELETE_THRESHOLD = 150 // Distance to trigger delete (not used with two buttons)
-  const SWIPE_VELOCITY_THRESHOLD = 0.5 // Minimum velocity for quick swipe
-  const MIN_SWIPE_DISTANCE = 20 // Minimum distance before tracking
-  const MAX_VERTICAL_DEVIATION = 30 // Max vertical movement allowed
-
-  const formatAmount = (item: ShoppingItem) => {
-    const parts: string[] = []
-    
-    // Primary amount
-    if (item.amount) {
-      const amt = toFraction(item.amount)
-      parts.push(`${amt}${item.unit ? " " + item.unit : ""}`)
-    }
-    
-    // Additional amounts (when units couldn't be merged)
-    if (item.additionalAmounts && item.additionalAmounts.length > 0) {
-      for (const additional of item.additionalAmounts) {
-        if (additional.amount) {
-          const amt = toFraction(additional.amount)
-          parts.push(`${amt}${additional.unit ? " " + additional.unit : ""}`)
-        }
-      }
-    }
-    
-    return parts.join(" + ")
-  }
-
-  // Deduplicate sources (same recipe might appear multiple times)
-  const uniqueSources = useMemo(() => {
-    if (!item.sources) return []
-    const seen = new Set<string>()
-    return item.sources.filter((source) => {
-      if (seen.has(source.recipeName)) return false
-      seen.add(source.recipeName)
-      return true
-    })
-  }, [item.sources])
+  const SWIPE_THRESHOLD = 100
+  const MIN_SWIPE_DISTANCE = 20
+  const MAX_VERTICAL_DEVIATION = 30
 
   const handleTouchStart = () => {
     // Swipe disabled: mobile uses more_vert (shoppinglist_mobile_redesign), desktop uses hover
@@ -303,16 +165,14 @@ function SwipeableItem({
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (touchStartX.current === null || touchStartY.current === null || window.innerWidth >= 768) return
-    
+
     const currentX = e.touches[0].clientX
     const currentY = e.touches[0].clientY
     const deltaX = touchStartX.current - currentX
     const deltaY = Math.abs(touchStartY.current - currentY)
     const absDeltaX = Math.abs(deltaX)
-    
-    // If vertical movement is significantly greater than horizontal, allow scrolling
+
     if (deltaY > absDeltaX * 1.5 && deltaY > 10) {
-      // This is a scroll gesture, not a swipe - reset and allow native scrolling
       touchStartX.current = null
       touchStartY.current = null
       touchStartTime.current = null
@@ -320,22 +180,18 @@ function SwipeableItem({
       setSwipeOffset(0)
       return
     }
-    
-    // Only proceed if horizontal movement is dominant and we've moved enough
+
     if (absDeltaX > MIN_SWIPE_DISTANCE && absDeltaX > deltaY && deltaY < MAX_VERTICAL_DEVIATION) {
       if (!isSwiping) {
         setIsSwiping(true)
       }
-      
-      // Only allow left swipe (positive deltaX)
+
       if (deltaX > 0) {
-        const maxSwipe = 120 // Maximum swipe distance
+        const maxSwipe = 120
         setSwipeOffset(Math.min(deltaX, maxSwipe))
-        // Only prevent default once we're actually swiping horizontally
         e.preventDefault()
       }
     } else if (isSwiping && deltaY > absDeltaX) {
-      // If we were swiping but now it's more vertical, cancel the swipe
       setIsSwiping(false)
       setSwipeOffset(0)
       touchStartX.current = null
@@ -352,7 +208,6 @@ function SwipeableItem({
       return
     }
 
-    // Only process if we were actually swiping
     if (!isSwiping || swipeOffset < MIN_SWIPE_DISTANCE) {
       setSwipeOffset(0)
       setIsSwiping(false)
@@ -362,30 +217,22 @@ function SwipeableItem({
       return
     }
 
-    const timeElapsed = Date.now() - touchStartTime.current
-    const velocity = timeElapsed > 0 ? swipeOffset / timeElapsed : 0
-
-    // Reveal buttons if swiped far enough
     if (swipeOffset >= SWIPE_THRESHOLD) {
-      // Reveal action buttons (pantry + delete)
-      setSwipeOffset(160) // Reveal both buttons
+      setSwipeOffset(160)
     } else {
-      // Snap back
       setSwipeOffset(0)
     }
-    
+
     setIsSwiping(false)
     touchStartX.current = null
     touchStartY.current = null
     touchStartTime.current = null
   }
 
-  // Reset swipe when item changes
   useEffect(() => {
     setSwipeOffset(0)
   }, [item.item])
 
-  // Close swipe when clicking outside
   useEffect(() => {
     if (swipeOffset > 0) {
       const handleClickOutside = (e: MouseEvent) => {
@@ -393,8 +240,8 @@ function SwipeableItem({
           setSwipeOffset(0)
         }
       }
-      document.addEventListener('click', handleClickOutside)
-      return () => document.removeEventListener('click', handleClickOutside)
+      document.addEventListener("click", handleClickOutside)
+      return () => document.removeEventListener("click", handleClickOutside)
     }
   }, [swipeOffset])
 
@@ -412,7 +259,6 @@ function SwipeableItem({
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Swipe strip removed: mobile uses more_vert (shoppinglist_mobile_redesign) */}
       <div className="absolute right-0 top-0 bottom-0 hidden"
         style={{
           transform: `translateX(${swipeOffset > 0 ? 0 : 100}%)`,
@@ -444,125 +290,31 @@ function SwipeableItem({
         </button>
       </div>
 
-      {/* Main item content — mobile: items-start, px-4, two-line; md: items-center, px-6 (shoppinglist_mobile_redesign) */}
       <div
-        className={`flex items-start md:items-center justify-between px-4 py-4 md:px-6 group transition-transform duration-200 ease-out swipeable-content hover:bg-stone-50 ${showSwipeHint ? 'animate-swipe-hint' : ''}`}
         style={{
           transform: showSwipeHint ? undefined : `translateX(-${swipeOffset}px)`,
-          ...dragStyle,
-          opacity: isDragging ? 0.5 : 1,
           willChange: isSwiping || isDragging ? 'transform' : 'auto',
         }}
       >
-        {/* Swipe hint tooltip */}
-        {showSwipeHint && (
-          <div className={cn("absolute -top-8 left-1/2 -translate-x-1/2 bg-foreground text-background text-xs px-2 py-1 rounded whitespace-nowrap z-10", isDesktop && "hidden")}>
-            Swipe left to delete
-          </div>
-        )}
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          {/* Drag handle — visible on all breakpoints; long-press on mobile to drag (TouchSensor delay) */}
-          <button
-            type="button"
-            data-drag-handle="true"
-            className="flex touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0 min-w-[36px] min-h-[36px] md:min-w-0 md:min-h-0 md:p-1 items-center justify-center"
-            style={{ touchAction: 'none' }}
-            aria-label="Drag to reorder"
-            {...dragHandleProps}
-          >
-            <GripVertical className="h-4 w-4 md:h-4 md:w-4" />
-          </button>
-          
-          {/* Checkbox — min 44px touch target on mobile for WCAG compliance */}
-          <button
-            type="button"
-            data-checkbox="true"
-            onClick={onCheckOff}
-            disabled={isCheckingOff}
-            className="min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center flex-shrink-0 -my-2 md:my-0"
-            aria-label={isChecked ? "Uncheck item" : "Check off item"}
-          >
-            <span className={`w-6 h-6 md:w-5 md:h-5 rounded border-2 flex items-center justify-center transition-all active:scale-95 ${
-              isChecked
-                ? "border-sage-500 bg-sage-500 text-white"
-                : "border-sage-300 hover:border-sage-500 hover:bg-sage-100 active:bg-sage-200"
-            }`}>
-              {isChecked && <Check className="h-4 w-4 md:h-3 md:w-3" />}
-            </span>
-          </button>
-          
-          {/* Inline: amount, name, and source tags on one line (wraps together), same on mobile and desktop */}
-          <div className={`flex-1 min-w-0 flex flex-wrap items-center gap-1.5 md:gap-2 ${isChecked ? "opacity-60" : ""}`}>
-            {formatAmount(item) && (
-              <span className={`font-bold text-foreground shrink-0 ${isChecked ? "text-gray-500 line-through" : ""}`}>
-                {formatAmount(item)}
-              </span>
-            )}
-            <span className={`min-w-0 truncate font-medium text-slate-700 md:text-slate-600 ${isChecked ? "text-gray-500 line-through" : ""}`}>
-              {item.item}
-            </span>
-            {uniqueSources.map((source, idx) => (
-              <SourceTag
-                key={`${source.recipeName}-${idx}`}
-                recipeName={source.recipeName}
-                colorIndex={recipeColorMap.get(source.recipeName)}
-                className="text-[9px] px-1.5 py-0.5 md:text-[10px] md:px-2 md:py-0.5 shrink-0"
-              />
-            ))}
-          </div>
-        </div>
-        
-        {/* Mobile: more_vert menu (shoppinglist_mobile_redesign) */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={cn("p-1 text-slate-400 hover:text-foreground", isDesktop && "hidden")}
-              aria-label="Item actions"
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onAddToPantry} disabled={isAddingToPantry}>
-              <Package className="h-4 w-4 mr-2" />
-              Add to pantry
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onRemove} disabled={isRemoving} className="text-destructive focus:text-destructive">
-              <Trash2 className="h-4 w-4 mr-2" />
-              Remove from list
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        
-        {/* Desktop action buttons */}
-        <div className={cn("items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity", isDesktop ? "flex" : "hidden")}>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-sage-600 flex-shrink-0"
-            onClick={onAddToPantry}
-            disabled={isAddingToPantry}
-            title="Add to pantry"
-          >
-            <Package className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive flex-shrink-0"
-            onClick={onRemove}
-            disabled={isRemoving}
-            title="Remove from list"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+        <ShoppingItemRow
+          item={item}
+          isDesktop={isDesktop}
+          onCheckOff={onCheckOff}
+          onRemove={onRemove}
+          onAddToPantry={onAddToPantry}
+          isCheckingOff={isCheckingOff}
+          isRemoving={isRemoving}
+          isAddingToPantry={isAddingToPantry}
+          recipeColorMap={recipeColorMap}
+          dragHandleProps={dragHandleProps}
+          dragStyle={dragStyle}
+          isDragging={isDragging}
+          showSwipeHint={showSwipeHint}
+        />
       </div>
     </div>
   )
 }
-
 // Sortable item component - memoized for better scroll performance
 const SortableShoppingItem = memo(function SortableShoppingItem({
   item,
@@ -647,27 +399,6 @@ function DragOverlayItem({
   item: ShoppingItem
   recipeColorMap: Map<string, number>
 }) {
-  const formatAmount = (item: ShoppingItem) => {
-    const parts: string[] = []
-    
-    if (item.amount) {
-      const amt = toFraction(item.amount)
-      parts.push(`${amt}${item.unit ? " " + item.unit : ""}`)
-    }
-    
-    if (item.additionalAmounts && item.additionalAmounts.length > 0) {
-      for (const additional of item.additionalAmounts) {
-        if (additional.amount) {
-          const amt = toFraction(additional.amount)
-          parts.push(`${amt}${additional.unit ? " " + additional.unit : ""}`)
-        }
-      }
-    }
-    
-    return parts.join(" + ")
-  }
-
-  // Deduplicate sources
   const uniqueSources = useMemo(() => {
     if (!item.sources) return []
     const seen = new Set<string>()
@@ -683,9 +414,9 @@ function DragOverlayItem({
       <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-foreground">
-          {formatAmount(item) && (
+          {formatShoppingItemAmount(item) && (
             <span className="text-muted-foreground mr-1.5 font-medium">
-              {formatAmount(item)}
+              {formatShoppingItemAmount(item)}
             </span>
           )}
           {item.item}
@@ -705,7 +436,6 @@ function DragOverlayItem({
     </div>
   )
 }
-
 // Swipe hint disabled: mobile uses more_vert menu per shoppinglist_mobile_redesign (no swipe)
 function useSwipeHint() {
   return { showSwipeHint: false }
@@ -1173,10 +903,10 @@ export function ShoppingListView() {
     const map = new Map<string, number>()
     const usedIndices = new Set<number>()
     for (const recipeName of uniqueRecipes) {
-      let idx = getColorIndex(recipeName)
-      if (usedIndices.size < RECIPE_COLORS.length) {
+      let idx = getRecipeColorIndex(recipeName)
+      if (usedIndices.size < 10) {
         while (usedIndices.has(idx)) {
-          idx = (idx + 1) % RECIPE_COLORS.length
+          idx = (idx + 1) % 10
         }
         usedIndices.add(idx)
       }
@@ -1358,26 +1088,6 @@ export function ShoppingListView() {
     }
   }
 
-  const formatAmount = (item: ShoppingItem) => {
-    const parts: string[] = []
-    
-    if (item.amount) {
-      const amt = toFraction(item.amount)
-      parts.push(`${amt}${item.unit ? " " + item.unit : ""}`)
-    }
-    
-    if (item.additionalAmounts && item.additionalAmounts.length > 0) {
-      for (const additional of item.additionalAmounts) {
-        if (additional.amount) {
-          const amt = toFraction(additional.amount)
-          parts.push(`${amt}${additional.unit ? " " + additional.unit : ""}`)
-        }
-      }
-    }
-    
-    return parts.join(" + ")
-  }
-
   return (
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
@@ -1514,77 +1224,16 @@ export function ShoppingListView() {
           >
             {/* Recipes in list — Collapsible on mobile, always expanded on desktop */}
             {uniqueRecipes.length > 0 && (
-              <Card className="mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
-                {/* Mobile: Collapsible header */}
-                <CardHeader
-                  role="button"
-                  tabIndex={0}
-                  className={cn("px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors", isDesktop && "hidden")}
-                  onClick={toggleRecipeSection}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      toggleRecipeSection()
-                    }
-                  }}
-                >
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="font-display text-sm font-semibold text-foreground uppercase tracking-wide">
-                      Recipes in list
-                    </CardTitle>
-                    <span className="text-[10px] font-medium px-2 py-0.5 bg-accent-green/20 text-primary rounded-full uppercase tracking-tighter">
-                      {uniqueRecipes.length}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleRecipeSection()
-                    }}
-                    className="p-1.5 text-stone-400 hover:text-primary rounded-lg transition-colors"
-                    aria-label={recipeSectionCollapsed ? "Expand recipes list" : "Collapse recipes list"}
-                  >
-                    {recipeSectionCollapsed ? (
-                      <ChevronDown className="h-5 w-5" />
-                    ) : (
-                      <ChevronUp className="h-5 w-5" />
-                    )}
-                  </button>
-                </CardHeader>
-
-                {/* Desktop: Static header (no collapse) */}
-                <CardHeader className={cn("px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100 flex", !isDesktop && "hidden")}>
-                  <div className="flex items-center gap-2 md:gap-3">
-                    <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
-                      Recipes in list
-                    </CardTitle>
-                    <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">
-                      {uniqueRecipes.length}
-                    </span>
-                  </div>
-                </CardHeader>
-
-                {/* Mobile: Conditional content */}
-                {!recipeSectionCollapsed && (
-                  <CardContent className={cn("p-4", isDesktop && "hidden")}>
-                    <div className="flex flex-wrap gap-2">
-                      {uniqueRecipes.map((recipeName) => (
-                        <RecipeTag
-                          key={recipeName}
-                          recipeName={recipeName}
-                          onRemove={() => handleRemoveRecipeItems(recipeName)}
-                          onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
-                          isRemoving={false}
-                          colorIndex={recipeColorMap.get(recipeName)}
-                        />
-                      ))}
-                    </div>
-                  </CardContent>
-                )}
-
-                {/* Desktop: Always visible content */}
-                <CardContent className={cn("p-4 md:p-6", !isDesktop && "hidden")}>
+              <ShoppingStateSection
+                title="Recipes in list"
+                count={uniqueRecipes.length}
+                isDesktop={isDesktop}
+                isCollapsed={recipeSectionCollapsed}
+                onToggle={toggleRecipeSection}
+                expandLabel="Expand recipes list"
+                collapseLabel="Collapse recipes list"
+                mobileCountClassName="bg-accent-green/20 text-primary"
+                mobileContent={
                   <div className="flex flex-wrap gap-2">
                     {uniqueRecipes.map((recipeName) => (
                       <RecipeTag
@@ -1597,8 +1246,22 @@ export function ShoppingListView() {
                       />
                     ))}
                   </div>
-                </CardContent>
-              </Card>
+                }
+                desktopContent={
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueRecipes.map((recipeName) => (
+                      <RecipeTag
+                        key={recipeName}
+                        recipeName={recipeName}
+                        onRemove={() => handleRemoveRecipeItems(recipeName)}
+                        onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
+                        isRemoving={false}
+                        colorIndex={recipeColorMap.get(recipeName)}
+                      />
+                    ))}
+                  </div>
+                }
+              />
             )}
 
             <DndContext
@@ -1614,13 +1277,10 @@ export function ShoppingListView() {
             >
               {/* Main shopping items grouped by category */}
               {(() => {
-                let isFirstItem = true // Track if we've shown hint yet
-                let globalIndexCounter = 0 // Track global index across all categories
-                // Create a map of item to global index for reliable lookup
+                let isFirstItem = true
+                let globalIndexCounter = 0
                 const itemToGlobalIndex = new Map<ShoppingItem, number>()
                 filteredItems.forEach((item, idx) => {
-                  // Use a unique key based on item properties to handle potential duplicates
-                  const itemKey = `${item.item.toLowerCase()}-${item.unit || ''}-${item.amount || 0}`
                   if (!itemToGlobalIndex.has(item)) {
                     itemToGlobalIndex.set(item, idx)
                   }
@@ -1628,105 +1288,52 @@ export function ShoppingListView() {
                 return categoryViewModels.map((categoryData) => {
                   const items = categoryData.items
 
-                  // Check if this category is a valid drop target
-                  const isDragTarget = activeItem &&
+                  const isDragTarget =
+                    activeItem &&
                     dragOverCategory === categoryData.key &&
                     activeItem.categoryKey !== categoryData.key
 
                   const isCollapsed = collapsedCategories.has(categoryData.key)
-                  const CategoryIcon = categoryData.key === "produce" ? Leaf : Package
                   return (
-                    <Card
+                    <ShoppingCategorySection
                       key={categoryData.key}
-                      className={`animate-fade-in transition-all duration-200 bg-white border border-stone-100 rounded-xl overflow-hidden shadow-sm ${
-                        isDragTarget ? 'border-2 border-dashed border-primary bg-primary/5' : ''
-                      }`}
+                      categoryData={categoryData}
+                      itemCount={items.length}
+                      isCollapsed={isCollapsed}
+                      isDragTarget={!!isDragTarget}
+                      isBulkCheckOffPending={bulkCheckOff.isPending}
+                      onToggleCategory={() => toggleCategory(categoryData.key)}
+                      onBulkCheckOff={() => handleBulkCheckOff(items, categoryData.name)}
                     >
-                      <CardHeader 
-                        className="px-4 py-3 md:px-6 md:py-4 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors"
-                        onClick={() => toggleCategory(categoryData.key)}
-                      >
-                        <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                          <CategoryIcon className="h-5 w-5 text-primary shrink-0" />
-                          <CardTitle className="min-w-0 truncate font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
-                            {categoryData.name}
-                          </CardTitle>
-                          {categoryData.isCustom && (
-                            <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded normal-case">Custom</span>
-                          )}
-                          <span className="text-[10px] font-medium px-2 py-0.5 bg-accent-green/20 text-primary rounded-full uppercase tracking-tighter">{categoryData.checkedCount}/{categoryData.totalCount}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            {items.length > 1 && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleBulkCheckOff(items, categoryData.name)
-                                }}
-                                disabled={bulkCheckOff.isPending}
-                                className="flex h-8 min-w-[36px] md:h-6 md:min-w-0 px-2 text-[10px] text-primary hover:bg-primary/10 touch-manipulation"
-                                title={`Check all items in ${categoryData.name}`}
-                                aria-label={`Check all items in ${categoryData.name}`}
-                              >
-                                <CheckCheck className="h-4 w-4 md:h-3 md:w-3 mr-1 shrink-0" />
-                                <span>All</span>
-                              </Button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                toggleCategory(categoryData.key)
-                              }}
-                              className="p-1.5 text-stone-400 hover:text-primary rounded-lg transition-colors"
-                              aria-label={isCollapsed ? "Expand category" : "Collapse category"}
-                            >
-                              {isCollapsed ? (
-                                <ChevronDown className="h-5 w-5" />
-                              ) : (
-                                <ChevronUp className="h-5 w-5" />
-                              )}
-                            </button>
-                        </div>
-                      </CardHeader>
-                      {!isCollapsed && (
-                        <CardContent className="p-0">
-                          <ul className="divide-y divide-stone-100" style={{ contain: 'layout style paint' }}>
-                            {items.map((item, itemIdx) => {
-                            const showHintForThisItem = isFirstItem && showSwipeHint
-                            if (isFirstItem) isFirstItem = false
-                            // Get global index from map, or use counter as fallback
-                            let globalIndex = itemToGlobalIndex.get(item)
-                            if (globalIndex === undefined) {
-                              globalIndex = globalIndexCounter++
-                              itemToGlobalIndex.set(item, globalIndex)
-                            }
-                            // Use a unique key that includes category, item name, unit, and GLOBAL index to prevent duplicates
-                            // Using globalIndex ensures uniqueness even if items have the same name/unit
-                            const reactKey = `${categoryData.key}-${item.item}-${item.unit || ''}-${globalIndex}`
-                            return (
-                              <SortableShoppingItem
-                                key={reactKey}
-                                item={item}
-                                itemIdx={globalIndex}
-                                isDesktop={isDesktop}
-                                onCheckOff={() => handleCheckOff(item)}
-                                onRemove={() => handleRemoveItem(item.item)}
-                                onAddToPantry={() => handleAddToPantry(item)}
-                                isCheckingOff={pendingCheckItems.has(item.item.toLowerCase().trim())}
-                                isRemoving={false}
-                                isAddingToPantry={pendingPantryItems.has(item.item.toLowerCase().trim())}
-                                recipeColorMap={recipeColorMap}
-                                showSwipeHint={showHintForThisItem}
-                              />
-                            )
-                          })}
-                        </ul>
-                      </CardContent>
-                      )}
-                    </Card>
+                      <ul className="divide-y divide-stone-100" style={{ contain: 'layout style paint' }}>
+                        {items.map((item) => {
+                          const showHintForThisItem = isFirstItem && showSwipeHint
+                          if (isFirstItem) isFirstItem = false
+                          let globalIndex = itemToGlobalIndex.get(item)
+                          if (globalIndex === undefined) {
+                            globalIndex = globalIndexCounter++
+                            itemToGlobalIndex.set(item, globalIndex)
+                          }
+                          const reactKey = `${categoryData.key}-${item.item}-${item.unit || ''}-${globalIndex}`
+                          return (
+                            <SortableShoppingItem
+                              key={reactKey}
+                              item={item}
+                              itemIdx={globalIndex}
+                              isDesktop={isDesktop}
+                              onCheckOff={() => handleCheckOff(item)}
+                              onRemove={() => handleRemoveItem(item.item)}
+                              onAddToPantry={() => handleAddToPantry(item)}
+                              isCheckingOff={pendingCheckItems.has(item.item.toLowerCase().trim())}
+                              isRemoving={false}
+                              isAddingToPantry={pendingPantryItems.has(item.item.toLowerCase().trim())}
+                              recipeColorMap={recipeColorMap}
+                              showSwipeHint={showHintForThisItem}
+                            />
+                          )
+                        })}
+                      </ul>
+                    </ShoppingCategorySection>
                   )
                 })
               })()}
@@ -1764,58 +1371,18 @@ export function ShoppingListView() {
 
           {/* In Pantry — Collapsible on mobile, always expanded on desktop */}
           {mergedAlreadyHave && mergedAlreadyHave.length > 0 && (
-            <Card className="mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
-              {/* Mobile: Collapsible header */}
-              <CardHeader
-                role="button"
-                tabIndex={0}
-                className={cn("px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors", isDesktop && "hidden")}
-                onClick={togglePantrySection}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    togglePantrySection()
-                  }
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <Package className="h-5 w-5 text-primary" />
-                  <CardTitle className="font-display text-sm font-semibold text-foreground uppercase tracking-wide">
-                    In Pantry
-                  </CardTitle>
-                  <span className="text-[10px] font-medium px-2 py-0.5 bg-accent-green/20 text-primary rounded-full uppercase tracking-tighter">
-                    {mergedAlreadyHave.length}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    togglePantrySection()
-                  }}
-                  className="p-1.5 text-stone-400 hover:text-primary rounded-lg transition-colors"
-                  aria-label={pantryCollapsed ? "Expand pantry items" : "Collapse pantry items"}
-                >
-                  {pantryCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
-                </button>
-              </CardHeader>
-
-              {/* Desktop: Static header (no collapse) */}
-              <CardHeader className={cn("px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100 flex", !isDesktop && "hidden")}>
-                <div className="flex items-center gap-2 md:gap-3">
-                  <Package className="h-5 w-5 text-primary" />
-                  <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
-                    In Pantry
-                  </CardTitle>
-                  <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">
-                    {mergedAlreadyHave.length}
-                  </span>
-                </div>
-              </CardHeader>
-
-              {/* Mobile: Conditional content */}
-              {!pantryCollapsed && (
-                <CardContent className={cn("p-4", isDesktop && "hidden")}>
+            <ShoppingStateSection
+              title="In Pantry"
+              count={mergedAlreadyHave.length}
+              icon={<Package className="h-5 w-5 text-primary" />}
+              isDesktop={isDesktop}
+              isCollapsed={pantryCollapsed}
+              onToggle={togglePantrySection}
+              expandLabel="Expand pantry items"
+              collapseLabel="Collapse pantry items"
+              mobileCountClassName="bg-accent-green/20 text-primary"
+              mobileContent={
+                <>
                   <p className="text-xs text-muted-foreground mb-3">Click to add back to list</p>
                   <div className="flex flex-wrap gap-2">
                     {mergedAlreadyHave.map((item, index) => (
@@ -1831,84 +1398,44 @@ export function ShoppingListView() {
                       </button>
                     ))}
                   </div>
-                </CardContent>
-              )}
-
-              {/* Desktop: Always visible content */}
-              <CardContent className={cn("p-4 md:p-6", !isDesktop && "hidden")}>
-                <p className="text-xs text-muted-foreground mb-4">Click to add back to list</p>
-                <div className="flex flex-wrap gap-2">
-                  {mergedAlreadyHave.map((item, index) => (
-                    <button
-                      key={`already-have-${item.item}-${item.unit || ''}-${index}`}
-                      type="button"
-                      onClick={() => moveToList.mutate(item)}
-                      disabled={moveToList.isPending}
-                      className="px-4 py-1.5 text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer"
-                      style={{ animationDelay: `${index * 20}ms` }}
-                    >
-                      {item.item}
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                </>
+              }
+              desktopContent={
+                <>
+                  <p className="text-xs text-muted-foreground mb-4">Click to add back to list</p>
+                  <div className="flex flex-wrap gap-2">
+                    {mergedAlreadyHave.map((item, index) => (
+                      <button
+                        key={`already-have-${item.item}-${item.unit || ''}-${index}`}
+                        type="button"
+                        onClick={() => moveToList.mutate(item)}
+                        disabled={moveToList.isPending}
+                        className="px-4 py-1.5 text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer"
+                        style={{ animationDelay: `${index * 20}ms` }}
+                      >
+                        {item.item}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              }
+            />
           )}
 
           {/* Excluded — Collapsible on mobile, always expanded on desktop */}
           {displayShoppingList?.excluded && displayShoppingList.excluded.length > 0 && (
-            <Card className="mb-4 animate-fade-in border border-stone-100 rounded-xl overflow-hidden shadow-sm">
-              {/* Mobile: Collapsible header */}
-              <CardHeader
-                role="button"
-                tabIndex={0}
-                className={cn("px-4 py-3 bg-stone-50/50 border-b border-stone-100 flex flex-row items-center justify-between cursor-pointer hover:bg-stone-100/50 transition-colors", isDesktop && "hidden")}
-                onClick={toggleExcludedSection}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    toggleExcludedSection()
-                  }
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <Ban className="h-5 w-5 text-red-500" />
-                  <CardTitle className="font-display text-sm font-semibold text-foreground uppercase tracking-wide">
-                    Excluded
-                  </CardTitle>
-                  <span className="text-[10px] font-medium px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full uppercase tracking-tighter">
-                    {displayShoppingList.excluded.length}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggleExcludedSection()
-                  }}
-                  className="p-1.5 text-stone-400 hover:text-primary rounded-lg transition-colors"
-                  aria-label={excludedCollapsed ? "Expand excluded items" : "Collapse excluded items"}
-                >
-                  {excludedCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
-                </button>
-              </CardHeader>
-
-              {/* Desktop: Static header (no collapse) */}
-              <CardHeader className={cn("px-4 md:px-6 py-3 md:py-4 bg-stone-50/50 border-b border-stone-100 flex", !isDesktop && "hidden")}>
-                <div className="flex items-center gap-2 md:gap-3">
-                  <Ban className="h-5 w-5 text-red-500" />
-                  <CardTitle className="font-display text-sm md:text-lg font-semibold text-foreground uppercase tracking-wide">
-                    Excluded
-                  </CardTitle>
-                  <span className="text-[10px] font-medium px-2 py-0.5 bg-stone-100 text-stone-500 rounded-full">
-                    {displayShoppingList.excluded.length}
-                  </span>
-                </div>
-              </CardHeader>
-
-              {/* Mobile: Conditional content */}
-              {!excludedCollapsed && (
-                <CardContent className={cn("p-4", isDesktop && "hidden")}>
+            <ShoppingStateSection
+              title="Excluded"
+              count={displayShoppingList.excluded.length}
+              icon={<Ban className="h-5 w-5 text-red-500" />}
+              isDesktop={isDesktop}
+              isCollapsed={excludedCollapsed}
+              onToggle={toggleExcludedSection}
+              expandLabel="Expand excluded items"
+              collapseLabel="Collapse excluded items"
+              mobileCountClassName="bg-rose-100 text-rose-700"
+              mobileContent={
+                <>
                   <p className="text-xs text-muted-foreground mb-3">Items excluded by keywords. Click to add back to list.</p>
                   <div className="flex flex-wrap gap-2">
                     {displayShoppingList.excluded.map((item, index) => (
@@ -1927,31 +1454,31 @@ export function ShoppingListView() {
                       </button>
                     ))}
                   </div>
-                </CardContent>
-              )}
-
-              {/* Desktop: Always visible content */}
-              <CardContent className={cn("p-4 md:p-6", !isDesktop && "hidden")}>
-                <p className="text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
-                <div className="flex flex-wrap gap-2">
-                  {displayShoppingList.excluded.map((item, index) => (
-                    <button
-                      key={`excluded-${item.item}-${item.unit || ''}-${index}`}
-                      type="button"
-                      onClick={() => moveExcludedToList.mutate(item)}
-                      disabled={moveExcludedToList.isPending}
-                      className="px-4 py-1.5 text-sm font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                      style={{ animationDelay: `${index * 20}ms` }}
-                    >
-                      <span>{item.item}</span>
-                      {item.excludedBy && (
-                        <span className="text-[9px] opacity-60 font-normal"> ({item.excludedBy})</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                </>
+              }
+              desktopContent={
+                <>
+                  <p className="text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {displayShoppingList.excluded.map((item, index) => (
+                      <button
+                        key={`excluded-${item.item}-${item.unit || ''}-${index}`}
+                        type="button"
+                        onClick={() => moveExcludedToList.mutate(item)}
+                        disabled={moveExcludedToList.isPending}
+                        className="px-4 py-1.5 text-sm font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer flex items-center gap-1.5"
+                        style={{ animationDelay: `${index * 20}ms` }}
+                      >
+                        <span>{item.item}</span>
+                        {item.excludedBy && (
+                          <span className="text-[9px] opacity-60 font-normal"> ({item.excludedBy})</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              }
+            />
           )}
 
           </div>
