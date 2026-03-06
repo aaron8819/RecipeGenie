@@ -327,6 +327,27 @@ export function useGenerateMealPlan() {
 }
 
 /**
+ * Fetch current recipe ids for the signed-in user.
+ * Used by planner flows that need to filter stale ids (e.g. loading templates).
+ */
+export function useFetchRecipeIds() {
+  const { user } = useAuthContext()
+
+  return useMutation({
+    mutationFn: async () => {
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from("recipes")
+        .select("id")
+        .eq("user_id", user!.id)
+
+      if (error) throw error
+      return ((data as { id: string }[] | null) || []).map((row) => row.id)
+    },
+  })
+}
+
+/**
  * Hook to swap a recipe in the meal plan
  * Updates cache immediately after successful swap for instant UI feedback
  */

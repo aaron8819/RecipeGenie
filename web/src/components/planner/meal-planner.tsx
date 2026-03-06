@@ -55,6 +55,7 @@ import {
   useUserConfig,
   useUpdateUserConfig,
   useGenerateMealPlan,
+  useFetchRecipeIds,
   useSwapRecipe,
   useMarkRecipeMade,
   useRemoveRecipeFromPlan,
@@ -84,7 +85,6 @@ import {
 } from "@/lib/planner-utils"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { cn } from "@/lib/utils"
-import { getSupabase } from "@/lib/supabase/client"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1098,6 +1098,7 @@ export function MealPlanner() {
 
   // Hook to save day assignments to database
   const saveDayAssignments = useSaveDayAssignments()
+  const fetchRecipeIds = useFetchRecipeIds()
 
   const { data: config } = useUserConfig()
   const updateConfig = useUpdateUserConfig()
@@ -1299,13 +1300,8 @@ export function MealPlanner() {
     if (!currentWeekDate) return
     try {
       // Filter out deleted recipes
-      const { data: recipeRows } = await getSupabase()
-        .from('recipes')
-        .select('id')
-      const existingRecipeIds = new Set(
-        (recipeRows as { id: string }[] || [])
-          .map(r => r.id)
-      )
+      const recipeIds = await fetchRecipeIds.mutateAsync()
+      const existingRecipeIds = new Set(recipeIds)
       const validIds = template.recipe_ids.filter(
         (id) => existingRecipeIds.has(id)
       )
