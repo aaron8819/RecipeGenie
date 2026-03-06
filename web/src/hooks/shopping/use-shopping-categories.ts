@@ -41,22 +41,36 @@ export function useSaveCategoryOverride() {
       if (config) {
         // Update existing config - get fresh client to avoid type issues
         const updateSupabase = getSupabase()
-        const { error: saveError } = await updateSupabase
-          .from("user_config")
+        const userConfigUpdate = updateSupabase.from("user_config") as unknown as {
+          update: (values: { category_overrides: Record<string, string> }) => {
+            eq: (column: string, value: string) => Promise<{ error: { message: string } | null }>
+          }
+        }
+        const { error: saveError } = await userConfigUpdate
           .update({ category_overrides: updatedOverrides })
           .eq("user_id", user!.id)
         if (saveError) throw saveError
       } else {
         // Insert new config (shouldn't happen normally, but handle it)
         const insertSupabase = getSupabase()
-        const { error: saveError } = await insertSupabase
-          .from("user_config")
+        const userConfigInsert = insertSupabase.from("user_config") as unknown as {
+          insert: (values: {
+            user_id: string
+            category_overrides: Record<string, string>
+            categories: string[]
+            default_selection: Record<string, number>
+            excluded_keywords: unknown[]
+            history_exclusion_days: number | null
+            week_start_day: number | null
+          }) => Promise<{ error: { message: string } | null }>
+        }
+        const { error: saveError } = await userConfigInsert
           .insert({
             user_id: user!.id,
             category_overrides: updatedOverrides,
             categories: [...DEFAULT_RECIPE_CATEGORIES],
             default_selection: { ...DEFAULT_RECIPE_SELECTION },
-            excluded_keywords: [...DEFAULT_USER_CONFIG.excluded_keywords],
+            excluded_keywords: [...(DEFAULT_USER_CONFIG.excluded_keywords ?? [])],
             history_exclusion_days: DEFAULT_USER_CONFIG.history_exclusion_days,
             week_start_day: DEFAULT_USER_CONFIG.week_start_day,
           })
@@ -92,8 +106,12 @@ export function useUpdateItemCategory() {
       )
 
       const supabase = getSupabase()
-      const { error: saveError } = await supabase
-        .from("shopping_list")
+      const shoppingListUpdate = supabase.from("shopping_list") as unknown as {
+        update: (values: { items: ShoppingItem[]; custom_order: boolean }) => {
+          eq: (column: string, value: string) => Promise<{ error: { message: string } | null }>
+        }
+      }
+      const { error: saveError } = await shoppingListUpdate
         .update({ items: updatedItems, custom_order: true })
         .eq("user_id", user!.id)
 
@@ -105,4 +123,3 @@ export function useUpdateItemCategory() {
     },
   })
 }
-

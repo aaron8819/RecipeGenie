@@ -4,11 +4,12 @@ import { useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
-import { useUpdateUserConfig } from "@/hooks/use-planner"
+import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
 
 const RECIPES_KEY = ["recipes"]
+export { useCategories } from "@/hooks/shared/user-config"
 
 function buildRecipesKey(options?: {
   category?: string | null
@@ -77,7 +78,13 @@ export function useRecipes(options?: {
       // Supabase .contains() is AND-only; the RPC uses && (array overlap) for OR.
       if (options?.tags && options.tags.length > 0) {
         if (!user) return []
-        const { data, error } = await supabase.rpc('filter_recipes_by_tags', {
+        const filterTagsRpcClient = supabase as unknown as {
+          rpc: (
+            fn: "filter_recipes_by_tags",
+            args: { p_user_id: string; p_tags: string[] }
+          ) => Promise<{ data: Recipe[] | null; error: { message: string } | null }>
+        }
+        const { data, error } = await filterTagsRpcClient.rpc('filter_recipes_by_tags', {
           p_user_id: user.id,
           p_tags: options.tags,
         })
@@ -168,8 +175,14 @@ export function useCreateRecipe() {
       const now = new Date().toISOString()
 
       const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipes")
+      const recipeInsert = supabase.from("recipes") as unknown as {
+        insert: (values: Omit<RecipeInsert, "id" | "user_id"> & { id: string; user_id: string }) => {
+          select: () => {
+            single: () => Promise<{ data: Recipe | null; error: { message: string } | null }>
+          }
+        }
+      }
+      const { data, error } = await recipeInsert
         .insert({ ...recipe, id, user_id: user!.id })
         .select()
         .single()
@@ -274,8 +287,18 @@ export function useUpdateRecipe() {
       const normalizedUpdates = normalizeRecipeUpdates(updates)
 
       const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipes")
+      const recipeUpdate = supabase.from("recipes") as unknown as {
+        update: (values: RecipeUpdate) => {
+          eq: (column: string, value: string) => {
+            eq: (column: string, value: string) => {
+              select: () => {
+                single: () => Promise<{ data: Recipe | null; error: { message: string } | null }>
+              }
+            }
+          }
+        }
+      }
+      const { data, error } = await recipeUpdate
         .update(normalizedUpdates)
         .eq("id", id)
         .eq("user_id", user!.id)
@@ -407,8 +430,18 @@ export function useToggleFavorite() {
   return useMutation({
     mutationFn: async ({ id, favorite }: { id: string; favorite: boolean }) => {
       const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipes")
+      const recipeFavoriteUpdate = supabase.from("recipes") as unknown as {
+        update: (values: { favorite: boolean }) => {
+          eq: (column: string, value: string) => {
+            eq: (column: string, value: string) => {
+              select: () => {
+                single: () => Promise<{ data: Recipe | null; error: { message: string } | null }>
+              }
+            }
+          }
+        }
+      }
+      const { data, error } = await recipeFavoriteUpdate
         .update({ favorite: !favorite })
         .eq("id", id)
         .eq("user_id", user!.id)
@@ -459,49 +492,6 @@ export function useToggleFavorite() {
       // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
     },
-  })
-}
-
-// Preferred display order for recipe categories (fallback for default categories)
-const DEFAULT_CATEGORY_ORDER = ["chicken", "beef", "lamb", "turkey", "vegetarian"]
-
-function sortDefaultCategories(categories: string[]): string[] {
-  return [...categories].sort((a, b) => {
-    const indexA = DEFAULT_CATEGORY_ORDER.indexOf(a)
-    const indexB = DEFAULT_CATEGORY_ORDER.indexOf(b)
-    if (indexA === -1 && indexB === -1) return a.localeCompare(b)
-    if (indexA === -1) return 1
-    if (indexB === -1) return -1
-    return indexA - indexB
-  })
-}
-
-/**
- * Hook to fetch all categories
- * Returns categories in the order they are stored (user's custom order)
- */
-export function useCategories() {
-  return useQuery({
-    queryKey: ["user_config", "categories"],
-    queryFn: async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("user_config")
-        .select("categories")
-        .single()
-
-      if (error) {
-        console.warn("Config not found, using defaults:", error.message)
-        return sortDefaultCategories(["chicken", "beef", "lamb", "turkey", "vegetarian"])
-      }
-      
-      const typedData = data as { categories?: string[] } | null
-      const userCategories = typedData?.categories || []
-      // Return categories in the order they are stored (user's custom order)
-      // If empty, return defaults in sorted order
-      return userCategories.length > 0 ? userCategories : sortDefaultCategories(["chicken", "beef", "lamb", "turkey", "vegetarian"])
-    },
-    staleTime: Infinity,
   })
 }
 
@@ -596,8 +586,16 @@ export function useBulkUpdateRecipeCategories() {
       newCategory: string
     }) => {
       const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipes")
+      const recipeCategoryUpdate = supabase.from("recipes") as unknown as {
+        update: (values: { category: string }) => {
+          eq: (column: string, value: string) => {
+            eq: (column: string, value: string) => {
+              select: (columns: string) => Promise<{ data: Array<{ id: string }> | null; error: { message: string } | null }>
+            }
+          }
+        }
+      }
+      const { data, error } = await recipeCategoryUpdate
         .update({ category: newCategory })
         .eq("user_id", user!.id)
         .eq("category", oldCategory)
@@ -623,7 +621,13 @@ export function useRenameTag() {
   return useMutation({
     mutationFn: async ({ oldTag, newTag }: { oldTag: string; newTag: string }) => {
       const supabase = getSupabase()
-      const { error } = await supabase.rpc("rename_tag", {
+      const renameTagRpcClient = supabase as unknown as {
+        rpc: (
+          fn: "rename_tag",
+          args: { p_user_id: string; p_old_tag: string; p_new_tag: string }
+        ) => Promise<{ error: { message: string } | null }>
+      }
+      const { error } = await renameTagRpcClient.rpc("rename_tag", {
         p_user_id: user!.id,
         p_old_tag: oldTag,
         p_new_tag: newTag,
@@ -649,10 +653,16 @@ export function useMergeTags() {
   return useMutation({
     mutationFn: async ({ sourceTags, targetTag }: { sourceTags: string[]; targetTag: string }) => {
       const supabase = getSupabase()
+      const mergeTagsRpcClient = supabase as unknown as {
+        rpc: (
+          fn: "merge_tags",
+          args: { p_user_id: string; p_source_tag: string; p_target_tag: string }
+        ) => Promise<{ error: { message: string } | null }>
+      }
       // One RPC call per source tag (O(S) requests instead of O(S*N))
       const results = await Promise.all(
         sourceTags.map((sourceTag) =>
-          supabase.rpc("merge_tags", {
+          mergeTagsRpcClient.rpc("merge_tags", {
             p_user_id: user!.id,
             p_source_tag: sourceTag,
             p_target_tag: targetTag,
@@ -681,7 +691,13 @@ export function useDeleteTag() {
   return useMutation({
     mutationFn: async (tag: string) => {
       const supabase = getSupabase()
-      const { error } = await supabase.rpc("delete_tag", {
+      const deleteTagRpcClient = supabase as unknown as {
+        rpc: (
+          fn: "delete_tag",
+          args: { p_user_id: string; p_tag: string }
+        ) => Promise<{ error: { message: string } | null }>
+      }
+      const { error } = await deleteTagRpcClient.rpc("delete_tag", {
         p_user_id: user!.id,
         p_tag: tag,
       })

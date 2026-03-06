@@ -8,6 +8,7 @@ import { DEFAULT_RECIPE_CATEGORIES, DEFAULT_RECIPE_SELECTION, DEFAULT_USER_CONFI
 
 const PANTRY_KEY = ["pantry"]
 const CONFIG_KEY = ["user_config"]
+type SupabaseWriteError = { message: string } | null
 
 /**
  * Hook to fetch all pantry items
@@ -48,8 +49,14 @@ export function useAddPantryItem() {
       const now = new Date().toISOString()
 
       const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("pantry_items")
+      const pantryInsert = supabase.from("pantry_items") as unknown as {
+        insert: (values: { user_id: string; item: string }) => {
+          select: () => {
+            single: () => Promise<{ data: PantryItem | null; error: SupabaseWriteError }>
+          }
+        }
+      }
+      const { data, error } = await pantryInsert
         .insert({ user_id: user!.id, item: normalizedItem })
         .select()
         .single()
@@ -223,15 +230,29 @@ export function useAddExcludedKeyword() {
 
       if (config) {
         // Update existing config
-        const { error } = await supabase
-          .from("user_config")
+        const userConfigUpdate = supabase.from("user_config") as unknown as {
+          update: (values: { excluded_keywords: string[] }) => {
+            eq: (column: string, value: string) => Promise<{ error: SupabaseWriteError }>
+          }
+        }
+        const { error } = await userConfigUpdate
           .update({ excluded_keywords: [...currentKeywords, normalizedKeyword] })
           .eq("user_id", user!.id)
         if (error) throw error
       } else {
         // Insert new config (shouldn't happen normally, but handle it)
-        const { error } = await supabase
-          .from("user_config")
+        const userConfigInsert = supabase.from("user_config") as unknown as {
+          insert: (values: {
+            user_id: string
+            excluded_keywords: string[]
+            categories: string[]
+            default_selection: Record<string, number>
+            category_overrides: Record<string, string>
+            history_exclusion_days: number | null
+            week_start_day: number | null
+          }) => Promise<{ error: SupabaseWriteError }>
+        }
+        const { error } = await userConfigInsert
           .insert({
             user_id: user!.id,
             excluded_keywords: [normalizedKeyword],
@@ -310,8 +331,12 @@ export function useRemoveExcludedKeyword() {
       const currentKeywords = typedConfig.excluded_keywords || []
       const updatedKeywords = currentKeywords.filter((k) => k !== normalizedKeyword)
 
-      const { error } = await supabase
-        .from("user_config")
+      const userConfigUpdate = supabase.from("user_config") as unknown as {
+        update: (values: { excluded_keywords: string[] }) => {
+          eq: (column: string, value: string) => Promise<{ error: SupabaseWriteError }>
+        }
+      }
+      const { error } = await userConfigUpdate
         .update({ excluded_keywords: updatedKeywords })
         .eq("user_id", user!.id)
 
@@ -350,5 +375,3 @@ export function useRemoveExcludedKeyword() {
     },
   })
 }
-
-

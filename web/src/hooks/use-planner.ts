@@ -2,19 +2,19 @@
 
 import { useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import type { Recipe, RecipeHistory, RecipeHistoryStatsRow, WeeklyPlan, UserConfig } from "@/types/database"
+import type { Recipe, RecipeHistory, RecipeHistoryStatsRow, WeeklyPlan } from "@/types/database"
 import { generateMealPlan, getSwapRecipe, autoAssignDays } from "@/lib/meal-planner"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { resolveUserConfig } from "@/lib/user-config"
-import { useCategories } from "./use-recipes"
+import { useCategories, useUpdateUserConfig, useUserConfig } from "@/hooks/shared/user-config"
 
 const WEEKLY_PLANS_KEY = ["weekly_plans"]
 const HISTORY_KEY = ["recipe_history"]
 const RECENT_HISTORY_KEY = [...HISTORY_KEY, "recent"]
 const HISTORY_STATS_KEY = [...HISTORY_KEY, "stats"]
-const CONFIG_KEY = ["user_config"]
 const RECIPES_KEY = ["recipes"]
+
+export { useUpdateUserConfig, useUserConfig } from "@/hooks/shared/user-config"
 
 export function getRecipeHistoryQueryKey() {
   return [...HISTORY_KEY]
@@ -166,25 +166,6 @@ export function useRecipeHistoryStats() {
 }
 
 /**
- * Hook to fetch user config
- */
-export function useUserConfig(options?: { enabled?: boolean }) {
-  return useQuery({
-    queryKey: [...CONFIG_KEY],
-    queryFn: async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("user_config")
-        .select("*")
-        .single()
-
-      return resolveUserConfig(data as UserConfig | null, error)
-    },
-    enabled: options?.enabled ?? true,
-  })
-}
-
-/**
  * Hook to get categories enabled for the planner
  * Returns all categories if enabled_planner_categories is null (not configured)
  * Returns filtered subset if enabled_planner_categories is set
@@ -205,49 +186,6 @@ export function usePlannerCategories() {
     const enabledSet = new Set(config.enabled_planner_categories)
     return allCategories.filter(cat => enabledSet.has(cat))
   }, [config, allCategories])
-}
-
-/**
- * Hook to update user config
- */
-export function useUpdateUserConfig() {
-  const queryClient = useQueryClient()
-  const { user } = useAuthContext()
-
-  return useMutation({
-    mutationFn: async (updates: Partial<UserConfig>) => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("user_config")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update(updates)
-        .eq("user_id", user!.id)
-        .select()
-        .single()
-
-      if (!error) {
-        return data as UserConfig
-      }
-
-      // If the row doesn't exist yet, upsert it with defaults
-      if (error.code === "PGRST116") {
-        const { data: upsertData, error: upsertError } = await supabase
-          .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
-          .upsert({ user_id: user!.id, ...updates }, { onConflict: "user_id" })
-          .select()
-          .single()
-
-        if (upsertError) throw upsertError
-        return upsertData as UserConfig
-      }
-
-      throw error
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData([...CONFIG_KEY], data)
-    },
-  })
 }
 
 /**
