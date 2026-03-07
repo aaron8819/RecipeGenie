@@ -25,6 +25,7 @@ export interface Ingredient {
 }
 
 export interface ShoppingItem {
+  rowId?: string
   item: string
   amount: number | null
   unit: string

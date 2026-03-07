@@ -4,6 +4,7 @@ import {
   buildCategoryViewModel,
   deriveCheckedPartition,
   deriveOrderedCategories,
+  deriveSortableItemIds,
   deriveVisibleShoppingItems,
   groupItemsByCategory,
   sortItemsWithinGroups,
@@ -11,6 +12,7 @@ import {
 
 function item(overrides: Partial<ShoppingItem>): ShoppingItem {
   return {
+    rowId: `row-${overrides.item || "item"}-${overrides.unit || "unit"}-${overrides.amount ?? "null"}`,
     item: "item",
     amount: null,
     unit: "",
@@ -81,21 +83,11 @@ describe("shopping-list selectors", () => {
       }),
     ]
 
-    const afterItemDelete = deriveVisibleShoppingItems({
-      items,
-      pendingClearList: false,
-      pendingItemDeletion: "onion",
-      pendingRecipeDeletion: null,
-    })
-    expect(afterItemDelete.map((i) => i.item)).toEqual(["garlic", "salt"])
-
-    const afterRecipeDelete = deriveVisibleShoppingItems({
-      items,
-      pendingClearList: false,
-      pendingItemDeletion: null,
-      pendingRecipeDeletion: "Stew",
-    })
-    expect(afterRecipeDelete.map((i) => i.item)).toEqual(["onion", "salt"])
+    expect(deriveVisibleShoppingItems(items).map((i) => i.item)).toEqual([
+      "garlic",
+      "onion",
+      "salt",
+    ])
   })
 
   it("builds a category view model with deterministic category order and counts", () => {
@@ -116,5 +108,14 @@ describe("shopping-list selectors", () => {
     expect(vm[0].totalCount).toBe(2)
     expect(vm[1].checkedCount).toBe(0)
     expect(vm[1].totalCount).toBe(1)
+  })
+
+  it("derives sortable ids from stable row identity instead of item name", () => {
+    const items = [
+      item({ rowId: "row-1", item: "milk", unit: "cup" }),
+      item({ rowId: "row-2", item: "milk", unit: "bottle" }),
+    ]
+
+    expect(deriveSortableItemIds(items)).toEqual(["row-1", "row-2"])
   })
 })

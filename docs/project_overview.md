@@ -68,6 +68,8 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Presentation-only shopping sections live in `web/src/components/shopping/shopping-list-components.tsx`.
 - Shopping mutations and cache flows live in `web/src/hooks/shopping/`.
 - Shopping aggregation/normalization/category logic lives in `web/src/lib/shopping-list.ts`, `web/src/lib/shopping-list-normalization.ts`, `web/src/lib/shopping-list-merging.ts`, and `web/src/lib/shopping-categories.ts`.
+- Stable shopping row identity helpers live in `web/src/lib/shopping-row-identity.ts`.
+- Shopping row-targeted server mutations now align on persisted `ShoppingItem.rowId` across UI state, cache mutations, and RPC boundaries.
 
 ### Pantry
 

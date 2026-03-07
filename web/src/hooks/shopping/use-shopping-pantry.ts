@@ -5,9 +5,12 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useRef } from "react"
 import type { ShoppingList, ShoppingItem, PantryItem } from "@/types/database"
-import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
+import {
+  ensureShoppingItemsHaveRowIds,
+  findShoppingItemIndexByRowId,
+  requireShoppingRowId,
+} from "@/lib/shopping-row-identity"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import {
@@ -33,7 +36,7 @@ export function useMoveToShoppingList() {
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
-      const normalizedItem = item.item.toLowerCase().trim()
+      const rowId = requireShoppingRowId(item, "pantry restore shopping item")
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -44,50 +47,14 @@ export function useMoveToShoppingList() {
       if (fetchError) throw fetchError
 
       const typedList = currentList as { items?: ShoppingItem[]; already_have?: ShoppingItem[]; custom_order?: boolean } | null
-      const currentItems = typedList?.items || []
-      const alreadyHave = typedList?.already_have || []
-
-      // Find all items with the same name in already_have and merge them
-      const itemsToMerge = alreadyHave.filter((i) => i.item.toLowerCase() === normalizedItem)
-      if (itemsToMerge.length === 0) return item
-
-      // Merge all items with the same name
-      let mergedItem = itemsToMerge[0]
-      for (let i = 1; i < itemsToMerge.length; i++) {
-        const nextItem = itemsToMerge[i]
-
-        // Merge sources
-        const existingSources = mergedItem.sources || []
-        const newSources = nextItem.sources || []
-        const sourceSet = new Set(existingSources.map((s) => s.recipeName))
-        const combinedSources = [...existingSources]
-        for (const source of newSources) {
-          if (!sourceSet.has(source.recipeName)) {
-            combinedSources.push(source)
-          }
-        }
-
-        // Merge amounts
-        const mergeResult = mergeAmounts(mergedItem.amount, mergedItem.unit, nextItem.amount, nextItem.unit)
-        if (mergeResult) {
-          mergedItem = {
-            ...mergedItem,
-            amount: roundForDisplay(mergeResult.amount),
-            unit: mergeResult.unit,
-            sources: combinedSources,
-          }
-        } else {
-          // Units incompatible, keep existing but combine sources
-          mergedItem = {
-            ...mergedItem,
-            sources: combinedSources,
-          }
-        }
-      }
+      const currentItems = ensureShoppingItemsHaveRowIds(typedList?.items || []).items
+      const alreadyHave = ensureShoppingItemsHaveRowIds(typedList?.already_have || []).items
+      const restoredItem = alreadyHave.find((candidate) => candidate.rowId === rowId)
+      if (!restoredItem) return item
 
       let updatedItems = currentItems
-      if (!currentItems.some((i) => i.item.toLowerCase() === normalizedItem)) {
-        updatedItems = [...currentItems, mergedItem]
+      if (!currentItems.some((candidate) => candidate.rowId === rowId)) {
+        updatedItems = [...currentItems, restoredItem]
         if (!typedList?.custom_order) {
           updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
         }
@@ -98,21 +65,19 @@ export function useMoveToShoppingList() {
         // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: updatedItems,
-          already_have: alreadyHave.filter((i) => i.item.toLowerCase() !== normalizedItem),
+          already_have: alreadyHave.filter((candidate) => candidate.rowId !== rowId),
         })
         .eq("user_id", user!.id)
 
       if (saveError) throw saveError
-      return mergedItem
+      return restoredItem
     },
-    // Optimistic update
     onMutate: async (item) => {
       const { previousData: previousList } =
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
-      const normalizedItem = item.item.toLowerCase().trim()
+      const rowId = requireShoppingRowId(item, "optimistic pantry restore shopping item")
 
-      // Optimistically update cache
       setOptimisticQueryData<ShoppingList>(
         queryClient,
         SHOPPING_KEY,
@@ -120,46 +85,12 @@ export function useMoveToShoppingList() {
           if (!old) return old
 
           const alreadyHave = old.already_have || []
-          const currentItems = old.items || []
+          const restoredItem = alreadyHave.find((candidate) => candidate.rowId === rowId)
+          if (!restoredItem) return old
 
-          // Find all items with the same name in already_have and merge them
-          const itemsToMerge = alreadyHave.filter((i) => i.item.toLowerCase() === normalizedItem)
-          if (itemsToMerge.length === 0) return old
-
-          // Merge all items with the same name (same logic as mutationFn)
-          let mergedItem = itemsToMerge[0]
-          for (let i = 1; i < itemsToMerge.length; i++) {
-            const nextItem = itemsToMerge[i]
-
-            const existingSources = mergedItem.sources || []
-            const newSources = nextItem.sources || []
-            const sourceSet = new Set(existingSources.map((s) => s.recipeName))
-            const combinedSources = [...existingSources]
-            for (const source of newSources) {
-              if (!sourceSet.has(source.recipeName)) {
-                combinedSources.push(source)
-              }
-            }
-
-            const mergeResult = mergeAmounts(mergedItem.amount, mergedItem.unit, nextItem.amount, nextItem.unit)
-            if (mergeResult) {
-              mergedItem = {
-                ...mergedItem,
-                amount: roundForDisplay(mergeResult.amount),
-                unit: mergeResult.unit,
-                sources: combinedSources,
-              }
-            } else {
-              mergedItem = {
-                ...mergedItem,
-                sources: combinedSources,
-              }
-            }
-          }
-
-          let updatedItems = currentItems
-          if (!currentItems.some((i) => i.item.toLowerCase() === normalizedItem)) {
-            updatedItems = [...currentItems, mergedItem]
+          let updatedItems = old.items || []
+          if (!updatedItems.some((candidate) => candidate.rowId === rowId)) {
+            updatedItems = [...updatedItems, restoredItem]
             if (!old.custom_order) {
               updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
             }
@@ -168,7 +99,7 @@ export function useMoveToShoppingList() {
           return {
             ...old,
             items: updatedItems,
-            already_have: alreadyHave.filter((i) => i.item.toLowerCase() !== normalizedItem),
+            already_have: alreadyHave.filter((candidate) => candidate.rowId !== rowId),
           }
         }
       )
@@ -194,7 +125,7 @@ export function useMoveExcludedToShoppingList() {
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
-      const normalizedItem = item.item.toLowerCase().trim()
+      const rowId = requireShoppingRowId(item, "excluded restore shopping item")
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -205,12 +136,14 @@ export function useMoveExcludedToShoppingList() {
       if (fetchError) throw fetchError
 
       const typedList = currentList as { items?: ShoppingItem[]; excluded?: ShoppingItem[]; custom_order?: boolean } | null
-      const currentItems = typedList?.items || []
-      const excluded = typedList?.excluded || []
+      const currentItems = ensureShoppingItemsHaveRowIds(typedList?.items || []).items
+      const excluded = ensureShoppingItemsHaveRowIds(typedList?.excluded || []).items
+      const restoredItem = excluded.find((candidate) => candidate.rowId === rowId)
+      if (!restoredItem) return item
 
       let updatedItems = currentItems
-      if (!currentItems.some((i) => i.item.toLowerCase() === normalizedItem)) {
-        updatedItems = [...currentItems, item]
+      if (!currentItems.some((candidate) => candidate.rowId === rowId)) {
+        updatedItems = [...currentItems, restoredItem]
         if (!typedList?.custom_order) {
           updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
         }
@@ -221,33 +154,32 @@ export function useMoveExcludedToShoppingList() {
         // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: updatedItems,
-          excluded: excluded.filter((i) => i.item.toLowerCase() !== normalizedItem),
+          excluded: excluded.filter((candidate) => candidate.rowId !== rowId),
         })
         .eq("user_id", user!.id)
 
       if (saveError) throw saveError
-      return item
+      return restoredItem
     },
-    // Optimistic update
     onMutate: async (item) => {
       const { previousData: previousList } =
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
-      const normalizedItem = item.item.toLowerCase().trim()
+      const rowId = requireShoppingRowId(item, "optimistic excluded restore shopping item")
 
-      // Optimistically update cache
       setOptimisticQueryData<ShoppingList>(
         queryClient,
         SHOPPING_KEY,
         (old) => {
           if (!old) return old
 
-          const currentItems = old.items || []
           const excluded = old.excluded || []
+          const restoredItem = excluded.find((candidate) => candidate.rowId === rowId)
+          if (!restoredItem) return old
 
-          let updatedItems = currentItems
-          if (!currentItems.some((i) => i.item.toLowerCase() === normalizedItem)) {
-            updatedItems = [...currentItems, item]
+          let updatedItems = old.items || []
+          if (!updatedItems.some((candidate) => candidate.rowId === rowId)) {
+            updatedItems = [...updatedItems, restoredItem]
             if (!old.custom_order) {
               updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
             }
@@ -256,7 +188,7 @@ export function useMoveExcludedToShoppingList() {
           return {
             ...old,
             items: updatedItems,
-            excluded: excluded.filter((i) => i.item.toLowerCase() !== normalizedItem),
+            excluded: excluded.filter((candidate) => candidate.rowId !== rowId),
           }
         }
       )
@@ -279,52 +211,19 @@ export function useMoveExcludedToShoppingList() {
 export function useAddToPantryAndRemove() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
-  const resolvedItemIndexes = useRef(new WeakMap<ShoppingItem, number>())
-
-  const resolveShoppingItemIndex = (items: ShoppingItem[], input: ShoppingItem): number => {
-    const itemIndex = (input as ShoppingItem & { itemIndex?: number }).itemIndex
-    if (typeof itemIndex === "number") {
-      const candidate = items[itemIndex]
-      if (!candidate) throw new Error("Shopping item index out of bounds")
-      if (candidate.item !== input.item) throw new Error("Item mismatch")
-      return itemIndex
-    }
-
-    const matchingIndexes = items
-      .map((candidate, idx) => ({ candidate, idx }))
-      .filter(({ candidate }) =>
-        candidate.item === input.item &&
-        candidate.amount === input.amount &&
-        candidate.unit === input.unit &&
-        candidate.categoryKey === input.categoryKey &&
-        candidate.categoryOrder === input.categoryOrder
-      )
-      .map(({ idx }) => idx)
-
-    if (matchingIndexes.length === 1) return matchingIndexes[0]
-    if (matchingIndexes.length === 0) {
-      throw new Error(`Shopping item not found: ${input.item}`)
-    }
-    throw new Error(`Ambiguous shopping item match: ${input.item}. Provide itemIndex.`)
-  }
 
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
+      const rowId = requireShoppingRowId(item, "pantry move shopping item")
       const normalizedItem = item.item.toLowerCase().trim()
       const supabase = getSupabase()
-
-      const resolvedIndex = resolvedItemIndexes.current.get(item)
-      if (resolvedIndex === undefined) {
-        throw new Error("Unable to resolve shopping item index for pantry move")
-      }
 
       const rpcClient = supabase as unknown as {
         rpc: (
           fn: "move_shopping_item_to_pantry",
           args: {
-            p_item_name: string
-            p_item_index: number
+            p_row_id: string
             p_pantry_qty: number | null
             p_pantry_unit: string | null
           }
@@ -350,13 +249,10 @@ export function useAddToPantryAndRemove() {
       }
 
       const { data, error } = await rpcClient.rpc("move_shopping_item_to_pantry", {
-        p_item_name: item.item,
-        p_item_index: resolvedIndex,
+        p_row_id: rowId,
         p_pantry_qty: item.amount,
         p_pantry_unit: item.unit || null,
       })
-
-      resolvedItemIndexes.current.delete(item)
 
       if (error) throw error
 
@@ -364,12 +260,12 @@ export function useAddToPantryAndRemove() {
       if (!row) throw new Error(`Failed to move item to pantry: ${item.item}`)
 
       return {
+        rowId,
         itemName: normalizedItem,
         wasAdded: row.pantry_was_inserted,
         removedItem: row.removed_item,
         pantryItem: row.pantry_item,
         shoppingListUpdatedAt: row.shopping_list_updated_at,
-        itemIndex: resolvedIndex,
       }
     },
     onMutate: async (item) => {
@@ -381,9 +277,12 @@ export function useAddToPantryAndRemove() {
         previousPantry: PANTRY_KEY,
       })
 
+      const rowId = requireShoppingRowId(item, "optimistic pantry move shopping item")
       const normalizedItem = item.item.toLowerCase().trim()
-      const resolvedIndex = resolveShoppingItemIndex(previousList?.items || [], item)
-      resolvedItemIndexes.current.set(item, resolvedIndex)
+      const resolvedIndex = findShoppingItemIndexByRowId(previousList?.items || [], rowId)
+      if (resolvedIndex === -1) {
+        throw new Error(`Shopping item not found: ${rowId}`)
+      }
 
       setOptimisticQueryData<ShoppingList>(
         queryClient,
@@ -391,8 +290,7 @@ export function useAddToPantryAndRemove() {
         (old) => {
           if (!old) return old
           const alreadyHave = old.already_have || []
-          const existingInAlreadyHave = alreadyHave.find((i) => i.item.toLowerCase() === normalizedItem)
-          const updatedAlreadyHave = existingInAlreadyHave
+          const updatedAlreadyHave = alreadyHave.some((candidate) => candidate.rowId === rowId)
             ? alreadyHave
             : [...alreadyHave, item]
 
@@ -423,7 +321,6 @@ export function useAddToPantryAndRemove() {
       return { previousList, previousPantry }
     },
     onError: (err, item, context) => {
-      resolvedItemIndexes.current.delete(item)
       rollbackQueryDataMany(
         queryClient,
         {
@@ -444,11 +341,10 @@ export function useAddToPantryAndRemove() {
           if (!old) return old
 
           const existingAlreadyHave = old.already_have || []
-          const normalized = result.itemName.toLowerCase().trim()
-          const alreadyExists = existingAlreadyHave.some((i) => i.item.toLowerCase() === normalized)
           const removed = result.removedItem
-          const mergedRemovedItem = removed
+          const restoredRow = removed
             ? {
+                rowId: result.rowId,
                 item: removed.item || result.itemName,
                 amount: removed.amount ?? null,
                 unit: removed.unit || "",
@@ -461,8 +357,8 @@ export function useAddToPantryAndRemove() {
           return {
             ...old,
             generated_at: result.shoppingListUpdatedAt,
-            already_have: !alreadyExists && mergedRemovedItem
-              ? [...existingAlreadyHave, mergedRemovedItem]
+            already_have: restoredRow && !existingAlreadyHave.some((candidate) => candidate.rowId === result.rowId)
+              ? [...existingAlreadyHave, restoredRow]
               : existingAlreadyHave,
           }
         }
@@ -480,7 +376,7 @@ export function useAddToPantryAndRemove() {
               created_at: pantryItem.created_at,
             }
             if (!old) return [pantryRow]
-            const existingIndex = old.findIndex((p) => p.item === pantryRow.item)
+            const existingIndex = old.findIndex((candidate) => candidate.item === pantryRow.item)
             if (existingIndex === -1) {
               return [...old, pantryRow].sort((a, b) => a.item.localeCompare(b.item))
             }
@@ -493,4 +389,3 @@ export function useAddToPantryAndRemove() {
     },
   })
 }
-

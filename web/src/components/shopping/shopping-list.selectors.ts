@@ -1,5 +1,4 @@
 import { getAllShoppingCategories } from "@/lib/shopping-categories"
-import { mergeAmounts, roundForDisplay } from "@/lib/unit-conversion"
 import type { CustomShoppingCategory, ShoppingItem, ShoppingList } from "@/types/database"
 
 export type ShoppingCategoryMeta = ReturnType<typeof getAllShoppingCategories>[number]
@@ -26,77 +25,11 @@ export function createDisplayShoppingList(shoppingList: ShoppingList | null | un
 }
 
 export function mergeAlreadyHaveItems(alreadyHave: ShoppingItem[]): ShoppingItem[] {
-  if (alreadyHave.length === 0) return []
-
-  const itemMap = new Map<string, ShoppingItem>()
-
-  for (const item of alreadyHave) {
-    const key = item.item.toLowerCase()
-    const existing = itemMap.get(key)
-
-    if (!existing) {
-      itemMap.set(key, item)
-      continue
-    }
-
-    const existingSources = existing.sources || []
-    const newSources = item.sources || []
-    const sourceSet = new Set(existingSources.map((s) => s.recipeName))
-    const combinedSources = [...existingSources]
-    for (const source of newSources) {
-      if (!sourceSet.has(source.recipeName)) {
-        combinedSources.push(source)
-      }
-    }
-
-    const mergeResult = mergeAmounts(existing.amount, existing.unit, item.amount, item.unit)
-    if (mergeResult) {
-      itemMap.set(key, {
-        ...existing,
-        amount: roundForDisplay(mergeResult.amount),
-        unit: mergeResult.unit,
-        sources: combinedSources,
-      })
-    } else {
-      itemMap.set(key, {
-        ...existing,
-        sources: combinedSources,
-      })
-    }
-  }
-
-  return Array.from(itemMap.values())
+  return [...alreadyHave]
 }
 
-type VisibleItemsInput = {
-  items: ShoppingItem[]
-  pendingClearList: boolean
-  pendingItemDeletion: string | null
-  pendingRecipeDeletion: string | null
-}
-
-export function deriveVisibleShoppingItems({
-  items,
-  pendingClearList,
-  pendingItemDeletion,
-  pendingRecipeDeletion,
-}: VisibleItemsInput): ShoppingItem[] {
-  if (pendingClearList) return []
-  let visibleItems = items
-
-  if (pendingItemDeletion) {
-    visibleItems = visibleItems.filter((item) => item.item !== pendingItemDeletion)
-  }
-
-  if (pendingRecipeDeletion) {
-    visibleItems = visibleItems.filter((item) => {
-      if (!item.sources) return true
-      const nonPendingSources = item.sources.filter((s) => s.recipeName !== pendingRecipeDeletion)
-      return nonPendingSources.length > 0 || item.sources.length === 0
-    })
-  }
-
-  return visibleItems
+export function deriveVisibleShoppingItems(items: ShoppingItem[]): ShoppingItem[] {
+  return items
 }
 
 export function groupItemsByCategory(items: ShoppingItem[]): Record<string, ShoppingItem[]> {
@@ -164,28 +97,17 @@ export function buildCategoryViewModel(
 }
 
 export function deriveSortableItemIds(items: ShoppingItem[]): string[] {
-  return items.map((_, idx) => `idx-${idx}`)
+  return items.map((item, index) => item.rowId || `missing-row-${index}`)
 }
 
-type UniqueRecipeInput = {
-  items: ShoppingItem[]
-  pendingRecipeDeletion: string | null
-  pendingClearList: boolean
-}
-
-export function deriveUniqueRecipeNames({
-  items,
-  pendingRecipeDeletion,
-  pendingClearList,
-}: UniqueRecipeInput): string[] {
-  if (pendingClearList) return []
+export function deriveUniqueRecipeNames(items: ShoppingItem[]): string[] {
   if (items.length === 0) return []
 
   const recipeSet = new Set<string>()
   for (const item of items) {
     if (!item.sources) continue
     for (const source of item.sources) {
-      if (source.recipeName !== "Manual" && source.recipeName !== pendingRecipeDeletion) {
+      if (source.recipeName !== "Manual") {
         recipeSet.add(source.recipeName)
       }
     }

@@ -10,23 +10,15 @@ export interface ReorderByFilteredResult {
 
 export function reorderByFilteredIndices(
   items: ShoppingItem[],
-  filteredItems: ShoppingItem[],
-  activeIndex: number,
-  overIndex: number
+  activeRowId: string,
+  overRowId: string
 ): ReorderByFilteredResult | null {
-  if (
-    activeIndex < 0 ||
-    overIndex < 0 ||
-    activeIndex >= filteredItems.length ||
-    overIndex >= filteredItems.length
-  ) {
+  if (!activeRowId || !overRowId) {
     return null
   }
 
-  const activeItemFromFiltered = filteredItems[activeIndex]
-  const overItemFromFiltered = filteredItems[overIndex]
-  const actualActiveIndex = items.findIndex((i) => i.item === activeItemFromFiltered.item)
-  const actualOverIndex = items.findIndex((i) => i.item === overItemFromFiltered.item)
+  const actualActiveIndex = items.findIndex((item) => item.rowId === activeRowId)
+  const actualOverIndex = items.findIndex((item) => item.rowId === overRowId)
 
   if (actualActiveIndex === -1 || actualOverIndex === -1) {
     return null

@@ -38,10 +38,10 @@ import {
   useMoveExcludedToShoppingList,
   useReorderShoppingList,
   useSaveCategoryOverride,
-  useUpdateItemCategory,
   useShoppingConfig,
   useUpdateShoppingConfig,
   useAddToPantryAndRemove,
+  useShoppingPendingActions,
 } from "@/hooks/use-shopping"
 import { SHOPPING_CATEGORIES, getCategoryByKey } from "@/lib/shopping-categories"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
@@ -231,7 +231,7 @@ function SwipeableItem({
 
   useEffect(() => {
     setSwipeOffset(0)
-  }, [item.item])
+  }, [item.rowId])
 
   useEffect(() => {
     if (swipeOffset > 0) {
@@ -318,7 +318,6 @@ function SwipeableItem({
 // Sortable item component - memoized for better scroll performance
 const SortableShoppingItem = memo(function SortableShoppingItem({
   item,
-  itemIdx,
   isDesktop,
   onCheckOff,
   onRemove,
@@ -330,7 +329,6 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   showSwipeHint,
 }: {
   item: ShoppingItem
-  itemIdx: number
   isDesktop: boolean
   onCheckOff: () => void
   onRemove: () => void
@@ -348,7 +346,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: `idx-${itemIdx}` })
+  } = useSortable({ id: item.rowId || item.item })
 
   const dragStyle = {
     transform: CSS.Transform.toString(transform),
@@ -378,6 +376,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   // Custom comparison function for memo
   return (
     prevProps.item.item === nextProps.item.item &&
+    prevProps.item.rowId === nextProps.item.rowId &&
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
@@ -449,9 +448,6 @@ export function ShoppingListView() {
   const [newItem, setNewItem] = useState("")
   const addItemInputRef = useRef<HTMLInputElement>(null)
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
-  const [pendingItemDeletion, setPendingItemDeletion] = useState<string | null>(null)
-  const [pendingRecipeDeletion, setPendingRecipeDeletion] = useState<string | null>(null)
-  const [pendingClearList, setPendingClearList] = useState(false)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
@@ -501,9 +497,13 @@ export function ShoppingListView() {
   const moveExcludedToList = useMoveExcludedToShoppingList()
   const reorderList = useReorderShoppingList()
   const saveCategoryOverride = useSaveCategoryOverride()
-  const updateItemCategory = useUpdateItemCategory()
   const addToPantryAndRemove = useAddToPantryAndRemove()
   const undoToast = useUndoToast()
+  const pendingActions = useShoppingPendingActions({
+    removeItemCommit: removeItem,
+    removeRecipeCommit: removeRecipeItems,
+    clearListCommit: clearList,
+  })
 
   // Handle clicking on a recipe tag
   const handleRecipeTagClick = useCallback((recipeId: string | undefined, recipeName: string) => {
@@ -520,49 +520,19 @@ export function ShoppingListView() {
   }, [allRecipes])
 
   // Handle item removal with undo
-  const handleRemoveItem = useCallback((itemName: string) => {
-    setPendingItemDeletion(itemName)
-    undoToast.show({
-      message: `"${itemName}" removed from list`,
-      onUndo: () => {
-        setPendingItemDeletion(null)
-      },
-      onExpire: () => {
-        removeItem.mutate(itemName)
-        setPendingItemDeletion(null)
-      },
-    })
-  }, [undoToast, removeItem])
+  const handleRemoveItem = useCallback((item: ShoppingItem) => {
+    pendingActions.enqueueRemoveItem(item)
+  }, [pendingActions])
 
   // Handle recipe items removal with undo
   const handleRemoveRecipeItems = useCallback((recipeName: string) => {
-    setPendingRecipeDeletion(recipeName)
-    undoToast.show({
-      message: `Items from "${recipeName}" removed`,
-      onUndo: () => {
-        setPendingRecipeDeletion(null)
-      },
-      onExpire: () => {
-        removeRecipeItems.mutate(recipeName)
-        setPendingRecipeDeletion(null)
-      },
-    })
-  }, [undoToast, removeRecipeItems])
+    pendingActions.enqueueRemoveRecipe(recipeName)
+  }, [pendingActions])
 
   // Handle clear list with undo
   const handleClearListWithUndo = useCallback(() => {
-    setPendingClearList(true)
-    undoToast.show({
-      message: "Shopping list cleared",
-      onUndo: () => {
-        setPendingClearList(false)
-      },
-      onExpire: () => {
-        clearList.mutate()
-        setPendingClearList(false)
-      },
-    })
-  }, [undoToast, clearList])
+    pendingActions.enqueueClearList()
+  }, [pendingActions])
 
   // Handle bulk check-off (check all items in a category)
   const handleBulkCheckOff = useCallback((items: ShoppingItem[], categoryName: string) => {
@@ -583,7 +553,7 @@ export function ShoppingListView() {
 
   // Handle adding item to pantry with per-item pending tracking
   const handleAddToPantry = useCallback((item: ShoppingItem) => {
-    const itemKey = item.item.toLowerCase().trim()
+    const itemKey = item.rowId || item.item.toLowerCase().trim()
 
     // Add to pending set
     setPendingPantryItems(prev => new Set(prev).add(itemKey))
@@ -616,7 +586,7 @@ export function ShoppingListView() {
 
   // Handle check-off with per-item pending tracking
   const handleCheckOff = useCallback((item: ShoppingItem) => {
-    const itemKey = item.item.toLowerCase().trim()
+    const itemKey = item.rowId || item.item.toLowerCase().trim()
 
     // Add to pending set
     setPendingCheckItems(prev => new Set(prev).add(itemKey))
@@ -794,24 +764,21 @@ export function ShoppingListView() {
 
   // Show cached data immediately even while fetching (stale-while-revalidate)
   const displayShoppingList = createDisplayShoppingList(shoppingList)
+  const projectedShoppingList = useMemo(() => {
+    return createDisplayShoppingList(pendingActions.projectShoppingList(displayShoppingList))
+  }, [displayShoppingList, pendingActions])
   
-  // Merge duplicate items in already_have by name (e.g., multiple "garlic" entries)
   const mergedAlreadyHave = useMemo(() => {
-    return mergeAlreadyHaveItems(displayShoppingList.already_have || [])
-  }, [displayShoppingList.already_have])
+    return mergeAlreadyHaveItems(projectedShoppingList.already_have || [])
+  }, [projectedShoppingList.already_have])
   
   // Only show loading on initial load with no cached data
   const showLoading = isLoading && !shoppingList
 
   // Filter items for pending deletions
   const filteredItems = useMemo(() => {
-    return deriveVisibleShoppingItems({
-      items: displayShoppingList?.items || [],
-      pendingClearList,
-      pendingItemDeletion,
-      pendingRecipeDeletion,
-    })
-  }, [displayShoppingList?.items, pendingItemDeletion, pendingRecipeDeletion, pendingClearList])
+    return deriveVisibleShoppingItems(projectedShoppingList.items || [])
+  }, [projectedShoppingList.items])
 
   // Group items by category
   const groupedItems = useMemo(() => {
@@ -879,9 +846,6 @@ export function ShoppingListView() {
     }
   }, [filteredItems, groupedItems, orderedCategories, manuallyExpandedCategories, manuallyCollapsedCategories, collapsedCategories])
 
-  // Create a flat list of all item IDs for the sortable context
-  // Use index-based IDs to ensure uniqueness while preserving drag-and-drop functionality
-  // Format: "idx-{index}" to avoid conflicts with item names that contain hyphens
   const allItemIds = useMemo(() => {
     return deriveSortableItemIds(filteredItems)
   }, [filteredItems])
@@ -889,12 +853,8 @@ export function ShoppingListView() {
   // Get unique recipe names from active items only (excluding "Manual" and pending deletions)
   // Only show recipe tags when there are active unchecked items
   const uniqueRecipes = useMemo(() => {
-    return deriveUniqueRecipeNames({
-      items: shoppingList?.items || [],
-      pendingRecipeDeletion,
-      pendingClearList,
-    })
-  }, [shoppingList?.items, pendingRecipeDeletion, pendingClearList])
+    return deriveUniqueRecipeNames(projectedShoppingList.items || [])
+  }, [projectedShoppingList.items])
 
   // Create a color mapping that assigns a unique color per recipe when possible.
   // Prefer hash-based index for stability; on collision use next available index.
@@ -1014,11 +974,8 @@ export function ShoppingListView() {
 
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event
-    // Extract index from ID (format: "idx-{index}")
-    const index = typeof active.id === 'string' ? parseInt(active.id.replace('idx-', ''), 10) : -1
-    if (index >= 0 && index < filteredItems.length) {
-      setActiveItem(filteredItems[index])
-    }
+    const activeId = String(active.id)
+    setActiveItem(filteredItems.find((item) => item.rowId === activeId) || null)
   }
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -1027,12 +984,8 @@ export function ShoppingListView() {
       setDragOverCategory(null)
       return
     }
-    // Extract index from ID (format: "idx-{index}")
-    const index = typeof over.id === 'string' ? parseInt(over.id.replace('idx-', ''), 10) : -1
-    if (index >= 0 && index < filteredItems.length) {
-      const overItem = filteredItems[index]
-      setDragOverCategory(overItem.categoryKey || null)
-    }
+    const overItem = filteredItems.find((item) => item.rowId === String(over.id))
+    setDragOverCategory(overItem?.categoryKey || null)
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -1042,14 +995,8 @@ export function ShoppingListView() {
 
     if (!over || active.id === over.id || !shoppingList?.items) return
 
-    // Extract indices from IDs (format: "idx-{index}")
-    const activeIndex = typeof active.id === 'string' ? parseInt(active.id.replace('idx-', ''), 10) : -1
-    const overIndex = typeof over.id === 'string' ? parseInt(over.id.replace('idx-', ''), 10) : -1
-
-    if (activeIndex === -1 || overIndex === -1 || activeIndex >= filteredItems.length || overIndex >= filteredItems.length) return
-
     const items = shoppingList.items
-    const reorderResult = reorderByFilteredIndices(items, filteredItems, activeIndex, overIndex)
+    const reorderResult = reorderByFilteredIndices(items, String(active.id), String(over.id))
     if (!reorderResult) return
     const { newItems, draggedItem, overItem, actualOverIndex } = reorderResult
 
@@ -1197,7 +1144,7 @@ export function ShoppingListView() {
       {/* Shopping List */}
       {showLoading ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
-      ) : filteredItems.length === 0 ? (
+      ) : filteredItems.length === 0 && mergedAlreadyHave.length === 0 && projectedShoppingList.excluded.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <EmptyState
             icon={ShoppingCart}
@@ -1314,19 +1261,18 @@ export function ShoppingListView() {
                             globalIndex = globalIndexCounter++
                             itemToGlobalIndex.set(item, globalIndex)
                           }
-                          const reactKey = `${categoryData.key}-${item.item}-${item.unit || ''}-${globalIndex}`
+                          const reactKey = item.rowId || `${categoryData.key}-${item.item}-${item.unit || ''}-${globalIndex}`
                           return (
                             <SortableShoppingItem
                               key={reactKey}
                               item={item}
-                              itemIdx={globalIndex}
                               isDesktop={isDesktop}
                               onCheckOff={() => handleCheckOff(item)}
-                              onRemove={() => handleRemoveItem(item.item)}
+                              onRemove={() => handleRemoveItem(item)}
                               onAddToPantry={() => handleAddToPantry(item)}
-                              isCheckingOff={pendingCheckItems.has(item.item.toLowerCase().trim())}
+                              isCheckingOff={pendingCheckItems.has(item.rowId || item.item.toLowerCase().trim())}
                               isRemoving={false}
-                              isAddingToPantry={pendingPantryItems.has(item.item.toLowerCase().trim())}
+                              isAddingToPantry={pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim())}
                               recipeColorMap={recipeColorMap}
                               showSwipeHint={showHintForThisItem}
                             />
@@ -1387,7 +1333,7 @@ export function ShoppingListView() {
                   <div className="flex flex-wrap gap-2">
                     {mergedAlreadyHave.map((item, index) => (
                       <button
-                        key={`already-have-${item.item}-${item.unit || ''}-${index}`}
+                        key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         type="button"
                         onClick={() => moveToList.mutate(item)}
                         disabled={moveToList.isPending}
@@ -1406,7 +1352,7 @@ export function ShoppingListView() {
                   <div className="flex flex-wrap gap-2">
                     {mergedAlreadyHave.map((item, index) => (
                       <button
-                        key={`already-have-${item.item}-${item.unit || ''}-${index}`}
+                        key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         type="button"
                         onClick={() => moveToList.mutate(item)}
                         disabled={moveToList.isPending}
@@ -1423,10 +1369,10 @@ export function ShoppingListView() {
           )}
 
           {/* Excluded — Collapsible on mobile, always expanded on desktop */}
-          {displayShoppingList?.excluded && displayShoppingList.excluded.length > 0 && (
+          {projectedShoppingList.excluded && projectedShoppingList.excluded.length > 0 && (
             <ShoppingStateSection
               title="Excluded"
-              count={displayShoppingList.excluded.length}
+              count={projectedShoppingList.excluded.length}
               icon={<Ban className="h-5 w-5 text-red-500" />}
               isDesktop={isDesktop}
               isCollapsed={excludedCollapsed}
@@ -1438,9 +1384,9 @@ export function ShoppingListView() {
                 <>
                   <p className="text-xs text-muted-foreground mb-3">Items excluded by keywords. Click to add back to list.</p>
                   <div className="flex flex-wrap gap-2">
-                    {displayShoppingList.excluded.map((item, index) => (
+                    {projectedShoppingList.excluded.map((item, index) => (
                       <button
-                        key={`excluded-${item.item}-${item.unit || ''}-${index}`}
+                        key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         type="button"
                         onClick={() => moveExcludedToList.mutate(item)}
                         disabled={moveExcludedToList.isPending}
@@ -1460,9 +1406,9 @@ export function ShoppingListView() {
                 <>
                   <p className="text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
                   <div className="flex flex-wrap gap-2">
-                    {displayShoppingList.excluded.map((item, index) => (
+                    {projectedShoppingList.excluded.map((item, index) => (
                       <button
-                        key={`excluded-${item.item}-${item.unit || ''}-${index}`}
+                        key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         type="button"
                         onClick={() => moveExcludedToList.mutate(item)}
                         disabled={moveExcludedToList.isPending}

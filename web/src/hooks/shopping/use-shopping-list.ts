@@ -6,6 +6,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/database"
+import { ensureShoppingItemsHaveRowIds, ensureShoppingListRowIds } from "@/lib/shopping-row-identity"
 import { generateShoppingList } from "@/lib/shopping-list"
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
@@ -28,7 +29,26 @@ export function useShoppingList() {
         .maybeSingle()
 
       if (error) throw error
-      if (data) return data as ShoppingList
+      if (data) {
+        const typedList = data as ShoppingList
+        const ensured = ensureShoppingListRowIds(typedList)
+
+        if (ensured.changed) {
+          const { error: saveError } = await supabase
+            .from("shopping_list")
+            // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
+            .update({
+              items: ensured.shoppingList.items,
+              already_have: ensured.shoppingList.already_have,
+              excluded: ensured.shoppingList.excluded,
+            })
+            .eq("user_id", user!.id)
+
+          if (saveError) throw saveError
+        }
+
+        return ensured.shoppingList
+      }
       return {
         user_id: user?.id || "",
         items: [],
@@ -109,12 +129,15 @@ export function useGenerateShoppingList() {
         currentList?.items || []
       )
       const preservedAlreadyHave: ShoppingItem[] = [...result.alreadyHave]
+      const ensuredItems = ensureShoppingItemsHaveRowIds(preservedItems)
+      const ensuredAlreadyHave = ensureShoppingItemsHaveRowIds(preservedAlreadyHave)
+      const ensuredExcluded = ensureShoppingItemsHaveRowIds(result.excluded)
 
       const shoppingListData = {
         user_id: user!.id,
-        items: preservedItems,
-        already_have: preservedAlreadyHave,
-        excluded: result.excluded,
+        items: ensuredItems.items,
+        already_have: ensuredAlreadyHave.items,
+        excluded: ensuredExcluded.items,
         source_recipes: recipeIds,
         scale: result.scale,
         total_servings: result.totalServings,
@@ -184,7 +207,6 @@ export function useSaveShoppingList() {
  * Hook to clear the shopping list
  */
 export function useClearShoppingList() {
-  const queryClient = useQueryClient()
   const { user } = useAuthContext()
 
   return useMutation({
@@ -210,7 +232,7 @@ export function useClearShoppingList() {
       if (error) throw error
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return undefined
     },
   })
 }

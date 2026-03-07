@@ -6,6 +6,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingItem, UserConfig } from "@/types/database"
+import { requireShoppingRowId } from "@/lib/shopping-row-identity"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
@@ -93,14 +94,14 @@ export function useUpdateItemCategory() {
 
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
-    mutationFn: async ({ itemName, newCategoryKey, items }: {
-      itemName: string; newCategoryKey: string; items: ShoppingItem[]
+    mutationFn: async ({ item, newCategoryKey, items }: {
+      item: ShoppingItem; newCategoryKey: string; items: ShoppingItem[]
     }) => {
-      const normalizedItem = itemName.toLowerCase().trim()
+      const rowId = requireShoppingRowId(item, "recategorized shopping item")
       const categoryData = SHOPPING_CATEGORIES[newCategoryKey]
 
       const updatedItems = items.map((item) =>
-        item.item.toLowerCase() === normalizedItem
+        item.rowId === rowId
           ? { ...item, categoryKey: newCategoryKey, categoryOrder: categoryData?.order || 8 }
           : item
       )

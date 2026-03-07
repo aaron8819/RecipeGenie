@@ -6,6 +6,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/database"
+import { ensureShoppingItemsHaveRowIds } from "@/lib/shopping-row-identity"
 import { generateShoppingList } from "@/lib/shopping-list"
 import { mergeShoppingItems, removeRecipeByNameFromItems } from "@/lib/shopping-list-merging"
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
@@ -77,7 +78,7 @@ export function useRemoveRecipeItems() {
       return { recipeName, removedCount: 0 }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      return undefined
     },
   })
 }
@@ -227,11 +228,14 @@ export function useAddToShoppingList() {
       )
 
       const mergedSourceRecipes = [...new Set([...(currentList.source_recipes || []), ...recipeIds])]
+      const ensuredUpdatedItems = ensureShoppingItemsHaveRowIds(updatedItems)
+      const ensuredAlreadyHave = ensureShoppingItemsHaveRowIds(mergedAlreadyHave)
+      const ensuredExcluded = ensureShoppingItemsHaveRowIds(mergedExcluded)
 
       const shoppingListData: Partial<ShoppingList> = {
-        items: updatedItems,
-        already_have: mergedAlreadyHave,
-        excluded: mergedExcluded,
+        items: ensuredUpdatedItems.items,
+        already_have: ensuredAlreadyHave.items,
+        excluded: ensuredExcluded.items,
         source_recipes: mergedSourceRecipes,
         scale,
         total_servings: (currentList.total_servings || 0) + result.totalServings,

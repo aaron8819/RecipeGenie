@@ -45,6 +45,7 @@ function createWrapper() {
 
 function makeItem(item: string, overrides: Partial<ShoppingItem> = {}): ShoppingItem {
   return {
+    rowId: `row-${item}-${overrides.unit || 'cup'}-${overrides.amount ?? 1}`,
     item,
     amount: 1,
     unit: 'cup',
@@ -76,7 +77,7 @@ beforeEach(() => {
   mockSupabase.from.mockReturnThis()
   mockSupabase.rpc.mockResolvedValue({
     data: [{
-      removed_item: { item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
+      removed_item: { rowId: 'row-garlic-cup-1', item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
       pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: new Date().toISOString() },
       shopping_list_updated_at: new Date().toISOString(),
       pantry_was_inserted: true,
@@ -102,14 +103,18 @@ describe('useAddToPantryAndRemove', () => {
     queryClient.setQueryData(
       [...SHOPPING_KEY],
       makeList({
-        items: [makeItem('garlic'), makeItem('onion'), makeItem('garlic', { unit: 'tbsp' })],
+        items: [
+          makeItem('garlic', { rowId: 'row-garlic-cup', unit: 'cup' }),
+          makeItem('onion', { rowId: 'row-onion-cup', unit: 'cup' }),
+          makeItem('garlic', { rowId: 'row-garlic-tbsp', unit: 'tbsp' }),
+        ],
         already_have: [],
       })
     )
     queryClient.setQueryData([...PANTRY_KEY], [] as PantryItem[])
 
     const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
-    const input = { ...makeItem('garlic', { unit: 'tbsp' }), itemIndex: 2 } as ShoppingItem & { itemIndex: number }
+    const input = makeItem('garlic', { rowId: 'row-garlic-tbsp', unit: 'tbsp' })
 
     result.current.mutate(input)
 
@@ -119,8 +124,7 @@ describe('useAddToPantryAndRemove', () => {
     })
 
     expect(mockSupabase.rpc).toHaveBeenCalledWith('move_shopping_item_to_pantry', {
-      p_item_name: 'garlic',
-      p_item_index: 2,
+      p_row_id: 'row-garlic-tbsp',
       p_pantry_qty: 1,
       p_pantry_unit: 'tbsp',
     })
@@ -144,7 +148,7 @@ describe('useAddToPantryAndRemove', () => {
 
     const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
 
-    result.current.mutate({ ...makeItem('garlic'), itemIndex: 0 } as ShoppingItem & { itemIndex: number })
+    result.current.mutate(makeItem('garlic'))
 
     await waitFor(() => expect(result.current.isError).toBe(true))
     expect(mockSupabase.rpc).not.toHaveBeenCalled()
@@ -165,7 +169,7 @@ describe('useAddToPantryAndRemove', () => {
     )
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [{
-        removed_item: { item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
+        removed_item: { rowId: 'row-garlic-cup-1', item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
         pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: '2026-01-01T00:00:00.000Z' },
         shopping_list_updated_at: new Date().toISOString(),
         pantry_was_inserted: false,
@@ -175,7 +179,7 @@ describe('useAddToPantryAndRemove', () => {
 
     const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
 
-    result.current.mutate({ ...makeItem('garlic'), itemIndex: 0 } as ShoppingItem & { itemIndex: number })
+    result.current.mutate(makeItem('garlic'))
 
     await waitFor(() =>
       expect(result.current.isSuccess || result.current.isError).toBe(true)
@@ -186,6 +190,43 @@ describe('useAddToPantryAndRemove', () => {
 
     const pantry = queryClient.getQueryData<PantryItem[]>([...PANTRY_KEY]) || []
     expect(pantry.filter((p) => p.item === 'garlic')).toHaveLength(1)
+  })
+
+  it('passes rowId to the RPC when duplicate names exist', async () => {
+    const { wrapper, queryClient } = createWrapper()
+    queryClient.setQueryData(
+      [...SHOPPING_KEY],
+      makeList({
+        items: [
+          makeItem('garlic', { rowId: 'row-garlic-clove', unit: 'clove' }),
+          makeItem('garlic', { rowId: 'row-garlic-bulb', unit: 'bulb' }),
+        ],
+        already_have: [],
+      })
+    )
+    queryClient.setQueryData([...PANTRY_KEY], [] as PantryItem[])
+
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: [{
+        removed_item: { rowId: 'row-garlic-bulb', item: 'garlic', amount: 1, unit: 'bulb', categoryKey: 'produce', categoryOrder: 1 },
+        pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: new Date().toISOString() },
+        shopping_list_updated_at: new Date().toISOString(),
+        pantry_was_inserted: true,
+      }],
+      error: null,
+    })
+
+    const { result } = renderHook(() => useAddToPantryAndRemove(), { wrapper })
+
+    result.current.mutate(makeItem('garlic', { rowId: 'row-garlic-bulb', unit: 'bulb' }))
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('move_shopping_item_to_pantry', {
+      p_row_id: 'row-garlic-bulb',
+      p_pantry_qty: 1,
+      p_pantry_unit: 'bulb',
+    })
   })
 })
 

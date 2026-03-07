@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-03-05 (v2.15.1)*
+*Last updated: 2026-03-07 (v2.15.1)*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -209,6 +209,26 @@ Stores the user's shopping list state.
 | `custom_order` | BOOLEAN | DEFAULT FALSE | Whether the list has been manually reordered (disables auto-sorting) |
 | `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when list was generated |
 
+**Shopping item JSONB structure:**
+```json
+[
+  {
+    "rowId": "01HV6Q2G7M9X3J7N8K4S5T6U7V",
+    "item": "garlic",
+    "amount": 2,
+    "unit": "clove",
+    "categoryKey": "produce",
+    "categoryOrder": 1,
+    "checked": false,
+    "sources": [{ "recipeName": "Chicken Stir Fry" }]
+  }
+]
+```
+
+`rowId` is the stable identity contract for shopping rows across `items`,
+`already_have`, and `excluded`. Client mutations, drag-and-drop ids, and
+server RPCs must target rows by `rowId`, not by item name.
+
 ### recipe_shares
 
 Stores cross-user recipe share requests and response state. Sharing is
@@ -410,6 +430,35 @@ Returns per-recipe aggregate history for UI surfaces that only need counts and t
 
 **Language:** `sql STABLE SECURITY DEFINER`
 
+### toggle_shopping_item_checked(p_row_id TEXT)
+
+Atomically toggles the `checked` flag for a shopping row identified by
+`rowId` inside `shopping_list.items`. Uses the authenticated user from
+`auth.uid()`.
+
+**Parameters:**
+- `p_row_id` (TEXT) - Stable shopping row identity
+
+**Returns:** `TABLE(row_id TEXT, checked BOOLEAN, updated_at TIMESTAMPTZ)`
+
+**Language:** `plpgsql`
+
+### move_shopping_item_to_pantry(p_row_id TEXT, p_pantry_qty NUMERIC, p_pantry_unit TEXT)
+
+Atomically removes a shopping row identified by `rowId` from
+`shopping_list.items`, appends it to `shopping_list.already_have`, and upserts
+the normalized pantry item into `pantry_items`. Uses the authenticated user
+from `auth.uid()`.
+
+**Parameters:**
+- `p_row_id` (TEXT) - Stable shopping row identity
+- `p_pantry_qty` (NUMERIC) - Pantry quantity fallback when the row amount is null
+- `p_pantry_unit` (TEXT) - Pantry unit fallback when the row unit is empty
+
+**Returns:** `TABLE(removed_item JSONB, pantry_item JSONB, shopping_list_updated_at TIMESTAMPTZ, pantry_was_inserted BOOLEAN)`
+
+**Language:** `plpgsql`
+
 ## Triggers
 
 ### update_recipes_updated_at
@@ -513,6 +562,7 @@ Pre-baseline historical evolution (for context only):
 23. **024_atomic_add_pantry_and_remove_shopping.sql** - Added atomic RPC for pantry add + shopping removal
 24. **025_atomic_mark_recipe_made.sql** - Added atomic weekly made/unmade toggle RPC for planner/history consistency
 25. **026_normalize_legacy_steak_defaults.sql** - Normalized known legacy default `steak` category payloads in `user_config` to canonical `beef`
+26. **027_shopping_row_identity_rpc_parity.sql** - Updated shopping RPC contracts to target stable `rowId` identity instead of name-based matching
 
 ## Query Examples
 
@@ -567,6 +617,7 @@ ORDER BY created_at DESC;
 - All user-specific tables require `user_id` to be set for proper RLS enforcement
 - The `recipes.ingredients` field uses JSONB for flexible ingredient storage
 - The `shopping_list.items` field uses JSONB for flexible shopping list item storage
+- `shopping_list` row payloads now use `rowId` as the stable identity field across `items`, `already_have`, and `excluded`
 - Default recipes are automatically created for new users via the `on_auth_user_created` trigger
 - Composite primary keys are enforced via unique indexes rather than traditional PRIMARY KEY constraints for tables that were migrated from single-user to multi-user
 

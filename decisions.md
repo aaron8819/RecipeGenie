@@ -2,7 +2,7 @@
 
 > **When to read:** You're making a major architectural decision, proposing a refactor, or need context on why something was built a certain way.
 
-*Last updated: 2026-02-26 (v2.15.0)*
+*Last updated: 2026-03-07 (v2.15.1)*
 
 This document captures key architectural and design decisions for Recipe Genie, including rationale and tradeoffs.
 
@@ -734,3 +734,42 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - (+) SSRF guard blocks lateral movement to internal services
 - (-) Upstash Redis is a required production dependency for rate limiting
 - (-) CSP nonce setup requires both middleware and root layout changes; missing one silently breaks scripts
+
+---
+
+## ADR-022: Stable Shopping Row Identity
+
+**Status:** Accepted (2026-03-07, v2.15.1)
+
+**Context:** Shopping list items are stored as JSON arrays inside `shopping_list.items`, `shopping_list.already_have`, and `shopping_list.excluded`. Name-based targeting had become unsafe because duplicate item names are valid and common. That caused ambiguity across UI keys, drag-and-drop ids, optimistic mutations, and server-side RPC boundaries.
+
+**Decision:** Treat `ShoppingItem.rowId` as the stable identity contract for all shopping rows. Every shopping row must carry a persisted `rowId`, and all row-targeted mutations must resolve by `rowId` rather than by item name.
+
+**Rationale:**
+- Duplicate names must remain distinct across active, pantry, and excluded lists
+- Stable ids are required for deterministic optimistic UI and pending destructive overlays
+- Row-based targeting aligns client behavior with backend mutation semantics
+- Persisted row ids survive refetch, invalidation, and reordering without ambiguity
+
+**Implementation:**
+- Added `web/src/lib/shopping-row-identity.ts` to enforce, backfill, and resolve row ids
+- Shopping list fetch paths backfill missing legacy row ids and persist them back to `shopping_list`
+- UI keys, drag-and-drop ids, reorder logic, pending destructive overlays, and row-targeted cache mutations now use `rowId`
+- Restore/remove/check/category/pantry flows target rows by `rowId`
+- Supabase RPCs now use row identity:
+  - `toggle_shopping_item_checked(p_row_id TEXT)`
+  - `move_shopping_item_to_pantry(p_row_id TEXT, p_pantry_qty NUMERIC, p_pantry_unit TEXT)`
+
+**Tradeoffs:**
+- (+) Correct behavior when duplicate item names exist
+- (+) Deterministic optimistic updates and undo flows
+- (+) Cleaner server/client contract for shopping mutations
+- (-) Legacy rows need one-time backfill on read
+- (-) Shopping JSON payloads carry one extra field per row
+
+**Risks:**
+- Older shopping rows without `rowId` are not directly targetable by row-aware RPCs until they are backfilled
+- **Mitigation**: fetch-time backfill persists missing row ids on the next successful shopping list read
+
+**Future Considerations:**
+- If shopping data ever moves from JSON arrays to first-class relational rows, preserve `rowId` semantics or perform an explicit migration plan

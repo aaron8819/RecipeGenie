@@ -6,6 +6,11 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingList, ShoppingItem } from "@/types/database"
+import {
+  ensureShoppingItemRowId,
+  ensureShoppingItemsHaveRowIds,
+  requireShoppingRowId,
+} from "@/lib/shopping-row-identity"
 import { ensureCategoryInfo } from "@/lib/shopping-list"
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
@@ -34,16 +39,18 @@ export function useAddShoppingItem() {
       const categoryOverrides =
         ((await getSupabase().from("user_config").select("category_overrides").single()).data as { category_overrides?: Record<string, string> } | null)?.category_overrides || {}
 
-      const newItem = ensureCategoryInfo(
-        {
-          item: normalizeItemName(itemName),
-          amount: amount || null,
-          unit: normalizeUnit(unit || ""),
-          categoryKey: "",
-          categoryOrder: 5,
-          sources: [{ recipeId: "", recipeName: "Manual" }],
-        },
-        categoryOverrides
+      const newItem = ensureShoppingItemRowId(
+        ensureCategoryInfo(
+          {
+            item: normalizeItemName(itemName),
+            amount: amount || null,
+            unit: normalizeUnit(unit || ""),
+            categoryKey: "",
+            categoryOrder: 5,
+            sources: [{ recipeId: "", recipeName: "Manual" }],
+          },
+          categoryOverrides
+        )
       )
 
       const supabase = getSupabase()
@@ -54,7 +61,9 @@ export function useAddShoppingItem() {
 
       if (fetchError && fetchError.code !== "PGRST116") throw fetchError
 
-      const currentItems = ((currentList as { items?: ShoppingItem[]; custom_order?: boolean } | null)?.items) || []
+      const currentItems = ensureShoppingItemsHaveRowIds(
+        ((currentList as { items?: ShoppingItem[]; custom_order?: boolean } | null)?.items) || []
+      ).items
       if (currentItems.some((i) => i.item.toLowerCase() === itemName.toLowerCase())) {
         throw new Error("Item already in shopping list")
       }
@@ -74,28 +83,27 @@ export function useAddShoppingItem() {
       if (saveError) throw saveError
       return newItem
     },
-    // Optimistic update
     onMutate: async ({ itemName, amount, unit }) => {
       const { previousData: previousList } =
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
-      // Get category overrides for optimistic item creation
       const categoryOverrides =
         ((await getSupabase().from("user_config").select("category_overrides").single()).data as { category_overrides?: Record<string, string> } | null)?.category_overrides || {}
 
-      const optimisticItem = ensureCategoryInfo(
-        {
-          item: normalizeItemName(itemName),
-          amount: amount || null,
-          unit: normalizeUnit(unit || ""),
-          categoryKey: "",
-          categoryOrder: 5,
-          sources: [{ recipeId: "", recipeName: "Manual" }],
-        },
-        categoryOverrides
+      const optimisticItem = ensureShoppingItemRowId(
+        ensureCategoryInfo(
+          {
+            item: normalizeItemName(itemName),
+            amount: amount || null,
+            unit: normalizeUnit(unit || ""),
+            categoryKey: "",
+            categoryOrder: 5,
+            sources: [{ recipeId: "", recipeName: "Manual" }],
+          },
+          categoryOverrides
+        )
       )
 
-      // Optimistically update cache
       setOptimisticQueryData<ShoppingList>(
         queryClient,
         SHOPPING_KEY,
@@ -114,7 +122,7 @@ export function useAddShoppingItem() {
             }
           }
           if (old.items.some((i) => i.item.toLowerCase() === itemName.toLowerCase())) {
-            return old // Don't add duplicate
+            return old
           }
           let updatedItems = [...old.items, optimisticItem]
           if (!old.custom_order) {
@@ -137,15 +145,13 @@ export function useAddShoppingItem() {
 
 /**
  * Hook to remove an item from the shopping list
- * Implements optimistic updates for instant UI feedback
  */
 export function useRemoveShoppingItem() {
-  const queryClient = useQueryClient()
   const { user } = useAuthContext()
 
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
-    mutationFn: async (itemName: string) => {
+    mutationFn: async (rowId: string) => {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
@@ -154,45 +160,23 @@ export function useRemoveShoppingItem() {
 
       if (fetchError) throw fetchError
 
-      const typedList = currentList as { items?: ShoppingItem[] } | null
+      const currentItems = ensureShoppingItemsHaveRowIds(
+        ((currentList as { items?: ShoppingItem[] } | null)?.items) || []
+      ).items
+
       const { error: saveError } = await supabase
         .from("shopping_list")
         // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
-          items: (typedList?.items || []).filter(
-            (i) => i.item.toLowerCase() !== itemName.toLowerCase()
-          ),
+          items: currentItems.filter((item) => item.rowId !== rowId),
         })
         .eq("user_id", user!.id)
 
       if (saveError) throw saveError
-      return itemName
-    },
-    // Optimistic update
-    onMutate: async (itemName) => {
-      const { previousData: previousList } =
-        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
-
-      // Optimistically remove from cache
-      setOptimisticQueryData<ShoppingList>(
-        queryClient,
-        SHOPPING_KEY,
-        (old) => {
-          if (!old) return old
-          return {
-            ...old,
-            items: old.items.filter((i) => i.item.toLowerCase() !== itemName.toLowerCase()),
-          }
-        }
-      )
-
-      return { previousList }
-    },
-    onError: (err, itemName, context) => {
-      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
+      return rowId
     },
     onSuccess: () => {
-      return invalidateQuery(queryClient, SHOPPING_KEY)
+      return undefined
     },
   })
 }
@@ -204,73 +188,69 @@ export function useRemoveShoppingItem() {
  */
 export function useCheckOffItem() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
 
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
+      const rowId = requireShoppingRowId(item, "checked shopping item")
       const supabase = getSupabase()
-      const rpcClient = supabase as unknown as {
-        rpc: (
-          fn: "toggle_shopping_item_checked",
-          args: { p_item_name: string }
-        ) => Promise<{
-          data: Array<{
-            item_name: string
-            checked: boolean | null
-            updated_at: string
-          }> | null
-          error: { message: string } | null
-        }>
+      const { data: currentList, error: fetchError } = await supabase
+        .from("shopping_list")
+        .select("items")
+        .single()
+
+      if (fetchError) throw fetchError
+
+      const currentItems = ensureShoppingItemsHaveRowIds(
+        ((currentList as { items?: ShoppingItem[] } | null)?.items) || []
+      ).items
+      const targetIndex = currentItems.findIndex((candidate) => candidate.rowId === rowId)
+      if (targetIndex === -1) {
+        throw new Error(`Shopping item not found: ${rowId}`)
       }
 
-      const { data, error } = await rpcClient.rpc("toggle_shopping_item_checked", {
-        p_item_name: item.item,
-      })
+      const nextChecked = !currentItems[targetIndex].checked
+      const updatedItems = currentItems.map((candidate) =>
+        candidate.rowId === rowId
+          ? { ...candidate, checked: nextChecked }
+          : candidate
+      )
 
-      if (error) throw error
+      const { error: saveError } = await supabase
+        .from("shopping_list")
+        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
+        .update({
+          items: updatedItems,
+        })
+        .eq("user_id", user!.id)
 
-      const rpcRows = data as
-        | Array<{
-            item_name: string
-            checked: boolean | null
-            updated_at: string
-          }>
-        | null
-
-      const row = rpcRows?.[0]
-      if (!row || row.checked === null) {
-        throw new Error(`Shopping item not found: ${item.item}`)
-      }
+      if (saveError) throw saveError
 
       return {
-        item_name: row.item_name,
-        checked: row.checked,
-        updated_at: row.updated_at,
+        rowId,
+        checked: nextChecked,
+        updated_at: new Date().toISOString(),
       }
     },
-    // Optimistic update
     onMutate: async (item) => {
       const { previousData: previousList } =
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
-      const normalizedItem = item.item.toLowerCase().trim()
+      const rowId = requireShoppingRowId(item, "optimistic checked shopping item")
 
-      // Optimistically update cache
       setOptimisticQueryData<ShoppingList>(
         queryClient,
         SHOPPING_KEY,
         (old) => {
           if (!old) return old
-          const currentItems = old.items || []
-          const updatedItems = currentItems.map((i) =>
-            i.item.toLowerCase() === normalizedItem
-              ? { ...i, checked: !i.checked }
-              : i
-          )
-
           return {
             ...old,
-            items: updatedItems,
+            items: old.items.map((candidate) =>
+              candidate.rowId === rowId
+                ? { ...candidate, checked: !candidate.checked }
+                : candidate
+            ),
           }
         }
       )
@@ -281,7 +261,6 @@ export function useCheckOffItem() {
       rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
     },
     onSuccess: (result) => {
-      const normalizedItem = result.item_name.toLowerCase().trim()
       reconcileQueryData<ShoppingList>(
         queryClient,
         SHOPPING_KEY,
@@ -289,10 +268,10 @@ export function useCheckOffItem() {
           if (!old) return old
           return {
             ...old,
-            items: old.items.map((i) =>
-              i.item.toLowerCase().trim() === normalizedItem
-                ? { ...i, checked: result.checked }
-                : i
+            items: old.items.map((candidate) =>
+              candidate.rowId === result.rowId
+                ? { ...candidate, checked: result.checked }
+                : candidate
             ),
           }
         }
@@ -312,7 +291,7 @@ export function useBulkCheckOff() {
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (itemsToCheck: ShoppingItem[]) => {
-      const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
+      const rowIds = new Set(itemsToCheck.map((item) => requireShoppingRowId(item, "bulk checked shopping item")))
 
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -322,14 +301,14 @@ export function useBulkCheckOff() {
 
       if (fetchError) throw fetchError
 
-      const typedList = currentList as { items?: ShoppingItem[] } | null
-      const currentItems = typedList?.items || []
+      const currentItems = ensureShoppingItemsHaveRowIds(
+        ((currentList as { items?: ShoppingItem[] } | null)?.items) || []
+      ).items
 
-      // Check all items (set checked to true)
-      const updatedItems = currentItems.map(i =>
-        itemNames.has(i.item.toLowerCase().trim())
-          ? { ...i, checked: true }
-          : i
+      const updatedItems = currentItems.map((item) =>
+        item.rowId && rowIds.has(item.rowId)
+          ? { ...item, checked: true }
+          : item
       )
 
       const { error: saveError } = await supabase
@@ -343,30 +322,24 @@ export function useBulkCheckOff() {
       if (saveError) throw saveError
       return { count: itemsToCheck.length }
     },
-    // Optimistic update
     onMutate: async (itemsToCheck) => {
       const { previousData: previousList } =
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
-      const itemNames = new Set(itemsToCheck.map(i => i.item.toLowerCase().trim()))
+      const rowIds = new Set(itemsToCheck.map((item) => requireShoppingRowId(item, "optimistic bulk checked shopping item")))
 
-      // Optimistically update cache
       setOptimisticQueryData<ShoppingList>(
         queryClient,
         SHOPPING_KEY,
         (old) => {
           if (!old) return old
-          const currentItems = old.items || []
-
-          const updatedItems = currentItems.map(i =>
-            itemNames.has(i.item.toLowerCase().trim())
-              ? { ...i, checked: true }
-              : i
-          )
-
           return {
             ...old,
-            items: updatedItems,
+            items: old.items.map((item) =>
+              item.rowId && rowIds.has(item.rowId)
+                ? { ...item, checked: true }
+                : item
+            ),
           }
         }
       )
@@ -393,14 +366,15 @@ export function useReorderShoppingList() {
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (newItems: ShoppingItem[]) => {
       const supabase = getSupabase()
+      const ensuredItems = ensureShoppingItemsHaveRowIds(newItems).items
       const { error: saveError } = await supabase
         .from("shopping_list")
         // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update({ items: newItems, custom_order: true })
+        .update({ items: ensuredItems, custom_order: true })
         .eq("user_id", user!.id)
 
       if (saveError) throw saveError
-      return newItems
+      return ensuredItems
     },
     onSuccess: () => {
       return invalidateQuery(queryClient, SHOPPING_KEY)

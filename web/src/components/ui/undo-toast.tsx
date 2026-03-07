@@ -10,6 +10,8 @@ interface UndoToastOptions {
   duration?: number // default 5000ms
   onUndo?: () => void // Optional - if not provided, shows informational toast without undo button
   onExpire?: () => void
+  onDismiss?: () => void
+  queueBehavior?: "replace" | "enqueue"
 }
 
 interface UndoToastContextValue {
@@ -32,6 +34,8 @@ interface ToastState {
   duration: number
   onUndo?: () => void
   onExpire?: () => void
+  onDismiss?: () => void
+  queueBehavior: "replace" | "enqueue"
   startTime: number
 }
 
@@ -42,6 +46,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const animationRef = useRef<number | null>(null)
   const toastRef = useRef<ToastState | null>(null)
+  const queueRef = useRef<UndoToastOptions[]>([])
 
   const clearTimers = useCallback(() => {
     if (timerRef.current) {
@@ -54,33 +59,23 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const dismiss = useCallback(() => {
-    clearTimers()
-    setIsVisible(false)
-    // Wait for exit animation before clearing toast
-    setTimeout(() => {
+  const showNextToast = useCallback(() => {
+    const nextOptions = queueRef.current.shift()
+    if (!nextOptions) {
       setToast(null)
       toastRef.current = null
-    }, 200)
-  }, [clearTimers])
-
-  const show = useCallback((options: UndoToastOptions) => {
-    // If a toast is already active, finalize it before showing the next one.
-    // This prevents pending undo actions from being silently canceled.
-    const activeToast = toastRef.current
-    if (activeToast?.onExpire) {
-      activeToast.onExpire()
+      return
     }
 
-    clearTimers()
-
-    const duration = options.duration ?? 5000
+    const duration = nextOptions.duration ?? 5000
     const startTime = Date.now()
     const nextToast: ToastState = {
-      message: options.message,
+      message: nextOptions.message,
       duration,
-      onUndo: options.onUndo,
-      onExpire: options.onExpire,
+      onUndo: nextOptions.onUndo,
+      onExpire: nextOptions.onExpire,
+      onDismiss: nextOptions.onDismiss,
+      queueBehavior: nextOptions.queueBehavior ?? "replace",
       startTime,
     }
 
@@ -89,13 +84,15 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
     setProgress(100)
     setIsVisible(true)
 
-    // Set up expiration timer
     timerRef.current = setTimeout(() => {
       nextToast.onExpire?.()
-      dismiss()
+      clearTimers()
+      setIsVisible(false)
+      setTimeout(() => {
+        showNextToast()
+      }, 200)
     }, duration)
 
-    // Animate progress bar
     const updateProgress = () => {
       const elapsed = Date.now() - startTime
       const remaining = Math.max(0, 100 - (elapsed / duration) * 100)
@@ -106,17 +103,50 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
       }
     }
     animationRef.current = requestAnimationFrame(updateProgress)
-  }, [clearTimers, dismiss])
+  }, [clearTimers])
+
+  const dismiss = useCallback(() => {
+    clearTimers()
+    toastRef.current?.onDismiss?.()
+    setIsVisible(false)
+    setTimeout(() => {
+      showNextToast()
+    }, 200)
+  }, [clearTimers, showNextToast])
+
+  const show = useCallback((options: UndoToastOptions) => {
+    const nextBehavior = options.queueBehavior ?? "replace"
+    const activeToast = toastRef.current
+
+    if (activeToast && (activeToast.queueBehavior === "enqueue" || nextBehavior === "enqueue")) {
+      queueRef.current.push(options)
+      return
+    }
+
+    if (activeToast) {
+      clearTimers()
+      setIsVisible(false)
+      queueRef.current = [options]
+      setTimeout(() => {
+        showNextToast()
+      }, 200)
+      return
+    }
+
+    queueRef.current.push(options)
+    showNextToast()
+  }, [clearTimers, showNextToast])
 
   const handleUndo = useCallback(() => {
     if (toast && toast.onUndo) {
       clearTimers()
       toast.onUndo()
-      toastRef.current = null
       setIsVisible(false)
-      setTimeout(() => setToast(null), 200)
+      setTimeout(() => {
+        showNextToast()
+      }, 200)
     }
-  }, [toast, clearTimers])
+  }, [toast, clearTimers, showNextToast])
 
   // Flush any pending deferred action and cancel timers on unmount.
   // This catches cases like tab navigation where the provider unmounts
@@ -149,7 +179,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleUndo}
+                onClick={handleUndo}
                   className="h-8 px-3 text-background hover:text-background hover:bg-background/20 font-medium"
                 >
                   Undo
