@@ -127,6 +127,6 @@ Before starting work, match your task to a doc below and read it first.
 | E2E tests (writing, debugging, fixtures) | `web/tests/README.md` |
 | Architectural decisions or major refactors | `decisions.md` |
 | Version bumps or release notes | `changelog.md` |
-| First session or onboarding | `project_overview.md` |
+| First session or onboarding | `docs/project_overview.md` |
 
 When a task spans multiple areas, read all applicable docs. Update any doc you relied on if your work changes what it describes. Update `changelog.md` when shipping a version bump.

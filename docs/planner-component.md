@@ -1,104 +1,60 @@
-# Meal Planner Component Documentation
+# Planner Domain Reference
 
-> When to read: You're working on meal plan generation, week navigation, day assignments, recipe swapping, calendar view, plan settings, or template loading.
+Use this doc when working on meal-plan generation, week navigation, day assignments, template load/save, or planner history behavior.
 
-Last updated: 2026-03-06
+This is a domain reference. Canonical project-wide boundaries live in [`./ARCHITECTURE_GUARDRAILS.md`](./ARCHITECTURE_GUARDRAILS.md).
 
-## Quick Start
+## Current State
 
-### Key Files
+- Planner presentation extraction is complete.
+- Planner pure selector/helper extraction is complete.
+- `meal-planner.tsx` is intentionally still orchestration-heavy.
+- No planner hook extraction is recommended right now.
 
-| File | Purpose |
-|------|---------|
-| `components/planner/meal-planner.tsx` | Main orchestration component for week navigation, planner actions, DnD, dialog state, and mutation sequencing |
-| `components/planner/meal-planner-components.tsx` | Presentation-only planner shells extracted from `meal-planner.tsx` |
-| `components/planner/meal-planner.selectors.ts` | Pure planner selectors/helpers for derived state and template shaping |
-| `components/planner/plan-settings-modal.tsx` | Settings dialog for default categories, day rules, and history exclusion |
-| `components/planner/add-recipe-to-plan-modal.tsx` | Modal for adding a recipe directly to the current plan |
-| `components/planner/save-template-dialog.tsx` | Save current plan as a reusable template |
-| `components/planner/load-template-dialog.tsx` | Browse and apply saved templates |
-| `hooks/use-planner.ts` | TanStack Query hooks for planner data access and mutations |
-| `lib/meal-planner.ts` | Business logic for plan generation, swaps, and auto-assign |
-| `lib/planner-utils.ts` | Date helpers and day-index conversion helpers |
+## Key Files
 
-### Refactor State
+| File | Responsibility |
+|------|----------------|
+| `web/src/components/planner/meal-planner.tsx` | Main planner orchestration: hook composition, week navigation, dialog state, DnD ownership, undo flows, async mutation sequencing. |
+| `web/src/components/planner/meal-planner-components.tsx` | Presentation-only planner sections extracted from the main component. |
+| `web/src/components/planner/meal-planner.selectors.ts` | Pure derived-state helpers for planner rendering and template shaping. |
+| `web/src/components/planner/plan-settings-modal.tsx` | Planner settings UI for default breakdown, excluded days, preferred days, and history exclusion. |
+| `web/src/hooks/use-planner.ts` | Planner data access and mutations. |
+| `web/src/hooks/use-plan-templates.ts` | Plan template queries and mutations. |
+| `web/src/lib/meal-planner.ts` | Plan generation and related planner business logic. |
+| `web/src/lib/planner-utils.ts` | Date helpers and day-index utilities. |
 
-- Presentation-only planner shells were extracted into `meal-planner-components.tsx`.
-- Pure derived planner logic was extracted into `meal-planner.selectors.ts`.
-- `meal-planner.tsx` is still large, but it is now mostly justified orchestration.
-- No planner hook extraction is recommended at this time.
-
-## Component Structure
-
-```text
-meal-planner.tsx
-+-- MealPlanner
-|   +-- hook composition and fetched-data ownership
-|   +-- week navigation and mobile-tab coordination
-|   +-- mutation sequencing and undo toasts
-|   +-- drag-and-drop active-item coordination
-|   +-- dialog and modal open-state ownership
-|
-+-- DayColumn
-+-- MobileDayColumn
-+-- FlipRecipeCard
-+-- StitchRecipeCard
-+-- MobileRecipeCard
-
-meal-planner-components.tsx
-+-- PlannerDaySection
-+-- PlannerSectionShell
-+-- PlannerDesktopWeekShell
-+-- PlannerMobileHeader
-+-- PlannerMobileTabBar
-+-- PlannerActionBar
-+-- PlannerEmptyWeekPanel
-+-- PlannerMobileWeekStrip
-
-meal-planner.selectors.ts
-+-- isRecipeMadeForWeek()
-+-- derivePlannerProgress()
-+-- deriveTotalMeals()
-+-- groupRecipesByPlannerDay()
-+-- deriveActiveRecipeOverlay()
-+-- normalizeStoredDayAssignments()
-+-- filterTemplateLoadData()
-```
-
-## Architectural Boundaries
+## Boundaries
 
 - Components must not access Supabase directly.
-- Hooks own planner data fetching and mutations.
-- Multi-step writes must remain atomic RPC-backed flows.
-- Extracted planner selectors/helpers must stay pure: no hooks, no side effects, no storage access.
-- `meal-planner.tsx` intentionally retains orchestration concerns rather than hiding them in a god hook.
+- Hooks own planner reads and writes.
+- Multi-step writes stay RPC-backed.
+- Extracted selectors/helpers stay pure.
+- `meal-planner.tsx` keeps orchestration concerns on purpose instead of hiding them in a large custom hook.
 
-## Key Behaviors
-
-### Date handling
-
-- Use `toLocalNoonISOString()` when sending a `date_made` derived from a calendar day.
-- Use local-calendar parsing helpers to avoid UTC boundary drift.
+## Important Behaviors
 
 ### Day assignments
 
-- Explicit day assignments come from `weekly_plans.day_assignments`.
-- Unassigned recipes are distributed deterministically by `groupRecipesByPlannerDay()` using `getUnassignedDayOfWeek()`.
-- Legacy local storage day assignments are normalized by `normalizeStoredDayAssignments()`, but storage reads and writes remain in `meal-planner.tsx`.
+- Persistent day assignments live in `weekly_plans.day_assignments`.
+- Planner uses pure selectors to normalize stored assignments and derive grouped day views.
+- Local planner UI state may temporarily stage assignment changes, but durable writes still belong in hooks.
 
-### Template loading
+### Dates
 
-- `filterTemplateLoadData()` handles deterministic payload shaping only:
-  - filters missing recipe IDs
-  - derives missing-count metadata
-  - filters `day_assignments` to valid recipe IDs
-  - preserves optional `category_selection`
-- Async fetches, writes, local state updates, and toast orchestration remain in `meal-planner.tsx`.
+- Use `toLocalNoonISOString()` for `date_made` values derived from a calendar day.
+- Keep planner date handling local-calendar-safe to avoid UTC boundary drift.
 
-### Undo patterns
+### Templates
 
-- Remove-from-plan uses immediate remove plus undo re-add with the saved day assignment.
-- Mark-made uses immediate mutation plus undo toggle with the same resolved `dateMade`.
+- Template load/save mutations belong in hooks.
+- Selector helpers may shape template data, but async fetches, invalidation, toasts, and local-state coordination remain in `meal-planner.tsx`.
+
+## Intentionally Not Being Refactored Further
+
+- No planner hook extraction.
+- No new extraction work that only moves orchestration around.
+- Re-open planner structure only if a new pure seam appears or a boundary violation/regression makes the current split wrong.
 
 ## Verification
 
@@ -112,10 +68,4 @@ npm run check:cycles
 npm run check:no-new-ts-expect-error
 ```
 
-## Current Recommendation
-
-Planner cleanup is intentionally stopping here for now.
-
-- No planner hook extraction is recommended.
-- No further planner refactor is clearly justified unless a new narrow pure-helper seam appears.
-- Future planner changes should be behavior-driven, not structure-driven.
+Last updated: 2026-03-07
