@@ -29,10 +29,10 @@ import {
   TabsContent,
 } from "@/components/ui/tabs"
 import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from "@/hooks/use-recipes"
+import { useRecipeImageStorage } from "@/hooks/use-recipe-image-storage"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
 import type { ParsedRecipe } from "@/lib/recipe-parser"
-import { uploadRecipeImage, deleteRecipeImage } from "@/lib/supabase/storage"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
@@ -90,6 +90,7 @@ export function RecipeDialog({
   const isEditing = !!recipe
   const createRecipe = useCreateRecipe()
   const updateRecipe = useUpdateRecipe()
+  const { uploadImage, deleteImage } = useRecipeImageStorage()
   const undoToast = useUndoToast()
 
   const [mode, setMode] = useState<"manual" | "import">("manual")
@@ -333,7 +334,7 @@ export function RecipeDialog({
         setIsUploadingImage(true)
         try {
           const recipeId = isEditing ? recipe.id : sanitizeRecipeNameForStorage(name)
-          finalImageUrl = await uploadRecipeImage(recipeId, imageFile)
+          finalImageUrl = await uploadImage(recipeId, imageFile)
         } catch (error) {
           console.error("Failed to upload image:", error)
           undoToast.show({ message: "Failed to upload image. Recipe will be saved without image.", duration: 5000 })
@@ -346,7 +347,7 @@ export function RecipeDialog({
       // Delete old image if it was removed
       if (isEditing && recipe.image_url && !imageFile && !imageUrl) {
         try {
-          await deleteRecipeImage(recipe.image_url)
+          await deleteImage(recipe.image_url)
         } catch (error) {
           console.error("Failed to delete old image:", error)
           // Continue anyway - image deletion failure shouldn't block recipe save

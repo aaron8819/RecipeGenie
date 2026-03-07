@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/client'
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+const SUPABASE_STORAGE_PUBLIC_BASE_URL =
+  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/recipe-images`
 
 /**
  * Validates an image file before upload
@@ -193,11 +195,6 @@ export function getRecipeImageUrl(
     return imageUrl
   }
 
-  // If it's a Supabase Storage path, construct public URL
-  const supabase = createClient()
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from('recipe-images').getPublicUrl(imageUrl)
-
-  return publicUrl
+  // For stored recipe image paths, derive the public URL deterministically.
+  return `${SUPABASE_STORAGE_PUBLIC_BASE_URL}/${imageUrl.replace(/^\/+/, '')}`
 }

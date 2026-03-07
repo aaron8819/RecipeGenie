@@ -50,8 +50,8 @@ function parsedRecipe(overrides: Partial<ParsedRecipe> = {}): ParsedRecipe {
     name: "Roast Chicken",
     servings: 4,
     ingredients: [
-      { item: "chicken", amount: 1, unit: "", modifier: null },
-      { item: "salt", amount: 1, unit: "tsp", modifier: null },
+      { item: "chicken", amount: 1, unit: "" },
+      { item: "salt", amount: 1, unit: "tsp" },
     ],
     instructions: ["Prep the chicken", "Roast until done"],
     warnings: [],

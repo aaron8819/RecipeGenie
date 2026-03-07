@@ -26,14 +26,8 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Enforce test.skip Policy
-        run: npm run check:no-new-test-skip
-
-      - name: Enforce @ts-expect-error Baseline
-        run: npm run check:no-new-ts-expect-error
-
-      - name: Enforce No Circular Imports
-        run: npm run check:cycles
+      - name: Run Verification Baseline
+        run: npm run verify
 
   migration-smoke-and-drift:
     runs-on: ubuntu-latest

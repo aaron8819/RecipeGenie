@@ -66,16 +66,12 @@ Do not reopen the completed extraction wave without a new, narrow, low-risk reas
 ## Quality Baseline
 
 These checks matter for architecture-sensitive changes. Run from `web/`.
+`npm run verify` is the canonical local baseline and matches the main CI quality gate.
 
 ```bash
-npm run lint
-npx tsc --noEmit
-npm run test -- --run
-npm run test:e2e:smoke
-npm run check:no-new-ts-expect-error
-npm run check:no-new-test-skip
-npm run check:cycles
+npm run verify
 npm run db:types:check
+npm run test:e2e:smoke
 ```
 
 For SQL changes, also verify the migration names referenced in docs and generated type parity.

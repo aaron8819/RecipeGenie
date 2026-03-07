@@ -13,7 +13,7 @@ function item(overrides: Partial<ShoppingItem>): ShoppingItem {
   return {
     item: "item",
     amount: null,
-    unit: null,
+    unit: "",
     checked: false,
     categoryKey: "misc",
     categoryOrder: 99,
