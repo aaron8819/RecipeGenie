@@ -101,7 +101,6 @@ import {
   filterTemplateLoadData,
   groupRecipesByPlannerDay,
   isRecipeMadeForWeek,
-  normalizeStoredDayAssignments,
 } from "./meal-planner.selectors"
 import {
   PlannerActionBar,
@@ -159,8 +158,6 @@ function getLastMadeMap(history: RecipeHistory[] | undefined): Map<string, strin
  * @param weekStartDate - Start date of the week (YYYY-MM-DD)
  * @returns true if the calendar date of dateStr falls within the week (inclusive)
  */
-const RECIPE_DAY_ASSIGNMENTS_KEY = "recipe-genie-recipe-day-assignments"
-
 /**
  * Compact category pill with inline stepper for meal selection
  */
@@ -224,7 +221,6 @@ function CategoryPill({ category, count, onIncrement, onDecrement }: CategoryPil
 }
 
 type RecipeDayAssignments = Record<string, number> // recipe_id -> dayIndex (0-6)
-type WeekAssignments = Record<string, RecipeDayAssignments> // week_date -> RecipeDayAssignments
 
 function EmptySlot({ onAdd, desktop }: { onAdd: () => void; desktop?: boolean }) {
   if (desktop) {
@@ -1056,7 +1052,8 @@ export function MealPlanner() {
   const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>("thisWeek")
   const mobileDaysContainerRef = useRef<HTMLDivElement>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
-  const [localDayAssignments, setLocalDayAssignments] = useState<Record<string, number> | null>(null)
+  const [pendingAssignmentOverlays, setPendingAssignmentOverlays] = useState<Record<string, Record<string, number>>>({})
+  const [pendingAssignmentCounts, setPendingAssignmentCounts] = useState<Record<string, number>>({})
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === "undefined") return true
     return window.matchMedia("(min-width: 1024px)").matches
@@ -1079,50 +1076,62 @@ export function MealPlanner() {
   const updateConfig = useUpdateUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
 
-  // Get day assignments from the weekly plan (database) with localStorage fallback
-  const recipeDayAssignments = useMemo(() => {
-    if (localDayAssignments) return localDayAssignments
-    // First try to get from database (weekly plan)
-    if (weeklyPlan?.day_assignments) {
-      return weeklyPlan.day_assignments
-    }
-    // Fallback to localStorage for backward compatibility
-    if (typeof window !== "undefined" && currentWeekDate) {
-      try {
-        const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
-        if (stored) {
-          return normalizeStoredDayAssignments({
-            storedAssignments: JSON.parse(stored),
-            currentWeekDate,
-            weekStartDay: config?.week_start_day ?? 1,
-          })
-        }
-      } catch {
-        // Ignore parse errors
+  const clearPendingAssignmentOverlay = useCallback((weekDate: string) => {
+    setPendingAssignmentCounts((prev) => {
+      const currentCount = prev[weekDate] || 0
+      if (currentCount <= 1) {
+        const next = { ...prev }
+        delete next[weekDate]
+        setPendingAssignmentOverlays((overlayPrev) => {
+          const overlayNext = { ...overlayPrev }
+          delete overlayNext[weekDate]
+          return overlayNext
+        })
+        return next
       }
+
+      return {
+        ...prev,
+        [weekDate]: currentCount - 1,
+      }
+    })
+  }, [])
+
+  // Visible assignments are query-backed base state plus a pending overlay for the selected week.
+  const recipeDayAssignments = useMemo(() => {
+    const baseAssignments = weeklyPlan?.day_assignments || {}
+    const overlayAssignments = pendingAssignmentOverlays[currentWeekDate] || {}
+    return {
+      ...baseAssignments,
+      ...overlayAssignments,
     }
-    return {}
-  }, [localDayAssignments, weeklyPlan?.day_assignments, currentWeekDate, config?.week_start_day])
+  }, [weeklyPlan?.day_assignments, pendingAssignmentOverlays, currentWeekDate])
 
   useEffect(() => {
-    if (weeklyPlan?.day_assignments) {
-      setLocalDayAssignments(weeklyPlan.day_assignments)
-    }
-  }, [weeklyPlan?.day_assignments])
+    setPendingAssignmentOverlays({})
+    setPendingAssignmentCounts({})
+  }, [currentWeekDate])
+
+  const currentWeekStart = useMemo(
+    () => getWeekStartDate(new Date(), config?.week_start_day || 1),
+    [config?.week_start_day]
+  )
+  const isCurrentWeek = currentWeekDate === currentWeekStart
+  const isTodayMode = mobileWeekTab === "today" && isCurrentWeek
 
   // Get week days for calendar view (needed early for handleMarkMade)
   const weekDays = useMemo(() => {
     return getWeekDays(currentWeekDate)
   }, [currentWeekDate])
 
-  // Mobile: filter to today only when "Today" tab, else all days
+  // Mobile: "Today" only applies when viewing the current week.
   const mobileDays = useMemo(() => {
-    if (mobileWeekTab === "today") {
+    if (mobileWeekTab === "today" && isCurrentWeek) {
       const t = new Date().toDateString()
       return weekDays.filter((d) => d.date.toDateString() === t)
     }
     return weekDays
-  }, [weekDays, mobileWeekTab])
+  }, [weekDays, mobileWeekTab, isCurrentWeek])
 
   // Compute effective tab based on currentWeekDate to keep visual indicator in sync
   // This prevents tab/date desync when using chevron navigation beyond this/next week
@@ -1264,15 +1273,8 @@ export function MealPlanner() {
       await saveWeeklyPlan.mutateAsync({
         weekDate: currentWeekDate,
         recipeIds: filteredTemplate.recipeIds,
+        dayAssignments: filteredTemplate.dayAssignments,
       })
-
-      if (filteredTemplate.dayAssignments) {
-        setLocalDayAssignments(filteredTemplate.dayAssignments)
-        saveDayAssignments.mutate({
-          weekDate: currentWeekDate,
-          dayAssignments: filteredTemplate.dayAssignments,
-        })
-      }
 
       if (filteredTemplate.categorySelection) {
         setSelection(filteredTemplate.categorySelection)
@@ -1402,35 +1404,27 @@ export function MealPlanner() {
       ...recipeDayAssignments,
       [recipeId]: dayOfWeek,
     }
-    setLocalDayAssignments(updatedAssignments)
-    
-    // Save to database
-    saveDayAssignments.mutate({
-      weekDate: currentWeekDate,
-      dayAssignments: updatedAssignments,
-    })
-    
-    // Also update localStorage as fallback
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem(RECIPE_DAY_ASSIGNMENTS_KEY)
-        const parsed = stored ? JSON.parse(stored) : null
-        let allAssignments: WeekAssignments = {}
-        if (parsed && typeof parsed === "object" && parsed.version === 2 && parsed.weeks) {
-          allAssignments = parsed.weeks
-        } else if (parsed) {
-          allAssignments = parsed as WeekAssignments
-        }
-        allAssignments[currentWeekDate] = updatedAssignments
-        localStorage.setItem(
-          RECIPE_DAY_ASSIGNMENTS_KEY,
-          JSON.stringify({ version: 2, weeks: allAssignments })
-        )
-      } catch {
-        // Ignore localStorage errors
+    setPendingAssignmentOverlays((prev) => ({
+      ...prev,
+      [currentWeekDate]: updatedAssignments,
+    }))
+    setPendingAssignmentCounts((prev) => ({
+      ...prev,
+      [currentWeekDate]: (prev[currentWeekDate] || 0) + 1,
+    }))
+
+    saveDayAssignments.mutate(
+      {
+        weekDate: currentWeekDate,
+        dayAssignments: updatedAssignments,
+      },
+      {
+        onSettled: () => {
+          clearPendingAssignmentOverlay(currentWeekDate)
+        },
       }
-    }
-  }, [currentWeekDate, recipeDayAssignments, saveDayAssignments, config?.week_start_day])
+    )
+  }, [currentWeekDate, recipeDayAssignments, saveDayAssignments, config?.week_start_day, clearPendingAssignmentOverlay])
 
   const categories = allCategories || config?.categories || []
   const totalMeals = deriveTotalMeals(selection)
@@ -1490,10 +1484,6 @@ export function MealPlanner() {
     handleMoveToDay(recipeId, targetDayIndex)
   }, [handleMoveToDay, recipeDayAssignments, weekDays])
 
-  // Check if displayed week is the current week
-  const currentWeekStart = getWeekStartDate(new Date(), config?.week_start_day || 1)
-  const isCurrentWeek = currentWeekDate === currentWeekStart
-
   const progress = useMemo(() => derivePlannerProgress({
     recipes: displayedRecipes,
     currentWeekDate,
@@ -1516,7 +1506,7 @@ export function MealPlanner() {
       {!isDesktop && (
       <PlannerMobileHeader
         weekLabel={formatWeekLabel(currentWeekDate)}
-        showControls={mobileWeekTab !== "today"}
+        showControls={!isTodayMode}
         progressLabel={`${progress.made} of ${progress.total} meals`}
         progressValue={progress.percentage}
         controls={
@@ -1912,7 +1902,7 @@ export function MealPlanner() {
             {/* Mobile: calendar view — Stitch calendarview_redesign_mobile: week strip + day sections */}
             {!isDesktop && (
             <div className="space-y-6">
-              {mobileWeekTab !== "today" && (
+              {!isTodayMode && (
                 <PlannerMobileWeekStrip
                   days={weekDays.map((d) => {
                     const isToday = d.date.toDateString() === new Date().toDateString()

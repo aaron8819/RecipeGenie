@@ -14,7 +14,59 @@ const RECENT_HISTORY_KEY = [...HISTORY_KEY, "recent"]
 const HISTORY_STATS_KEY = [...HISTORY_KEY, "stats"]
 const RECIPES_KEY = ["recipes"]
 
+type DirectWeeklyPlanWrite = {
+  weekDate: string
+  recipeIds?: string[]
+  dayAssignments?: Record<string, number> | null
+  madeRecipeIds?: string[]
+  scale?: number
+  refreshGeneratedAt?: boolean
+}
+
 export { useUpdateUserConfig, useUserConfig } from "@/hooks/shared/user-config"
+
+async function fetchExistingWeeklyPlan(userId: string, weekDate: string) {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from("weekly_plans")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("week_date", weekDate)
+    .maybeSingle()
+
+  if (error) throw error
+  return (data as WeeklyPlan | null) || null
+}
+
+async function persistWeeklyPlanDirect(userId: string, write: DirectWeeklyPlanWrite) {
+  const supabase = getSupabase()
+  const existingPlan = await fetchExistingWeeklyPlan(userId, write.weekDate)
+
+  const payload = {
+    user_id: userId,
+    week_date: write.weekDate,
+    recipe_ids: write.recipeIds ?? existingPlan?.recipe_ids ?? [],
+    day_assignments:
+      write.dayAssignments !== undefined
+        ? write.dayAssignments
+        : (existingPlan?.day_assignments ?? null),
+    made_recipe_ids: write.madeRecipeIds ?? existingPlan?.made_recipe_ids ?? [],
+    scale: write.scale ?? existingPlan?.scale ?? 1.0,
+    generated_at:
+      write.refreshGeneratedAt
+        ? new Date().toISOString()
+        : (existingPlan?.generated_at ?? new Date().toISOString()),
+  }
+
+  const { error } = await supabase
+    .from("weekly_plans")
+    // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
+    .upsert(payload, { onConflict: "user_id,week_date" })
+
+  if (error) throw error
+
+  return existingPlan
+}
 
 export function getRecipeHistoryQueryKey() {
   return [...HISTORY_KEY]
@@ -388,17 +440,12 @@ export function useSwapRecipe() {
       const newDayAssignments =
         dayIndex !== undefined ? { ...rest, [newRecipe.id]: dayIndex } : rest
 
-      const { error: saveError } = await supabase
-        .from("weekly_plans")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update({
-          recipe_ids: newRecipeIds,
-          day_assignments: Object.keys(newDayAssignments).length > 0 ? newDayAssignments : null,
-        })
-        .eq("user_id", user!.id)
-        .eq("week_date", weekDate)
+      await persistWeeklyPlanDirect(user!.id, {
+        weekDate,
+        recipeIds: newRecipeIds,
+        dayAssignments: Object.keys(newDayAssignments).length > 0 ? newDayAssignments : null,
+      })
 
-      if (saveError) throw saveError
       return { newRecipe, oldRecipeId, weekDate }
     },
 
@@ -445,37 +492,24 @@ export function useSaveWeeklyPlan() {
   const { user } = useAuthContext()
 
   return useMutation({
-    mutationFn: async ({ weekDate, recipeIds, scale }: { weekDate: string; recipeIds: string[]; scale?: number }) => {
-      const supabase = getSupabase()
-      
-      // Check if plan already exists
-      const { data: existingPlan } = await supabase
-        .from("weekly_plans")
-        .select("*")
-        .eq("user_id", user!.id)
-        .eq("week_date", weekDate)
-        .maybeSingle()
-
-      // idx_weekly_plans_user_date is a unique index on (user_id, week_date); explicit
-      // onConflict columns let PostgREST resolve the ON CONFLICT clause in 1 RTT.
-      // The SELECT above is still needed to preserve made_recipe_ids and day_assignments.
-      const typedExisting = existingPlan as WeeklyPlan | null
-      const { error } = await supabase
-        .from("weekly_plans")
-        // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
-        .upsert(
-          {
-            user_id: user!.id,
-            week_date: weekDate,
-            recipe_ids: recipeIds,
-            scale: scale || 1.0,
-            made_recipe_ids: typedExisting?.made_recipe_ids || [],
-            day_assignments: typedExisting?.day_assignments || null,
-            generated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,week_date' }
-        )
-      if (error) throw error
+    mutationFn: async ({
+      weekDate,
+      recipeIds,
+      scale,
+      dayAssignments,
+    }: {
+      weekDate: string
+      recipeIds: string[]
+      scale?: number
+      dayAssignments?: Record<string, number> | null
+    }) => {
+      await persistWeeklyPlanDirect(user!.id, {
+        weekDate,
+        recipeIds,
+        dayAssignments,
+        scale: scale || 1.0,
+        refreshGeneratedAt: true,
+      })
 
       return { weekDate, recipeIds }
     },
@@ -496,14 +530,7 @@ export function useAddRecipeToPlan() {
 
   return useMutation({
     mutationFn: async ({ weekDate, recipeId, dayOfWeek }: { weekDate: string; recipeId: string; dayOfWeek?: number }) => {
-      const supabase = getSupabase()
-      const { data: existingPlan } = await supabase
-        .from("weekly_plans")
-        .select("*")
-        .eq("user_id", user!.id)
-        .eq("week_date", weekDate)
-        .maybeSingle()
-
+      const existingPlan = await fetchExistingWeeklyPlan(user!.id, weekDate)
       const typedPlan = existingPlan as { recipe_ids?: string[]; day_assignments?: Record<string, number> | null } | null
       const currentIds = typedPlan?.recipe_ids || []
       if (currentIds.includes(recipeId)) {
@@ -515,26 +542,13 @@ export function useAddRecipeToPlan() {
         ...(dayOfWeek !== undefined ? { [recipeId]: dayOfWeek } : {}),
       }
 
-      // The SELECT above is load-bearing (reads currentIds, day_assignments, scale, made_recipe_ids).
-      // Replace the if/else write with a single upsert — idx_weekly_plans_user_date unique index
-      // on (user_id, week_date) is resolvable when columns are passed explicitly to onConflict.
-      const typedExistingPlan = existingPlan as WeeklyPlan | null
-      const { error } = await supabase
-        .from("weekly_plans")
-        // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
-        .upsert(
-          {
-            user_id: user!.id,
-            week_date: weekDate,
-            recipe_ids: [...currentIds, recipeId],
-            day_assignments: Object.keys(mergedDayAssignments).length > 0 ? mergedDayAssignments : null,
-            scale: typedExistingPlan?.scale || 1.0,
-            made_recipe_ids: typedExistingPlan?.made_recipe_ids || [],
-            generated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id,week_date' }
-        )
-      if (error) throw error
+      await persistWeeklyPlanDirect(user!.id, {
+        weekDate,
+        recipeIds: [...currentIds, recipeId],
+        dayAssignments: Object.keys(mergedDayAssignments).length > 0 ? mergedDayAssignments : null,
+        scale: existingPlan?.scale || 1.0,
+        refreshGeneratedAt: true,
+      })
 
       return { weekDate, recipeId }
     },
@@ -554,29 +568,26 @@ export function useRemoveRecipeFromPlan() {
 
   return useMutation({
     mutationFn: async ({ weekDate, recipeId }: { weekDate: string; recipeId: string }) => {
-      const supabase = getSupabase()
-      const { data: existingPlan, error: fetchError } = await supabase
-        .from("weekly_plans")
-        .select("recipe_ids, made_recipe_ids")
-        .eq("user_id", user!.id)
-        .eq("week_date", weekDate)
-        .single()
+      const existingPlan = await fetchExistingWeeklyPlan(user!.id, weekDate)
+      if (!existingPlan) {
+        throw new Error(`Weekly plan not found for ${weekDate}`)
+      }
 
-      if (fetchError) throw fetchError
+      const typedPlan = existingPlan as {
+        recipe_ids: string[]
+        made_recipe_ids?: string[]
+        day_assignments?: Record<string, number> | null
+      }
+      const nextDayAssignments = { ...(typedPlan.day_assignments || {}) }
+      delete nextDayAssignments[recipeId]
+      await persistWeeklyPlanDirect(user!.id, {
+        weekDate,
+        recipeIds: typedPlan.recipe_ids.filter((id) => id !== recipeId),
+        madeRecipeIds: (typedPlan.made_recipe_ids || []).filter((id) => id !== recipeId),
+        dayAssignments: Object.keys(nextDayAssignments).length > 0 ? nextDayAssignments : null,
+        scale: existingPlan.scale ?? 1.0,
+      })
 
-      const typedPlan = existingPlan as { recipe_ids: string[]; made_recipe_ids?: string[] }
-      const { error } = await supabase
-        .from("weekly_plans")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-        .update({
-          recipe_ids: typedPlan.recipe_ids.filter((id) => id !== recipeId),
-          // Also remove from made_recipe_ids if present
-          made_recipe_ids: (typedPlan.made_recipe_ids || []).filter((id) => id !== recipeId),
-        })
-        .eq("user_id", user!.id)
-        .eq("week_date", weekDate)
-
-      if (error) throw error
       return { weekDate, recipeId }
     },
 
@@ -604,6 +615,13 @@ export function useRemoveRecipeFromPlan() {
             recipe_ids: old.recipe_ids.filter((id) => id !== recipeId),
             // Also remove from made_recipe_ids if present
             made_recipe_ids: (old.made_recipe_ids || []).filter((id) => id !== recipeId),
+            day_assignments: old.day_assignments
+              ? (() => {
+                  const nextDayAssignments = { ...old.day_assignments }
+                  delete nextDayAssignments[recipeId]
+                  return Object.keys(nextDayAssignments).length > 0 ? nextDayAssignments : null
+                })()
+              : null,
           }
         }
       )
@@ -868,41 +886,10 @@ export function useSaveDayAssignments() {
 
   return useMutation({
     mutationFn: async ({ weekDate, dayAssignments }: { weekDate: string; dayAssignments: Record<string, number> }) => {
-      const supabase = getSupabase()
-
-      // Check if plan already exists
-      const { data: existingPlan } = await supabase
-        .from("weekly_plans")
-        .select("*")
-        .eq("user_id", user!.id)
-        .eq("week_date", weekDate)
-        .maybeSingle()
-
-      // Use explicit update/insert pattern since unique index isn't auto-detected by upsert
-      if (existingPlan) {
-        // Update existing plan
-        const { error } = await supabase
-          .from("weekly_plans")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
-          .update({
-            day_assignments: dayAssignments,
-          })
-          .eq("user_id", user!.id)
-          .eq("week_date", weekDate)
-        if (error) throw error
-      } else {
-        // Insert new plan with day assignments
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
-        const { error } = await supabase.from("weekly_plans").insert({
-          user_id: user!.id,
-          week_date: weekDate,
-          recipe_ids: [],
-          day_assignments: dayAssignments,
-          scale: 1.0,
-          generated_at: new Date().toISOString(),
-        })
-        if (error) throw error
-      }
+      await persistWeeklyPlanDirect(user!.id, {
+        weekDate,
+        dayAssignments,
+      })
 
       return { weekDate, dayAssignments }
     },

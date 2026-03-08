@@ -9,7 +9,7 @@ globalThis.React = React
 
 const fetchRecipeIdsMutateAsync = vi.fn<() => Promise<string[]>>()
 const saveWeeklyPlanMutateAsync = vi.fn<
-  (args: { weekDate: string; recipeIds: string[] }) => Promise<unknown>
+  (args: { weekDate: string; recipeIds: string[]; dayAssignments?: Record<string, number> | null }) => Promise<unknown>
 >()
 const saveDayAssignmentsMutate = vi.fn<
   (args: { weekDate: string; dayAssignments: Record<string, number> }) => void
@@ -402,6 +402,10 @@ describe("MealPlanner template loading", () => {
       expect(saveWeeklyPlanMutateAsync).toHaveBeenCalledWith({
         weekDate: getWeekStartDate(new Date(), 1),
         recipeIds: ["existing-2", "existing-1"],
+        dayAssignments: {
+          "existing-2": 4,
+          "existing-1": 1,
+        },
       })
     })
 
@@ -410,28 +414,9 @@ describe("MealPlanner template loading", () => {
       saveWeeklyPlanMutateAsync.mock.invocationCallOrder[0]
     )
 
-    await waitFor(() => {
-      expect(saveDayAssignmentsMutate).toHaveBeenCalledWith({
-        weekDate: getWeekStartDate(new Date(), 1),
-        dayAssignments: {
-          "existing-2": 4,
-          "existing-1": 1,
-        },
-      })
-    })
-
-    expect(saveWeeklyPlanMutateAsync.mock.invocationCallOrder[0]).toBeLessThan(
-      saveDayAssignmentsMutate.mock.invocationCallOrder[0]
-    )
+    expect(saveDayAssignmentsMutate).not.toHaveBeenCalled()
 
     await waitFor(() => {
-      expect(screen.getByTestId("save-template-dialog-state")).toHaveAttribute(
-        "data-day-assignments",
-        JSON.stringify({
-          "existing-2": 4,
-          "existing-1": 1,
-        })
-      )
       expect(screen.getByTestId("save-template-dialog-state")).toHaveAttribute(
         "data-category-selection",
         JSON.stringify({
@@ -464,6 +449,7 @@ describe("MealPlanner template loading", () => {
       expect(saveWeeklyPlanMutateAsync).toHaveBeenCalledWith({
         weekDate: getWeekStartDate(new Date(), 1),
         recipeIds: ["existing-1"],
+        dayAssignments: null,
       })
     })
 
