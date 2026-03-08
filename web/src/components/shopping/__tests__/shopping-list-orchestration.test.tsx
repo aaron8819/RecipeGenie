@@ -506,9 +506,21 @@ vi.mock("@/hooks/use-shopping", () => ({
   currentConfig = makeConfig()
   currentShoppingList = makeList()
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((message, ...args) => {
+    const renderedMessage = [message, ...args]
+      .map((part) => {
+        if (typeof part === "string") return part
+        if (part instanceof Error) return part.message
+        try {
+          return String(part)
+        } catch {
+          return ""
+        }
+      })
+      .join(" ")
+
     if (
-      typeof message === "string" &&
-      (message.includes("not wrapped in act") || message.includes("Warning: An update to"))
+      renderedMessage.includes("not wrapped in act") ||
+      renderedMessage.includes("Warning: An update to")
     ) {
       return
     }
@@ -637,6 +649,18 @@ describe("ShoppingListView orchestration", () => {
 
   it("reveals quick mobile remove actions with a swipe and keeps deferred delete behavior intact", () => {
     setMobileViewport()
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes("max-width") ? false : false,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
     currentShoppingList = makeList({
       items: [makeItem("garlic", { rowId: "row-garlic-clove" })],
     })
