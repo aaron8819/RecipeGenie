@@ -124,6 +124,31 @@ test.describe('Navigation', () => {
       await expect(bottomNav).toBeVisible()
     })
 
+    test('should keep bottom navigation inside the visible viewport across tabs', async ({ page, navigateToTab }) => {
+      const tabs = ['planner', 'recipes', 'shopping', 'pantry'] as const
+
+      for (const tab of tabs) {
+        await navigateToTab(tab)
+
+        const bottomNav = page.locator('nav[aria-label="Bottom navigation"]')
+        await expect(bottomNav).toBeVisible()
+
+        const navMetrics = await bottomNav.evaluate((el) => {
+          const rect = el.getBoundingClientRect()
+          return {
+            top: rect.top,
+            bottom: rect.bottom,
+            height: rect.height,
+            viewportHeight: window.visualViewport?.height ?? window.innerHeight,
+          }
+        })
+
+        expect(navMetrics.top).toBeGreaterThanOrEqual(0)
+        expect(navMetrics.bottom).toBeLessThanOrEqual(navMetrics.viewportHeight + 1)
+        expect(navMetrics.height).toBeGreaterThanOrEqual(64)
+      }
+    })
+
     test('should display all four tabs', async ({ page }) => {
       const bottomNav = page.locator('nav.fixed.bottom-0')
       const tabs = ['Planner', 'Recipes', 'Shopping', 'Pantry']

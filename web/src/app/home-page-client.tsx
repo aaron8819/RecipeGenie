@@ -256,7 +256,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
   }
 
   return (
-    <main className="flex-1 min-h-0 flex flex-col bg-background pb-[var(--bottom-nav-height)] md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
+    <main className="flex-1 min-h-0 flex flex-col bg-background pb-[var(--bottom-nav-safe-height)] md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
       <Header
         userEmail={user?.email}
         onSignOut={handleSignOut}

@@ -20,6 +20,7 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card/95 backdrop-blur-md safe-area-bottom md:hidden"
       aria-label="Bottom navigation"
+      style={{ minHeight: "var(--bottom-nav-safe-height)" }}
     >
       <div className="flex h-16 items-center justify-around">
         {tabs.map((tab) => {

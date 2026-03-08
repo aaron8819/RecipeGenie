@@ -15,7 +15,7 @@ export default function Loading() {
         className="flex-1 px-4 space-y-3 animate-pulse"
         style={{
           paddingTop: 'calc(var(--header-height, 65px) + 1rem)',
-          paddingBottom: 'calc(var(--bottom-nav-height, 64px) + 1rem)',
+          paddingBottom: 'calc(var(--bottom-nav-safe-height, 64px) + 1rem)',
         }}
       >
         <div className="mt-2 h-7 w-40 rounded-lg bg-muted" />
@@ -28,7 +28,7 @@ export default function Loading() {
       {/* Bottom nav placeholder */}
       <div
         className="fixed bottom-0 left-0 right-0 bg-muted animate-pulse border-t border-border"
-        style={{ height: 'var(--bottom-nav-height, 64px)' }}
+        style={{ height: 'var(--bottom-nav-safe-height, 64px)' }}
       />
     </div>
   )
