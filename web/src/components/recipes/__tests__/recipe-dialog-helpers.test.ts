@@ -5,6 +5,7 @@ import {
   buildNewRecipeDialogFormValues,
   buildRecipeSubmissionData,
   clampRecipeServings,
+  isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
 } from "../recipe-dialog.defaults"
 import {
@@ -182,6 +183,52 @@ describe("recipe dialog defaults helpers", () => {
         ingredients: [{ item: "Flour", amount: null, unit: "" }],
         instructions: "",
       })
+    ).toBe(true)
+    expect(
+      isEditingRecipeDialogDirty(
+        {
+          name: "Soup",
+          category: "dinner",
+          servings: 4,
+          tags: ["easy"],
+          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          instructions: "Boil",
+          imageUrl: "https://example.com/soup.jpg",
+        },
+        {
+          name: "Soup",
+          category: "dinner",
+          servings: 4,
+          tags: ["easy"],
+          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          instructions: "Boil",
+          imageUrl: "https://example.com/soup.jpg",
+          imageReference: "https://example.com/soup.jpg",
+        }
+      )
+    ).toBe(false)
+    expect(
+      isEditingRecipeDialogDirty(
+        {
+          name: "Soup",
+          category: "dinner",
+          servings: 4,
+          tags: ["easy"],
+          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          instructions: "Boil",
+          imageUrl: "https://example.com/soup.jpg",
+        },
+        {
+          name: "Soup Deluxe",
+          category: "dinner",
+          servings: 4,
+          tags: ["easy"],
+          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          instructions: "Boil",
+          imageUrl: "https://example.com/soup.jpg",
+          imageReference: "https://example.com/soup.jpg",
+        }
+      )
     ).toBe(true)
     expect(clampRecipeServings(0)).toBe(1)
     expect(clampRecipeServings(101)).toBe(100)

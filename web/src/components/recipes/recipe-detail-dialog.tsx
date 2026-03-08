@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, Pencil, Trash2, X, History, UtensilsCrossed, ChefHat, Share2 } from "lucide-react"
+import { Heart, Pencil, Trash2, X, History, UtensilsCrossed, ChefHat, Share2, CalendarPlus, ShoppingCart, Check, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -19,7 +19,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { useToggleFavorite } from "@/hooks/use-recipes"
+import { useRecipe, useToggleFavorite } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
@@ -30,25 +30,44 @@ import { CookMode } from "./cook-mode"
 interface RecipeDetailDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  recipe: Recipe | null
+  recipeId?: string | null
+  recipe?: Recipe | null
   onEdit?: (recipe: Recipe) => void
   onDelete?: (recipe: Recipe) => void
   onShare?: (recipe: Recipe) => void
+  onAddToPlan?: (recipe: Recipe) => void
+  onAddToShoppingList?: (recipe: Recipe) => void
+  onMarkAsMade?: (recipe: Recipe) => void
   lastMade?: string | null
   timesMade?: number
+  isAddingToPlan?: boolean
+  isAddingToShoppingList?: boolean
+  isMarkingAsMade?: boolean
+  isSharing?: boolean
 }
 
 export function RecipeDetailDialog({
   open,
   onOpenChange,
-  recipe,
+  recipeId,
+  recipe: initialRecipe = null,
   onEdit,
   onDelete,
   onShare,
+  onAddToPlan,
+  onAddToShoppingList,
+  onMarkAsMade,
   lastMade,
   timesMade = 0,
+  isAddingToPlan = false,
+  isAddingToShoppingList = false,
+  isMarkingAsMade = false,
+  isSharing = false,
 }: RecipeDetailDialogProps) {
   const toggleFavorite = useToggleFavorite()
+  const resolvedRecipeId = recipeId ?? initialRecipe?.id ?? null
+  const { data: liveRecipe } = useRecipe(open ? resolvedRecipeId : null)
+  const recipe = liveRecipe ?? initialRecipe
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isCookMode, setIsCookMode] = useState(false)
   const cookModeRecipeRef = useRef<Recipe | null>(null)
@@ -206,14 +225,67 @@ export function RecipeDetailDialog({
                   <Button
                     variant="outline"
                     onClick={() => onShare(recipe)}
+                    disabled={isSharing}
                     className="flex items-center gap-2 border-2 border-slate-200 dark:border-stone-700 text-slate-700 dark:text-stone-200 font-semibold rounded-full hover:bg-slate-100 dark:hover:bg-stone-700 transition-all px-4 sm:px-6 py-2 sm:py-2.5 text-sm"
                   >
-                    <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                    {isSharing ? (
+                      <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin" />
+                    ) : (
+                      <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                    )}
                     Share
                   </Button>
                 )}
               </div>
             </div>
+            {(onAddToPlan || onAddToShoppingList || onMarkAsMade) && (
+              <div className="mt-5 flex flex-wrap items-center gap-2 sm:gap-3">
+                {onAddToPlan && (
+                  <Button
+                    variant="outline"
+                    onClick={() => onAddToPlan(recipe)}
+                    disabled={isAddingToPlan}
+                    className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
+                  >
+                    {isAddingToPlan ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CalendarPlus className="h-4 w-4" />
+                    )}
+                    Add to Plan
+                  </Button>
+                )}
+                {onAddToShoppingList && (
+                  <Button
+                    variant="outline"
+                    onClick={() => onAddToShoppingList(recipe)}
+                    disabled={isAddingToShoppingList}
+                    className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
+                  >
+                    {isAddingToShoppingList ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ShoppingCart className="h-4 w-4" />
+                    )}
+                    Add to Shopping
+                  </Button>
+                )}
+                {onMarkAsMade && (
+                  <Button
+                    onClick={() => onMarkAsMade(recipe)}
+                    disabled={isMarkingAsMade}
+                    className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold"
+                  >
+                    {isMarkingAsMade ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4" />
+                    )}
+                    Mark Made
+                  </Button>
+                )}
+              </div>
+            )}
             <hr className="mt-8 border-stone-200 dark:border-stone-800" />
           </div>
 
@@ -303,4 +375,3 @@ export function RecipeDetailDialog({
     </Dialog>
   )
 }
-

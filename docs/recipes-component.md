@@ -8,6 +8,13 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - The recipe dialog presentation extraction wave is complete.
 - `recipe-dialog.tsx` still owns form/dialog orchestration, import parsing flow, and submit sequencing.
+- `recipe-list.tsx` still owns recipe browsing orchestration, including search/filter state, mobile-vs-desktop toolbar structure, and modal coordination.
+- The recipe detail dialog is query-backed and action-complete for common follow-up actions:
+  - favorite toggle
+  - add to plan
+  - add to shopping
+  - mark made
+  - share/edit/delete
 - The recipe image storage boundary is now explicit:
   - `getRecipeImageUrl()` is a pure helper.
   - Upload/delete behavior goes through `useRecipeImageStorage()`.
@@ -19,7 +26,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/components/recipes/recipe-list.tsx` | Main recipe browsing, filtering, sorting, and dialog orchestration. |
 | `web/src/components/recipes/recipe-dialog.tsx` | Main create/edit orchestration for manual entry and imports. |
 | `web/src/components/recipes/recipe-dialog-components.tsx` | Presentation-only recipe dialog sections extracted from the main dialog. |
-| `web/src/components/recipes/recipe-detail-dialog.tsx` | Read-only recipe detail and cook-mode entry point. |
+| `web/src/components/recipes/recipe-detail-dialog.tsx` | Query-backed recipe detail, cook-mode entry point, and common follow-up actions. |
 | `web/src/components/recipes/share-recipe-dialog.tsx` | Share a recipe with another user. |
 | `web/src/components/recipes/shared-recipes-inbox.tsx` | Inbox and sent-share status views. |
 | `web/src/hooks/use-recipes.ts` | Recipe CRUD, categories, and tag operations. |
@@ -45,6 +52,11 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - OR-style multi-tag filtering is pushed to the database through the `filter_recipes_by_tags` RPC.
 - Additional category/search/favorites filtering may still be applied after the RPC result returns.
 
+### Recipe browsing UX
+
+- Recipe search currently matches recipe `name` and `category`.
+- Mobile recipes browsing intentionally separates primary browse controls from utility actions so `Shared` and `Settings` remain visible without horizontal scrolling.
+
 ### Recipe images
 
 - Upload and delete flows belong behind `useRecipeImageStorage()`.
@@ -61,6 +73,11 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Share acceptance creates a recipient-owned copy from the snapshot payload.
 - Sharing is not a live-sync relationship between users.
 
+### Dialog discard protection
+
+- Unsaved-change discard confirmation applies to both create mode and edit mode.
+- Edit-mode dirty detection compares current form values against the loaded recipe snapshot rather than using create-mode heuristics.
+
 ## Intentionally Not Being Refactored Further
 
 - The remaining size of `recipe-dialog.tsx` is mostly justified orchestration.
@@ -75,4 +92,4 @@ npm run test -- --run src/lib/__tests__/recipe-parser.test.ts
 npx playwright test recipes.spec.ts --project=chromium
 ```
 
-Last updated: 2026-03-07
+Last updated: 2026-03-08

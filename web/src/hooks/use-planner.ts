@@ -80,6 +80,86 @@ export function getRecipeHistoryStatsQueryKey() {
   return [...HISTORY_STATS_KEY]
 }
 
+function buildHistoryStats(history: RecipeHistory[]): RecipeHistoryStatsRow[] {
+  const stats = new Map<string, { times: number; lastMade: string }>()
+
+  for (const entry of history) {
+    const existing = stats.get(entry.recipe_id)
+    if (!existing) {
+      stats.set(entry.recipe_id, { times: 1, lastMade: entry.date_made })
+      continue
+    }
+
+    existing.times += 1
+    if (new Date(entry.date_made).getTime() > new Date(existing.lastMade).getTime()) {
+      existing.lastMade = entry.date_made
+    }
+  }
+
+  return Array.from(stats.entries()).map(([recipe_id, value]) => ({
+    recipe_id,
+    times_made: value.times,
+    last_made: value.lastMade,
+  }))
+}
+
+function applyMarkedHistoryStats(
+  previousStats: RecipeHistoryStatsRow[] | undefined,
+  recipeId: string,
+  dateMade: string
+): RecipeHistoryStatsRow[] {
+  const stats = [...(previousStats || [])]
+  const index = stats.findIndex((entry) => entry.recipe_id === recipeId)
+
+  if (index === -1) {
+    stats.unshift({
+      recipe_id: recipeId,
+      times_made: 1,
+      last_made: dateMade,
+    })
+    return stats
+  }
+
+  const existing = stats[index]
+  stats[index] = {
+    ...existing,
+    times_made: existing.times_made + 1,
+    last_made:
+      new Date(dateMade).getTime() > new Date(existing.last_made).getTime()
+        ? dateMade
+        : existing.last_made,
+  }
+  return stats
+}
+
+function applyUnmarkedHistoryStats(
+  previousStats: RecipeHistoryStatsRow[] | undefined,
+  nextHistory: RecipeHistory[] | undefined,
+  recipeId: string
+): RecipeHistoryStatsRow[] | undefined {
+  if (nextHistory) {
+    return buildHistoryStats(nextHistory)
+  }
+
+  if (!previousStats) return previousStats
+
+  const stats = [...previousStats]
+  const index = stats.findIndex((entry) => entry.recipe_id === recipeId)
+  if (index === -1) return stats
+
+  const existing = stats[index]
+  if (existing.times_made <= 1) {
+    stats.splice(index, 1)
+    return stats
+  }
+
+  stats[index] = {
+    ...existing,
+    times_made: existing.times_made - 1,
+  }
+  return stats
+}
+
 /**
  * Hook to fetch weekly plan for a specific week
  */
@@ -673,6 +753,8 @@ export function useMarkRecipeAsMade() {
 
       // Snapshot previous value for rollback
       const previousHistory = queryClient.getQueryData<RecipeHistory[]>([...HISTORY_KEY])
+      const previousStats = queryClient.getQueryData<RecipeHistoryStatsRow[]>([...HISTORY_STATS_KEY])
+      const dateMade = new Date().toISOString()
 
       // Optimistically update cache
       queryClient.setQueryData<RecipeHistory[]>(
@@ -680,23 +762,32 @@ export function useMarkRecipeAsMade() {
         (old) => {
           const existing = old || []
           return [
-            { id: Date.now(), user_id: user?.id || "", recipe_id: recipeId, date_made: new Date().toISOString() },
+            { id: Date.now(), user_id: user?.id || "", recipe_id: recipeId, date_made: dateMade },
             ...existing
           ]
         }
       )
 
-      return { previousHistory }
+      queryClient.setQueryData<RecipeHistoryStatsRow[]>(
+        [...HISTORY_STATS_KEY],
+        applyMarkedHistoryStats(previousStats, recipeId, dateMade)
+      )
+
+      return { previousHistory, previousStats }
     },
     onError: (err, recipeId, context) => {
       // Rollback on error
       if (context?.previousHistory !== undefined) {
         queryClient.setQueryData([...HISTORY_KEY], context.previousHistory)
       }
+      if (context?.previousStats !== undefined) {
+        queryClient.setQueryData([...HISTORY_STATS_KEY], context.previousStats)
+      }
     },
     onSettled: () => {
       // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
+      queryClient.invalidateQueries({ queryKey: HISTORY_STATS_KEY })
     },
   })
 }
@@ -746,8 +837,10 @@ export function useUnmarkRecipeAsMade() {
 
       // Snapshot previous value for rollback
       const previousHistory = queryClient.getQueryData<RecipeHistory[]>([...HISTORY_KEY])
+      const previousStats = queryClient.getQueryData<RecipeHistoryStatsRow[]>([...HISTORY_STATS_KEY])
 
       // Optimistically update cache - remove most recent entry for this recipe
+      let nextHistory: RecipeHistory[] | undefined
       queryClient.setQueryData<RecipeHistory[]>(
         [...HISTORY_KEY],
         (old) => {
@@ -756,23 +849,34 @@ export function useUnmarkRecipeAsMade() {
           // History is sorted by date_made DESC, so first match is most recent
           const index = existing.findIndex(entry => entry.recipe_id === recipeId)
           if (index !== -1) {
-            return [...existing.slice(0, index), ...existing.slice(index + 1)]
+            nextHistory = [...existing.slice(0, index), ...existing.slice(index + 1)]
+            return nextHistory
           }
+          nextHistory = existing
           return existing
         }
       )
 
-      return { previousHistory }
+      queryClient.setQueryData<RecipeHistoryStatsRow[] | undefined>(
+        [...HISTORY_STATS_KEY],
+        applyUnmarkedHistoryStats(previousStats, nextHistory, recipeId)
+      )
+
+      return { previousHistory, previousStats }
     },
     onError: (err, recipeId, context) => {
       // Rollback on error
       if (context?.previousHistory !== undefined) {
         queryClient.setQueryData([...HISTORY_KEY], context.previousHistory)
       }
+      if (context?.previousStats !== undefined) {
+        queryClient.setQueryData([...HISTORY_STATS_KEY], context.previousStats)
+      }
     },
     onSettled: () => {
       // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
+      queryClient.invalidateQueries({ queryKey: HISTORY_STATS_KEY })
     },
   })
 }

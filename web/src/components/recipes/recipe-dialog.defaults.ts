@@ -99,6 +99,29 @@ export function isNewRecipeDialogDirty(values: {
   )
 }
 
+export function isEditingRecipeDialogDirty(
+  initialValues: RecipeDialogFormValues,
+  currentValues: RecipeDialogFormValues & { imageReference: string | null }
+): boolean {
+  return JSON.stringify({
+    name: initialValues.name,
+    category: initialValues.category,
+    servings: initialValues.servings,
+    tags: initialValues.tags,
+    ingredients: initialValues.ingredients,
+    instructions: initialValues.instructions,
+    imageReference: initialValues.imageUrl,
+  }) !== JSON.stringify({
+    name: currentValues.name,
+    category: currentValues.category,
+    servings: currentValues.servings,
+    tags: currentValues.tags,
+    ingredients: currentValues.ingredients,
+    instructions: currentValues.instructions,
+    imageReference: currentValues.imageReference,
+  })
+}
+
 export function clampRecipeServings(value: number): number {
   return Math.min(100, Math.max(1, value))
 }

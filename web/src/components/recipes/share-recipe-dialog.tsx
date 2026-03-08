@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import type { Recipe } from '@/types/database';
+import { useRecipe } from '@/hooks/use-recipes';
 import { useCreateRecipeShare } from '@/hooks/use-recipe-shares';
 import { getErrorMessage } from '@/lib/utils';
 
 interface ShareRecipeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  recipe: Recipe | null;
+  recipeId: string | null;
   onShared?: () => void;
 }
 
@@ -22,10 +22,11 @@ const MESSAGE_LIMIT = 300;
 export function ShareRecipeDialog({
   open,
   onOpenChange,
-  recipe,
+  recipeId,
   onShared,
 }: ShareRecipeDialogProps) {
   const createShare = useCreateRecipeShare();
+  const { data: recipe } = useRecipe(open ? recipeId : null);
   const [recipientEmail, setRecipientEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);

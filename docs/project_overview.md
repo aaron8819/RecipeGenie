@@ -61,6 +61,8 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Text and URL parsing logic lives in `web/src/lib/recipe-parser.ts` and `web/src/lib/recipe-url-parser.ts`.
 - Recipe image upload/delete flows go through `web/src/hooks/use-recipe-image-storage.ts`.
 - `getRecipeImageUrl()` in `web/src/lib/supabase/storage.ts` is a pure URL helper and can be used from components/selectors.
+- Recipe list orchestration includes current search/filter UX, responsive toolbar behavior, and Recipes modal coordination.
+- Recipe detail is query-backed and now owns common follow-up actions such as add-to-plan, add-to-shopping, and mark-made entry points.
 
 ### Shopping
 
@@ -110,4 +112,4 @@ The recent architecture cleanup wave is complete for now.
 - Update the relevant domain doc in `docs/` when a domain workflow changes materially.
 - Record durable architecture decisions in [`decisions.md`](decisions.md).
 
-Last updated: 2026-03-07
+Last updated: 2026-03-08

@@ -56,6 +56,27 @@ function updateRecipeQuery(
   return old
 }
 
+function findRecipeInCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string
+): Recipe | undefined {
+  const queries = queryClient.getQueriesData<Recipe[] | Recipe | null>({
+    queryKey: RECIPES_KEY,
+  })
+
+  for (const [, data] of queries) {
+    if (Array.isArray(data)) {
+      const match = data.find((recipe) => recipe.id === id)
+      if (match) return match
+    } else if (data && typeof data === "object" && "id" in data) {
+      const recipe = data as Recipe
+      if (recipe.id === id) return recipe
+    }
+  }
+
+  return undefined
+}
+
 /**
  * Hook to fetch all recipes with optional filtering
  */
@@ -140,6 +161,7 @@ export function useRecipes(options?: {
  */
 export function useRecipe(id: string | null) {
   const { user } = useAuthContext()
+  const queryClient = useQueryClient()
 
   return useQuery({
     queryKey: [...RECIPES_KEY, id],
@@ -157,7 +179,9 @@ export function useRecipe(id: string | null) {
       if (error) throw error
       return data as Recipe
     },
+    initialData: id ? findRecipeInCache(queryClient, id) : undefined,
     enabled: !!id && !!user,
+    staleTime: 30 * 1000,
   })
 }
 
@@ -199,7 +223,7 @@ export function useCreateRecipe() {
       const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
 
       // Create optimistic recipe
-      const id = recipe.name.toLowerCase().replace(/\s+/g, "-")
+      const id = sanitizeRecipeNameForStorage(recipe.name)
       const now = new Date().toISOString()
       const optimisticRecipe: Recipe = {
         id,

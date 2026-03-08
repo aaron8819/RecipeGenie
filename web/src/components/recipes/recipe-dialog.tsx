@@ -28,7 +28,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs"
-import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts } from "@/hooks/use-recipes"
+import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts, useRecipe } from "@/hooks/use-recipes"
 import { useRecipeImageStorage } from "@/hooks/use-recipe-image-storage"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
@@ -50,6 +50,7 @@ import {
   buildNewRecipeDialogFormValues,
   buildRecipeSubmissionData,
   hasValidRecipeIngredients,
+  isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
 } from "./recipe-dialog.defaults"
 import {
@@ -75,6 +76,7 @@ interface RecipeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   recipe?: Recipe
+  recipeId?: string
   categories: string[]
   onRecipeCreated?: (recipe: Recipe) => void
 }
@@ -84,10 +86,14 @@ export function RecipeDialog({
   open,
   onOpenChange,
   recipe,
+  recipeId,
   categories,
   onRecipeCreated,
 }: RecipeDialogProps) {
-  const isEditing = !!recipe
+  const resolvedRecipeId = recipeId ?? recipe?.id ?? null
+  const { data: liveRecipe } = useRecipe(open && !!resolvedRecipeId ? resolvedRecipeId : null)
+  const editingRecipe = liveRecipe ?? recipe
+  const isEditing = !!resolvedRecipeId
   const createRecipe = useCreateRecipe()
   const updateRecipe = useUpdateRecipe()
   const { uploadImage, deleteImage } = useRecipeImageStorage()
@@ -134,8 +140,8 @@ export function RecipeDialog({
 
   // Reset form when dialog opens/closes or recipe changes
   useEffect(() => {
-    if (open && recipe) {
-      const formValues = buildEditingRecipeDialogFormValues(recipe)
+    if (open && editingRecipe) {
+      const formValues = buildEditingRecipeDialogFormValues(editingRecipe)
       setName(formValues.name)
       setCategory(formValues.category)
       setServings(formValues.servings)
@@ -151,7 +157,7 @@ export function RecipeDialog({
       setParseError(null)
       setImportStep('input')
       setParsedPreview(null)
-    } else if (open && !recipe) {
+    } else if (open && !isEditing) {
       const formValues = buildNewRecipeDialogFormValues(categories)
       setName(formValues.name)
       setCategory(formValues.category)
@@ -169,7 +175,7 @@ export function RecipeDialog({
       setImportStep('input')
       setParsedPreview(null)
     }
-  }, [open, recipe, categories])
+  }, [open, editingRecipe, isEditing, categories])
 
   const handleAddIngredient = () => {
     setIngredients([...ingredients, { item: "", amount: null, unit: "" }])
@@ -333,8 +339,8 @@ export function RecipeDialog({
       if (imageFile) {
         setIsUploadingImage(true)
         try {
-          const recipeId = isEditing ? recipe.id : sanitizeRecipeNameForStorage(name)
-          finalImageUrl = await uploadImage(recipeId, imageFile)
+          const nextRecipeId = editingRecipe?.id ?? sanitizeRecipeNameForStorage(name)
+          finalImageUrl = await uploadImage(nextRecipeId, imageFile)
         } catch (error) {
           console.error("Failed to upload image:", error)
           undoToast.show({ message: "Failed to upload image. Recipe will be saved without image.", duration: 5000 })
@@ -345,9 +351,9 @@ export function RecipeDialog({
       }
 
       // Delete old image if it was removed
-      if (isEditing && recipe.image_url && !imageFile && !imageUrl) {
+      if (editingRecipe?.image_url && !imageFile && !imageUrl) {
         try {
-          await deleteImage(recipe.image_url)
+          await deleteImage(editingRecipe.image_url)
         } catch (error) {
           console.error("Failed to delete old image:", error)
           // Continue anyway - image deletion failure shouldn't block recipe save
@@ -366,7 +372,7 @@ export function RecipeDialog({
 
       if (isEditing) {
         await updateRecipe.mutateAsync({
-          id: recipe.id,
+          id: editingRecipe!.id,
           updates: recipeData,
         })
       } else {
@@ -388,11 +394,25 @@ export function RecipeDialog({
   const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
 
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
-  const isDirty = !isEditing && isNewRecipeDialogDirty({
-    name,
-    ingredients,
-    instructions,
-  })
+  const initialEditingFormValues = editingRecipe
+    ? buildEditingRecipeDialogFormValues(editingRecipe)
+    : null
+  const isDirty = isEditing
+    ? !!initialEditingFormValues && isEditingRecipeDialogDirty(initialEditingFormValues, {
+        name,
+        category,
+        servings,
+        tags,
+        ingredients,
+        instructions,
+        imageUrl,
+        imageReference: imagePreview ?? imageUrl,
+      })
+    : isNewRecipeDialogDirty({
+        name,
+        ingredients,
+        instructions,
+      })
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isDirty) {
       setShowDiscardConfirm(true)
@@ -586,8 +606,8 @@ export function RecipeDialog({
             isEditing={isEditing}
             isSubmitting={isSubmitting}
             isUploadingImage={isUploadingImage}
-            canSubmit={!!name.trim() && !!category && hasValidIngredients && !isSubmitting}
-            onCancel={() => onOpenChange(false)}
+            canSubmit={!!name.trim() && !!category && hasValidIngredients && !isSubmitting && (!isEditing || !!editingRecipe)}
+            onCancel={() => handleOpenChange(false)}
             onSubmit={handleSubmit}
           />
           {!hasValidIngredients && !isSubmitting && (

@@ -17,13 +17,13 @@ import {
   getWeekStartDate,
   navigateWeek,
 } from "@/hooks/use-planner"
-import type { Recipe } from "@/types/database"
+import { useRecipe } from "@/hooks/use-recipes"
 import { cn } from "@/lib/utils"
 
 interface AddToPlanDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  recipe: Recipe | null
+  recipeId: string | null
 }
 
 type WeekOption = "this" | "next" | "custom"
@@ -31,10 +31,11 @@ type WeekOption = "this" | "next" | "custom"
 export function AddToPlanDialog({
   open,
   onOpenChange,
-  recipe,
+  recipeId,
 }: AddToPlanDialogProps) {
   const { data: config } = useUserConfig()
   const addToPlan = useAddRecipeToPlan()
+  const { data: recipe } = useRecipe(open ? recipeId : null)
 
   const [selectedOption, setSelectedOption] = useState<WeekOption>("this")
   const [customWeekDate, setCustomWeekDate] = useState<string>("")

@@ -68,6 +68,9 @@ vi.mock("@/hooks/use-recipes", () => ({
   useTagsWithCounts: () => ({
     data: [],
   }),
+  useRecipe: () => ({
+    data: undefined,
+  }),
 }))
 
 vi.mock("@/hooks/use-recipe-image-storage", () => ({
@@ -479,5 +482,27 @@ describe("RecipeDialog image orchestration", () => {
     expect(deleteImageMock).toHaveBeenCalledWith("https://cdn.example.com/existing.jpg")
     expect(undoToastShow).not.toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("prompts before discarding unsaved edit changes and keeps the dialog open until confirmed", async () => {
+    const onOpenChange = vi.fn()
+    const recipe = recipeFixture({
+      id: "edit-recipe",
+      name: "Edit Soup",
+    })
+
+    renderEditDialog(recipe, onOpenChange)
+
+    fireEvent.change(screen.getByLabelText("Recipe Name"), { target: { value: "Edited Soup" } })
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+
+    expect(screen.getByText("Discard unsaved changes?")).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }))
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
+    })
   })
 })
