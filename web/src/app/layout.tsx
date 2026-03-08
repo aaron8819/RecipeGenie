@@ -45,17 +45,26 @@ export default async function RootLayout({
   // Next.js reads the 'x-nonce' header from middleware and applies it to inline scripts.
   await headers()
 
-  // Read session server-side so AuthProvider can initialise synchronously on the client,
-  // eliminating the client-side getSession() round-trip that causes the loading spinner
-  // to appear on every first load. getSession() reads from the cookie — no network call.
+  // Read the cookie session for fast bootstrap, then verify the user server-side.
+  // Supabase warns against trusting session.user from getSession() in server code.
   const supabase = await createClient()
   const { data: { session: initialSession } } = await supabase.auth.getSession()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  const verifiedInitialSession =
+    initialSession && user
+      ? {
+          ...initialSession,
+          user,
+        }
+      : null
 
   return (
     <html lang="en" className={cn(outfit.variable, playfair.variable)}>
       <body className={cn(outfit.className, "min-h-0 flex flex-col overflow-hidden")}>
         <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-          <Providers initialSession={initialSession}>{children}</Providers>
+          <Providers initialSession={verifiedInitialSession}>{children}</Providers>
         </div>
       </body>
     </html>

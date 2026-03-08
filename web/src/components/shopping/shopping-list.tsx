@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
-import { Plus, Trash2, Package, Ban, Check, CheckCheck, Copy, GripVertical, X, Settings, Loader2, ChevronUp, Leaf, Sparkles, MoreVertical } from "lucide-react"
+import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, ChevronUp, Sparkles, MoreVertical } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -14,7 +14,6 @@ import {
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
-  useDndMonitor,
 } from "@dnd-kit/core"
 import {
   SortableContext,
@@ -26,6 +25,12 @@ import { CSS } from "@dnd-kit/utilities"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   useShoppingList,
   useAddShoppingItem,
@@ -43,7 +48,7 @@ import {
   useAddToPantryAndRemove,
   useShoppingPendingActions,
 } from "@/hooks/use-shopping"
-import { SHOPPING_CATEGORIES, getCategoryByKey } from "@/lib/shopping-categories"
+import { getCategoryByKey } from "@/lib/shopping-categories"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { ShoppingItem, Recipe } from "@/types/database"
 import { toFraction, cn } from "@/lib/utils"
@@ -72,9 +77,12 @@ import {
   getRecipeColorIndex,
   ShoppingCategorySection,
   ShoppingItemRow,
+  ShoppingRestoreChip,
   ShoppingStateSection,
   SourceTag,
 } from "./shopping-list-components"
+
+type ShoppingMode = "shop" | "manage"
 
 function RecipeTag({ 
   recipeName, 
@@ -119,10 +127,12 @@ function RecipeTag({
   )
 }
 
-// Swipeable item component with swipe-to-delete
+// Swipeable item component with mobile quick correction actions
 function SwipeableItem({
   item,
   isDesktop,
+  showDragHandle,
+  sourceDisplay,
   onCheckOff,
   onRemove,
   onAddToPantry,
@@ -137,6 +147,8 @@ function SwipeableItem({
 }: {
   item: ShoppingItem
   isDesktop: boolean
+  showDragHandle?: boolean
+  sourceDisplay?: "tags" | "summary" | "none"
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
@@ -154,13 +166,20 @@ function SwipeableItem({
   const touchStartX = useRef<number | null>(null)
   const touchStartY = useRef<number | null>(null)
   const touchStartTime = useRef<number | null>(null)
+  const touchStartOffset = useRef(0)
   const itemRef = useRef<HTMLDivElement>(null)
-  const SWIPE_THRESHOLD = 100
+  const ACTION_REVEAL_WIDTH = 116
+  const SWIPE_THRESHOLD = 72
   const MIN_SWIPE_DISTANCE = 20
   const MAX_VERTICAL_DEVIATION = 30
 
-  const handleTouchStart = () => {
-    // Swipe disabled: mobile uses more_vert (shoppinglist_mobile_redesign), desktop uses hover
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.innerWidth >= 768) return
+
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+    touchStartTime.current = Date.now()
+    touchStartOffset.current = swipeOffset
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -186,11 +205,12 @@ function SwipeableItem({
         setIsSwiping(true)
       }
 
-      if (deltaX > 0) {
-        const maxSwipe = 120
-        setSwipeOffset(Math.min(deltaX, maxSwipe))
-        e.preventDefault()
-      }
+      const nextOffset = Math.min(
+        Math.max(touchStartOffset.current + deltaX, 0),
+        ACTION_REVEAL_WIDTH
+      )
+      setSwipeOffset(nextOffset)
+      e.preventDefault()
     } else if (isSwiping && deltaY > absDeltaX) {
       setIsSwiping(false)
       setSwipeOffset(0)
@@ -218,7 +238,7 @@ function SwipeableItem({
     }
 
     if (swipeOffset >= SWIPE_THRESHOLD) {
-      setSwipeOffset(160)
+      setSwipeOffset(ACTION_REVEAL_WIDTH)
     } else {
       setSwipeOffset(0)
     }
@@ -253,16 +273,20 @@ function SwipeableItem({
   return (
     <div
       ref={itemRef}
+      data-testid={`shopping-row-${item.rowId || item.item}`}
       className="relative overflow-hidden"
       style={{ touchAction: 'pan-y pinch-zoom' }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <div className="absolute right-0 top-0 bottom-0 hidden"
+      <div
+        className={cn(
+          "absolute right-0 top-0 bottom-0 items-center gap-2 pr-4 md:hidden",
+          swipeOffset > 0 ? "flex" : "hidden"
+        )}
         style={{
-          transform: `translateX(${swipeOffset > 0 ? 0 : 100}%)`,
-          width: '160px',
+          width: `${ACTION_REVEAL_WIDTH}px`,
           willChange: isSwiping ? 'transform' : 'auto',
         }}
       >
@@ -275,7 +299,7 @@ function SwipeableItem({
           }}
           disabled={isAddingToPantry}
           className="h-11 w-11 rounded-full bg-sage-500/90 flex items-center justify-center text-white disabled:opacity-50"
-          aria-label="Add to pantry"
+          aria-label="Quick add to pantry"
         >
           <Package className="h-5 w-5" />
         </button>
@@ -284,7 +308,7 @@ function SwipeableItem({
           onClick={handleDeleteClick}
           disabled={isRemoving}
           className="h-11 w-11 rounded-full bg-destructive/90 flex items-center justify-center text-white disabled:opacity-50"
-          aria-label="Delete item"
+          aria-label="Quick remove item"
         >
           <Trash2 className="h-5 w-5" />
         </button>
@@ -299,6 +323,8 @@ function SwipeableItem({
         <ShoppingItemRow
           item={item}
           isDesktop={isDesktop}
+          showDragHandle={showDragHandle}
+          sourceDisplay={sourceDisplay}
           onCheckOff={onCheckOff}
           onRemove={onRemove}
           onAddToPantry={onAddToPantry}
@@ -319,6 +345,8 @@ function SwipeableItem({
 const SortableShoppingItem = memo(function SortableShoppingItem({
   item,
   isDesktop,
+  showDragHandle,
+  sourceDisplay,
   onCheckOff,
   onRemove,
   onAddToPantry,
@@ -330,6 +358,8 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
 }: {
   item: ShoppingItem
   isDesktop: boolean
+  showDragHandle: boolean
+  sourceDisplay?: "tags" | "summary" | "none"
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
@@ -365,6 +395,8 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
         isRemoving={isRemoving}
         isAddingToPantry={isAddingToPantry}
         recipeColorMap={recipeColorMap}
+        showDragHandle={showDragHandle}
+        sourceDisplay={sourceDisplay}
         dragHandleProps={{ ...attributes, ...listeners }}
         dragStyle={dragStyle}
         isDragging={isDragging}
@@ -374,6 +406,66 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   )
 }, (prevProps, nextProps) => {
   // Custom comparison function for memo
+  return (
+    prevProps.item.item === nextProps.item.item &&
+    prevProps.item.rowId === nextProps.item.rowId &&
+    prevProps.item.amount === nextProps.item.amount &&
+    prevProps.item.unit === nextProps.item.unit &&
+    prevProps.item.categoryKey === nextProps.item.categoryKey &&
+    prevProps.item.checked === nextProps.item.checked &&
+    prevProps.isCheckingOff === nextProps.isCheckingOff &&
+    prevProps.isRemoving === nextProps.isRemoving &&
+    prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
+    prevProps.isDesktop === nextProps.isDesktop &&
+    prevProps.showDragHandle === nextProps.showDragHandle &&
+    prevProps.showSwipeHint === nextProps.showSwipeHint &&
+    JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
+  )
+})
+
+const StaticShoppingItem = memo(function StaticShoppingItem({
+  item,
+  isDesktop,
+  sourceDisplay,
+  onCheckOff,
+  onRemove,
+  onAddToPantry,
+  isCheckingOff,
+  isRemoving,
+  isAddingToPantry,
+  recipeColorMap,
+  showSwipeHint,
+}: {
+  item: ShoppingItem
+  isDesktop: boolean
+  sourceDisplay?: "tags" | "summary" | "none"
+  onCheckOff: () => void
+  onRemove: () => void
+  onAddToPantry: () => void
+  isCheckingOff: boolean
+  isRemoving: boolean
+  isAddingToPantry: boolean
+  recipeColorMap: Map<string, number>
+  showSwipeHint?: boolean
+}) {
+  return (
+    <li>
+      <SwipeableItem
+        item={item}
+        isDesktop={isDesktop}
+        sourceDisplay={sourceDisplay}
+        onCheckOff={onCheckOff}
+        onRemove={onRemove}
+        onAddToPantry={onAddToPantry}
+        isCheckingOff={isCheckingOff}
+        isRemoving={isRemoving}
+        isAddingToPantry={isAddingToPantry}
+        recipeColorMap={recipeColorMap}
+        showSwipeHint={showSwipeHint}
+      />
+    </li>
+  )
+}, (prevProps, nextProps) => {
   return (
     prevProps.item.item === nextProps.item.item &&
     prevProps.item.rowId === nextProps.item.rowId &&
@@ -435,7 +527,7 @@ function DragOverlayItem({
     </div>
   )
 }
-// Swipe hint disabled: mobile uses more_vert menu per shoppinglist_mobile_redesign (no swipe)
+// Swipe hint stays off by default to preserve a clean row layout at rest.
 function useSwipeHint() {
   return { showSwipeHint: false }
 }
@@ -450,6 +542,7 @@ export function ShoppingListView() {
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [shoppingMode, setShoppingMode] = useState<ShoppingMode>("shop")
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
   const [manuallyExpandedCategories, setManuallyExpandedCategories] = useState<Set<string>>(new Set())
   const [manuallyCollapsedCategories, setManuallyCollapsedCategories] = useState<Set<string>>(new Set())
@@ -460,9 +553,10 @@ export function ShoppingListView() {
   // Tracks items currently being added to prevent duplicate concurrent submissions
   const [activeAdditions, setActiveAdditions] = useState<Set<string>>(new Set())
   const { showSwipeHint } = useSwipeHint()
+  const isManageMode = shoppingMode === "manage"
 
   // Mobile UX improvements - collapsible sections and scroll-to-top FAB
-  const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(false)
+  const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(true)
   const [pantryCollapsed, setPantryCollapsed] = useState(true) // Default: collapsed
   const [excludedCollapsed, setExcludedCollapsed] = useState(true) // Default: collapsed
   const [showScrollToTop, setShowScrollToTop] = useState(false)
@@ -797,6 +891,14 @@ export function ShoppingListView() {
     return buildCategoryViewModel(groupedItems, orderedCategories)
   }, [groupedItems, orderedCategories])
 
+  const displayedCategoryViewModels = useMemo(() => {
+    if (isManageMode) return categoryViewModels
+
+    const activeCategories = categoryViewModels.filter((category) => category.uncheckedCount > 0)
+    const completedCategories = categoryViewModels.filter((category) => category.uncheckedCount === 0)
+    return [...activeCategories, ...completedCategories]
+  }, [categoryViewModels, isManageMode])
+
   // Check if all items are checked
   const allItemsChecked = useMemo(() => {
     return deriveCheckedPartition(filteredItems).allChecked
@@ -972,13 +1074,25 @@ export function ShoppingListView() {
     }
   }
 
+  const handleEnterManageMode = useCallback(() => {
+    setShoppingMode("manage")
+  }, [])
+
+  const handleExitManageMode = useCallback(() => {
+    setShoppingMode("shop")
+    setActiveItem(null)
+    setDragOverCategory(null)
+  }, [])
+
   const handleDragStart = (event: DragStartEvent) => {
+    if (!isManageMode) return
     const { active } = event
     const activeId = String(active.id)
     setActiveItem(filteredItems.find((item) => item.rowId === activeId) || null)
   }
 
   const handleDragOver = (event: DragOverEvent) => {
+    if (!isManageMode) return
     const { over } = event
     if (!over || !filteredItems) {
       setDragOverCategory(null)
@@ -989,6 +1103,7 @@ export function ShoppingListView() {
   }
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (!isManageMode) return
     const { active, over } = event
     setActiveItem(null)
     setDragOverCategory(null)
@@ -1035,6 +1150,93 @@ export function ShoppingListView() {
     }
   }
 
+  const renderOrganizeMenu = (triggerClassName?: string) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={triggerClassName}
+          aria-label="Organize"
+          aria-pressed={isManageMode}
+        >
+          <Sparkles className="h-5 w-5" />
+          <span className={cn(triggerClassName?.includes("gap-2") ? "" : "sr-only")}>
+            Organize
+          </span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem onClick={isManageMode ? handleExitManageMode : handleEnterManageMode}>
+          <GripVertical className="mr-2 h-4 w-4" />
+          {isManageMode ? "Exit Manage Mode" : "Enter Manage Mode"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setShowSettings(true)}>
+          <Sparkles className="mr-2 h-4 w-4" />
+          Shopping settings
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
+  const shoppingListContent = (
+    <>
+      {displayedCategoryViewModels.map((categoryData, categoryIndex) => {
+        const items = categoryData.items
+        const isDragTarget =
+          isManageMode &&
+          activeItem &&
+          dragOverCategory === categoryData.key &&
+          activeItem.categoryKey !== categoryData.key
+
+        const isCollapsed = collapsedCategories.has(categoryData.key)
+
+        return (
+          <ShoppingCategorySection
+            key={categoryData.key}
+            categoryData={categoryData}
+            itemCount={items.length}
+            isCollapsed={isCollapsed}
+            isDragTarget={!!isDragTarget}
+            isBulkCheckOffPending={bulkCheckOff.isPending}
+            onToggleCategory={() => toggleCategory(categoryData.key)}
+            onBulkCheckOff={() => handleBulkCheckOff(items, categoryData.name)}
+            compact={!isManageMode}
+          >
+            <ul className="divide-y divide-stone-100" style={{ contain: "layout style paint" }}>
+              {items.map((item, index) => {
+                const showHintForThisItem = categoryIndex === 0 && index === 0 && showSwipeHint
+                const reactKey =
+                  item.rowId ||
+                  `${categoryData.key}-${item.item}-${item.unit || ""}-${index}`
+                const sourceDisplay: "tags" | "summary" = isManageMode ? "tags" : "summary"
+
+                const sharedProps = {
+                  item,
+                  isDesktop,
+                  onCheckOff: () => handleCheckOff(item),
+                  onRemove: () => handleRemoveItem(item),
+                  onAddToPantry: () => handleAddToPantry(item),
+                  isCheckingOff: pendingCheckItems.has(item.rowId || item.item.toLowerCase().trim()),
+                  isRemoving: false,
+                  isAddingToPantry: pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim()),
+                  recipeColorMap,
+                  sourceDisplay,
+                  showSwipeHint: showHintForThisItem,
+                }
+
+                if (isManageMode) {
+                  return <SortableShoppingItem key={reactKey} {...sharedProps} showDragHandle={true} />
+                }
+
+                return <StaticShoppingItem key={reactKey} {...sharedProps} />
+              })}
+            </ul>
+          </ShoppingCategorySection>
+        )
+      })}
+    </>
+  )
+
   return (
     <>
     <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
@@ -1063,14 +1265,7 @@ export function ShoppingListView() {
       <div className={cn("flex items-center justify-between mb-4", isDesktop && "hidden")}>
         <h1 className="font-display text-2xl font-bold text-foreground">Shopping List</h1>
         <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="p-3 text-slate-500 hover:text-primary transition-colors rounded-lg"
-            aria-label="Organize"
-          >
-            <Sparkles className="h-5 w-5" />
-          </button>
+          {renderOrganizeMenu("p-3 text-slate-500 hover:text-primary transition-colors rounded-lg")}
           <button
             type="button"
             onClick={handleClearListWithUndo}
@@ -1091,14 +1286,7 @@ export function ShoppingListView() {
             <p className="text-muted-foreground">Plan your farm-to-table meals for the week.</p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            <Button
-              variant="outline"
-              onClick={() => setShowSettings(true)}
-              className="flex items-center gap-2 border-stone-200 bg-white hover:bg-stone-50 hover:text-foreground rounded-lg px-4 py-2 text-sm font-medium"
-            >
-              <Sparkles className="h-4 w-4" />
-              Organize
-            </Button>
+            {renderOrganizeMenu("flex items-center gap-2 border border-stone-200 bg-white hover:bg-stone-50 hover:text-foreground rounded-lg px-4 py-2 text-sm font-medium")}
             <Button
               variant="outline"
               onClick={handleCopyList}
@@ -1154,6 +1342,26 @@ export function ShoppingListView() {
         </div>
       ) : (
         <div className="relative">
+          {isManageMode ? (
+            <Card className="mb-4 border-amber-200 bg-amber-50/80 shadow-sm">
+              <CardContent className="flex items-start justify-between gap-3 px-4 py-3">
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Manage Mode</p>
+                  <p className="text-xs text-amber-800">
+                    Drag items to reorder them or move them between categories. Tap Done to return to shopping.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExitManageMode}
+                  className="border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+                >
+                  Done
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
           {/* Subtle loading indicator for background refetch */}
           {isFetching && !isLoading && (
             <div className="absolute top-0 right-0 z-10 p-2">
@@ -1163,132 +1371,83 @@ export function ShoppingListView() {
             </div>
           )}
           <div
-            className="space-y-4"
+            className="space-y-3"
             style={{
               WebkitOverflowScrolling: 'touch',
               overscrollBehavior: 'contain',
             }}
           >
-            {/* Recipes in list — Collapsible on mobile, always expanded on desktop */}
+            {/* Recipes in list — collapsed by default to keep active shopping rows near the top */}
             {uniqueRecipes.length > 0 && (
-              <ShoppingStateSection
-                title="Recipes in list"
-                count={uniqueRecipes.length}
-                isDesktop={isDesktop}
-                isCollapsed={recipeSectionCollapsed}
-                onToggle={toggleRecipeSection}
-                expandLabel="Expand recipes list"
-                collapseLabel="Collapse recipes list"
-                mobileCountClassName="bg-accent-green/20 text-primary"
-                mobileContent={
-                  <div className="flex flex-wrap gap-2">
-                    {uniqueRecipes.map((recipeName) => (
-                      <RecipeTag
-                        key={recipeName}
-                        recipeName={recipeName}
-                        onRemove={() => handleRemoveRecipeItems(recipeName)}
-                        onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
-                        isRemoving={false}
-                        colorIndex={recipeColorMap.get(recipeName)}
-                      />
-                    ))}
+              <Card className="overflow-hidden rounded-lg border border-stone-100 bg-stone-50/70 shadow-sm">
+                <CardContent className="px-3 py-2.5 md:px-4 md:py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-600 md:text-xs">
+                          Recipes in list
+                        </p>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-stone-500">
+                          {uniqueRecipes.length}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                        {recipeSectionCollapsed
+                          ? "Recipe context is tucked away while you shop."
+                          : "Recipe provenance stays secondary to the active list."}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={toggleRecipeSection}
+                      className="h-8 shrink-0 px-2 text-xs text-stone-600 hover:bg-white hover:text-foreground"
+                      aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
+                    >
+                      {recipeSectionCollapsed ? "Show" : "Hide"}
+                    </Button>
                   </div>
-                }
-                desktopContent={
-                  <div className="flex flex-wrap gap-2">
-                    {uniqueRecipes.map((recipeName) => (
-                      <RecipeTag
-                        key={recipeName}
-                        recipeName={recipeName}
-                        onRemove={() => handleRemoveRecipeItems(recipeName)}
-                        onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
-                        isRemoving={false}
-                        colorIndex={recipeColorMap.get(recipeName)}
-                      />
-                    ))}
-                  </div>
-                }
-              />
+                  {!recipeSectionCollapsed ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {uniqueRecipes.map((recipeName) => (
+                        <RecipeTag
+                          key={recipeName}
+                          recipeName={recipeName}
+                          onRemove={() => handleRemoveRecipeItems(recipeName)}
+                          onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
+                          isRemoving={false}
+                          colorIndex={recipeColorMap.get(recipeName)}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
             )}
 
-            <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={allItemIds}
-              strategy={verticalListSortingStrategy}
-            >
-              {/* Main shopping items grouped by category */}
-              {(() => {
-                let isFirstItem = true
-                let globalIndexCounter = 0
-                const itemToGlobalIndex = new Map<ShoppingItem, number>()
-                filteredItems.forEach((item, idx) => {
-                  if (!itemToGlobalIndex.has(item)) {
-                    itemToGlobalIndex.set(item, idx)
-                  }
-                })
-                return categoryViewModels.map((categoryData) => {
-                  const items = categoryData.items
+            {isManageMode ? (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={allItemIds}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {shoppingListContent}
+                </SortableContext>
 
-                  const isDragTarget =
-                    activeItem &&
-                    dragOverCategory === categoryData.key &&
-                    activeItem.categoryKey !== categoryData.key
-
-                  const isCollapsed = collapsedCategories.has(categoryData.key)
-                  return (
-                    <ShoppingCategorySection
-                      key={categoryData.key}
-                      categoryData={categoryData}
-                      itemCount={items.length}
-                      isCollapsed={isCollapsed}
-                      isDragTarget={!!isDragTarget}
-                      isBulkCheckOffPending={bulkCheckOff.isPending}
-                      onToggleCategory={() => toggleCategory(categoryData.key)}
-                      onBulkCheckOff={() => handleBulkCheckOff(items, categoryData.name)}
-                    >
-                      <ul className="divide-y divide-stone-100" style={{ contain: 'layout style paint' }}>
-                        {items.map((item) => {
-                          const showHintForThisItem = isFirstItem && showSwipeHint
-                          if (isFirstItem) isFirstItem = false
-                          let globalIndex = itemToGlobalIndex.get(item)
-                          if (globalIndex === undefined) {
-                            globalIndex = globalIndexCounter++
-                            itemToGlobalIndex.set(item, globalIndex)
-                          }
-                          const reactKey = item.rowId || `${categoryData.key}-${item.item}-${item.unit || ''}-${globalIndex}`
-                          return (
-                            <SortableShoppingItem
-                              key={reactKey}
-                              item={item}
-                              isDesktop={isDesktop}
-                              onCheckOff={() => handleCheckOff(item)}
-                              onRemove={() => handleRemoveItem(item)}
-                              onAddToPantry={() => handleAddToPantry(item)}
-                              isCheckingOff={pendingCheckItems.has(item.rowId || item.item.toLowerCase().trim())}
-                              isRemoving={false}
-                              isAddingToPantry={pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim())}
-                              recipeColorMap={recipeColorMap}
-                              showSwipeHint={showHintForThisItem}
-                            />
-                          )
-                        })}
-                      </ul>
-                    </ShoppingCategorySection>
-                  )
-                })
-              })()}
-            </SortableContext>
-
-            <DragOverlay>
-              {activeItem ? <DragOverlayItem item={activeItem} recipeColorMap={recipeColorMap} /> : null}
-            </DragOverlay>
-          </DndContext>
+                <DragOverlay>
+                  {activeItem ? <DragOverlayItem item={activeItem} recipeColorMap={recipeColorMap} /> : null}
+                </DragOverlay>
+              </DndContext>
+            ) : (
+              shoppingListContent
+            )}
 
           {/* Complete Shopping Button - appears when all items are checked */}
           {allItemsChecked && filteredItems.length > 0 && (
@@ -1329,38 +1488,37 @@ export function ShoppingListView() {
               mobileCountClassName="bg-accent-green/20 text-primary"
               mobileContent={
                 <>
-                  <p className="text-xs text-muted-foreground mb-3">Click to add back to list</p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-xs text-muted-foreground mb-3">Restore pantry items with their amount and source shown inline.</p>
+                  <div className="grid gap-2">
                     {mergedAlreadyHave.map((item, index) => (
-                      <button
+                      <ShoppingRestoreChip
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
-                        type="button"
-                        onClick={() => moveToList.mutate(item)}
+                        item={item}
+                        reasonLabel="In pantry"
+                        onRestore={() => moveToList.mutate(item)}
                         disabled={moveToList.isPending}
-                        className="px-3 py-2 text-xs font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer min-h-[44px]"
-                        style={{ animationDelay: `${index * 20}ms` }}
-                      >
-                        {item.item}
-                      </button>
+                        recipeColorMap={recipeColorMap}
+                        tone="pantry"
+                        compact={true}
+                      />
                     ))}
                   </div>
                 </>
               }
               desktopContent={
                 <>
-                  <p className="text-xs text-muted-foreground mb-4">Click to add back to list</p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-xs text-muted-foreground mb-4">Restore pantry items with the original amount and recipe context visible.</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {mergedAlreadyHave.map((item, index) => (
-                      <button
+                      <ShoppingRestoreChip
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
-                        type="button"
-                        onClick={() => moveToList.mutate(item)}
+                        item={item}
+                        reasonLabel="In pantry"
+                        onRestore={() => moveToList.mutate(item)}
                         disabled={moveToList.isPending}
-                        className="px-4 py-1.5 text-sm font-semibold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100 hover:bg-emerald-100 active:bg-emerald-100 transition-colors cursor-pointer"
-                        style={{ animationDelay: `${index * 20}ms` }}
-                      >
-                        {item.item}
-                      </button>
+                        recipeColorMap={recipeColorMap}
+                        tone="pantry"
+                      />
                     ))}
                   </div>
                 </>
@@ -1382,44 +1540,37 @@ export function ShoppingListView() {
               mobileCountClassName="bg-rose-100 text-rose-700"
               mobileContent={
                 <>
-                  <p className="text-xs text-muted-foreground mb-3">Items excluded by keywords. Click to add back to list.</p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-xs text-muted-foreground mb-3">Restore excluded items with the keyword reason and recipe source visible.</p>
+                  <div className="grid gap-2">
                     {projectedShoppingList.excluded.map((item, index) => (
-                      <button
+                      <ShoppingRestoreChip
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
-                        type="button"
-                        onClick={() => moveExcludedToList.mutate(item)}
+                        item={item}
+                        reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}
+                        onRestore={() => moveExcludedToList.mutate(item)}
                         disabled={moveExcludedToList.isPending}
-                        className="px-3 py-2 text-xs font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer min-h-[44px] flex items-center gap-1.5"
-                        style={{ animationDelay: `${index * 20}ms` }}
-                      >
-                        <span>{item.item}</span>
-                        {item.excludedBy && (
-                          <span className="text-[9px] opacity-60 font-normal"> ({item.excludedBy})</span>
-                        )}
-                      </button>
+                        recipeColorMap={recipeColorMap}
+                        tone="excluded"
+                        compact={true}
+                      />
                     ))}
                   </div>
                 </>
               }
               desktopContent={
                 <>
-                  <p className="text-xs text-muted-foreground mb-4">Items excluded by keywords. Click to add back to list.</p>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="text-xs text-muted-foreground mb-4">Restore excluded items with the exclusion reason and original recipe context visible.</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
                     {projectedShoppingList.excluded.map((item, index) => (
-                      <button
+                      <ShoppingRestoreChip
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
-                        type="button"
-                        onClick={() => moveExcludedToList.mutate(item)}
+                        item={item}
+                        reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}
+                        onRestore={() => moveExcludedToList.mutate(item)}
                         disabled={moveExcludedToList.isPending}
-                        className="px-4 py-1.5 text-sm font-semibold bg-rose-50 text-rose-700 rounded-full border border-rose-100 hover:bg-rose-100 active:bg-rose-100 transition-colors cursor-pointer flex items-center gap-1.5"
-                        style={{ animationDelay: `${index * 20}ms` }}
-                      >
-                        <span>{item.item}</span>
-                        {item.excludedBy && (
-                          <span className="text-[9px] opacity-60 font-normal"> ({item.excludedBy})</span>
-                        )}
-                      </button>
+                        recipeColorMap={recipeColorMap}
+                        tone="excluded"
+                      />
                     ))}
                   </div>
                 </>

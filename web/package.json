@@ -15,6 +15,7 @@
     "test:e2e": "playwright test --project=chromium --project=firefox --project=webkit --project=\"Mobile Chrome\" --project=\"Mobile Safari\" --project=\"iPhone SE\" --project=iPad",
     "test:e2e:full": "playwright test --project=chromium --project=firefox --project=webkit --project=\"Mobile Chrome\" --project=\"Mobile Safari\" --project=\"iPhone SE\" --project=iPad",
     "test:e2e:smoke": "playwright test --project=smoke",
+    "test:e2e:smoke:shopping": "node scripts/run-playwright-shopping-smoke.mjs",
     "test:e2e:smoke:list": "node scripts/check-smoke-tests.mjs",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",

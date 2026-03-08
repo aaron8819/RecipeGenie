@@ -5,6 +5,7 @@ import type { ShoppingItem } from "@/types/database"
 import {
   ShoppingCategorySection,
   ShoppingItemRow,
+  ShoppingRestoreChip,
   ShoppingStateSection,
 } from "../shopping-list-components"
 
@@ -33,6 +34,7 @@ describe("ShoppingCategorySection", () => {
           name: "Produce",
           isCustom: true,
           checkedCount: 1,
+          uncheckedCount: 2,
           totalCount: 3,
         }}
         itemCount={3}
@@ -48,8 +50,11 @@ describe("ShoppingCategorySection", () => {
 
     expect(screen.getByText("Produce")).toBeInTheDocument()
     expect(screen.getByText("Custom")).toBeInTheDocument()
-    expect(screen.getByText("1/3")).toBeInTheDocument()
+    expect(screen.getByText("2 left")).toBeInTheDocument()
+    expect(screen.getByText("1 done")).toBeInTheDocument()
     expect(screen.getByText("Spinach row")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Check all items in Produce" }).className).toContain("min-w-[44px]")
+    expect(screen.getByRole("button", { name: "Collapse category" }).className).toContain("h-9")
 
     fireEvent.click(screen.getByRole("button", { name: "Check all items in Produce" }))
     expect(onBulkCheckOff).toHaveBeenCalledTimes(1)
@@ -66,6 +71,7 @@ describe("ShoppingCategorySection", () => {
           name: "Misc",
           isCustom: false,
           checkedCount: 0,
+          uncheckedCount: 1,
           totalCount: 1,
         }}
         itemCount={1}
@@ -85,6 +91,24 @@ describe("ShoppingCategorySection", () => {
 })
 
 describe("ShoppingItemRow", () => {
+  it("keeps management drag handles out of the default shopping row", () => {
+    render(
+      <ShoppingItemRow
+        item={item()}
+        isDesktop={true}
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+  })
+
   it("renders desktop row actions, dedupes sources, and forwards callbacks", () => {
     const onCheckOff = vi.fn()
     const onAddToPantry = vi.fn()
@@ -103,6 +127,7 @@ describe("ShoppingItemRow", () => {
         isRemoving={false}
         isAddingToPantry={false}
         recipeColorMap={new Map([["Autumn Soup", 1]])}
+        showDragHandle={true}
         onCheckOff={onCheckOff}
         onAddToPantry={onAddToPantry}
         onRemove={onRemove}
@@ -112,6 +137,7 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByText("2 lb")).toBeInTheDocument()
     expect(screen.getByText("apples")).toBeInTheDocument()
     expect(screen.getAllByText("Autumn Soup")).toHaveLength(1)
+    expect(screen.getByRole("button", { name: "Drag to reorder" })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "Check off item" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to pantry" }))
@@ -124,7 +150,7 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("hidden")
   })
 
-  it("keeps mobile action trigger visible and disables busy actions", () => {
+  it("keeps mobile action trigger centered with consistent touch targets and disables busy actions", () => {
     render(
       <ShoppingItemRow
         item={item({ checked: true, item: "milk" })}
@@ -140,9 +166,33 @@ describe("ShoppingItemRow", () => {
       />
     )
 
+    expect(screen.getByTestId("shopping-item-row").className).toContain("items-center")
     expect(screen.getByText("Swipe left to delete")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Uncheck item" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("h-11")
+    expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("w-11")
     expect(screen.getByRole("button", { name: "Item actions" }).className).not.toContain("hidden")
+  })
+
+  it("renders compact provenance summaries in shopping mode", () => {
+    render(
+      <ShoppingItemRow
+        item={item({
+          sources: [{ recipeName: "Weeknight Pasta" }],
+        })}
+        isDesktop={false}
+        sourceDisplay="summary"
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.getByText("from Weeknight Pasta")).toBeInTheDocument()
   })
 })
 
@@ -197,5 +247,39 @@ describe("ShoppingStateSection", () => {
     expect(screen.getByText("Mobile excluded body")).toBeInTheDocument()
     expect(screen.getByText("Desktop excluded body")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Collapse excluded items" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Collapse excluded items" }).className).toContain("h-9")
+    expect(screen.getByRole("button", { name: "Collapse excluded items" }).className).toContain("w-9")
+  })
+})
+
+describe("ShoppingRestoreChip", () => {
+  it("renders amount, reason, and recipe origin for restore actions", () => {
+    const onRestore = vi.fn()
+
+    render(
+      <ShoppingRestoreChip
+        item={item({
+          item: "milk",
+          amount: 1,
+          unit: "cup",
+          sources: [{ recipeName: "Pasta Bake" }],
+          excludedBy: "dairy",
+        })}
+        reasonLabel="Excluded: dairy"
+        onRestore={onRestore}
+        disabled={false}
+        recipeColorMap={new Map([["Pasta Bake", 2]])}
+        tone="excluded"
+        compact={true}
+      />
+    )
+
+    expect(screen.getByText("milk")).toBeInTheDocument()
+    expect(screen.getByText("1 cup")).toBeInTheDocument()
+    expect(screen.getByText("Excluded: dairy")).toBeInTheDocument()
+    expect(screen.getByText("Pasta Bake")).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Restore milk 1 cup Excluded: dairy" }))
+    expect(onRestore).toHaveBeenCalledTimes(1)
   })
 })

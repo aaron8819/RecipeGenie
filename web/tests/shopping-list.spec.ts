@@ -149,10 +149,20 @@ test.describe('Shopping List', () => {
       await expect(recipeTags.first()).toBeVisible()
     })
 
-    test('should show recipes in list section', async ({ page }) => {
-      // Header shows "Recipes in list" with removable tags
+    test('should keep recipes in list collapsed by default in shopping mode', async ({ page }) => {
       const recipesInList = page.getByText(/recipes in list/i)
       await expect(recipesInList).toBeVisible()
+      await expect(page.getByRole('button', { name: /show recipes in list/i })).toBeVisible()
+    })
+
+    test('should hide reorder handles until Manage Mode is enabled', async ({ page }) => {
+      await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
+
+      await page.getByRole('button', { name: /organize/i }).click()
+      await page.getByRole('menuitem', { name: /enter manage mode/i }).click()
+
+      await expect(page.getByText(/manage mode/i)).toBeVisible()
+      await expect(page.getByRole('button', { name: /drag to reorder/i }).first()).toBeVisible()
     })
   })
 
@@ -283,6 +293,7 @@ test.describe('Shopping List', () => {
         page.locator('button').filter({ has: page.locator('svg[class*="Sparkles"]') })
       )
       await organizeButton.first().click()
+      await page.getByRole('menuitem', { name: /shopping settings/i }).click()
 
       const dialog = page.locator('[role="dialog"]')
       await expect(dialog).toBeVisible()
@@ -293,6 +304,7 @@ test.describe('Shopping List', () => {
         page.locator('button').filter({ has: page.locator('svg[class*="Sparkles"]') })
       )
       await organizeButton.first().click()
+      await page.getByRole('menuitem', { name: /shopping settings/i }).click()
       await page.waitForTimeout(300)
 
       // Should have tabs
@@ -339,6 +351,8 @@ test.describe('Shopping List', () => {
     })
 
     test('should show recipe tags with X button to remove', async ({ page }) => {
+      await page.getByRole('button', { name: /show recipes in list/i }).click()
+
       // Recipe tags in "Recipes in list" section have X buttons
       const recipeTags = page.locator('[class*="rounded-full"]').filter({
         has: page.locator('svg[class*="X"], button')
@@ -424,6 +438,7 @@ test.describe('Shopping List', () => {
 
       if (await organizeButton.first().isVisible().catch(() => false)) {
         await organizeButton.first().click()
+        await page.getByRole('menuitem', { name: /shopping settings/i }).click()
         await page.waitForTimeout(300)
 
         const dialog = page.locator('[role="dialog"]')

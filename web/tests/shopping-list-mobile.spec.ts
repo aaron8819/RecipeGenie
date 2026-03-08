@@ -270,6 +270,8 @@ test.describe('Shopping List Mobile', () => {
     })
 
     test('should allow swiping on recipe tags for horizontal scroll', async ({ page }) => {
+      await page.getByRole('button', { name: /show recipes in list/i }).click()
+
       // Recipe tags section
       const tagsSection = page.getByText(/recipes in list/i).locator('..')
 
@@ -448,6 +450,27 @@ test.describe('Shopping List Mobile', () => {
         expect(itemsAfter).toBeGreaterThan(0)
       }
     })
+
+    test('should keep drag handles hidden until Manage Mode is enabled', async ({ page }) => {
+      await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
+
+      await page.getByRole('button', { name: /organize/i }).tap()
+      await page.getByRole('menuitem', { name: /enter manage mode/i }).tap()
+
+      await expect(page.getByText(/manage mode/i)).toBeVisible()
+      await expect(page.getByRole('button', { name: /drag to reorder/i }).first()).toBeVisible()
+    })
+  })
+
+  test.describe('Shopping Context Density', () => {
+    test.beforeEach(async ({ page, navigateToTab }) => {
+      await addItemsToShoppingListMobile(page, navigateToTab)
+    })
+
+    test('should keep recipes in list collapsed by default on mobile', async ({ page }) => {
+      await expect(page.getByText(/recipes in list/i)).toBeVisible()
+      await expect(page.getByRole('button', { name: /show recipes in list/i })).toBeVisible()
+    })
   })
 
   test.describe('Mobile Settings Modal', () => {
@@ -458,6 +481,7 @@ test.describe('Shopping List Mobile', () => {
 
       if (await organizeButton.first().isVisible().catch(() => false)) {
         await organizeButton.first().tap()
+        await page.getByRole('menuitem', { name: /shopping settings/i }).tap()
         await page.waitForTimeout(300)
 
         const dialog = page.locator('[role="dialog"]')

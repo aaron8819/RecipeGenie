@@ -164,6 +164,8 @@ export function SourceTag({
 export function ShoppingItemRow({
   item,
   isDesktop,
+  showDragHandle = false,
+  sourceDisplay = "tags",
   isCheckingOff,
   isRemoving,
   isAddingToPantry,
@@ -178,6 +180,8 @@ export function ShoppingItemRow({
 }: {
   item: ShoppingItem
   isDesktop: boolean
+  showDragHandle?: boolean
+  sourceDisplay?: "tags" | "summary" | "none"
   isCheckingOff: boolean
   isRemoving: boolean
   isAddingToPantry: boolean
@@ -193,11 +197,18 @@ export function ShoppingItemRow({
   const isChecked = item.checked || false
   const amountLabel = formatShoppingItemAmount(item)
   const uniqueSources = dedupeSources(item)
+  const nonManualSources = uniqueSources.filter((source) => source.recipeName !== "Manual")
+  const sourceSummary = nonManualSources.length === 1
+    ? `from ${nonManualSources[0].recipeName}`
+    : nonManualSources.length > 1
+      ? `from ${nonManualSources.length} recipes`
+      : null
 
   return (
     <div
+      data-testid="shopping-item-row"
       className={cn(
-        "group swipeable-content flex items-start justify-between px-4 py-4 transition-transform duration-200 ease-out hover:bg-stone-50 md:items-center md:px-6",
+        "group swipeable-content flex min-h-[68px] items-center justify-between px-4 py-3 transition-transform duration-200 ease-out hover:bg-stone-50 md:min-h-[60px] md:px-5",
         showSwipeHint && "animate-swipe-hint"
       )}
       style={{
@@ -216,17 +227,19 @@ export function ShoppingItemRow({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        <button
-          type="button"
-          data-drag-handle="true"
-          className="flex min-h-[36px] min-w-[36px] touch-none items-center justify-center p-1 text-muted-foreground hover:text-foreground md:min-h-0 md:min-w-0"
-          style={{ touchAction: "none" }}
-          aria-label="Drag to reorder"
-          {...dragHandleProps}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {showDragHandle ? (
+          <button
+            type="button"
+            data-drag-handle="true"
+            className="flex min-h-[36px] min-w-[36px] touch-none items-center justify-center p-1 text-muted-foreground hover:text-foreground md:min-h-0 md:min-w-0"
+            style={{ touchAction: "none" }}
+            aria-label="Drag to reorder"
+            {...dragHandleProps}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        ) : null}
 
         <button
           type="button"
@@ -248,38 +261,42 @@ export function ShoppingItemRow({
           </span>
         </button>
 
-        <div
-          className={cn(
-            "flex min-w-0 flex-1 flex-wrap items-center gap-1.5 md:gap-2",
-            isChecked && "opacity-60"
-          )}
-        >
-          {amountLabel ? (
+        <div className={cn("flex min-h-[44px] min-w-0 flex-1 flex-col justify-center", isChecked && "opacity-60")}>
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:gap-2">
+            {amountLabel ? (
+              <span
+                className={cn(
+                  "shrink-0 font-bold text-foreground",
+                  isChecked && "text-gray-500 line-through"
+                )}
+              >
+                {amountLabel}
+              </span>
+            ) : null}
             <span
               className={cn(
-                "shrink-0 font-bold text-foreground",
+                "min-w-0 truncate font-medium text-slate-700 md:text-slate-600",
                 isChecked && "text-gray-500 line-through"
               )}
             >
-              {amountLabel}
+              {item.item}
             </span>
+            {sourceDisplay === "tags"
+              ? uniqueSources.map((source, index) => (
+                  <SourceTag
+                    key={`${source.recipeName}-${index}`}
+                    recipeName={source.recipeName}
+                    colorIndex={recipeColorMap.get(source.recipeName)}
+                    className="shrink-0 px-1.5 py-0.5 text-[9px] md:px-2 md:py-0.5 md:text-[10px]"
+                  />
+                ))
+              : null}
+          </div>
+          {sourceDisplay === "summary" && sourceSummary ? (
+            <p className="mt-1 truncate text-[11px] text-muted-foreground">
+              {sourceSummary}
+            </p>
           ) : null}
-          <span
-            className={cn(
-              "min-w-0 truncate font-medium text-slate-700 md:text-slate-600",
-              isChecked && "text-gray-500 line-through"
-            )}
-          >
-            {item.item}
-          </span>
-          {uniqueSources.map((source, index) => (
-            <SourceTag
-              key={`${source.recipeName}-${index}`}
-              recipeName={source.recipeName}
-              colorIndex={recipeColorMap.get(source.recipeName)}
-              className="shrink-0 px-1.5 py-0.5 text-[9px] md:px-2 md:py-0.5 md:text-[10px]"
-            />
-          ))}
         </div>
       </div>
 
@@ -287,7 +304,10 @@ export function ShoppingItemRow({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className={cn("p-1 text-slate-400 hover:text-foreground", isDesktop && "hidden")}
+            className={cn(
+              "flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-slate-400 transition-colors hover:bg-stone-100 hover:text-foreground",
+              isDesktop && "hidden"
+            )}
             aria-label="Item actions"
           >
             <MoreVertical className="h-5 w-5" />
@@ -311,7 +331,7 @@ export function ShoppingItemRow({
 
       <div
         className={cn(
-          "items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100",
+          "self-center items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100",
           isDesktop ? "flex" : "hidden"
         )}
       >
@@ -342,11 +362,84 @@ export function ShoppingItemRow({
   )
 }
 
+export function ShoppingRestoreChip({
+  item,
+  reasonLabel,
+  onRestore,
+  disabled,
+  recipeColorMap,
+  tone = "pantry",
+  compact = false,
+}: {
+  item: ShoppingItem
+  reasonLabel: string
+  onRestore: () => void
+  disabled: boolean
+  recipeColorMap: Map<string, number>
+  tone?: "pantry" | "excluded"
+  compact?: boolean
+}) {
+  const amountLabel = formatShoppingItemAmount(item)
+  const sources = dedupeSources(item).filter((source) => source.recipeName !== "Manual")
+  const toneClasses = tone === "excluded"
+    ? {
+        shell: "border-rose-200 bg-rose-50 text-rose-900 hover:bg-rose-100 active:bg-rose-100",
+        badge: "bg-rose-100 text-rose-700",
+      }
+    : {
+        shell: "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 active:bg-emerald-100",
+        badge: "bg-emerald-100 text-emerald-700",
+      }
+
+  return (
+    <button
+      type="button"
+      onClick={onRestore}
+      disabled={disabled}
+      aria-label={`Restore ${item.item}${amountLabel ? ` ${amountLabel}` : ""} ${reasonLabel}`}
+      className={cn(
+        "rounded-2xl border text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+        compact ? "min-h-[44px] px-3 py-2.5" : "px-4 py-3",
+        toneClasses.shell
+      )}
+    >
+      <div className="flex min-h-[38px] items-center justify-between gap-3">
+        <div className="min-w-0 self-center">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className={cn("font-semibold leading-tight", compact ? "text-sm" : "text-sm")}>
+              {item.item}
+            </span>
+            {amountLabel ? (
+              <span className={cn("rounded-full px-2 py-0.5 font-medium", toneClasses.badge, compact ? "text-[10px]" : "text-xs")}>
+                {amountLabel}
+              </span>
+            ) : null}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className={cn("rounded-full px-2 py-0.5 font-medium", toneClasses.badge, compact ? "text-[10px]" : "text-xs")}>
+              {reasonLabel}
+            </span>
+            {sources.map((source, index) => (
+              <SourceTag
+                key={`${source.recipeName}-${index}`}
+                recipeName={source.recipeName}
+                colorIndex={recipeColorMap.get(source.recipeName)}
+                className={compact ? "text-[9px]" : "text-[10px]"}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </button>
+  )
+}
+
 type CategoryData = {
   key: string
   name: string
   isCustom: boolean
   checkedCount: number
+  uncheckedCount: number
   totalCount: number
 }
 
@@ -358,6 +451,7 @@ export function ShoppingCategorySection({
   isBulkCheckOffPending,
   onToggleCategory,
   onBulkCheckOff,
+  compact = false,
   children,
 }: {
   categoryData: CategoryData
@@ -367,9 +461,12 @@ export function ShoppingCategorySection({
   isBulkCheckOffPending: boolean
   onToggleCategory: () => void
   onBulkCheckOff: () => void
+  compact?: boolean
   children: ReactNode
 }) {
   const CategoryIcon = categoryData.key === "produce" ? Leaf : Package
+  const remainingCount = categoryData.uncheckedCount
+  const completedCount = categoryData.checkedCount
 
   const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return
@@ -391,19 +488,26 @@ export function ShoppingCategorySection({
     <Card
       className={cn(
         "animate-fade-in overflow-hidden rounded-xl border border-stone-100 bg-white shadow-sm transition-all duration-200",
+        compact && "rounded-lg shadow-xs",
         isDragTarget && "border-2 border-dashed border-primary bg-primary/5"
       )}
     >
       <CardHeader
         role="button"
         tabIndex={0}
-        className="flex cursor-pointer flex-row items-center justify-between border-b border-stone-100 bg-stone-50/50 px-4 py-3 transition-colors hover:bg-stone-100/50 md:px-6 md:py-4"
+        className={cn(
+          "flex cursor-pointer flex-row items-center justify-between border-b border-stone-100 bg-stone-50/50 transition-colors hover:bg-stone-100/50",
+          compact ? "px-3 py-2.5 md:px-4 md:py-3" : "px-4 py-3 md:px-6 md:py-4"
+        )}
         onClick={onToggleCategory}
         onKeyDown={handleHeaderKeyDown}
       >
-        <div className="flex min-w-0 items-center gap-2 md:gap-3">
-          <CategoryIcon className="h-5 w-5 shrink-0 text-primary" />
-          <CardTitle className="min-w-0 truncate font-display text-sm font-semibold uppercase tracking-wide text-foreground md:text-lg">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 pr-2">
+          <CategoryIcon className={cn("shrink-0 text-primary", compact ? "h-4 w-4" : "h-5 w-5")} />
+          <CardTitle className={cn(
+            "min-w-0 truncate font-display font-semibold uppercase tracking-wide text-foreground",
+            compact ? "text-xs md:text-sm" : "text-sm md:text-lg"
+          )}>
             {categoryData.name}
           </CardTitle>
           {categoryData.isCustom ? (
@@ -411,18 +515,26 @@ export function ShoppingCategorySection({
               Custom
             </span>
           ) : null}
-          <span className="rounded-full bg-accent-green/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-tighter text-primary">
-            {categoryData.checkedCount}/{categoryData.totalCount}
+          <span className="rounded-full bg-accent-green/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-tight text-primary">
+            {remainingCount} left
           </span>
+          {completedCount > 0 ? (
+            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-tight text-stone-500">
+              {completedCount} done
+            </span>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 self-center">
           {itemCount > 1 ? (
             <Button
               variant="ghost"
               size="sm"
               onClick={handleBulkClick}
               disabled={isBulkCheckOffPending}
-              className="flex h-8 min-w-[36px] touch-manipulation px-2 text-[10px] text-primary hover:bg-primary/10 md:h-6 md:min-w-0"
+              className={cn(
+                "flex min-h-[36px] min-w-[36px] touch-manipulation items-center justify-center px-2 text-[10px] text-primary hover:bg-primary/10 md:min-h-0 md:min-w-0",
+                compact ? "h-9 min-w-[44px] md:h-7 md:min-w-[36px]" : "h-9 min-w-[44px] md:h-8"
+              )}
               title={`Check all items in ${categoryData.name}`}
               aria-label={`Check all items in ${categoryData.name}`}
             >
@@ -433,7 +545,7 @@ export function ShoppingCategorySection({
           <button
             type="button"
             onClick={handleCollapseClick}
-            className="rounded-lg p-1.5 text-stone-400 transition-colors hover:text-primary"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary"
             aria-label={isCollapsed ? "Expand category" : "Collapse category"}
           >
             {isCollapsed ? (
@@ -516,7 +628,7 @@ export function ShoppingStateSection({
         <button
           type="button"
           onClick={handleCollapseClick}
-          className="rounded-lg p-1.5 text-stone-400 transition-colors hover:text-primary"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary"
           aria-label={isCollapsed ? expandLabel : collapseLabel}
         >
           {isCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
