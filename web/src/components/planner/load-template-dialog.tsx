@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -31,12 +32,16 @@ interface LoadTemplateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onLoadTemplate: (template: PlanTemplate) => void;
+  weekLabel: string;
+  currentRecipeCount: number;
 }
 
 export function LoadTemplateDialog({
   open,
   onOpenChange,
   onLoadTemplate,
+  weekLabel,
+  currentRecipeCount,
 }: LoadTemplateDialogProps) {
   const { data: templates, isLoading } =
     usePlanTemplates();
@@ -45,11 +50,14 @@ export function LoadTemplateDialog({
   const renameTemplate = useRenamePlanTemplate();
   const [deleteTarget, setDeleteTarget] =
     useState<PlanTemplate | null>(null);
+  const [loadTarget, setLoadTarget] =
+    useState<PlanTemplate | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   const handleLoad = (template: PlanTemplate) => {
     onLoadTemplate(template);
+    setLoadTarget(null);
     onOpenChange(false);
   };
 
@@ -79,6 +87,16 @@ export function LoadTemplateDialog({
     setRenameValue('');
   };
 
+  const getTemplateSummary = (
+    template: PlanTemplate
+  ): { valid: number; missing: number; assigned: number } => {
+    const { valid, missing } = getValidRecipeCount(template);
+    const assigned = template.day_assignments
+      ? Object.keys(template.day_assignments).length
+      : 0;
+    return { valid, missing, assigned };
+  };
+
   // Check which recipe IDs from a template still exist
   const getValidRecipeCount = (
     template: PlanTemplate
@@ -106,6 +124,9 @@ export function LoadTemplateDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
           <DialogTitle>Load Template</DialogTitle>
+          <DialogDescription className="sr-only">
+            Review a saved template, then confirm loading it into the currently visible week.
+          </DialogDescription>
           <div className="flex-1 overflow-y-auto py-4">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -119,12 +140,12 @@ export function LoadTemplateDialog({
             ) : (
               <div className="space-y-2">
                 {templates.map((template) => {
-                  const { valid, missing } =
-                    getValidRecipeCount(template);
+                  const { valid, missing, assigned } =
+                    getTemplateSummary(template);
                   return (
                     <div
                       key={template.id}
-                      className="flex items-center gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                      className="flex items-start gap-2 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
                     >
                       {renamingId === template.id ? (
                         <>
@@ -160,17 +181,11 @@ export function LoadTemplateDialog({
                         </>
                       ) : (
                         <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleLoad(template)
-                            }
-                            className="flex-1 text-left min-w-0"
-                          >
+                          <div className="flex-1 min-w-0">
                             <div className="font-medium truncate">
                               {template.name}
                             </div>
-                            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                            <div className="text-xs text-muted-foreground flex items-center gap-2 mt-1 flex-wrap">
                               <Calendar className="h-3 w-3" />
                               {valid} recipe
                               {valid !== 1 ? 's' : ''}
@@ -185,7 +200,34 @@ export function LoadTemplateDialog({
                                   : "Unknown date"}
                               </span>
                             </div>
-                          </button>
+                            <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                              {assigned > 0 ? (
+                                <span className="rounded-full bg-muted px-2 py-1">
+                                  {assigned} day assignment
+                                  {assigned !== 1 ? 's' : ''}
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-muted px-2 py-1">
+                                  No saved day assignments
+                                </span>
+                              )}
+                              {template.category_selection ? (
+                                <span className="rounded-full bg-muted px-2 py-1">
+                                  Includes meal mix
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setLoadTarget(template)
+                            }
+                            className="shrink-0"
+                          >
+                            Load
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -238,6 +280,54 @@ export function LoadTemplateDialog({
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!loadTarget}
+        onOpenChange={(o) => !o && setLoadTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Load template into {weekLabel}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {loadTarget ? (
+                <>
+                  This will load &quot;{loadTarget.name}&quot; into the visible week.
+                  {currentRecipeCount > 0 ? (
+                    <> It will replace {currentRecipeCount} currently planned recipe{currentRecipeCount !== 1 ? 's' : ''}.</>
+                  ) : (
+                    <> Your current week is empty.</>
+                  )}
+                  {' '}Rename and delete are unchanged.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {loadTarget ? (
+            <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              <div>
+                Template: <span className="font-medium text-foreground">{loadTarget.name}</span>
+              </div>
+              <div>
+                Week: <span className="font-medium text-foreground">{weekLabel}</span>
+              </div>
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (loadTarget) {
+                  handleLoad(loadTarget);
+                }
+              }}
+            >
+              Load Template
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

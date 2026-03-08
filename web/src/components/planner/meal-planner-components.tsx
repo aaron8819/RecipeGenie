@@ -1,5 +1,5 @@
 import React, { type HTMLAttributes, type ReactNode } from "react"
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
+import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type PlannerDaySectionProps = {
@@ -200,6 +200,35 @@ export function PlannerEmptyWeekPanel({ children }: PlannerEmptyWeekPanelProps) 
       </p>
       {children}
     </div>
+  )
+}
+
+type PlannerDayAddButtonProps = {
+  onClick: () => void
+  ariaLabel: string
+  desktop?: boolean
+}
+
+export function PlannerDayAddButton({
+  onClick,
+  ariaLabel,
+  desktop = false,
+}: PlannerDayAddButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className={cn(
+        "w-full border border-dashed transition-colors flex items-center justify-center gap-2 text-slate-500 hover:text-primary dark:hover:text-emerald-400 hover:border-primary dark:hover:border-emerald-500",
+        desktop
+          ? "rounded-xl border-slate-300 dark:border-slate-700 px-3 py-2 text-[11px] font-bold uppercase tracking-wide"
+          : "rounded-2xl border-slate-200 dark:border-slate-800 px-4 py-3 text-sm font-semibold"
+      )}
+    >
+      <Plus className={cn("shrink-0", desktop ? "h-4 w-4" : "h-4 w-4")} />
+      <span>Add Meal</span>
+    </button>
   )
 }
 

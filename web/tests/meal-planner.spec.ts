@@ -249,6 +249,19 @@ test.describe('Meal Planner', () => {
       await expect(dialog).toBeVisible()
     })
 
+    test('should open settings modal on mobile', async ({ page }) => {
+      await page.setViewportSize(VIEWPORTS.mobile)
+      await page.waitForTimeout(300)
+
+      const settingsButton = page.getByRole('button', { name: 'Open planner settings' })
+      await expect(settingsButton).toBeVisible()
+
+      await settingsButton.click()
+
+      const dialog = page.locator('[role="dialog"]')
+      await expect(dialog).toBeVisible()
+    })
+
     test('should have all settings sections', async ({ page }) => {
       await page.setViewportSize(VIEWPORTS.desktopLarge)
 
@@ -770,6 +783,30 @@ test.describe('Meal Planner', () => {
 
       // Close the dialog
       await page.keyboard.press('Escape')
+    })
+
+    test('should show day-specific add meal affordance on populated mobile day sections', async ({ page, navigateToTab, addRecipe }) => {
+      await navigateToTab('recipes')
+      await addRecipe(SAMPLE_RECIPE)
+      await page.waitForTimeout(500)
+      await navigateToTab('planner')
+
+      await page.setViewportSize(VIEWPORTS.mobile)
+      await page.waitForTimeout(300)
+
+      const incrementButton = page.getByRole('button', { name: /Increase Chicken count/i }).first()
+      if (await incrementButton.isVisible().catch(() => false)) {
+        await incrementButton.click()
+      } else {
+        const fallbackIncrement = page.getByRole('button', { name: /Increase \w+ count/i }).first()
+        await fallbackIncrement.click()
+      }
+
+      await page.getByRole('button', { name: /Generate Plan/i }).first().click()
+      await page.waitForTimeout(1500)
+
+      const dayAddButton = page.getByRole('button', { name: /Add meal to /i }).first()
+      await expect(dayAddButton).toBeVisible()
     })
   })
 

@@ -104,12 +104,12 @@ import {
 } from "./meal-planner.selectors"
 import {
   PlannerActionBar,
+  PlannerDayAddButton,
   PlannerDaySection,
   PlannerDesktopWeekShell,
   PlannerEmptyWeekPanel,
   PlannerMobileHeader,
   PlannerMobileTabBar,
-  PlannerMobileWeekStrip,
   PlannerSectionShell,
 } from "./meal-planner-components"
 import {
@@ -441,7 +441,7 @@ function DayColumn({
                   onMoveToDay={(dayIdx) => onMoveToDay(mainRecipe.id, dayIdx)}
                   weekDays={weekDays}
                   currentDayIndex={currentDayIndex}
-                  showMoveToDay={false}
+                  showMoveToDay
                   lastMade={statsMap.get(mainRecipe.id)?.lastMade ?? null}
                   timesMade={statsMap.get(mainRecipe.id)?.timesMade ?? 0}
                 />
@@ -469,7 +469,7 @@ function DayColumn({
                     onMoveToDay={(dayIdx) => onMoveToDay(r.id, dayIdx)}
                     weekDays={weekDays}
                     currentDayIndex={currentDayIndex}
-                    showMoveToDay={false}
+                    showMoveToDay
                     lastMade={statsMap.get(r.id)?.lastMade ?? null}
                     timesMade={statsMap.get(r.id)?.timesMade ?? 0}
                   />
@@ -477,6 +477,11 @@ function DayColumn({
               )}
             </FlipRecipeCard>
           ))}
+          <PlannerDayAddButton
+            desktop
+            onClick={() => onAddMeal(dayIndex)}
+            ariaLabel={`Add meal to ${day.dayName}`}
+          />
         </div>
       ) : (
         <EmptySlot onAdd={() => onAddMeal(dayIndex)} desktop />
@@ -552,34 +557,40 @@ function MobileDayColumn({
       data-day-date={formatLocalISODate(day.date)}
     >
       {dayRecipes.length > 0 ? (
-        dayRecipes.map((recipe, slotIdx) => (
-          <FlipRecipeCard
-            key={`mobile-day-${dayIndex}-slot-${slotIdx}`}
-            recipe={recipe}
-            slotKey={`mobile-day-${dayIndex}-slot-${slotIdx}`}
-          >
-            {(displayedRecipe) => (
-              <MobileRecipeCard
-                recipe={displayedRecipe}
-                isMade={isRecipeMade(displayedRecipe)}
-                isMarkingThis={markingRecipeId === recipe.id}
-                isSwapping={swappingRecipeId === recipe.id}
-                isJustAddedToCart={cartAddedRecipeId === recipe.id}
-                isToday={isToday}
-                onView={() => onViewRecipe(recipe)}
-                onSwap={() => onSwapRecipe(recipe)}
-                onMarkMade={() => onMarkMade(recipe.id, isRecipeMade(recipe))}
-                onAddToCart={() => onAddToCart(recipe.id)}
-                onRemove={() => onRemoveRecipe(recipe)}
-                onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
-                weekDays={weekDays}
-                currentDayIndex={currentDayIndex}
-                lastMade={statsMap.get(recipe.id)?.lastMade ?? null}
-                timesMade={statsMap.get(recipe.id)?.timesMade ?? 0}
-              />
-            )}
-          </FlipRecipeCard>
-        ))
+        <div className="space-y-4">
+          {dayRecipes.map((recipe, slotIdx) => (
+            <FlipRecipeCard
+              key={`mobile-day-${dayIndex}-slot-${slotIdx}`}
+              recipe={recipe}
+              slotKey={`mobile-day-${dayIndex}-slot-${slotIdx}`}
+            >
+              {(displayedRecipe) => (
+                <MobileRecipeCard
+                  recipe={displayedRecipe}
+                  isMade={isRecipeMade(displayedRecipe)}
+                  isMarkingThis={markingRecipeId === recipe.id}
+                  isSwapping={swappingRecipeId === recipe.id}
+                  isJustAddedToCart={cartAddedRecipeId === recipe.id}
+                  isToday={isToday}
+                  onView={() => onViewRecipe(recipe)}
+                  onSwap={() => onSwapRecipe(recipe)}
+                  onMarkMade={() => onMarkMade(recipe.id, isRecipeMade(recipe))}
+                  onAddToCart={() => onAddToCart(recipe.id)}
+                  onRemove={() => onRemoveRecipe(recipe)}
+                  onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
+                  weekDays={weekDays}
+                  currentDayIndex={currentDayIndex}
+                  lastMade={statsMap.get(recipe.id)?.lastMade ?? null}
+                  timesMade={statsMap.get(recipe.id)?.timesMade ?? 0}
+                />
+              )}
+            </FlipRecipeCard>
+          ))}
+          <PlannerDayAddButton
+            onClick={() => onAddMeal(dayIndex)}
+            ariaLabel={`Add meal to ${dayNameLong}`}
+          />
+        </div>
       ) : (
         <EmptySlot onAdd={() => onAddMeal(dayIndex)} />
       )}
@@ -720,6 +731,7 @@ function StitchRecipeCard({
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 text-slate-400 hover:text-primary"
                     title="Move to another day"
+                    aria-label="Move to another day"
                   >
                     <CalendarIcon className="h-4 w-4" />
                   </button>
@@ -793,6 +805,7 @@ function StitchRecipeCard({
                     onClick={(e) => e.stopPropagation()}
                     className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
                     title="Move to another day"
+                    aria-label="Move to another day"
                   >
                     <CalendarIcon className="h-4 w-4" />
                   </button>
@@ -1138,15 +1151,6 @@ export function MealPlanner() {
   const effectiveTab = useMemo((): MobileWeekTab | null => {
     return resolveEffectiveMobileWeekTab(mobileWeekTab, currentWeekDate, config?.week_start_day || 1)
   }, [currentWeekDate, mobileWeekTab, config?.week_start_day])
-
-  const scrollToDay = useCallback((date: Date) => {
-    const key = formatLocalISODate(date)
-    const target = mobileDaysContainerRef.current?.querySelector<HTMLElement>(
-      `[data-day-date="${key}"]`
-    )
-    if (!target) return
-    target.scrollIntoView({ block: "start", behavior: "smooth" })
-  }, [])
 
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecentRecipeHistory()
@@ -1506,55 +1510,68 @@ export function MealPlanner() {
       {!isDesktop && (
       <PlannerMobileHeader
         weekLabel={formatWeekLabel(currentWeekDate)}
-        showControls={!isTodayMode}
+        showControls
         progressLabel={`${progress.made} of ${progress.total} meals`}
         progressValue={progress.percentage}
         controls={
           <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={handlePrevWeek}
-              className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
-              aria-label="Previous week"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNextWeek}
-              className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
-              aria-label="Next week"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            <Popover open={isDatePickerOpenMobile} onOpenChange={setIsDatePickerOpenMobile}>
-              <PopoverTrigger asChild>
+            {!isTodayMode && (
+              <>
                 <button
                   type="button"
+                  onClick={handlePrevWeek}
                   className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
-                  title="Pick a date to jump to that week"
-                  aria-label="Open calendar to pick a week"
+                  aria-label="Previous week"
                 >
-                  <CalendarIcon className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <Calendar
-                  selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
-                  onSelect={(date) => {
-                  if (date) {
-                    markUserNavigated()
-                    const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
-                    setCurrentWeekDate(weekStart)
-                    setIsDatePickerOpenMobile(false)
-                      const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
-                      if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
-                      else if (weekStart === nextWeekStart) setMobileWeekTab("nextWeek")
-                    }
-                  }}
-                />
-              </PopoverContent>
-            </Popover>
+                <button
+                  type="button"
+                  onClick={handleNextWeek}
+                  className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+                  aria-label="Next week"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+                <Popover open={isDatePickerOpenMobile} onOpenChange={setIsDatePickerOpenMobile}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+                      title="Pick a date to jump to that week"
+                      aria-label="Open calendar to pick a week"
+                    >
+                      <CalendarIcon className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <Calendar
+                      selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
+                      onSelect={(date) => {
+                        if (date) {
+                          markUserNavigated()
+                          const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
+                          setCurrentWeekDate(weekStart)
+                          setIsDatePickerOpenMobile(false)
+                          const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
+                          if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
+                          else if (weekStart === nextWeekStart) setMobileWeekTab("nextWeek")
+                        }
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+              aria-label="Open planner settings"
+              title="Open planner settings"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
           </div>
         }
       />
@@ -1902,21 +1919,6 @@ export function MealPlanner() {
             {/* Mobile: calendar view — Stitch calendarview_redesign_mobile: week strip + day sections */}
             {!isDesktop && (
             <div className="space-y-6">
-              {!isTodayMode && (
-                <PlannerMobileWeekStrip
-                  days={weekDays.map((d) => {
-                    const isToday = d.date.toDateString() === new Date().toDateString()
-                    return {
-                      key: d.date.toISOString(),
-                      shortLabel: d.dayName,
-                      dayNumber: d.dayNumber,
-                      isToday,
-                      ariaLabel: `Scroll to ${d.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`,
-                      onSelect: () => scrollToDay(d.date),
-                    }
-                  })}
-                />
-              )}
               <div className="space-y-10" ref={mobileDaysContainerRef}>
                 {mobileDays.map((day) => {
                   const dayIndex = getWeekDayIndexForDate(weekDays, day.date)
@@ -2035,6 +2037,8 @@ export function MealPlanner() {
         open={isLoadTemplateOpen}
         onOpenChange={setIsLoadTemplateOpen}
         onLoadTemplate={handleLoadTemplate}
+        weekLabel={formatWeekLabel(currentWeekDate)}
+        currentRecipeCount={weeklyPlan?.recipe_ids?.length || 0}
       />
     </div>
   )

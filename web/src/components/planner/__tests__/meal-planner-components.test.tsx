@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import {
   PlannerActionBar,
+  PlannerDayAddButton,
   PlannerDaySection,
   PlannerDesktopWeekShell,
   PlannerEmptyWeekPanel,
@@ -141,6 +142,24 @@ describe("PlannerEmptyWeekPanel", () => {
     expect(screen.getByText("Plan your week")).toBeInTheDocument()
     expect(screen.getByText(/select how many meals you want/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Generate Plan" })).toBeInTheDocument()
+  })
+})
+
+describe("PlannerDayAddButton", () => {
+  it("renders a day-specific add CTA and forwards clicks", () => {
+    const onClick = vi.fn()
+
+    render(
+      <PlannerDayAddButton
+        onClick={onClick}
+        ariaLabel="Add meal to Tuesday"
+      />
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Add meal to Tuesday" }))
+
+    expect(screen.getByText("Add Meal")).toBeInTheDocument()
+    expect(onClick).toHaveBeenCalledTimes(1)
   })
 })
 

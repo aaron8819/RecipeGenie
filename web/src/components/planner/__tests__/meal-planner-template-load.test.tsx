@@ -20,6 +20,7 @@ let loadTemplateToApply: PlanTemplate
 let currentWeeklyPlan: WeeklyPlan
 let currentUserConfig: UserConfig
 let currentRecipes: Recipe[]
+let currentWeeklyPlanRecipes: Recipe[]
 
 vi.mock("next/image", () => ({
   default: ({
@@ -76,7 +77,7 @@ vi.mock("@/hooks/use-planner", () => ({
     isLoading: false,
   }),
   useWeeklyPlanRecipes: () => ({
-    data: [],
+    data: currentWeeklyPlanRecipes,
   }),
   useUserConfig: () => ({
     data: currentUserConfig,
@@ -256,7 +257,18 @@ vi.mock("@/components/ui/empty-state", () => ({
 }))
 
 vi.mock("../meal-planner-components", () => ({
-  PlannerActionBar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PlannerActionBar: ({
+    leading,
+    children,
+  }: {
+    leading?: React.ReactNode
+    children: React.ReactNode
+  }) => (
+    <div>
+      {leading}
+      {children}
+    </div>
+  ),
   PlannerDaySection: React.forwardRef<HTMLElement, { children: React.ReactNode; header?: React.ReactNode }>(
     function MockPlannerDaySection({ children, header }, ref) {
       return (
@@ -268,6 +280,11 @@ vi.mock("../meal-planner-components", () => ({
     }
   ),
   PlannerDesktopWeekShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  PlannerDayAddButton: ({ ariaLabel }: { ariaLabel: string }) => (
+    <button type="button" aria-label={ariaLabel}>
+      Add Meal
+    </button>
+  ),
   PlannerEmptyWeekPanel: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   PlannerMobileHeader: ({ controls }: { controls?: React.ReactNode }) => <div>{controls}</div>,
   PlannerMobileTabBar: () => <div>Mobile tabs</div>,
@@ -358,6 +375,7 @@ describe("MealPlanner template loading", () => {
     currentWeeklyPlan = weeklyPlanFixture()
     currentUserConfig = userConfigFixture()
     currentRecipes = [recipeFixture({ id: "existing-1" })]
+    currentWeeklyPlanRecipes = []
 
     Object.defineProperty(window, "matchMedia", {
       writable: true,
@@ -466,5 +484,58 @@ describe("MealPlanner template loading", () => {
       message: 'Template "Simple Rotation" loaded',
       duration: 4000,
     })
+  })
+
+  it("shows an explicit move-to-day control on desktop recipe cards", () => {
+    currentWeeklyPlan = weeklyPlanFixture({
+      recipe_ids: ["existing-1"],
+      day_assignments: {
+        "existing-1": 1,
+      },
+    })
+    currentWeeklyPlanRecipes = [
+      recipeFixture({
+        id: "existing-1",
+        name: "Planner Recipe",
+      }),
+    ]
+
+    render(<MealPlanner />)
+
+    expect(screen.getByRole("button", { name: "Move to another day" })).toBeInTheDocument()
+  })
+
+  it("removes the redundant mobile week strip while keeping mobile tabs visible", () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockImplementation(() => ({
+        matches: false,
+        media: "(min-width: 1024px)",
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+
+    currentWeeklyPlan = weeklyPlanFixture({
+      recipe_ids: ["existing-1"],
+      day_assignments: {
+        "existing-1": 1,
+      },
+    })
+    currentWeeklyPlanRecipes = [
+      recipeFixture({
+        id: "existing-1",
+        name: "Planner Recipe",
+      }),
+    ]
+
+    render(<MealPlanner />)
+
+    expect(screen.getByText("Mobile tabs")).toBeInTheDocument()
+    expect(screen.queryByText("Mobile week strip")).not.toBeInTheDocument()
   })
 })
