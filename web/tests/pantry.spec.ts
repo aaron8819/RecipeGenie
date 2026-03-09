@@ -99,33 +99,6 @@ test.describe('Pantry Management', () => {
     await expect(page.getByRole('button', { name: /^undo$/i })).toBeVisible()
   })
 
-  test('opens What Can I Make with accessible description and current CTA copy @core', async ({ page }) => {
-    await page.getByRole('button', { name: /what can i make/i }).click()
-
-    const dialog = page.getByRole('dialog', { name: /what can i make/i })
-    await expect(dialog).toBeVisible()
-    await expect(
-      dialog.getByText(/see recipes that match your pantry items and add their ingredients to your shopping list/i)
-    ).toBeVisible()
-
-    const addIngredientsButton = dialog.getByRole('button', { name: /add ingredients to shopping list/i }).first()
-    if (await addIngredientsButton.isVisible().catch(() => false)) {
-      await expect(addIngredientsButton).toBeVisible()
-    } else {
-      await expect(
-        dialog.getByText(/no matching recipes found|no recipes can be made with pantry items alone/i)
-      ).toBeVisible()
-    }
-  })
-
-  test('keeps What Can I Make open-scoped until the user opens it @extended', async ({ page }) => {
-    await expect(page.getByRole('dialog', { name: /what can i make/i })).toHaveCount(0)
-
-    await page.getByRole('button', { name: /what can i make/i }).click()
-
-    await expect(page.getByRole('dialog', { name: /what can i make/i })).toBeVisible()
-  })
-
   test('uses mobile-sized remove touch targets @extended', async ({ page }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await page.reload()

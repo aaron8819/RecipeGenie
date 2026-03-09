@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useCallback, useMemo, useRef } from "react"
-import { Plus, X, Package, Ban, Loader2, ChefHat } from "lucide-react"
+import { Plus, X, Package, Ban, Loader2 } from "lucide-react"
 import type { PantryItem } from "@/types/database"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,7 +15,6 @@ import {
 } from "@/hooks/use-pantry"
 import { usePantryExcludedKeywords } from "@/hooks/use-pantry-excluded-keywords"
 import { useUndoToast } from "@/hooks/use-undo-toast"
-import { WhatCanIMake } from "./what-can-i-make"
 
 type InlineFeedback = {
   message: string
@@ -59,7 +58,6 @@ function summarizeOutcomes(
 export function PantryList() {
   const [newItem, setNewItem] = useState("")
   const [newKeyword, setNewKeyword] = useState("")
-  const [isWhatCanIMakeOpen, setIsWhatCanIMakeOpen] = useState(false)
   const [pantryFeedback, setPantryFeedback] = useState<InlineFeedback | null>(null)
   const [keywordFeedback, setKeywordFeedback] = useState<InlineFeedback | null>(null)
   const [removingPantryIds, setRemovingPantryIds] = useState<Set<string>>(new Set())
@@ -216,18 +214,6 @@ export function PantryList() {
         </div>
         <p className="text-sm text-muted-foreground">{headerSummary}</p>
       </div>
-
-      {/* What Can I Make? button */}
-      <div className="flex justify-end">
-        <Button
-          onClick={() => setIsWhatCanIMakeOpen(true)}
-          className="flex items-center gap-2"
-        >
-          <ChefHat className="h-4 w-4" />
-          What Can I Make?
-        </Button>
-      </div>
-
       <div className="grid gap-6 md:grid-cols-2">
       {/* Pantry Items */}
         <Card>
@@ -423,13 +409,6 @@ export function PantryList() {
       </Card>
     </div>
 
-      {/* What Can I Make? Dialog */}
-      {isWhatCanIMakeOpen ? (
-        <WhatCanIMake
-          open={isWhatCanIMakeOpen}
-          onOpenChange={setIsWhatCanIMakeOpen}
-        />
-      ) : null}
     </div>
   )
 }

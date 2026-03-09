@@ -59,12 +59,6 @@ vi.mock("@/hooks/use-undo-toast", () => ({
   }),
 }))
 
-vi.mock("@/components/pantry/what-can-i-make", () => ({
-  WhatCanIMake: ({ open }: { open: boolean }) => (
-    <div data-testid="what-can-i-make">Dialog open: {String(open)}</div>
-  ),
-}))
-
 describe("PantryList", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -75,16 +69,6 @@ describe("PantryList", () => {
     excludedKeywordsState.isLoading = false
     excludedKeywordsState.isFetching = false
     removeKeywordMutateAsync.mockResolvedValue(undefined)
-  })
-
-  it("mounts What Can I Make only after the dialog is opened", async () => {
-    render(<PantryList />)
-
-    expect(screen.queryByTestId("what-can-i-make")).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole("button", { name: /what can i make/i }))
-
-    expect(screen.getByTestId("what-can-i-make")).toBeInTheDocument()
   })
 
   it("preserves unresolved pantry failures in the input and surfaces grouped item feedback", async () => {
