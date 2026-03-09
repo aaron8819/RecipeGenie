@@ -1284,8 +1284,10 @@ export function MealPlanner() {
         }),
         duration: 4000,
       })
-      setBulkCartJustAdded(true)
-      setTimeout(() => setBulkCartJustAdded(false), 1500)
+      if (result.added > 0) {
+        setBulkCartJustAdded(true)
+        setTimeout(() => setBulkCartJustAdded(false), 1500)
+      }
     } catch (error) {
       console.error("Failed to add to shopping list:", error)
       undoToast.show({
@@ -1456,8 +1458,10 @@ export function MealPlanner() {
         }),
         duration: 4000,
       })
-      setCartAddedRecipeId(recipeId)
-      setTimeout(() => setCartAddedRecipeId(null), 1500)
+      if (result.added > 0) {
+        setCartAddedRecipeId(recipeId)
+        setTimeout(() => setCartAddedRecipeId(null), 1500)
+      }
     } catch (error) {
       console.error("Failed to add recipe to shopping list:", error)
       undoToast.show({

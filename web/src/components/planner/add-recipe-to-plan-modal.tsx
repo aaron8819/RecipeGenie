@@ -46,6 +46,7 @@ export function AddRecipeToPlanModal({
   const [category, setCategory] = useState<string | null>(null)
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { data: recipes } = useRecipes({
     search: search || null,
@@ -61,13 +62,15 @@ export function AddRecipeToPlanModal({
       setCategory(null)
       setSelectedRecipeId(null)
       setSubmissionError(null)
+      setIsSubmitting(false)
     }
     onOpenChange(open)
   }
 
   const handleAddToPlan = async () => {
-    if (!selectedRecipeId || !weekDate) return
+    if (!selectedRecipeId || !weekDate || isSubmitting) return
     setSubmissionError(null)
+    setIsSubmitting(true)
 
     try {
       await addToPlan.mutateAsync({
@@ -78,6 +81,8 @@ export function AddRecipeToPlanModal({
       handleOpenChange(false)
     } catch (error) {
       setSubmissionError(getErrorMessage(error, "Failed to add recipe to this plan"))
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -198,9 +203,9 @@ export function AddRecipeToPlanModal({
           </Button>
           <Button
             onClick={handleAddToPlan}
-            disabled={!selectedRecipeId || addToPlan.isPending}
+            disabled={!selectedRecipeId || addToPlan.isPending || isSubmitting}
           >
-            {addToPlan.isPending ? "Adding..." : "Add to Plan"}
+            {addToPlan.isPending || isSubmitting ? "Adding..." : "Add to Plan"}
           </Button>
         </DialogFooter>
       </DialogContent>
