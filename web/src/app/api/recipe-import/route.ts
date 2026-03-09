@@ -4,6 +4,9 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { extractRecipeFromHtml } from '@/lib/recipe-url-parser';
 import { fetchRecipeHtmlSafely, UnsafeUrlError } from '@/lib/url-safety';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 const FETCH_TIMEOUT_MS = 10_000;
 const USER_AGENT =
   'RecipeGenie/1.0 (recipe importer; +https://recipegenie.app)';
