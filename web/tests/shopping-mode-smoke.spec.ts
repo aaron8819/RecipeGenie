@@ -1,5 +1,7 @@
 import { expect, test } from './fixtures'
 
+test.describe.configure({ mode: 'serial' })
+
 type SmokeRecipe = {
   name: string
   category: string
@@ -197,7 +199,7 @@ async function revealMobileSwipeActions(row: import('@playwright/test').Locator)
   )
 }
 
-test.describe('Shopping Mode Smoke', () => {
+test.describe('Shopping Mode Smoke @core', () => {
   test('keeps shopping mode dense by default and reveals manage controls only on demand @smoke', async ({
     page,
     setupAuth,
@@ -244,7 +246,7 @@ test.describe('Shopping Mode Smoke', () => {
   })
 })
 
-test.describe('Shopping Mode Smoke Mobile', () => {
+test.describe('Shopping Mode Smoke Mobile @extended', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true })
 
   test('keeps mobile quick actions and richer restore context available @smoke', async ({

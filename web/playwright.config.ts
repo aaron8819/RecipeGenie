@@ -1,19 +1,13 @@
 import { defineConfig, devices } from '@playwright/test'
+import { E2E_BASE_URL, E2E_HOST, E2E_PORT } from './tests/e2e-env'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000'
-const webServerCommand = process.env.PLAYWRIGHT_WEB_SERVER_COMMAND || 'npm run dev'
-const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER
-  ? process.env.PLAYWRIGHT_REUSE_EXISTING_SERVER === '1'
-  : !process.env.CI
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || E2E_BASE_URL
+const webServerCommand =
+  process.env.PLAYWRIGHT_WEB_SERVER_COMMAND ||
+  `npm run dev -- --hostname ${E2E_HOST} --port ${E2E_PORT}`
 
-const smokeTestMatch = [
-  '**/authentication.spec.ts',
-  '**/recipes.spec.ts',
-  '**/meal-planner.spec.ts',
-  '**/shopping-mode-smoke.spec.ts',
-  '**/smoke-critical-flow.spec.ts',
-]
-
+const coreCiGrep = /@core/
+const extendedGrep = /@extended/
 const smokeGrep = /@smoke/
 
 /**
@@ -48,9 +42,6 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL,
 
-    /* Reuse authenticated state from global setup */
-    storageState: 'playwright/.auth/user.json',
-
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
 
@@ -69,10 +60,23 @@ export default defineConfig({
 
   /* Configure projects for major browsers */
   projects: [
-    /* Smoke suite: critical end-to-end flow on Chromium only */
+    /* Core CI suite: lean Chromium-only baseline */
+    {
+      name: 'core-ci',
+      grep: coreCiGrep,
+      use: { ...devices['Desktop Chrome'] },
+    },
+
+    /* Extended suite: mobile, accessibility, and responsive contracts on Chromium */
+    {
+      name: 'extended-chromium',
+      grep: extendedGrep,
+      use: { ...devices['Desktop Chrome'] },
+    },
+
+    /* Smoke subset: highest-signal core path checks on Chromium only */
     {
       name: 'smoke',
-      testMatch: smokeTestMatch,
       grep: smokeGrep,
       use: { ...devices['Desktop Chrome'] },
     },
@@ -116,7 +120,7 @@ export default defineConfig({
   webServer: {
     command: webServerCommand,
     url: baseURL,
-    reuseExistingServer,
+    reuseExistingServer: false,
     timeout: 120 * 1000,
   },
 })

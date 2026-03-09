@@ -1,52 +1,104 @@
-import { test, expect, TEST_USER } from './fixtures'
+import { test, expect, VIEWPORTS } from './fixtures'
+import { assertRecipeGenieAppShell, signInToRecipeGenie } from './e2e-env'
 
-test.describe('Smoke Route Load', () => {
-  test('should load app shell at root @smoke', async ({ page, setupAuth }) => {
-    await setupAuth()
-    await page.goto('/')
-    await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible()
-  })
+async function expectRecipesView(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('textbox', { name: /search recipes by name or category/i })).toBeVisible()
+}
 
-  test.describe('Auth bootstrap', () => {
+async function expectPlannerView(page: import('@playwright/test').Page) {
+  const desktopPlannerMarker = page.getByText(/quick meal mix/i)
+  if (await desktopPlannerMarker.isVisible().catch(() => false)) {
+    await expect(desktopPlannerMarker).toBeVisible()
+    return
+  }
+
+  await expect(page.getByRole('button', { name: /today/i })).toBeVisible()
+}
+
+async function expectShoppingView(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('heading', { name: 'Shopping List' }).first()).toBeVisible()
+}
+
+async function expectPantryView(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('heading', { name: 'Pantry', exact: true })).toBeVisible()
+}
+
+async function dismissNextDevTools(page: import('@playwright/test').Page) {
+  const closeButton = page.getByRole('button', { name: /close next\.js dev tools/i })
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click({ force: true })
+  }
+}
+
+async function activateBottomNavTab(
+  page: import('@playwright/test').Page,
+  tabName: RegExp
+) {
+  const button = page.getByRole('navigation', { name: /bottom navigation/i }).getByRole('button', { name: tabName })
+  await button.dispatchEvent('click')
+}
+
+test.describe('Smoke Baseline', () => {
+  test.describe('Unauthenticated entry', () => {
     test.use({ storageState: { cookies: [], origins: [] } })
 
-    test('should bootstrap auth via login or session restore @smoke', async ({ page }) => {
+    test('shows the Recipe Genie sign-in screen when unauthenticated @core @smoke', async ({ page }) => {
       await page.goto('/')
-      await page.waitForLoadState('domcontentloaded')
 
-      const emailInput = page.locator('#email')
-      if (await emailInput.isVisible().catch(() => false)) {
-        await emailInput.fill(TEST_USER.email)
-        await page.locator('#password').fill(TEST_USER.password)
-        await page.getByRole('button', { name: /sign in/i }).click()
-      }
-
-      await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible({ timeout: 45000 })
+      await expect(page.getByRole('heading', { name: 'Recipe Genie' })).toBeVisible()
+      await expect(page.getByLabel('Email')).toBeVisible()
+      await expect(page.getByLabel('Password')).toBeVisible()
+      await expect(page.getByRole('button', { name: /^sign in$/i })).toBeVisible()
     })
   })
 
-  test('should load recipes tab @smoke', async ({ page, setupAuth, navigateToTab }) => {
-    await setupAuth()
-    await navigateToTab('recipes')
-    await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible()
-    await expect
-      .poll(async () => page.evaluate(() => localStorage.getItem('recipe-genie-active-tab')))
-      .toBe('recipes')
+  test.describe('Authenticated shell', () => {
+    test.use({ storageState: { cookies: [], origins: [] } })
+
+    test('signs in and reaches the Recipe Genie shell deterministically @core @smoke', async ({ page }) => {
+      await page.goto('/')
+      await signInToRecipeGenie(page)
+
+      await assertRecipeGenieAppShell(page)
+      await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible()
+      await expectRecipesView(page)
+    })
   })
 
-  test('should load planner tab @smoke', async ({ page, setupAuth, navigateToTab }) => {
+  test('restores the authenticated home shell at the app root @extended @smoke', async ({ page, setupAuth }) => {
     await setupAuth()
-    await navigateToTab('planner')
-    await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible()
-    await expect
-      .poll(async () => page.evaluate(() => localStorage.getItem('recipe-genie-active-tab')))
-      .toBe('planner')
+    await page.goto('/')
+
+    await assertRecipeGenieAppShell(page)
+    await expect(page.getByRole('button', { name: /help/i })).toBeVisible()
+    await expectRecipesView(page)
   })
 
-  test('should load shopping tab @smoke', async ({ page, setupAuth, navigateToTab }) => {
+  test('switches tabs through the mobile bottom navigation @extended @smoke', async ({ page, setupAuth }) => {
+    await page.setViewportSize(VIEWPORTS.mobile)
+    await setupAuth()
+
+    const bottomNav = page.getByRole('navigation', { name: /bottom navigation/i })
+    await expect(bottomNav).toBeVisible()
+    await dismissNextDevTools(page)
+
+    await activateBottomNavTab(page, /planner/i)
+    await expectPlannerView(page)
+
+    await activateBottomNavTab(page, /shopping/i)
+    await expectShoppingView(page)
+
+    await activateBottomNavTab(page, /pantry/i)
+    await expectPantryView(page)
+  })
+
+  test('persists the active tab contract across reloads @extended @smoke', async ({ page, setupAuth, navigateToTab }) => {
     await setupAuth()
     await navigateToTab('shopping')
-    await expect(page.getByRole('button', { name: /sign out/i }).first()).toBeVisible()
+    await expectShoppingView(page)
+
+    await page.reload()
+    await expectShoppingView(page)
     await expect
       .poll(async () => page.evaluate(() => localStorage.getItem('recipe-genie-active-tab')))
       .toBe('shopping')

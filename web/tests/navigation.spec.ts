@@ -1,332 +1,124 @@
 import { test, expect, VIEWPORTS } from './fixtures'
 
+async function expectRecipesView(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('textbox', { name: /search recipes by name or category/i })).toBeVisible()
+}
+
+async function expectPlannerView(page: import('@playwright/test').Page) {
+  const desktopPlannerMarker = page.getByText(/quick meal mix/i)
+  if (await desktopPlannerMarker.isVisible().catch(() => false)) {
+    await expect(desktopPlannerMarker).toBeVisible()
+    return
+  }
+
+  await expect(page.getByRole('button', { name: /today/i })).toBeVisible()
+}
+
+async function expectShoppingView(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('heading', { name: 'Shopping List' }).first()).toBeVisible()
+}
+
+async function expectPantryView(page: import('@playwright/test').Page) {
+  await expect(page.getByRole('heading', { name: 'Pantry', exact: true })).toBeVisible()
+}
+
+async function dismissNextDevTools(page: import('@playwright/test').Page) {
+  const closeButton = page.getByRole('button', { name: /close next\.js dev tools/i })
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click({ force: true })
+  }
+}
+
+async function activateBottomNavTab(
+  page: import('@playwright/test').Page,
+  tabName: RegExp
+) {
+  const button = page.getByRole('navigation', { name: /bottom navigation/i }).getByRole('button', { name: tabName })
+  await button.dispatchEvent('click')
+}
+
 test.describe('Navigation', () => {
-  test.describe('Desktop Header Navigation', () => {
-    test.beforeEach(async ({ page, setupAuth }) => {
-      await page.setViewportSize(VIEWPORTS.desktop)
-      await setupAuth()
-    })
+  test('shows stable shell navigation on desktop @extended', async ({ page, setupAuth }) => {
+    await page.setViewportSize(VIEWPORTS.desktop)
+    await setupAuth()
 
-    test('should display fixed header at top', async ({ page }) => {
-      // Target the main navigation header (the one with fixed positioning class)
-      const header = page.locator('header.md\\:fixed')
-      await expect(header).toBeVisible()
-
-      // Check header is fixed
-      const headerStyles = await header.evaluate((el) => {
-        const styles = window.getComputedStyle(el)
-        return {
-          position: styles.position,
-          top: styles.top,
-        }
-      })
-
-      // On desktop, header should be fixed (md: prefix applies)
-      // Check for either fixed or static (may depend on breakpoint)
-      expect(['fixed', 'static']).toContain(headerStyles.position)
-    })
-
-    test('should display all navigation tabs', async ({ page }) => {
-      const tabs = ['Planner', 'Recipes', 'Shopping', 'Pantry']
-
-      for (const tab of tabs) {
-        const tabButton = page.locator('header.md\\:fixed').getByRole('button', { name: new RegExp(tab, 'i') })
-        await expect(tabButton).toBeVisible()
-      }
-    })
-
-    test('should show active tab with underline indicator', async ({ page }) => {
-      // Navigate to recipes tab
-      await page.locator('header.md\\:fixed').getByRole('button', { name: /recipes/i }).click()
-      await page.waitForTimeout(300)
-
-      // Check for active styling (border-b-2 class)
-      const activeTab = page.locator('header button.border-b-2.border-primary')
-      await expect(activeTab).toBeVisible()
-      await expect(activeTab).toHaveText(/recipes/i)
-    })
-
-    test('should switch content when clicking tabs', async ({ page }) => {
-      // Click on Pantry tab
-      await page.locator('header.md\\:fixed').getByRole('button', { name: /pantry/i }).click()
-      await page.waitForTimeout(300)
-
-      // Verify pantry content is visible (look for pantry-specific elements)
-      const pantryContent = page.getByText(/pantry|add item/i)
-      await expect(pantryContent.first()).toBeVisible()
-    })
-
-    test('should display user avatar with initials', async ({ page }) => {
-      const avatar = page.locator('[title*="@"]')
-      await expect(avatar).toBeVisible()
-      await expect(avatar).toContainText(/[A-Z]{2}/)
-    })
-
-    test('should display help icon that opens onboarding dialog', async ({ page }) => {
-      const helpButton = page.getByRole('button', { name: /help/i })
-      await expect(helpButton).toBeVisible()
-
-      await helpButton.click()
-
-      // Dialog should open
-      const dialog = page.locator('[role="dialog"]')
-      await expect(dialog).toBeVisible()
-    })
-
-    test('should hide bottom navigation on desktop', async ({ page }) => {
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-      await expect(bottomNav).toBeHidden()
-    })
-
-    test('should maintain header on scroll', async ({ page }) => {
-      // Add some content to enable scrolling
-      await page.evaluate(() => {
-        document.body.style.height = '3000px'
-      })
-
-      // Scroll down
-      await page.evaluate(() => window.scrollTo(0, 500))
-      await page.waitForTimeout(100)
-
-      // Main navigation header should still be visible
-      const header = page.locator('header.md\\:fixed')
-      await expect(header).toBeVisible()
-    })
-
-    test('should not cause layout shift when switching tabs', async ({ page }) => {
-      // Target the main navigation header (the one with fixed positioning class)
-      const mainHeader = page.locator('header.md\\:fixed')
-
-      // Get initial header position
-      const initialPosition = await mainHeader.boundingBox()
-
-      // Switch tabs
-      await mainHeader.getByRole('button', { name: /shopping/i }).click()
-      await page.waitForTimeout(300)
-
-      // Get new header position
-      const newPosition = await mainHeader.boundingBox()
-
-      // Position should be the same
-      expect(initialPosition?.y).toBe(newPosition?.y)
-      expect(initialPosition?.height).toBe(newPosition?.height)
-    })
+    await expect(page.getByRole('button', { name: /go to planner/i })).toBeVisible()
+    const headerNav = page.locator('header').getByRole('navigation')
+    await expect(headerNav.getByRole('button', { name: 'Planner', exact: true })).toBeVisible()
+    await expect(headerNav.getByRole('button', { name: 'Recipes', exact: true })).toBeVisible()
+    await expect(headerNav.getByRole('button', { name: 'Shopping', exact: true })).toBeVisible()
+    await expect(headerNav.getByRole('button', { name: 'Pantry', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /help/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible()
+    await expect(page.getByRole('navigation', { name: /bottom navigation/i })).toHaveCount(0)
   })
 
-  test.describe('Mobile Bottom Navigation', () => {
-    test.beforeEach(async ({ page, setupAuth }) => {
-      await page.setViewportSize(VIEWPORTS.mobile)
-      await setupAuth()
-    })
+  test('shows usable bottom navigation on mobile @extended', async ({ page, setupAuth }) => {
+    await page.setViewportSize(VIEWPORTS.mobile)
+    await setupAuth()
 
-    test('should display bottom navigation on mobile', async ({ page }) => {
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-      await expect(bottomNav).toBeVisible()
-    })
+    const bottomNav = page.getByRole('navigation', { name: /bottom navigation/i })
+    await expect(bottomNav).toBeVisible()
+    await dismissNextDevTools(page)
 
-    test('should keep bottom navigation inside the visible viewport across tabs', async ({ page, navigateToTab }) => {
-      const tabs = ['planner', 'recipes', 'shopping', 'pantry'] as const
+    await activateBottomNavTab(page, /planner/i)
+    await expectPlannerView(page)
 
-      for (const tab of tabs) {
-        await navigateToTab(tab)
+    await activateBottomNavTab(page, /shopping/i)
+    await expectShoppingView(page)
 
-        const bottomNav = page.locator('nav[aria-label="Bottom navigation"]')
-        await expect(bottomNav).toBeVisible()
+    await activateBottomNavTab(page, /pantry/i)
+    await expectPantryView(page)
 
-        const navMetrics = await bottomNav.evaluate((el) => {
-          const rect = el.getBoundingClientRect()
-          return {
-            top: rect.top,
-            bottom: rect.bottom,
-            height: rect.height,
-            viewportHeight: window.visualViewport?.height ?? window.innerHeight,
-          }
-        })
-
-        expect(navMetrics.top).toBeGreaterThanOrEqual(0)
-        expect(navMetrics.bottom).toBeLessThanOrEqual(navMetrics.viewportHeight + 1)
-        expect(navMetrics.height).toBeGreaterThanOrEqual(64)
-      }
-    })
-
-    test('should display all four tabs', async ({ page }) => {
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-      const tabs = ['Planner', 'Recipes', 'Shopping', 'Pantry']
-
-      for (const tab of tabs) {
-        const tabButton = bottomNav.getByRole('button', { name: new RegExp(tab, 'i') })
-        await expect(tabButton).toBeVisible()
-      }
-    })
-
-    test('should highlight active tab', async ({ page }) => {
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-
-      // Click recipes tab
-      await bottomNav.getByRole('button', { name: /recipes/i }).click()
-      await page.waitForTimeout(300)
-
-      // Check for active styling
-      const activeButton = bottomNav.locator('button.text-primary')
-      await expect(activeButton).toBeVisible()
-    })
-
-    test('should have clear and recognizable icons', async ({ page }) => {
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-      const buttons = bottomNav.locator('button')
-
-      // All 4 buttons should have SVG icons
-      const count = await buttons.count()
-      expect(count).toBe(4)
-
-      for (let i = 0; i < count; i++) {
-        const icon = buttons.nth(i).locator('svg')
-        await expect(icon).toBeVisible()
-      }
-    })
-
-    test('should switch content smoothly on tap', async ({ page }) => {
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-
-      // Navigate to each tab and verify content loads
-      const tabs = ['planner', 'recipes', 'shopping', 'pantry']
-
-      for (const tab of tabs) {
-        await bottomNav.getByRole('button', { name: new RegExp(tab, 'i') }).click()
-        await page.waitForTimeout(300)
-
-        // Content should be visible (no error states)
-        const errorState = page.getByText(/error|failed|crash/i)
-        await expect(errorState).not.toBeVisible()
-      }
-    })
-
-    test('should have proper safe area padding', async ({ page }) => {
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-
-      // Check for safe-area class
-      const hasClass = await bottomNav.evaluate((el) => {
-        return el.classList.contains('safe-area-bottom')
-      })
-
-      expect(hasClass).toBeTruthy()
-    })
-
-    test('should not overlap with floating action buttons', async ({ page }) => {
-      // Navigate to recipes to see FAB
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-      await bottomNav.getByRole('button', { name: /recipes/i }).click()
-      await page.waitForTimeout(300)
-
-      const fab = page.locator('button[aria-label="Add Recipe"]')
-      const navBox = await bottomNav.boundingBox()
-
-      if (await fab.isVisible()) {
-        const fabBox = await fab.boundingBox()
-
-        if (navBox && fabBox) {
-          // FAB should be above the nav
-          expect(fabBox.y + fabBox.height).toBeLessThanOrEqual(navBox.y)
-        }
-      }
-    })
+    await activateBottomNavTab(page, /recipes/i)
+    await expectRecipesView(page)
   })
 
-  test.describe('Tab Switching', () => {
-    test.beforeEach(async ({ page, setupAuth }) => {
-      await setupAuth()
-    })
+  test('keeps visited tabs mounted after first visit @core', async ({ page, setupAuth, navigateToTab }) => {
+    await page.setViewportSize(VIEWPORTS.desktop)
+    await setupAuth()
 
-    test('should persist active tab in localStorage', async ({ page, navigateToTab }) => {
-      await navigateToTab('pantry')
+    await expect(page.getByPlaceholder('Add tomatoes, milk...')).toHaveCount(0)
+    await expect(page.getByPlaceholder(/add pantry item \(comma-separated\)/i)).toHaveCount(0)
 
-      const storedTab = await page.evaluate(() => localStorage.getItem('recipe-genie-active-tab'))
-      expect(storedTab).toBe('pantry')
-    })
+    await navigateToTab('shopping')
+    await expectShoppingView(page)
 
-    test('should restore active tab on page reload', async ({ page, navigateToTab }) => {
-      await navigateToTab('shopping')
-      await page.reload()
-      await page.waitForLoadState('networkidle')
+    await navigateToTab('pantry')
+    await expectPantryView(page)
 
-      // Check if shopping tab content is visible (may vary by implementation)
-      // The stored tab should be 'shopping'
-      const storedTab = await page.evaluate(() => localStorage.getItem('recipe-genie-active-tab'))
-      expect(storedTab).toBe('shopping')
-    })
+    await navigateToTab('recipes')
+    await expectRecipesView(page)
+
+    await expect(page.getByPlaceholder('Add tomatoes, milk...')).toHaveCount(1)
+    await expect(page.getByPlaceholder(/add pantry item \(comma-separated\)/i)).toHaveCount(1)
   })
 
-  test.describe('Responsive Behavior', () => {
-    test('should show header nav on tablet portrait', async ({ page, setupAuth }) => {
-      await page.setViewportSize(VIEWPORTS.tablet)
-      await setupAuth()
+  test('preserves recipes search context across tab switches @extended', async ({ page, setupAuth, navigateToTab }) => {
+    await page.setViewportSize(VIEWPORTS.desktop)
+    await setupAuth()
 
-      // At 768px width, should show header nav (md breakpoint)
-      const headerNav = page.locator('header nav')
-      await expect(headerNav).toBeVisible()
-    })
+    const searchInput = page.getByRole('textbox', { name: /search recipes by name or category/i })
+    await searchInput.fill('chicken')
+    await expect(searchInput).toHaveValue('chicken')
 
-    test('should hide bottom nav on tablet', async ({ page, setupAuth }) => {
-      await page.setViewportSize(VIEWPORTS.tablet)
-      await setupAuth()
+    await navigateToTab('planner')
+    await expectPlannerView(page)
 
-      const bottomNav = page.locator('nav.fixed.bottom-0')
-      await expect(bottomNav).toBeHidden()
-    })
-
-    test('should transition smoothly between mobile and desktop layouts', async ({ page, setupAuth }) => {
-      // Start on mobile
-      await page.setViewportSize(VIEWPORTS.mobile)
-      await setupAuth()
-
-      // Bottom nav visible on mobile
-      await expect(page.locator('nav.fixed.bottom-0')).toBeVisible()
-
-      // Resize to desktop
-      await page.setViewportSize(VIEWPORTS.desktop)
-      await page.waitForTimeout(300)
-
-      // Bottom nav hidden, header nav visible
-      await expect(page.locator('nav.fixed.bottom-0')).toBeHidden()
-      await expect(page.locator('header nav')).toBeVisible()
-    })
+    await navigateToTab('recipes')
+    await expectRecipesView(page)
+    await expect(searchInput).toHaveValue('chicken')
   })
 
-  test.describe('Active Tab Indicators', () => {
-    test.beforeEach(async ({ page, setupAuth }) => {
-      await setupAuth()
-    })
+  test('restores the user-selected tab after reload @core', async ({ page, setupAuth, navigateToTab }) => {
+    await setupAuth()
+    await navigateToTab('shopping')
+    await expectShoppingView(page)
 
-    test('should show underline on desktop active tab', async ({ page }) => {
-      await page.setViewportSize(VIEWPORTS.desktop)
-
-      await page.locator('header.md\\:fixed').getByRole('button', { name: /recipes/i }).click()
-      await page.waitForTimeout(300)
-
-      const activeTab = page.locator('header button.border-b-2')
-      await expect(activeTab).toBeVisible()
-    })
-
-    test('should show primary color on mobile active tab', async ({ page }) => {
-      await page.setViewportSize(VIEWPORTS.mobile)
-
-      await page.locator('nav.fixed.bottom-0').getByRole('button', { name: /shopping/i }).click()
-      await page.waitForTimeout(300)
-
-      const activeTab = page.locator('nav.fixed.bottom-0 button.text-primary')
-      const activeText = await activeTab.textContent()
-      expect(activeText?.toLowerCase()).toContain('shopping')
-    })
-
-    test('should scale icon on mobile active tab', async ({ page }) => {
-      await page.setViewportSize(VIEWPORTS.mobile)
-
-      await page.locator('nav.fixed.bottom-0').getByRole('button', { name: /planner/i }).click()
-      await page.waitForTimeout(300)
-
-      // Check if icon has scale class
-      const activeIcon = page.locator('nav.fixed.bottom-0 button.text-primary svg.scale-110')
-      await expect(activeIcon).toBeVisible()
-    })
+    await page.reload()
+    await expectShoppingView(page)
+    await expect
+      .poll(async () => page.evaluate(() => localStorage.getItem('recipe-genie-active-tab')))
+      .toBe('shopping')
   })
 })

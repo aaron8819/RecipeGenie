@@ -81,7 +81,7 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
             <ChefHat className="h-8 w-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">Recipe Genie</h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm text-foreground/80">
             {isSignUp ? "Create an account" : "Sign in to your account"}
           </p>
         </div>
@@ -138,7 +138,7 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
 
         {isSignUp && successMessage && pendingEmail && (
           <div className="mt-4 space-y-3 text-center">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-foreground/75">
               Didn&apos;t get the email? It can take a minute.
             </p>
             <Button
@@ -158,7 +158,7 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
                 setResendMessage(null)
                 setPendingEmail(null)
               }}
-              className="text-sm text-primary hover:underline transition-colors"
+              className="text-sm font-medium text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:underline"
             >
               Already confirmed? Sign in
             </button>
@@ -175,7 +175,7 @@ export function AuthForm({ initialError, initialMode = 'signin' }: AuthFormProps
               setResendMessage(null)
               setPendingEmail(null)
             }}
-            className="text-sm text-primary hover:underline transition-colors"
+            className="text-sm font-medium text-foreground underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:underline"
           >
             {isSignUp
               ? "Already have an account? Sign in"

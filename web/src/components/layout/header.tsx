@@ -98,7 +98,7 @@ export function Header({
           {/* Right: avatar, sign out — flush to right padding */}
           <div className="flex items-center gap-4 flex-shrink-0">
             <div
-              className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-accent-foreground font-bold text-xs flex-shrink-0"
+              className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-foreground font-bold text-xs flex-shrink-0"
               title={userEmail}
             >
               {getInitials(userEmail)}
@@ -118,4 +118,3 @@ export function Header({
     </>
   )
 }
-

@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import type { LucideIcon } from "lucide-react"
 import { Button } from "./button"
 
@@ -30,7 +31,7 @@ export function EmptyState({
         <Icon className="h-8 w-8 text-muted-foreground" />
       </div>
       <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
-      <p className="text-muted-foreground max-w-sm mb-6">{description}</p>
+      <p className="max-w-sm mb-6 text-foreground/80">{description}</p>
       {(action || secondaryAction) && (
         <div className="flex gap-3">
           {action && (
