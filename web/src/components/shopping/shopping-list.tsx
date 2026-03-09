@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
-import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, ChevronUp, Sparkles, MoreVertical } from "lucide-react"
+import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles, MoreVertical } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -559,8 +559,6 @@ export function ShoppingListView() {
   const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(true)
   const [pantryCollapsed, setPantryCollapsed] = useState(true) // Default: collapsed
   const [excludedCollapsed, setExcludedCollapsed] = useState(true) // Default: collapsed
-  const [showScrollToTop, setShowScrollToTop] = useState(false)
-
   useEffect(() => {
     if (typeof window === "undefined") return
     const mq = window.matchMedia("(min-width: 768px)")
@@ -732,114 +730,6 @@ export function ShoppingListView() {
 
   const toggleExcludedSection = useCallback(() => {
     setExcludedCollapsed(prev => !prev)
-  }, [])
-
-  // Scroll to top handler (mobile only)
-  const handleScrollToTop = useCallback(() => {
-    // Find scroll container - same logic as useEffect
-    let scrollContainer: HTMLElement | null = document.querySelector('[aria-hidden="false"].overflow-y-auto')
-    if (!scrollContainer) {
-      scrollContainer = document.querySelector('[aria-hidden="false"] .overflow-y-auto')
-    }
-
-    if (!scrollContainer) return
-
-    scrollContainer.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
-  }, [])
-
-  // Scroll detection for FAB visibility (mobile only)
-  // Using requestAnimationFrame polling since scroll events don't fire reliably
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    // Use matchMedia instead of window.innerWidth - works with DevTools device emulation
-    const isMobile = window.matchMedia('(max-width: 767px)').matches
-    if (!isMobile) {
-      setShowScrollToTop(false)
-      return
-    }
-
-    let animationFrameId: number
-    let isRunning = true
-
-    const checkScrollPosition = () => {
-      if (!isRunning) return
-
-      // Check ALL possible scroll sources
-      let scrollTop = 0
-
-      // 1. Check window scroll
-      if (window.scrollY > 0) {
-        scrollTop = window.scrollY
-      }
-
-      // 2. Check document.documentElement
-      if (scrollTop === 0 && document.documentElement.scrollTop > 0) {
-        scrollTop = document.documentElement.scrollTop
-      }
-
-      // 3. Check overflow-y-auto containers
-      if (scrollTop === 0) {
-        const allScrollContainers = document.querySelectorAll('.overflow-y-auto')
-        allScrollContainers.forEach((el) => {
-          const htmlEl = el as HTMLElement
-          if (htmlEl.scrollTop > scrollTop) {
-            scrollTop = htmlEl.scrollTop
-          }
-        })
-      }
-
-      // 4. Check any element with scrollTop > 0 (fallback)
-      if (scrollTop === 0) {
-        const allElements = document.querySelectorAll('*')
-        allElements.forEach((el) => {
-          const htmlEl = el as HTMLElement
-          if (htmlEl.scrollTop > scrollTop) {
-            scrollTop = htmlEl.scrollTop
-          }
-        })
-      }
-
-      const shouldShow = scrollTop > 200
-
-      // Only update state if it changed to avoid unnecessary re-renders
-      setShowScrollToTop((prev) => {
-        if (prev !== shouldShow) {
-          return shouldShow
-        }
-        return prev
-      })
-
-      // Continue polling
-      animationFrameId = requestAnimationFrame(checkScrollPosition)
-    }
-
-    // Start polling after a small delay to ensure DOM is ready
-    const startTimer = setTimeout(() => {
-      checkScrollPosition()
-    }, 100)
-
-    // Add resize listener to handle orientation changes
-    const mediaQuery = window.matchMedia('(max-width: 767px)')
-    const handleMediaChange = (e: MediaQueryListEvent) => {
-      if (!e.matches) {
-        setShowScrollToTop(false)
-      }
-    }
-
-    mediaQuery.addEventListener('change', handleMediaChange)
-
-    return () => {
-      clearTimeout(startTimer)
-      isRunning = false
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
-      }
-      mediaQuery.removeEventListener('change', handleMediaChange)
-    }
   }, [])
 
   // Sensors: TouchSensor (long-press) for mobile to avoid scroll conflicts;
@@ -1239,7 +1129,7 @@ export function ShoppingListView() {
 
   return (
     <>
-    <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
+    <div className="flex-1 min-h-0 flex flex-col">
       {/* Mobile sticky add item - always accessible at top */}
       <div className={cn("sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-stone-100 pb-3 mb-4", isDesktop && "hidden")}>
         <form onSubmit={handleAddItem} className="relative">
@@ -1328,7 +1218,7 @@ export function ShoppingListView() {
       </header>
 
       {/* Shopping List — full width (sidebar removed) */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-x-hidden">
+      <div className="flex-1 min-h-0 flex flex-col">
       {/* Shopping List */}
       {showLoading ? (
         <p className="text-center text-muted-foreground py-8">Loading...</p>
@@ -1619,17 +1509,6 @@ export function ShoppingListView() {
         categories={categories || []}
       />
     </div>
-
-    {/* Scroll to top FAB - mobile only (outside overflow container) */}
-    {showScrollToTop && (
-      <button
-        onClick={handleScrollToTop}
-        className={cn("fixed bottom-28 right-4 z-40 h-12 w-12 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-200 flex items-center justify-center", isDesktop && "hidden")}
-        aria-label="Scroll to top"
-      >
-        <ChevronUp className="h-5 w-5" />
-      </button>
-    )}
     </>
   )
 }

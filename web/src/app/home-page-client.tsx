@@ -256,7 +256,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
   }
 
   return (
-    <main className="flex-1 min-h-0 flex flex-col bg-background pb-[var(--bottom-nav-safe-height)] md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
+    <main className="flex-1 min-h-0 flex flex-col bg-background md:pb-6 md:pt-[var(--header-height)] smooth-scroll">
       <Header
         userEmail={user?.email}
         onSignOut={handleSignOut}
@@ -268,7 +268,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
         <div
           className={
             activeTab === "recipes"
-              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
           aria-hidden={activeTab !== "recipes"}
@@ -278,7 +278,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
         <div
           className={
             activeTab === "planner"
-              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
           aria-hidden={activeTab !== "planner"}
@@ -288,7 +288,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
         <div
           className={
             activeTab === "pantry"
-              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
           aria-hidden={activeTab !== "pantry"}
@@ -298,7 +298,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
         <div
           className={
             activeTab === "shopping"
-              ? "flex-1 min-h-0 flex flex-col overflow-y-auto scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
           aria-hidden={activeTab !== "shopping"}
