@@ -25,10 +25,16 @@ import { useRecipeHistoryStats, useMarkRecipeAsMade, useUnmarkRecipeAsMade } fro
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { downloadRecipesAsJson } from "@/lib/recipe-export"
+import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import type { Recipe } from "@/types/database"
 
 type SortOption = "timesMade" | "lastMade" | "name" | "newest"
+
+const SHOPPING_ITEM_LABEL = {
+  singular: "shopping item",
+  plural: "shopping items",
+}
 
 /**
  * Sort recipes based on the selected sort option
@@ -183,9 +189,12 @@ export function RecipeList() {
         scale: 1.0,
       })
 
-      const itemCount = result.added + result.merged
       showToast({
-        message: `Added ${itemCount} ingredient${itemCount !== 1 ? "s" : ""} from "${recipe.name}" to shopping list`,
+        message: formatShoppingAddMessage(result, {
+          sourceName: recipe.name,
+          itemLabel: SHOPPING_ITEM_LABEL,
+          zeroMessage: `All shopping items from "${recipe.name}" are already on the shopping list`,
+        }),
       })
     } catch (error) {
       showToast({

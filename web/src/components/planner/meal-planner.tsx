@@ -80,7 +80,8 @@ import {
   buildUnassignedDayPriority,
 } from "@/lib/planner-utils"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
-import { cn } from "@/lib/utils"
+import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
+import { cn, getErrorMessage } from "@/lib/utils"
 import {
   formatLocalISODate,
   formatWeekLabel,
@@ -132,6 +133,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { useSaveWeeklyPlan } from "@/hooks/use-planner"
 import type { Recipe, RecipeHistory, PlanTemplate } from "@/types/database"
+
+const SHOPPING_ITEM_LABEL = {
+  singular: "shopping item",
+  plural: "shopping items",
+}
 
 /**
  * Get the most recent "made" date for each recipe from history
@@ -1240,28 +1246,22 @@ export function MealPlanner() {
     if (!weeklyPlan?.recipe_ids || weeklyPlan.recipe_ids.length === 0) return
     try {
       const result = await addToShoppingList.mutateAsync({ recipeIds: weeklyPlan.recipe_ids })
-      
-      // Show success message based on what happened
-      let message = ""
-      if (result.added > 0 && result.merged > 0) {
-        message = `${result.added} item${result.added !== 1 ? "s" : ""} added, ${result.merged} item${result.merged !== 1 ? "s" : ""} merged to shopping list`
-      } else if (result.added > 0) {
-        message = `${result.added} item${result.added !== 1 ? "s" : ""} added to shopping list`
-      } else if (result.merged > 0) {
-        message = `${result.merged} item${result.merged !== 1 ? "s" : ""} merged to shopping list`
-      } else {
-        message = "All items already in shopping list"
-      }
-      
+
       undoToast.show({
-        message,
+        message: formatShoppingAddMessage(result, {
+          itemLabel: SHOPPING_ITEM_LABEL,
+          zeroMessage: "Everything in this plan is already on the shopping list",
+        }),
         duration: 4000,
       })
       setBulkCartJustAdded(true)
       setTimeout(() => setBulkCartJustAdded(false), 1500)
     } catch (error) {
-      // Error handling is done by the mutation itself
       console.error("Failed to add to shopping list:", error)
+      undoToast.show({
+        message: getErrorMessage(error, "Failed to add this plan to shopping list"),
+        duration: 4000,
+      })
     }
   }
 
@@ -1291,6 +1291,10 @@ export function MealPlanner() {
       undoToast.show({ message: msg, duration: 4000 })
     } catch (error) {
       console.error('Failed to load template:', error)
+      undoToast.show({
+        message: getErrorMessage(error, `Failed to load template "${template.name}"`),
+        duration: 4000,
+      })
     }
   }
 
@@ -1378,19 +1382,25 @@ export function MealPlanner() {
     setAddingToCartRecipeId(recipeId)
     try {
       const result = await addToShoppingList.mutateAsync({ recipeIds: [recipeId] })
-      let message = ''
-      if (result.added > 0 && result.merged > 0) {
-        message = `${result.added} item${result.added !== 1 ? 's' : ''} added, ${result.merged} merged`
-      } else if (result.added > 0) {
-        message = `${result.added} item${result.added !== 1 ? 's' : ''} added to shopping list`
-      } else if (result.merged > 0) {
-        message = `${result.merged} item${result.merged !== 1 ? 's' : ''} merged to shopping list`
-      } else {
-        message = 'All items already in shopping list'
-      }
-      undoToast.show({ message, duration: 4000 })
+      const recipeName = displayedRecipes?.find((recipe) => recipe.id === recipeId)?.name
+      undoToast.show({
+        message: formatShoppingAddMessage(result, {
+          sourceName: recipeName,
+          itemLabel: SHOPPING_ITEM_LABEL,
+          zeroMessage: recipeName
+            ? `All shopping items from "${recipeName}" are already on the shopping list`
+            : "Everything from this recipe is already on the shopping list",
+        }),
+        duration: 4000,
+      })
       setCartAddedRecipeId(recipeId)
       setTimeout(() => setCartAddedRecipeId(null), 1500)
+    } catch (error) {
+      console.error("Failed to add recipe to shopping list:", error)
+      undoToast.show({
+        message: getErrorMessage(error, "Failed to add recipe to shopping list"),
+        duration: 4000,
+      })
     } finally {
       setAddingToCartRecipeId(null)
     }

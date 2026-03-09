@@ -267,7 +267,7 @@ export function RecipeDetailDialog({
                     ) : (
                       <ShoppingCart className="h-4 w-4" />
                     )}
-                    Add to Shopping
+                    Add to Shopping List
                   </Button>
                 )}
                 {onMarkAsMade && (

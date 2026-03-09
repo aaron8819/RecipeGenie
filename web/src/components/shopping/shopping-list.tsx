@@ -51,11 +51,12 @@ import {
 import { getCategoryByKey } from "@/lib/shopping-categories"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { ShoppingItem, Recipe } from "@/types/database"
-import { toFraction, cn } from "@/lib/utils"
+import { cn, toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
 import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
+import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import { useRecipe, useRecipes, useCategories } from "@/hooks/use-recipes"
@@ -653,15 +654,14 @@ export function ShoppingListView() {
     // Perform mutation
     addToPantryAndRemove.mutate(item, {
       onSuccess: (data) => {
-        // Different message if item was already in pantry
         const message = data.wasAdded
-          ? `"${item.item}" added to pantry`
-          : `"${item.item}" already in pantry`
+          ? `Moved "${item.item}" to pantry`
+          : `"${item.item}" removed from shopping; already in pantry`
         undoToast.show({ message, duration: 2000 })
       },
       onError: () => {
         undoToast.show({
-          message: `Failed to add "${item.item}" to pantry`,
+          message: `Failed to move "${item.item}" to pantry`,
           duration: 3000,
         })
       },
@@ -886,13 +886,18 @@ export function ShoppingListView() {
     const itemsToAdd = items.filter(item => !activeAdditions.has(item.toLowerCase().trim()))
 
     if (itemsToAdd.length === 0) {
-      undoToast.show({ message: 'Item already being added', duration: 2000 })
+      undoToast.show({
+        message: items.length === 1 ? `"${items[0]}" is already being added` : "Those items are already being added",
+        duration: 2000,
+      })
       return
     }
 
     try {
-      // Add each item
       const addedItems: string[] = []
+      const duplicateItems: string[] = []
+      const failedItems: string[] = []
+
       for (const item of itemsToAdd) {
         const normalized = item.toLowerCase().trim()
         setActiveAdditions(prev => new Set(prev).add(normalized))
@@ -900,8 +905,12 @@ export function ShoppingListView() {
           await addItem.mutateAsync({ itemName: item })
           addedItems.push(item)
         } catch (error) {
-          // Skip duplicates or errors for individual items
-          console.warn(`Skipped item "${item}":`, error)
+          if (isAlreadyInShoppingListError(error)) {
+            duplicateItems.push(item)
+          } else {
+            failedItems.push(item)
+            console.warn(`Failed to add item "${item}":`, error)
+          }
         } finally {
           setActiveAdditions(prev => {
             const next = new Set(prev)
@@ -910,23 +919,80 @@ export function ShoppingListView() {
           })
         }
       }
-      setNewItem("")
+
+      setNewItem(failedItems.join(", "))
       addItemInputRef.current?.focus()
 
-      // Show confirmation toast
-      if (addedItems.length > 0) {
-        const message = addedItems.length === 1
-          ? `Added: ${addedItems[0]}`
-          : `Added ${addedItems.length} items`
+      if (addedItems.length > 0 || duplicateItems.length > 0 || failedItems.length > 0) {
+        const messageParts: string[] = []
+
+        if (addedItems.length > 0) {
+          messageParts.push(
+            addedItems.length === 1
+              ? `Added "${addedItems[0]}" to shopping list`
+              : `Added ${addedItems.length} items to shopping list`
+          )
+        }
+
+        if (duplicateItems.length > 0) {
+          messageParts.push(
+            duplicateItems.length === 1
+              ? `"${duplicateItems[0]}" was already on the shopping list`
+              : `${duplicateItems.length} items were already on the shopping list`
+          )
+        }
+
+        if (failedItems.length > 0) {
+          messageParts.push(
+            failedItems.length === 1
+              ? `Could not add "${failedItems[0]}"`
+              : `Could not add ${failedItems.length} items`
+          )
+        }
+
         undoToast.show({
-          message,
-          duration: 2000,
+          message: messageParts.join("; "),
+          duration: 3000,
         })
       }
     } catch (error) {
       console.error("Failed to add items:", error)
     }
   }
+
+  const handleRestorePantryItem = useCallback((item: ShoppingItem) => {
+    moveToList.mutate(item, {
+      onSuccess: () => {
+        undoToast.show({
+          message: `Restored "${item.item}" to shopping list`,
+          duration: 2000,
+        })
+      },
+      onError: () => {
+        undoToast.show({
+          message: `Failed to restore "${item.item}" to shopping list`,
+          duration: 3000,
+        })
+      },
+    })
+  }, [moveToList, undoToast])
+
+  const handleRestoreExcludedItem = useCallback((item: ShoppingItem) => {
+    moveExcludedToList.mutate(item, {
+      onSuccess: () => {
+        undoToast.show({
+          message: `Restored "${item.item}" to shopping list`,
+          duration: 2000,
+        })
+      },
+      onError: () => {
+        undoToast.show({
+          message: `Failed to restore "${item.item}" to shopping list`,
+          duration: 3000,
+        })
+      },
+    })
+  }, [moveExcludedToList, undoToast])
 
 
   const handleCopyList = async () => {
@@ -1385,7 +1451,7 @@ export function ShoppingListView() {
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel="In pantry"
-                        onRestore={() => moveToList.mutate(item)}
+                        onRestore={() => handleRestorePantryItem(item)}
                         disabled={moveToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="pantry"
@@ -1404,7 +1470,7 @@ export function ShoppingListView() {
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel="In pantry"
-                        onRestore={() => moveToList.mutate(item)}
+                        onRestore={() => handleRestorePantryItem(item)}
                         disabled={moveToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="pantry"
@@ -1437,7 +1503,7 @@ export function ShoppingListView() {
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}
-                        onRestore={() => moveExcludedToList.mutate(item)}
+                        onRestore={() => handleRestoreExcludedItem(item)}
                         disabled={moveExcludedToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="excluded"
@@ -1456,7 +1522,7 @@ export function ShoppingListView() {
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}
-                        onRestore={() => moveExcludedToList.mutate(item)}
+                        onRestore={() => handleRestoreExcludedItem(item)}
                         disabled={moveExcludedToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="excluded"

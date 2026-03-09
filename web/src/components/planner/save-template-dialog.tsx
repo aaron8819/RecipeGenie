@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2, Save } from 'lucide-react';
+import { useUndoToast } from '@/hooks/use-undo-toast';
 import { useSavePlanTemplate } from '@/hooks/use-plan-templates';
+import { getErrorMessage } from '@/lib/utils';
 
 interface SaveTemplateDialogProps {
   open: boolean;
@@ -30,17 +32,31 @@ export function SaveTemplateDialog({
 }: SaveTemplateDialogProps) {
   const [name, setName] = useState('');
   const saveTemplate = useSavePlanTemplate();
+  const undoToast = useUndoToast();
 
   const handleSave = async () => {
     if (!name.trim()) return;
-    await saveTemplate.mutateAsync({
-      name: name.trim(),
-      recipeIds,
-      dayAssignments,
-      categorySelection,
-    });
-    setName('');
-    onOpenChange(false);
+    const templateName = name.trim();
+
+    try {
+      await saveTemplate.mutateAsync({
+        name: templateName,
+        recipeIds,
+        dayAssignments,
+        categorySelection,
+      });
+      undoToast.show({
+        message: `Template "${templateName}" saved with ${recipeIds.length} planned recipe${recipeIds.length === 1 ? '' : 's'}`,
+        duration: 4000,
+      });
+      setName('');
+      onOpenChange(false);
+    } catch (error) {
+      undoToast.show({
+        message: getErrorMessage(error, `Failed to save template "${templateName}"`),
+        duration: 4000,
+      });
+    }
   };
 
   return (

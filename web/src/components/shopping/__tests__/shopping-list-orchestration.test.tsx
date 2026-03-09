@@ -13,8 +13,13 @@ const shoppingListeners = new Set<() => void>()
 const removeItemMutate = vi.fn<(rowId: string) => void>()
 const removeRecipeItemsMutate = vi.fn<(recipeName: string) => void>()
 const clearListMutate = vi.fn<() => void>()
-const moveToListMutate = vi.fn<(item: ShoppingItem) => void>()
-const moveExcludedMutate = vi.fn<(item: ShoppingItem) => void>()
+const moveToListMutate = vi.fn<
+  (item: ShoppingItem, options?: { onSuccess?: () => void; onError?: () => void }) => void
+>()
+const moveExcludedMutate = vi.fn<
+  (item: ShoppingItem, options?: { onSuccess?: () => void; onError?: () => void }) => void
+>()
+const addShoppingItemMutateAsync = vi.fn<(args: { itemName: string }) => Promise<unknown>>()
 const addToPantryAndRemoveMutate = vi.fn<
   (item: ShoppingItem, options?: { onSuccess?: (data: { wasAdded: boolean }) => void; onSettled?: () => void }) => void
 >()
@@ -250,7 +255,7 @@ vi.mock("@/hooks/use-shopping", () => ({
     isPending: false,
   }),
   useAddShoppingItem: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: addShoppingItemMutateAsync,
     isPending: false,
   }),
   useRemoveShoppingItem: () => ({
@@ -562,20 +567,22 @@ vi.mock("@/hooks/use-shopping", () => ({
     }))
   })
 
-  moveToListMutate.mockImplementation((item: ShoppingItem) => {
+  moveToListMutate.mockImplementation((item: ShoppingItem, options) => {
     updateShoppingList((prev) => ({
       ...prev,
       already_have: prev.already_have.filter((alreadyHaveItem) => alreadyHaveItem.rowId !== item.rowId),
       items: [...prev.items, item],
     }))
+    options?.onSuccess?.()
   })
 
-  moveExcludedMutate.mockImplementation((item: ShoppingItem) => {
+  moveExcludedMutate.mockImplementation((item: ShoppingItem, options) => {
     updateShoppingList((prev) => ({
       ...prev,
       excluded: prev.excluded.filter((excludedItem) => excludedItem.rowId !== item.rowId),
       items: [...prev.items, item],
     }))
+    options?.onSuccess?.()
     moveExcludedResolvers.push(() => undefined)
   })
 
@@ -588,6 +595,7 @@ vi.mock("@/hooks/use-shopping", () => ({
     options?.onSuccess?.({ wasAdded: true })
     options?.onSettled?.()
   })
+  addShoppingItemMutateAsync.mockResolvedValue({ rowId: "row-new-item" })
 
   vi.stubGlobal("requestAnimationFrame", vi.fn(() => 0))
   vi.stubGlobal("cancelAnimationFrame", vi.fn())
@@ -645,6 +653,7 @@ describe("ShoppingListView orchestration", () => {
     expect(currentShoppingList.items.map((item) => item.rowId)).toEqual([])
     expect(currentShoppingList.already_have.map((item) => item.rowId)).toEqual(["row-garlic-clove"])
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
+    expect(screen.getByRole("alert")).toHaveTextContent('Moved "garlic" to pantry')
   })
 
   it("reveals quick mobile remove actions with a swipe and keeps deferred delete behavior intact", () => {
@@ -969,6 +978,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.queryByText("Excluded")).not.toBeInTheDocument()
     expect(screen.getByText("Fresh Produce")).toBeInTheDocument()
     expect(screen.getAllByText("cilantro")).toHaveLength(1)
+    expect(screen.getByRole("alert")).toHaveTextContent('Restored "cilantro" to shopping list')
 
     resolveNextExcludedMove()
 
@@ -998,8 +1008,14 @@ describe("ShoppingListView orchestration", () => {
       fireEvent.click(screen.getByRole("button", { name: "Restore salt 1 tsp Excluded: salt" }))
     })
 
-    expect(moveToListMutate).toHaveBeenCalledWith(expect.objectContaining({ rowId: "row-milk-cup" }))
-    expect(moveExcludedMutate).toHaveBeenCalledWith(expect.objectContaining({ rowId: "row-salt-tsp" }))
+    expect(moveToListMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "row-milk-cup" }),
+      expect.any(Object)
+    )
+    expect(moveExcludedMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "row-salt-tsp" }),
+      expect.any(Object)
+    )
     expect(currentShoppingList.items.map((item) => item.rowId)).toEqual([
       "row-milk-cup",
       "row-salt-tsp",
@@ -1022,5 +1038,38 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
     expect(screen.getByText("2 cups")).toBeInTheDocument()
     expect(screen.getByText("Excluded: cilantro")).toBeInTheDocument()
+  })
+
+  it("explains manual add results when some items are duplicates", async () => {
+    currentShoppingList = makeList({
+      items: [makeItem("milk")],
+    })
+
+    addShoppingItemMutateAsync.mockImplementation(async ({ itemName }: { itemName: string }) => {
+      if (itemName.toLowerCase() === "milk") {
+        throw new Error("Item already in shopping list")
+      }
+
+      updateShoppingList((prev) => ({
+        ...prev,
+        items: [...prev.items, makeItem(itemName.toLowerCase(), { rowId: `row-${itemName.toLowerCase()}` })],
+      }))
+      return { rowId: `row-${itemName.toLowerCase()}` }
+    })
+
+    renderShoppingList()
+
+    fireEvent.change(screen.getByPlaceholderText(/add tomatoes, milk/i), {
+      target: { value: "milk, eggs" },
+    })
+    await act(async () => {
+      fireEvent.submit(screen.getByPlaceholderText(/add tomatoes, milk/i).closest("form")!)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      'Added "eggs" to shopping list; "milk" was already on the shopping list'
+    )
   })
 })

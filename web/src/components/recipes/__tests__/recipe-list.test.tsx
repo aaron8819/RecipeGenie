@@ -1,5 +1,5 @@
 import React from "react"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeList } from "../recipe-list"
 import type { Recipe } from "@/types/database"
@@ -15,6 +15,8 @@ let lastRecipeOptions:
 
 let baseRecipes: Recipe[] = []
 let isDesktopViewport = true
+const addToShoppingListMutateAsync = vi.fn()
+const undoToastShow = vi.fn()
 
 vi.mock("@/hooks/use-is-desktop", () => ({
   useIsDesktop: () => isDesktopViewport,
@@ -81,13 +83,13 @@ vi.mock("@/hooks/use-planner", () => ({
 
 vi.mock("@/hooks/use-shopping", () => ({
   useAddToShoppingList: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: addToShoppingListMutateAsync,
   }),
 }))
 
 vi.mock("@/hooks/use-undo-toast", () => ({
   useUndoToast: () => ({
-    show: vi.fn(),
+    show: undoToastShow,
   }),
 }))
 
@@ -159,7 +161,20 @@ vi.mock("@/components/ui/empty-state", () => ({
 }))
 
 vi.mock("../recipe-card", () => ({
-  RecipeCard: ({ recipe }: { recipe: Recipe }) => <div>{recipe.name}</div>,
+  RecipeCard: ({
+    recipe,
+    onAddToShoppingList,
+  }: {
+    recipe: Recipe
+    onAddToShoppingList?: (recipe: Recipe) => void
+  }) => (
+    <div>
+      <span>{recipe.name}</span>
+      <button type="button" onClick={() => onAddToShoppingList?.(recipe)}>
+        Add {recipe.name}
+      </button>
+    </div>
+  ),
 }))
 
 vi.mock("../recipe-dialog", () => ({
@@ -213,6 +228,8 @@ describe("RecipeList", () => {
     lastRecipeOptions = undefined
     baseRecipes = [recipeFixture()]
     isDesktopViewport = true
+    addToShoppingListMutateAsync.mockReset()
+    undoToastShow.mockReset()
     window.localStorage.clear()
   })
 
@@ -262,5 +279,39 @@ describe("RecipeList", () => {
     expect(within(utilitiesRow).getByRole("button", { name: "Shared" })).toBeInTheDocument()
     expect(within(utilitiesRow).getByRole("button", { name: "Settings" })).toBeInTheDocument()
     expect(screen.getAllByRole("button", { name: "Favorites" }).length).toBeGreaterThan(0)
+  })
+
+  it("reports update-only shopping results without claiming new additions", async () => {
+    addToShoppingListMutateAsync.mockResolvedValueOnce({
+      added: 0,
+      merged: 2,
+    })
+
+    render(<RecipeList />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
+
+    await waitFor(() => {
+      expect(undoToastShow).toHaveBeenCalledWith({
+        message: 'Updated 2 shopping items from "Chicken Soup" already on the shopping list',
+      })
+    })
+  })
+
+  it("reports when everything from a recipe is already on the shopping list", async () => {
+    addToShoppingListMutateAsync.mockResolvedValueOnce({
+      added: 0,
+      merged: 0,
+    })
+
+    render(<RecipeList />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
+
+    await waitFor(() => {
+      expect(undoToastShow).toHaveBeenCalledWith({
+        message: 'All shopping items from "Chicken Soup" are already on the shopping list',
+      })
+    })
   })
 })

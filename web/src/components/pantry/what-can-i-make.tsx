@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Loader2, ChefHat, ShoppingCart } from 'lucide-react';
 import { usePantryMatch } from '@/hooks/use-pantry-match';
-import { useAddToShoppingList } from '@/hooks/use-shopping';
+import { usePantryItems } from '@/hooks/use-pantry';
+import { useAddPantryRecipeToShoppingList } from '@/hooks/use-shopping';
 import { useUndoToast } from '@/hooks/use-undo-toast';
+import { formatShoppingAddMessage } from '@/lib/shopping-feedback';
 import { cn } from '@/lib/utils';
 import { getTagClassName } from '@/lib/tag-colors';
 
@@ -24,7 +27,8 @@ export function WhatCanIMake({
   onOpenChange,
 }: WhatCanIMakeProps) {
   const { matches, isLoading } = usePantryMatch();
-  const addToShoppingList = useAddToShoppingList();
+  const { data: pantryItems } = usePantryItems();
+  const addRecipeToShoppingList = useAddPantryRecipeToShoppingList();
   const undoToast = useUndoToast();
   const [filter, setFilter] = useState<
     'all' | 'canMake'
@@ -38,23 +42,26 @@ export function WhatCanIMake({
       ? matches.filter((m) => m.matchPercentage === 100)
       : matches;
 
-  const handleAddMissing = async (
+  const handleAddRecipeToShoppingList = async (
     recipeId: string,
     recipeName: string
   ) => {
     setAddingId(recipeId);
     try {
-      const result = await addToShoppingList.mutateAsync({
-        recipeIds: [recipeId],
-        scale: 1.0,
-      });
-      const count = result.added + result.merged;
+      const result = await addRecipeToShoppingList.mutateAsync(recipeId);
       undoToast.show({
-        message: `Added ${count} ingredient${count !== 1 ? 's' : ''} from "${recipeName}" to shopping list`,
+        message: formatShoppingAddMessage(result, {
+          sourceName: recipeName,
+          itemLabel: {
+            singular: 'shopping item',
+            plural: 'shopping items',
+          },
+          zeroMessage: `All shopping items from "${recipeName}" are already on the shopping list`,
+        }),
       });
     } catch {
       undoToast.show({
-        message: 'Failed to add to shopping list',
+        message: `Failed to add "${recipeName}" to the shopping list`,
       });
     } finally {
       setAddingId(null);
@@ -68,6 +75,9 @@ export function WhatCanIMake({
           <ChefHat className="h-5 w-5 text-primary" />
           What Can I Make?
         </DialogTitle>
+        <DialogDescription>
+          See what you can make now and add any missing shopping items from a recipe.
+        </DialogDescription>
 
         {/* Filter toggles */}
         <div className="flex gap-2 py-2">
@@ -105,9 +115,11 @@ export function WhatCanIMake({
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">
-              {filter === 'canMake'
-                ? 'No recipes can be made with pantry items alone. Try "All" to see partial matches.'
-                : 'No matching recipes found. Add more items to your pantry.'}
+              {!pantryItems || pantryItems.length === 0
+                ? 'Add pantry items first to compare recipes against what you already have.'
+                : filter === 'canMake'
+                  ? 'Nothing is fully covered by your pantry yet. Try "All" to see what is missing.'
+                  : 'No recipe matches your current pantry items yet.'}
             </p>
           ) : (
             filtered.map((match) => (
@@ -137,6 +149,11 @@ export function WhatCanIMake({
                         <span className="text-xs text-muted-foreground">
                           Missing{' '}
                           {match.missingIngredients.length}
+                        </span>
+                      )}
+                      {match.missingIngredients.length === 0 && (
+                        <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                          Ready now
                         </span>
                       )}
                     </div>
@@ -186,7 +203,7 @@ export function WhatCanIMake({
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        handleAddMissing(
+                        handleAddRecipeToShoppingList(
                           match.recipe.id,
                           match.recipe.name
                         )
@@ -201,7 +218,7 @@ export function WhatCanIMake({
                       ) : (
                         <ShoppingCart className="h-3 w-3 mr-1" />
                       )}
-                      Add to list
+                      Add ingredients to shopping list
                     </Button>
                   </div>
                 )}
