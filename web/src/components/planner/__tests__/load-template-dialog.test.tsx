@@ -1,5 +1,5 @@
 import React from "react"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { LoadTemplateDialog } from "../load-template-dialog"
 import type { PlanTemplate, Recipe } from "@/types/database"
@@ -76,7 +76,7 @@ describe("LoadTemplateDialog", () => {
   })
 
   it("requires an explicit confirmation before loading a template", () => {
-    const onLoadTemplate = vi.fn()
+    const onLoadTemplate = vi.fn().mockResolvedValue(undefined)
 
     render(
       <LoadTemplateDialog
@@ -98,11 +98,13 @@ describe("LoadTemplateDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Load Template" }))
 
-    expect(onLoadTemplate).toHaveBeenCalledWith(templates[0])
+    return waitFor(() => {
+      expect(onLoadTemplate).toHaveBeenCalledWith(templates[0])
+    })
   })
 
   it("shows template context without loading on row click alone", () => {
-    const onLoadTemplate = vi.fn()
+    const onLoadTemplate = vi.fn().mockResolvedValue(undefined)
 
     render(
       <LoadTemplateDialog
@@ -119,5 +121,28 @@ describe("LoadTemplateDialog", () => {
     expect(screen.getByText("1 day assignment")).toBeInTheDocument()
     expect(screen.getByText("Includes meal mix")).toBeInTheDocument()
     expect(onLoadTemplate).not.toHaveBeenCalled()
+  })
+
+  it("keeps the dialog actionable when loading a template fails", async () => {
+    const onLoadTemplate = vi.fn().mockRejectedValue(new Error("Network down"))
+
+    render(
+      <LoadTemplateDialog
+        open
+        onOpenChange={vi.fn()}
+        onLoadTemplate={onLoadTemplate}
+        weekLabel="Mar 2 - Mar 8"
+        currentRecipeCount={3}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Load" }))
+    fireEvent.click(screen.getByRole("button", { name: "Load Template" }))
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Network down")
+    })
+
+    expect(screen.getByRole("button", { name: "Load" })).toBeInTheDocument()
   })
 })

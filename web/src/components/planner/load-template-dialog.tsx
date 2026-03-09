@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -27,11 +27,12 @@ import {
 } from '@/hooks/use-plan-templates';
 import { useRecipes } from '@/hooks/use-recipes';
 import type { PlanTemplate } from '@/types/database';
+import { getErrorMessage } from '@/lib/utils';
 
 interface LoadTemplateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onLoadTemplate: (template: PlanTemplate) => void;
+  onLoadTemplate: (template: PlanTemplate) => Promise<void>;
   weekLabel: string;
   currentRecipeCount: number;
 }
@@ -54,20 +55,48 @@ export function LoadTemplateDialog({
     useState<PlanTemplate | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [managementError, setManagementError] = useState<string | null>(null);
+  const [loadingTemplateId, setLoadingTemplateId] = useState<string | null>(null);
 
-  const handleLoad = (template: PlanTemplate) => {
-    onLoadTemplate(template);
+  useEffect(() => {
+    if (open) return;
+    setLoadError(null);
+    setManagementError(null);
+    setLoadingTemplateId(null);
+    setDeleteTarget(null);
     setLoadTarget(null);
-    onOpenChange(false);
+    setRenamingId(null);
+    setRenameValue('');
+  }, [open]);
+
+  const handleLoad = async (template: PlanTemplate) => {
+    setLoadError(null);
+    setLoadingTemplateId(template.id);
+    try {
+      await onLoadTemplate(template);
+      setLoadTarget(null);
+      onOpenChange(false);
+    } catch (error) {
+      setLoadError(getErrorMessage(error, `Failed to load template "${template.name}"`));
+    } finally {
+      setLoadingTemplateId(null);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await deleteTemplate.mutateAsync(deleteTarget.id);
-    setDeleteTarget(null);
+    setManagementError(null);
+    try {
+      await deleteTemplate.mutateAsync(deleteTarget.id);
+      setDeleteTarget(null);
+    } catch (error) {
+      setManagementError(getErrorMessage(error, `Failed to delete template "${deleteTarget.name}"`));
+    }
   };
 
   const startRename = (template: PlanTemplate) => {
+    setManagementError(null);
     setRenamingId(template.id);
     setRenameValue(template.name);
   };
@@ -79,12 +108,17 @@ export function LoadTemplateDialog({
 
   const submitRename = async () => {
     if (!renamingId || !renameValue.trim()) return;
-    await renameTemplate.mutateAsync({
-      templateId: renamingId,
-      name: renameValue.trim(),
-    });
-    setRenamingId(null);
-    setRenameValue('');
+    setManagementError(null);
+    try {
+      await renameTemplate.mutateAsync({
+        templateId: renamingId,
+        name: renameValue.trim(),
+      });
+      setRenamingId(null);
+      setRenameValue('');
+    } catch (error) {
+      setManagementError(getErrorMessage(error, 'Failed to rename template'));
+    }
   };
 
   const getTemplateSummary = (
@@ -127,6 +161,16 @@ export function LoadTemplateDialog({
           <DialogDescription className="sr-only">
             Review a saved template, then confirm loading it into the currently visible week.
           </DialogDescription>
+          {loadError ? (
+            <p className="mt-3 text-sm text-destructive" role="alert">
+              {loadError}
+            </p>
+          ) : null}
+          {managementError ? (
+            <p className="mt-3 text-sm text-destructive" role="alert">
+              {managementError}
+            </p>
+          ) : null}
           <div className="flex-1 overflow-y-auto py-4">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -225,6 +269,7 @@ export function LoadTemplateDialog({
                               setLoadTarget(template)
                             }
                             className="shrink-0"
+                            disabled={loadingTemplateId !== null}
                           >
                             Load
                           </Button>
@@ -323,11 +368,19 @@ export function LoadTemplateDialog({
             <AlertDialogAction
               onClick={() => {
                 if (loadTarget) {
-                  handleLoad(loadTarget);
+                  void handleLoad(loadTarget);
                 }
               }}
+              disabled={loadingTemplateId === loadTarget?.id}
             >
-              Load Template
+              {loadingTemplateId === loadTarget?.id ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                'Load Template'
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

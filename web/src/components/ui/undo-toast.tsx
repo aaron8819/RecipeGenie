@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react"
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react"
 import { X } from "lucide-react"
 import { Button } from "./button"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,7 @@ interface UndoToastOptions {
   onExpire?: () => void
   onDismiss?: () => void
   queueBehavior?: "replace" | "enqueue"
+  dedupeKey?: string
 }
 
 interface UndoToastContextValue {
@@ -36,7 +37,12 @@ interface ToastState {
   onExpire?: () => void
   onDismiss?: () => void
   queueBehavior: "replace" | "enqueue"
+  dedupeKey: string
   startTime: number
+}
+
+function resolveDedupeKey(options: UndoToastOptions) {
+  return options.dedupeKey ?? `${options.onUndo ? "undo" : "info"}:${options.message}`
 }
 
 export function UndoToastProvider({ children }: { children: React.ReactNode }) {
@@ -76,6 +82,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
       onExpire: nextOptions.onExpire,
       onDismiss: nextOptions.onDismiss,
       queueBehavior: nextOptions.queueBehavior ?? "replace",
+      dedupeKey: resolveDedupeKey(nextOptions),
       startTime,
     }
 
@@ -117,6 +124,18 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   const show = useCallback((options: UndoToastOptions) => {
     const nextBehavior = options.queueBehavior ?? "replace"
     const activeToast = toastRef.current
+    const dedupeKey = resolveDedupeKey(options)
+    const shouldDedupe =
+      !options.onUndo &&
+      nextBehavior !== "enqueue" &&
+      (
+        activeToast?.dedupeKey === dedupeKey ||
+        queueRef.current.some((queuedToast) => resolveDedupeKey(queuedToast) === dedupeKey)
+      )
+
+    if (shouldDedupe) {
+      return
+    }
 
     if (activeToast && (activeToast.queueBehavior === "enqueue" || nextBehavior === "enqueue")) {
       queueRef.current.push(options)
@@ -165,29 +184,30 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
       {/* Toast Container */}
       <div
         className={cn(
-          "fixed bottom-24 left-1/2 -translate-x-1/2 z-50 transition-all duration-200",
+          "fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 px-3 transition-all duration-200 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:px-0",
           isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
         )}
         role="alert"
         aria-live="polite"
+        aria-atomic="true"
       >
         {toast && (
-          <div className="bg-foreground text-background rounded-lg shadow-lg overflow-hidden min-w-[280px] max-w-[400px]">
+          <div className="w-full overflow-hidden rounded-lg bg-foreground text-background shadow-lg sm:min-w-[280px] sm:max-w-[400px]">
             <div className="flex items-center gap-3 px-4 py-3">
               <span className="flex-1 text-sm">{toast.message}</span>
               {toast.onUndo && (
                 <Button
                   variant="ghost"
                   size="sm"
-                onClick={handleUndo}
-                  className="h-8 px-3 text-background hover:text-background hover:bg-background/20 font-medium"
+                  onClick={handleUndo}
+                  className="h-8 shrink-0 px-3 font-medium text-background hover:bg-background/20 hover:text-background"
                 >
                   Undo
                 </Button>
               )}
               <button
                 onClick={dismiss}
-                className="text-background/60 hover:text-background transition-colors"
+                className="shrink-0 text-background/60 transition-colors hover:text-background"
                 aria-label="Dismiss"
               >
                 <X className="h-4 w-4" />

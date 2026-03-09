@@ -177,9 +177,22 @@ export function RecipeList() {
 
   const handleDelete = useCallback(async (recipe: Recipe) => {
     if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
-      await deleteRecipe.mutateAsync(recipe.id)
+      try {
+        await deleteRecipe.mutateAsync(recipe.id)
+        showToast({
+          message: `"${recipe.name}" deleted`,
+        })
+        return true
+      } catch (error) {
+        showToast({
+          message: getErrorMessage(error, `Failed to delete "${recipe.name}"`),
+          duration: 4000,
+        })
+        return false
+      }
     }
-  }, [deleteRecipe])
+    return false
+  }, [deleteRecipe, showToast])
 
   const handleAddToShoppingList = useCallback(async (recipe: Recipe) => {
     setAddingToShoppingListId(recipe.id)

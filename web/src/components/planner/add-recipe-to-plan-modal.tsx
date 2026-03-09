@@ -22,7 +22,7 @@ import {
 import { useRecipes, useCategories } from "@/hooks/use-recipes"
 import { useAddRecipeToPlan } from "@/hooks/use-planner"
 import type { Recipe } from "@/types/database"
-import { cn } from "@/lib/utils"
+import { cn, getErrorMessage } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
 
 interface AddRecipeToPlanModalProps {
@@ -45,6 +45,7 @@ export function AddRecipeToPlanModal({
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
 
   const { data: recipes } = useRecipes({
     search: search || null,
@@ -59,12 +60,14 @@ export function AddRecipeToPlanModal({
       setSearch("")
       setCategory(null)
       setSelectedRecipeId(null)
+      setSubmissionError(null)
     }
     onOpenChange(open)
   }
 
   const handleAddToPlan = async () => {
     if (!selectedRecipeId || !weekDate) return
+    setSubmissionError(null)
 
     try {
       await addToPlan.mutateAsync({
@@ -74,7 +77,7 @@ export function AddRecipeToPlanModal({
       })
       handleOpenChange(false)
     } catch (error) {
-      console.error("Failed to add recipe to plan:", error)
+      setSubmissionError(getErrorMessage(error, "Failed to add recipe to this plan"))
     }
   }
 
@@ -102,13 +105,19 @@ export function AddRecipeToPlanModal({
             <Input
               placeholder="Search recipes..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                if (submissionError) setSubmissionError(null)
+              }}
               className="pl-9"
             />
           </div>
           <Select
             value={category || "all"}
-            onValueChange={(v) => setCategory(v === "all" ? null : v)}
+            onValueChange={(v) => {
+              setCategory(v === "all" ? null : v)
+              if (submissionError) setSubmissionError(null)
+            }}
           >
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Category" />
@@ -136,7 +145,10 @@ export function AddRecipeToPlanModal({
                 <li key={recipe.id}>
                   <button
                     type="button"
-                    onClick={() => setSelectedRecipeId(recipe.id)}
+                    onClick={() => {
+                      setSelectedRecipeId(recipe.id)
+                      if (submissionError) setSubmissionError(null)
+                    }}
                     className={cn(
                       "w-full px-4 py-3 text-left transition-colors hover:bg-accent",
                       selectedRecipeId === recipe.id && "bg-primary/10"
@@ -173,6 +185,12 @@ export function AddRecipeToPlanModal({
             </ul>
           )}
         </div>
+
+        {submissionError ? (
+          <p className="mt-3 text-sm text-destructive" role="alert">
+            {submissionError}
+          </p>
+        ) : null}
 
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={() => handleOpenChange(false)}>

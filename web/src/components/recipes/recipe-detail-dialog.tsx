@@ -33,7 +33,7 @@ interface RecipeDetailDialogProps {
   recipeId?: string | null
   recipe?: Recipe | null
   onEdit?: (recipe: Recipe) => void
-  onDelete?: (recipe: Recipe) => void
+  onDelete?: (recipe: Recipe) => Promise<boolean> | boolean | void
   onShare?: (recipe: Recipe) => void
   onAddToPlan?: (recipe: Recipe) => void
   onAddToShoppingList?: (recipe: Recipe) => void
@@ -70,15 +70,23 @@ export function RecipeDetailDialog({
   const recipe = liveRecipe ?? initialRecipe
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isCookMode, setIsCookMode] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const cookModeRecipeRef = useRef<Recipe | null>(null)
 
   const recipeImageUrl = recipe ? getRecipeImageUrl(recipe.image_url) : null
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (onDelete && recipe) {
-      onDelete(recipe)
-      setShowDeleteConfirm(false)
-      onOpenChange(false)
+      setIsDeleting(true)
+      try {
+        const deleted = await onDelete(recipe)
+        if (deleted !== false) {
+          setShowDeleteConfirm(false)
+          onOpenChange(false)
+        }
+      } finally {
+        setIsDeleting(false)
+      }
     }
   }
 
@@ -362,12 +370,20 @@ export function RecipeDetailDialog({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDelete}
+              onClick={() => void handleDelete()}
+              disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

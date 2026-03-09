@@ -16,6 +16,7 @@ let lastRecipeOptions:
 let baseRecipes: Recipe[] = []
 let isDesktopViewport = true
 const addToShoppingListMutateAsync = vi.fn()
+const deleteRecipeMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
 
 vi.mock("@/hooks/use-is-desktop", () => ({
@@ -71,7 +72,7 @@ vi.mock("@/hooks/use-recipes", () => ({
     mutate: vi.fn(),
   }),
   useDeleteRecipe: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: deleteRecipeMutateAsync,
   }),
 }))
 
@@ -164,14 +165,19 @@ vi.mock("../recipe-card", () => ({
   RecipeCard: ({
     recipe,
     onAddToShoppingList,
+    onDelete,
   }: {
     recipe: Recipe
     onAddToShoppingList?: (recipe: Recipe) => void
+    onDelete?: (recipe: Recipe) => void
   }) => (
     <div>
       <span>{recipe.name}</span>
       <button type="button" onClick={() => onAddToShoppingList?.(recipe)}>
         Add {recipe.name}
+      </button>
+      <button type="button" onClick={() => onDelete?.(recipe)}>
+        Delete {recipe.name}
       </button>
     </div>
   ),
@@ -225,12 +231,15 @@ function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
 
 describe("RecipeList", () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     lastRecipeOptions = undefined
     baseRecipes = [recipeFixture()]
     isDesktopViewport = true
     addToShoppingListMutateAsync.mockReset()
+    deleteRecipeMutateAsync.mockReset()
     undoToastShow.mockReset()
     window.localStorage.clear()
+    vi.spyOn(window, "confirm").mockReturnValue(true)
   })
 
   it("aligns the search copy with the actual search scope", () => {
@@ -312,6 +321,22 @@ describe("RecipeList", () => {
       expect(undoToastShow).toHaveBeenCalledWith({
         message: 'All shopping items from "Chicken Soup" are already on the shopping list',
       })
+    })
+  })
+
+  it("waits for recipe deletion to succeed before confirming it", async () => {
+    deleteRecipeMutateAsync.mockResolvedValueOnce("recipe-1")
+
+    render(<RecipeList />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Chicken Soup" }))
+
+    await waitFor(() => {
+      expect(deleteRecipeMutateAsync).toHaveBeenCalledWith("recipe-1")
+    })
+
+    expect(undoToastShow).toHaveBeenCalledWith({
+      message: '"Chicken Soup" deleted',
     })
   })
 })

@@ -359,6 +359,7 @@ function DayColumn({
   addingToCartRecipeId,
   cartAddedRecipeId,
   swappingRecipeId,
+  removingRecipeId,
   onViewRecipe,
   onSwapRecipe,
   onMarkMade,
@@ -379,6 +380,7 @@ function DayColumn({
   addingToCartRecipeId: string | null
   cartAddedRecipeId: string | null
   swappingRecipeId: string | null
+  removingRecipeId: string | null
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
   onMarkMade: (recipeId: string, isMade: boolean) => void
@@ -438,6 +440,7 @@ function DayColumn({
                   isAddingToCart={addingToCartRecipeId === mainRecipe.id}
                   isJustAddedToCart={cartAddedRecipeId === mainRecipe.id}
                   isSwapping={swappingRecipeId === mainRecipe.id}
+                  isRemoving={removingRecipeId === mainRecipe.id}
                   isToday={isToday}
                   onView={() => onViewRecipe(mainRecipe)}
                   onSwap={() => onSwapRecipe(mainRecipe)}
@@ -466,6 +469,7 @@ function DayColumn({
                     isAddingToCart={addingToCartRecipeId === r.id}
                     isJustAddedToCart={cartAddedRecipeId === r.id}
                     isSwapping={swappingRecipeId === r.id}
+                    isRemoving={removingRecipeId === r.id}
                     isToday={false}
                     onView={() => onViewRecipe(r)}
                     onSwap={() => onSwapRecipe(r)}
@@ -506,8 +510,10 @@ function MobileDayColumn({
   dayRecipes,
   isRecipeMade,
   markingRecipeId,
+  addingToCartRecipeId,
   swappingRecipeId,
   cartAddedRecipeId,
+  removingRecipeId,
   onViewRecipe,
   onSwapRecipe,
   onMarkMade,
@@ -524,8 +530,10 @@ function MobileDayColumn({
   dayRecipes: Recipe[]
   isRecipeMade: (recipe: Recipe) => boolean
   markingRecipeId: string | null
+  addingToCartRecipeId: string | null
   swappingRecipeId: string | null
   cartAddedRecipeId: string | null
+  removingRecipeId: string | null
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
   onMarkMade: (recipeId: string, isMade: boolean) => void
@@ -575,8 +583,10 @@ function MobileDayColumn({
                   recipe={displayedRecipe}
                   isMade={isRecipeMade(displayedRecipe)}
                   isMarkingThis={markingRecipeId === recipe.id}
+                  isAddingToCart={addingToCartRecipeId === recipe.id}
                   isSwapping={swappingRecipeId === recipe.id}
                   isJustAddedToCart={cartAddedRecipeId === recipe.id}
+                  isRemoving={removingRecipeId === recipe.id}
                   isToday={isToday}
                   onView={() => onViewRecipe(recipe)}
                   onSwap={() => onSwapRecipe(recipe)}
@@ -615,6 +625,7 @@ function StitchRecipeCard({
   isAddingToCart,
   isJustAddedToCart,
   isSwapping,
+  isRemoving,
   isToday,
   onView,
   onSwap,
@@ -635,6 +646,7 @@ function StitchRecipeCard({
   isAddingToCart: boolean
   isJustAddedToCart: boolean
   isSwapping: boolean
+  isRemoving: boolean
   isToday?: boolean
   onView: () => void
   onSwap: () => void
@@ -724,10 +736,11 @@ function StitchRecipeCard({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onRemove() }}
+                disabled={isRemoving}
                 className="p-1 text-slate-400 hover:text-red-500 transition-colors"
                 title="Remove"
               >
-                <X className="h-4 w-4" />
+                {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
               </button>
             {showMoveToDay && (
               <DropdownMenu>
@@ -798,10 +811,11 @@ function StitchRecipeCard({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onRemove() }}
+              disabled={isRemoving}
               className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-slate-400 hover:text-red-500 transition-colors"
               title="Remove"
             >
-              <X className="h-4 w-4" />
+              {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
             </button>
             {showMoveToDay && (
               <DropdownMenu>
@@ -847,8 +861,10 @@ function MobileRecipeCard({
   recipe,
   isMade,
   isMarkingThis,
+  isAddingToCart,
   isSwapping,
   isJustAddedToCart,
+  isRemoving,
   isToday,
   onView,
   onSwap,
@@ -864,8 +880,10 @@ function MobileRecipeCard({
   recipe: Recipe
   isMade: boolean
   isMarkingThis: boolean
+  isAddingToCart: boolean
   isSwapping: boolean
   isJustAddedToCart: boolean
+  isRemoving: boolean
   isToday?: boolean
   onView: () => void
   onSwap: () => void
@@ -987,29 +1005,32 @@ function MobileRecipeCard({
               </>
             ) : null}
             {!isMade && (
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-                disabled={isJustAddedToCart}
-                className={cn(
-                  "flex flex-col items-center gap-1 transition-colors",
-                  isJustAddedToCart ? "text-emerald-500" : "text-slate-400 hover:text-primary"
-                )}
-                title="Add to cart"
-              >
-                {isJustAddedToCart
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onAddToCart() }}
+              disabled={isAddingToCart || isJustAddedToCart}
+              className={cn(
+                "flex flex-col items-center gap-1 transition-colors",
+                isJustAddedToCart ? "text-emerald-500" : "text-slate-400 hover:text-primary"
+              )}
+              title="Add to cart"
+            >
+              {isAddingToCart ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : isJustAddedToCart
                   ? <Check className="h-5 w-5" />
                   : <ShoppingCart className="h-5 w-5" />
-                }
+              }
               </button>
             )}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onRemove() }}
+              disabled={isRemoving}
               className="flex flex-col items-center gap-1 text-slate-400 hover:text-red-500 transition-colors"
               title="Remove"
             >
-              <X className="h-5 w-5" />
+              {isRemoving ? <Loader2 className="h-5 w-5 animate-spin" /> : <X className="h-5 w-5" />}
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1060,6 +1081,8 @@ export function MealPlanner() {
   const [cartAddedRecipeId, setCartAddedRecipeId] = useState<string | null>(null)
   const [bulkCartJustAdded, setBulkCartJustAdded] = useState(false)
   const [swappingRecipeId, setSwappingRecipeId] = useState<string | null>(null)
+  const [removingRecipeId, setRemovingRecipeId] = useState<string | null>(null)
+  const [plannerGenerationError, setPlannerGenerationError] = useState<string | null>(null)
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
   const [addRecipeTargetDayIndex, setAddRecipeTargetDayIndex] = useState<number | null>(null)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
@@ -1129,6 +1152,7 @@ export function MealPlanner() {
   useEffect(() => {
     setPendingAssignmentOverlays({})
     setPendingAssignmentCounts({})
+    setPlannerGenerationError(null)
   }, [currentWeekDate])
 
   const currentWeekStart = useMemo(
@@ -1228,18 +1252,24 @@ export function MealPlanner() {
 
   const handleGeneratePlan = () => {
     if (!currentWeekDate) return
+    setPlannerGenerationError(null)
     // Show confirmation if there are existing recipes
     if (weeklyPlan?.recipe_ids && weeklyPlan.recipe_ids.length > 0) {
       setShowRegenerateConfirm(true)
     } else {
-      executeGeneratePlan()
+      void executeGeneratePlan()
     }
   }
 
   const executeGeneratePlan = async () => {
     if (!currentWeekDate) return
-    setShowRegenerateConfirm(false)
-    await generatePlan.mutateAsync({ weekDate: currentWeekDate, selection })
+    setPlannerGenerationError(null)
+    try {
+      await generatePlan.mutateAsync({ weekDate: currentWeekDate, selection })
+      setShowRegenerateConfirm(false)
+    } catch (error) {
+      setPlannerGenerationError(getErrorMessage(error, "Failed to generate this meal plan"))
+    }
   }
 
   const handleGenerateShoppingList = async () => {
@@ -1290,11 +1320,7 @@ export function MealPlanner() {
       }
       undoToast.show({ message: msg, duration: 4000 })
     } catch (error) {
-      console.error('Failed to load template:', error)
-      undoToast.show({
-        message: getErrorMessage(error, `Failed to load template "${template.name}"`),
-        duration: 4000,
-      })
+      throw new Error(getErrorMessage(error, `Failed to load template "${template.name}"`))
     }
   }
 
@@ -1307,6 +1333,11 @@ export function MealPlanner() {
         oldRecipeId: recipe.id,
         category: recipe.category,
         excludeIds: weeklyPlan?.recipe_ids || [],
+      })
+    } catch (error) {
+      undoToast.show({
+        message: getErrorMessage(error, `Failed to swap "${recipe.name}"`),
+        duration: 4000,
       })
     } finally {
       setSwappingRecipeId(null)
@@ -1356,6 +1387,11 @@ export function MealPlanner() {
           // Mutation already executed, nothing to do
         },
       })
+    } catch (error) {
+      undoToast.show({
+        message: getErrorMessage(error, `Failed to update "${recipeName}"`),
+        duration: 4000,
+      })
     } finally {
       setMarkingRecipeId(null)
     }
@@ -1363,20 +1399,47 @@ export function MealPlanner() {
 
   const handleRemoveFromPlan = useCallback((recipe: Recipe) => {
     if (!currentWeekDate) return
+    if (removingRecipeId === recipe.id) return
     // Capture day assignment before removing so undo can restore it
     const savedDayOfWeek = recipeDayAssignments[recipe.id]
-    removeFromPlan.mutate({ weekDate: currentWeekDate, recipeId: recipe.id })
-    undoToast.show({
-      message: `"${recipe.name}" removed from plan`,
-      onUndo: () => {
-        addRecipeToPlan.mutate({
-          weekDate: currentWeekDate,
-          recipeId: recipe.id,
-          dayOfWeek: savedDayOfWeek,
-        })
+    setRemovingRecipeId(recipe.id)
+    removeFromPlan.mutate(
+      { weekDate: currentWeekDate, recipeId: recipe.id },
+      {
+        onSuccess: () => {
+          undoToast.show({
+            message: `"${recipe.name}" removed from plan`,
+            onUndo: () => {
+              addRecipeToPlan.mutate(
+                {
+                  weekDate: currentWeekDate,
+                  recipeId: recipe.id,
+                  dayOfWeek: savedDayOfWeek,
+                },
+                {
+                  onError: (error) => {
+                    undoToast.show({
+                      message: getErrorMessage(error, `Failed to restore "${recipe.name}" to the plan`),
+                      duration: 4000,
+                    })
+                  },
+                }
+              )
+            },
+          })
+        },
+        onError: (error) => {
+          undoToast.show({
+            message: getErrorMessage(error, `Failed to remove "${recipe.name}" from the plan`),
+            duration: 4000,
+          })
+        },
+        onSettled: () => {
+          setRemovingRecipeId((current) => (current === recipe.id ? null : current))
+        },
       },
-    })
-  }, [currentWeekDate, undoToast, removeFromPlan, addRecipeToPlan, recipeDayAssignments])
+    )
+  }, [addRecipeToPlan, currentWeekDate, recipeDayAssignments, removeFromPlan, removingRecipeId, undoToast])
 
   const handleAddRecipeToCart = async (recipeId: string) => {
     setAddingToCartRecipeId(recipeId)
@@ -1728,6 +1791,26 @@ export function MealPlanner() {
       </div>
       )}
 
+      {plannerGenerationError ? (
+        <div className="mb-4 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-destructive" role="alert">
+              {plannerGenerationError}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void executeGeneratePlan()}
+              disabled={generatePlan.isPending}
+              className="shrink-0"
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Week navigation (mobile) + Add to Cart */}
       <PlannerActionBar
         leading={!isDesktop ? (
@@ -1871,6 +1954,7 @@ export function MealPlanner() {
                         addingToCartRecipeId={addingToCartRecipeId}
                         cartAddedRecipeId={cartAddedRecipeId}
                         swappingRecipeId={swappingRecipeId}
+                        removingRecipeId={removingRecipeId}
                         onViewRecipe={setViewingRecipe}
                         onSwapRecipe={handleSwapRecipe}
                         onMarkMade={handleMarkMade}
@@ -1909,6 +1993,7 @@ export function MealPlanner() {
                       addingToCartRecipeId={addingToCartRecipeId}
                       cartAddedRecipeId={cartAddedRecipeId}
                       swappingRecipeId={swappingRecipeId}
+                      removingRecipeId={removingRecipeId}
                       onViewRecipe={setViewingRecipe}
                       onSwapRecipe={handleSwapRecipe}
                       onMarkMade={handleMarkMade}
@@ -1941,8 +2026,10 @@ export function MealPlanner() {
                       dayRecipes={dayRecipes}
                       isRecipeMade={isRecipeMade}
                       markingRecipeId={markingRecipeId}
+                      addingToCartRecipeId={addingToCartRecipeId}
                       swappingRecipeId={swappingRecipeId}
                       cartAddedRecipeId={cartAddedRecipeId}
+                      removingRecipeId={removingRecipeId}
                       onViewRecipe={setViewingRecipe}
                       onSwapRecipe={handleSwapRecipe}
                       onMarkMade={handleMarkMade}
@@ -2002,14 +2089,27 @@ export function MealPlanner() {
               {weeklyPlan?.recipe_ids?.length === 1 ? "recipe" : "recipes"} in your meal plan.
               Recipes marked as made will be preserved.
             </AlertDialogDescription>
+            {plannerGenerationError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {plannerGenerationError}
+              </p>
+            ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={executeGeneratePlan}
+              onClick={() => void executeGeneratePlan()}
+              disabled={generatePlan.isPending}
               className="bg-primary hover:bg-primary/90"
             >
-              Generate New Plan
+              {generatePlan.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                "Generate New Plan"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
