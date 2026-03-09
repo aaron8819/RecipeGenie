@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select"
 import { useRecipes, useCategories } from "@/hooks/use-recipes"
 import { useAddRecipeToPlan } from "@/hooks/use-planner"
+import { useAsyncSubmit } from "@/hooks/use-async-submit"
 import type { Recipe } from "@/types/database"
 import { cn, getErrorMessage } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
@@ -45,8 +46,6 @@ export function AddRecipeToPlanModal({
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
-  const [submissionError, setSubmissionError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { data: recipes } = useRecipes({
     search: search || null,
@@ -54,6 +53,15 @@ export function AddRecipeToPlanModal({
   })
   const { data: categories } = useCategories()
   const addToPlan = useAddRecipeToPlan()
+  const {
+    clearError: clearSubmissionError,
+    error: submissionError,
+    isSubmitting,
+    reset: resetSubmissionState,
+    run,
+  } = useAsyncSubmit({
+    getErrorMessage: (error) => getErrorMessage(error, "Failed to add recipe to this plan"),
+  })
 
   // Reset state when modal opens
   const handleOpenChange = (open: boolean) => {
@@ -61,29 +69,22 @@ export function AddRecipeToPlanModal({
       setSearch("")
       setCategory(null)
       setSelectedRecipeId(null)
-      setSubmissionError(null)
-      setIsSubmitting(false)
+      resetSubmissionState()
     }
     onOpenChange(open)
   }
 
   const handleAddToPlan = async () => {
     if (!selectedRecipeId || !weekDate || isSubmitting) return
-    setSubmissionError(null)
-    setIsSubmitting(true)
 
-    try {
+    await run(async () => {
       await addToPlan.mutateAsync({
         weekDate,
         recipeId: selectedRecipeId,
         dayOfWeek: targetDayIndex != null ? (weekStartDay + targetDayIndex) % 7 : undefined,
       })
       handleOpenChange(false)
-    } catch (error) {
-      setSubmissionError(getErrorMessage(error, "Failed to add recipe to this plan"))
-    } finally {
-      setIsSubmitting(false)
-    }
+    })
   }
 
   const selectedRecipe = useMemo(() => {
@@ -112,7 +113,7 @@ export function AddRecipeToPlanModal({
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value)
-                if (submissionError) setSubmissionError(null)
+                if (submissionError) clearSubmissionError()
               }}
               className="pl-9"
             />
@@ -121,7 +122,7 @@ export function AddRecipeToPlanModal({
             value={category || "all"}
             onValueChange={(v) => {
               setCategory(v === "all" ? null : v)
-              if (submissionError) setSubmissionError(null)
+              if (submissionError) clearSubmissionError()
             }}
           >
             <SelectTrigger className="w-[140px]">
@@ -152,7 +153,7 @@ export function AddRecipeToPlanModal({
                     type="button"
                     onClick={() => {
                       setSelectedRecipeId(recipe.id)
-                      if (submissionError) setSubmissionError(null)
+                      if (submissionError) clearSubmissionError()
                     }}
                     className={cn(
                       "w-full px-4 py-3 text-left transition-colors hover:bg-accent",

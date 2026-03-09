@@ -26,6 +26,7 @@ import {
   useRenamePlanTemplate,
 } from '@/hooks/use-plan-templates';
 import { useRecipes } from '@/hooks/use-recipes';
+import { useAsyncSubmit } from '@/hooks/use-async-submit';
 import type { PlanTemplate } from '@/types/database';
 import { getErrorMessage } from '@/lib/utils';
 
@@ -55,33 +56,42 @@ export function LoadTemplateDialog({
     useState<PlanTemplate | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [managementError, setManagementError] = useState<string | null>(null);
   const [loadingTemplateId, setLoadingTemplateId] = useState<string | null>(null);
+  const {
+    error: loadError,
+    reset: resetLoadState,
+    run: runLoad,
+  } = useAsyncSubmit({
+    getErrorMessage: (error) =>
+      getErrorMessage(
+        error,
+        loadTarget ? `Failed to load template "${loadTarget.name}"` : 'Failed to load template'
+      ),
+  });
 
   useEffect(() => {
     if (open) return;
-    setLoadError(null);
+    resetLoadState();
     setManagementError(null);
     setLoadingTemplateId(null);
     setDeleteTarget(null);
     setLoadTarget(null);
     setRenamingId(null);
     setRenameValue('');
-  }, [open]);
+  }, [open, resetLoadState]);
 
   const handleLoad = async (template: PlanTemplate) => {
-    setLoadError(null);
     setLoadingTemplateId(template.id);
-    try {
+    await runLoad(async () => {
       await onLoadTemplate(template);
       setLoadTarget(null);
       onOpenChange(false);
-    } catch (error) {
-      setLoadError(getErrorMessage(error, `Failed to load template "${template.name}"`));
-    } finally {
-      setLoadingTemplateId(null);
-    }
+    }, {
+      onSettled: () => {
+        setLoadingTemplateId(null);
+      },
+    });
   };
 
   const handleDelete = async () => {

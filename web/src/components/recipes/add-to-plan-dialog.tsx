@@ -18,6 +18,7 @@ import {
   navigateWeek,
 } from "@/hooks/use-planner"
 import { useRecipe } from "@/hooks/use-recipes"
+import { useAsyncSubmit } from "@/hooks/use-async-submit"
 import { cn } from "@/lib/utils"
 
 interface AddToPlanDialogProps {
@@ -39,7 +40,16 @@ export function AddToPlanDialog({
 
   const [selectedOption, setSelectedOption] = useState<WeekOption>("this")
   const [customWeekDate, setCustomWeekDate] = useState<string>("")
-  const [error, setError] = useState<string | null>(null)
+  const {
+    clearError,
+    error,
+    isSubmitting,
+    reset,
+    run,
+  } = useAsyncSubmit({
+    getErrorMessage: (submitError) =>
+      submitError instanceof Error ? submitError.message : "Failed to add recipe to plan",
+  })
 
   // Calculate week dates
   const thisWeekDate = getWeekStartDate(new Date(), config?.week_start_day || 1)
@@ -50,9 +60,9 @@ export function AddToPlanDialog({
     if (open) {
       setCustomWeekDate(navigateWeek(nextWeekDate, "next"))
       setSelectedOption("this")
-      setError(null)
+      reset()
     }
-  }, [open, nextWeekDate])
+  }, [open, nextWeekDate, reset])
 
   const getSelectedWeekDate = () => {
     switch (selectedOption) {
@@ -86,16 +96,13 @@ export function AddToPlanDialog({
   const handleAddToPlan = async () => {
     if (!recipe) return
 
-    setError(null)
-    try {
+    await run(async () => {
       await addToPlan.mutateAsync({
         weekDate: getSelectedWeekDate(),
         recipeId: recipe.id,
       })
       onOpenChange(false)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add recipe to plan")
-    }
+    })
   }
 
   if (!recipe) return null
@@ -117,7 +124,10 @@ export function AddToPlanDialog({
           {/* This Week Option */}
           <button
             type="button"
-            onClick={() => setSelectedOption("this")}
+            onClick={() => {
+              setSelectedOption("this")
+              if (error) clearError()
+            }}
             className={cn(
               "w-full p-4 rounded-lg border-2 text-left transition-all",
               selectedOption === "this"
@@ -134,7 +144,10 @@ export function AddToPlanDialog({
           {/* Next Week Option */}
           <button
             type="button"
-            onClick={() => setSelectedOption("next")}
+            onClick={() => {
+              setSelectedOption("next")
+              if (error) clearError()
+            }}
             className={cn(
               "w-full p-4 rounded-lg border-2 text-left transition-all",
               selectedOption === "next"
@@ -151,7 +164,10 @@ export function AddToPlanDialog({
           {/* Custom Week Option */}
           <button
             type="button"
-            onClick={() => setSelectedOption("custom")}
+            onClick={() => {
+              setSelectedOption("custom")
+              if (error) clearError()
+            }}
             className={cn(
               "w-full p-4 rounded-lg border-2 text-left transition-all",
               selectedOption === "custom"
@@ -206,8 +222,8 @@ export function AddToPlanDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleAddToPlan} disabled={addToPlan.isPending}>
-            {addToPlan.isPending ? "Adding..." : "Add to Plan"}
+          <Button onClick={handleAddToPlan} disabled={addToPlan.isPending || isSubmitting}>
+            {addToPlan.isPending || isSubmitting ? "Adding..." : "Add to Plan"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,7 +1,17 @@
 import React from "react"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SaveTemplateDialog } from "../save-template-dialog"
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
 
 const saveTemplateMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
@@ -81,6 +91,43 @@ describe("SaveTemplateDialog", () => {
         message: 'Template "Weeknight Rotation" saved with 2 planned recipes',
         duration: 4000,
       })
+    })
+  })
+
+  it("blocks repeat submits and only closes after the save really succeeds", async () => {
+    const pendingSave = deferred<void>()
+    const onOpenChange = vi.fn()
+    saveTemplateMutateAsync.mockReturnValueOnce(pendingSave.promise)
+
+    render(
+      <SaveTemplateDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        recipeIds={["recipe-1"]}
+        dayAssignments={null}
+        categorySelection={null}
+      />
+    )
+
+    fireEvent.change(screen.getByLabelText("Template Name"), {
+      target: { value: "Weeknight Rotation" },
+    })
+
+    const submitButton = screen.getByRole("button", { name: /save template/i })
+
+    fireEvent.click(submitButton)
+    fireEvent.click(screen.getByRole("button", { name: /save template/i }))
+
+    expect(saveTemplateMutateAsync).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
+
+    await act(async () => {
+      pendingSave.resolve()
+      await pendingSave.promise
+    })
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(false)
     })
   })
 })

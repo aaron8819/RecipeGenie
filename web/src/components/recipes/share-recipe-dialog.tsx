@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useRecipe } from '@/hooks/use-recipes';
 import { useCreateRecipeShare } from '@/hooks/use-recipe-shares';
+import { useAsyncSubmit } from '@/hooks/use-async-submit';
 import { getErrorMessage } from '@/lib/utils';
 
 interface ShareRecipeDialogProps {
@@ -29,24 +30,26 @@ export function ShareRecipeDialog({
   const { data: recipe } = useRecipe(open ? recipeId : null);
   const [recipientEmail, setRecipientEmail] = useState('');
   const [message, setMessage] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const { clearError, error, isSubmitting, reset, run } = useAsyncSubmit({
+    getErrorMessage: (submissionError) =>
+      getErrorMessage(submissionError, 'Unable to share recipe.'),
+  });
 
   useEffect(() => {
     if (!open) {
       setRecipientEmail('');
       setMessage('');
-      setError(null);
+      reset();
       setSuccessMessage(null);
     }
-  }, [open]);
+  }, [open, reset]);
 
   const handleSubmit = async () => {
     if (!recipe) return;
-    setError(null);
     setSuccessMessage(null);
 
-    try {
+    await run(async () => {
       const result = await createShare.mutateAsync({
         recipeId: recipe.id,
         recipientEmail,
@@ -58,16 +61,15 @@ export function ShareRecipeDialog({
         setSuccessMessage('Recipe shared successfully.');
       }
       onShared?.();
-    } catch (submissionError) {
-      setError(getErrorMessage(submissionError, 'Unable to share recipe.'));
-    }
+    });
   };
 
   const canSubmit =
     !!recipe &&
     recipientEmail.trim().length > 0 &&
     message.length <= MESSAGE_LIMIT &&
-    !createShare.isPending;
+    !createShare.isPending &&
+    !isSubmitting;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,7 +100,10 @@ export function ShareRecipeDialog({
                 type="email"
                 placeholder="friend@example.com"
                 value={recipientEmail}
-                onChange={(e) => setRecipientEmail(e.target.value)}
+                onChange={(e) => {
+                  setRecipientEmail(e.target.value);
+                  if (error) clearError();
+                }}
               />
             </div>
 
@@ -113,7 +118,10 @@ export function ShareRecipeDialog({
                 id="share-message"
                 placeholder="Thought you'd like this one..."
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                onChange={(e) => {
+                  setMessage(e.target.value);
+                  if (error) clearError();
+                }}
                 maxLength={MESSAGE_LIMIT}
               />
               <p className="text-xs text-slate-500 dark:text-slate-400 text-right">
@@ -137,12 +145,12 @@ export function ShareRecipeDialog({
               <Button
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                disabled={createShare.isPending}
+                disabled={createShare.isPending || isSubmitting}
               >
                 Close
               </Button>
               <Button onClick={handleSubmit} disabled={!canSubmit}>
-                {createShare.isPending ? (
+                {createShare.isPending || isSubmitting ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 ) : (
                   <Send className="h-4 w-4 mr-2" />

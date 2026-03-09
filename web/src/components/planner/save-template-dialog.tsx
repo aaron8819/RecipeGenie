@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Save } from 'lucide-react';
 import { useUndoToast } from '@/hooks/use-undo-toast';
 import { useSavePlanTemplate } from '@/hooks/use-plan-templates';
+import { useAsyncSubmit } from '@/hooks/use-async-submit';
 import { getErrorMessage } from '@/lib/utils';
 
 interface SaveTemplateDialogProps {
@@ -33,12 +34,15 @@ export function SaveTemplateDialog({
   const [name, setName] = useState('');
   const saveTemplate = useSavePlanTemplate();
   const undoToast = useUndoToast();
+  const { isSubmitting, run } = useAsyncSubmit({
+    getErrorMessage: (error) => getErrorMessage(error, `Failed to save template "${name.trim()}"`),
+  });
 
   const handleSave = async () => {
     if (!name.trim()) return;
     const templateName = name.trim();
 
-    try {
+    await run(async () => {
       await saveTemplate.mutateAsync({
         name: templateName,
         recipeIds,
@@ -51,12 +55,14 @@ export function SaveTemplateDialog({
       });
       setName('');
       onOpenChange(false);
-    } catch (error) {
-      undoToast.show({
-        message: getErrorMessage(error, `Failed to save template "${templateName}"`),
-        duration: 4000,
-      });
-    }
+    }, {
+      onError: (error) => {
+        undoToast.show({
+          message: getErrorMessage(error, `Failed to save template "${templateName}"`),
+          duration: 4000,
+        });
+      },
+    });
   };
 
   return (
@@ -98,10 +104,10 @@ export function SaveTemplateDialog({
           <Button
             onClick={handleSave}
             disabled={
-              !name.trim() || saveTemplate.isPending
+              !name.trim() || saveTemplate.isPending || isSubmitting
             }
           >
-            {saveTemplate.isPending ? (
+            {saveTemplate.isPending || isSubmitting ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             ) : (
               <Save className="h-4 w-4 mr-2" />
