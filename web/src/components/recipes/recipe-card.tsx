@@ -184,7 +184,7 @@ function RecipeCard({
                   }}
                   disabled={isMarkingAsMade}
                   className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
-                  title="Mark as Done"
+                  title="Mark as Made"
                 >
                   {isMarkingAsMade ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -256,7 +256,7 @@ function RecipeCard({
               }}
               disabled={isMarkingAsMade}
               className="p-3 text-slate-400 hover:text-primary dark:hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-all"
-              title="Mark as Done"
+              title="Mark as Made"
             >
               {isMarkingAsMade ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -570,4 +570,3 @@ function RecipeCard({
 // useCallback so this avoids a full list repaint on every state update.
 const RecipeCardMemo = memo(RecipeCard)
 export { RecipeCardMemo as RecipeCard }
-

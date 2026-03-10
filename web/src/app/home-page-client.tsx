@@ -10,11 +10,10 @@ import { useRecipes } from "@/hooks/use-recipes"
 import { Header, BottomNav, FirstRunOnboarding } from "@/components/layout"
 import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
+import { HOME_TAB_NAVIGATE_EVENT, persistHomeTab } from "@/lib/home-navigation"
 import { getSupabase } from "@/lib/supabase/client"
 import {
   HOME_DEFAULT_TAB,
-  HOME_TAB_COOKIE,
-  HOME_TAB_STORAGE_KEY,
   isValidHomeTab,
   normalizeHomeTab,
 } from "./home-tab-state"
@@ -38,11 +37,6 @@ const ShoppingListView = dynamic(
   { ssr: false, loading: TabLoader }
 )
 
-function persistTab(tab: string) {
-  localStorage.setItem(HOME_TAB_STORAGE_KEY, tab)
-  document.cookie = `${HOME_TAB_COOKIE}=${encodeURIComponent(tab)}; Path=/; Max-Age=31536000; SameSite=Lax`
-}
-
 export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?: string }) {
   const normalizedInitialTab = normalizeHomeTab(initialTab)
   const [activeTab, setActiveTab] = useState(() => normalizedInitialTab)
@@ -63,7 +57,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
 
   useEffect(() => {
     // Align local persistence with the server-provided initial tab on first mount.
-    persistTab(activeTab)
+    persistHomeTab(activeTab)
   }, [activeTab])
 
   useEffect(() => {
@@ -170,6 +164,19 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
       return next
     })
   }, [])
+
+  useEffect(() => {
+    const handleNavigateHomeTab = (event: Event) => {
+      const detail = (event as CustomEvent<{ tab?: string }>).detail
+      if (!detail?.tab || !isValidHomeTab(detail.tab)) return
+      activateTab(detail.tab)
+    }
+
+    window.addEventListener(HOME_TAB_NAVIGATE_EVENT, handleNavigateHomeTab as EventListener)
+    return () => {
+      window.removeEventListener(HOME_TAB_NAVIGATE_EVENT, handleNavigateHomeTab as EventListener)
+    }
+  }, [activateTab])
 
   useEffect(() => {
     if (typeof window === "undefined") return

@@ -1095,6 +1095,20 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByText("Excluded: cilantro")).toBeInTheDocument()
   })
 
+  it("gives the empty shopping state clear next steps", () => {
+    currentShoppingList = makeList()
+
+    renderShoppingList()
+
+    expect(screen.getByText("Your shopping list is clear")).toBeInTheDocument()
+    expect(screen.getByText("Add item")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Browse Recipes" })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Browse Recipes" }))
+
+    expect(window.localStorage.getItem("recipe-genie-active-tab")).toBe("recipes")
+  })
+
   it("shows inline add feedback when some manual items are duplicates", async () => {
     currentShoppingList = makeList({
       items: [makeItem("milk")],

@@ -81,6 +81,7 @@ import {
 } from "@/lib/planner-utils"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
+import { navigateToHomeTab } from "@/lib/home-navigation"
 import { cn, getErrorMessage } from "@/lib/utils"
 import {
   formatLocalISODate,
@@ -1958,7 +1959,11 @@ export function MealPlanner() {
             <EmptyState
               icon={BookOpen}
               title="Add recipes first"
-              description="You need recipes before you can plan your meals. Start by adding some recipes to your collection."
+              description="You need recipes before you can plan meals. Add a few in Recipes, then come back to build this week."
+              action={{
+                label: "Go to Recipes",
+                onClick: () => navigateToHomeTab("recipes"),
+              }}
             />
           ) : (
             <>

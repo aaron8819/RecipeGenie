@@ -56,6 +56,7 @@ import { cn, toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
+import { navigateToHomeTab } from "@/lib/home-navigation"
 import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
@@ -1515,7 +1516,7 @@ export function ShoppingListView() {
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
           <div>
             <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2">Shopping List</h1>
-            <p className="text-muted-foreground">Plan your farm-to-table meals for the week.</p>
+            <p className="text-muted-foreground">Track what is left to buy, keep recipe sources visible, and share the list quickly.</p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
             {renderOrganizeMenu("flex items-center gap-2 border border-stone-200 bg-white hover:bg-stone-50 hover:text-foreground rounded-lg px-4 py-2 text-sm font-medium")}
@@ -1577,7 +1578,15 @@ export function ShoppingListView() {
           <EmptyState
             icon={ShoppingCart}
             title="Your shopping list is clear"
-            description="Add a few items above with commas, or add recipes to build the list automatically."
+            description="Add a few items above, or build the list from recipes and meal plans."
+            action={{
+              label: "Add item",
+              onClick: () => addItemInputRef.current?.focus(),
+            }}
+            secondaryAction={{
+              label: "Browse Recipes",
+              onClick: () => navigateToHomeTab("recipes"),
+            }}
           />
         </div>
       ) : (

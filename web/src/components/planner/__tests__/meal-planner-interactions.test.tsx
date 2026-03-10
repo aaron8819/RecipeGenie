@@ -263,10 +263,19 @@ vi.mock("@/components/ui/calendar", () => ({
 }))
 
 vi.mock("@/components/ui/empty-state", () => ({
-  EmptyState: ({ title, description }: { title: string; description: string }) => (
+  EmptyState: ({
+    title,
+    description,
+    action,
+  }: {
+    title: string
+    description: string
+    action?: { label: string; onClick: () => void }
+  }) => (
     <div>
       <div>{title}</div>
       <div>{description}</div>
+      {action ? <button type="button" onClick={action.onClick}>{action.label}</button> : null}
     </div>
   ),
 }))
@@ -592,6 +601,18 @@ describe("MealPlanner interactions", () => {
 
     expect(screen.getByRole("button", { name: "Add planned meal ingredients to Shopping" })).toBeEnabled()
     expect(screen.queryByRole("button", { name: "Plan Added" })).not.toBeInTheDocument()
+  })
+
+  it("offers a direct route to Recipes when the planner is empty", () => {
+    currentRecipes = []
+    currentWeeklyPlan = weeklyPlanFixture()
+    currentWeeklyPlanRecipes = []
+
+    render(<MealPlanner />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to Recipes" }))
+
+    expect(window.localStorage.getItem("recipe-genie-active-tab")).toBe("recipes")
   })
 
   it("disables repeat taps on the mobile card action and returns to a neutral state when nothing new is added", async () => {

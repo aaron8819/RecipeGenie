@@ -33,14 +33,18 @@ export function EmptyState({
       <h3 className="text-lg font-semibold text-foreground mb-2">{title}</h3>
       <p className="max-w-sm mb-6 text-foreground/80">{description}</p>
       {(action || secondaryAction) && (
-        <div className="flex gap-3">
+        <div className="flex w-full max-w-md flex-col gap-3 sm:w-auto sm:flex-row sm:justify-center">
           {action && (
-            <Button onClick={action.onClick} variant={action.variant || "default"}>
+            <Button onClick={action.onClick} variant={action.variant || "default"} className="w-full sm:w-auto">
               {action.label}
             </Button>
           )}
           {secondaryAction && (
-            <Button onClick={secondaryAction.onClick} variant={secondaryAction.variant || "outline"}>
+            <Button
+              onClick={secondaryAction.onClick}
+              variant={secondaryAction.variant || "outline"}
+              className="w-full sm:w-auto"
+            >
               {secondaryAction.label}
             </Button>
           )}
