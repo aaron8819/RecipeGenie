@@ -144,12 +144,40 @@ describe("RecipeDetailDialog cache consistency", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add to Plan" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
-    fireEvent.click(screen.getByRole("button", { name: "Mark Made" }))
     fireEvent.click(screen.getByRole("button", { name: "Share" }))
 
     expect(onAddToPlan).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
     expect(onAddToShoppingList).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
-    expect(onMarkAsMade).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
     expect(onShare).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
+    expect(screen.queryByRole("button", { name: "Mark Made" })).not.toBeInTheDocument()
+  })
+
+  it("keeps minimal contexts structured without rendering unrelated action groups", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    const onEdit = vi.fn()
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RecipeDetailDialog
+          open={true}
+          onOpenChange={() => {}}
+          recipeId="recipe-1"
+          recipe={makeRecipe()}
+          onEdit={onEdit}
+        />
+      </QueryClientProvider>
+    )
+
+    expect(screen.getByRole("button", { name: "Start Cooking" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Edit Recipe" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Add to Plan" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Add to Shopping List" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Mark Made" })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Recipe" }))
+    expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
   })
 })
