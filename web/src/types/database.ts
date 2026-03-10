@@ -25,6 +25,11 @@ export interface Ingredient {
   originalText?: string
 }
 
+export interface RecipeInstructionGroup {
+  label?: string
+  steps: string[]
+}
+
 export interface ShoppingItem {
   rowId?: string
   item: string
@@ -47,6 +52,11 @@ export interface RecipeShareSnapshot {
   ingredients: Ingredient[]
   instructions: string[]
   image_url: string | null
+  prep_time_minutes?: number | null
+  cook_time_minutes?: number | null
+  total_time_minutes?: number | null
+  notes?: string[] | null
+  instruction_groups?: RecipeInstructionGroup[] | null
 }
 
 export interface RecipeHistoryStats {
@@ -56,18 +66,45 @@ export interface RecipeHistoryStats {
 }
 
 type RecipeBase = Database["public"]["Tables"]["recipes"]["Row"]
-export type Recipe = Omit<RecipeBase, "ingredients"> & {
+export type Recipe = Omit<
+  RecipeBase,
+  | "ingredients"
+  | "notes"
+  | "instruction_groups"
+  | "prep_time_minutes"
+  | "cook_time_minutes"
+  | "total_time_minutes"
+> & {
   ingredients: Ingredient[]
+  notes?: string[] | null
+  instruction_groups?: RecipeInstructionGroup[] | null
+  prep_time_minutes?: number | null
+  cook_time_minutes?: number | null
+  total_time_minutes?: number | null
 }
 
 type RecipeInsertBase = Database["public"]["Tables"]["recipes"]["Insert"]
-export type RecipeInsert = Omit<RecipeInsertBase, "ingredients"> & {
+export type RecipeInsert = Omit<
+  RecipeInsertBase,
+  | "ingredients"
+  | "notes"
+  | "instruction_groups"
+> & {
   ingredients?: Ingredient[]
+  notes?: string[] | null
+  instruction_groups?: RecipeInstructionGroup[] | null
 }
 
 type RecipeUpdateBase = Database["public"]["Tables"]["recipes"]["Update"]
-export type RecipeUpdate = Omit<RecipeUpdateBase, "ingredients"> & {
+export type RecipeUpdate = Omit<
+  RecipeUpdateBase,
+  | "ingredients"
+  | "notes"
+  | "instruction_groups"
+> & {
   ingredients?: Ingredient[]
+  notes?: string[] | null
+  instruction_groups?: RecipeInstructionGroup[] | null
 }
 
 export type PantryItem = Database["public"]["Tables"]["pantry_items"]["Row"]

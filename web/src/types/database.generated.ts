@@ -131,44 +131,59 @@ export type Database = {
       }
       recipes: {
         Row: {
+          cook_time_minutes: number | null
           category: string
           created_at: string | null
           favorite: boolean | null
           id: string
           image_url: string | null
           ingredients: Json
+          instruction_groups: Json | null
           instructions: string[]
           name: string
+          notes: Json | null
+          prep_time_minutes: number | null
           servings: number
           tags: string[] | null
+          total_time_minutes: number | null
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          cook_time_minutes?: number | null
           category: string
           created_at?: string | null
           favorite?: boolean | null
           id: string
           image_url?: string | null
           ingredients?: Json
+          instruction_groups?: Json | null
           instructions?: string[]
           name: string
+          notes?: Json | null
+          prep_time_minutes?: number | null
           servings?: number
           tags?: string[] | null
+          total_time_minutes?: number | null
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          cook_time_minutes?: number | null
           category?: string
           created_at?: string | null
           favorite?: boolean | null
           id?: string
           image_url?: string | null
           ingredients?: Json
+          instruction_groups?: Json | null
           instructions?: string[]
           name?: string
+          notes?: Json | null
+          prep_time_minutes?: number | null
           servings?: number
           tags?: string[] | null
+          total_time_minutes?: number | null
           updated_at?: string | null
           user_id?: string
         }
@@ -304,16 +319,21 @@ export type Database = {
       filter_recipes_by_tags: {
         Args: { p_tags: string[]; p_user_id: string }
         Returns: {
+          cook_time_minutes: number | null
           category: string
           created_at: string | null
           favorite: boolean | null
           id: string
           image_url: string | null
           ingredients: Json
+          instruction_groups: Json | null
           instructions: string[]
           name: string
+          notes: Json | null
+          prep_time_minutes: number | null
           servings: number
           tags: string[] | null
+          total_time_minutes: number | null
           updated_at: string | null
           user_id: string
         }[]
@@ -508,4 +528,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-

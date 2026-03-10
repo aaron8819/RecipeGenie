@@ -143,18 +143,6 @@ export function parseRecipeText(text: string): ParsedRecipe {
     warnings.push('No instructions found - add a "Directions" or "Instructions" section')
   }
 
-  if (notes.length > 0) {
-    warnings.push(
-      "Notes were parsed separately and will be preserved as labeled instruction lines when applied."
-    )
-  }
-
-  if (metadata && hasTimeMetadata(metadata)) {
-    warnings.push(
-      "Prep/Cook/Total time were parsed for preview, but recipes do not yet have dedicated time fields."
-    )
-  }
-
   return {
     name: name || "Untitled Recipe",
     ingredients,

@@ -24,6 +24,7 @@ import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
 import { useRef, useState } from "react"
+import { formatRecipeTime, getRecipeInstructionGroups, getRecipeNotes } from "@/lib/recipe-structure"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import { CookMode } from "./cook-mode"
 
@@ -81,16 +82,6 @@ function groupIngredientsByLabel(recipe: Recipe): Array<{
   return groups
 }
 
-function isInstructionSectionLabel(step: string): boolean {
-  const trimmed = step.trim()
-  if (!trimmed.endsWith(":")) {
-    return false
-  }
-
-  const words = trimmed.replace(/:\s*$/, "").split(/\s+/).filter(Boolean)
-  return words.length > 0 && words.length <= 6
-}
-
 const HEADER_PRIMARY_BUTTON_CLASS =
   "h-9 rounded-full px-3.5 text-sm font-semibold shadow-sm"
 
@@ -135,6 +126,11 @@ function RecipeDetailHeader({
   isSharing = false,
 }: RecipeDetailHeaderProps) {
   const hasTertiaryActions = !!(onShare || onAddToPlan || onAddToShoppingList)
+  const timeChips = [
+    { label: "Prep", value: formatRecipeTime(recipe.prep_time_minutes) },
+    { label: "Cook", value: formatRecipeTime(recipe.cook_time_minutes) },
+    { label: "Total", value: formatRecipeTime(recipe.total_time_minutes) },
+  ].filter((chip) => !!chip.value)
 
   return (
     <>
@@ -209,6 +205,18 @@ function RecipeDetailHeader({
                 </div>
               ) : null}
             </div>
+            {timeChips.length > 0 ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {timeChips.map((chip) => (
+                  <span
+                    key={chip.label}
+                    className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700 dark:bg-zinc-800 dark:text-stone-200"
+                  >
+                    {chip.label} {chip.value}
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 self-start lg:max-w-[28rem] lg:justify-self-end lg:justify-end">
@@ -344,6 +352,8 @@ export function RecipeDetailDialog({
 
   const recipeImageUrl = recipe ? getRecipeImageUrl(recipe.image_url) : null
   const ingredientGroups = recipe ? groupIngredientsByLabel(recipe) : []
+  const instructionGroups = recipe ? getRecipeInstructionGroups(recipe) : []
+  const notes = recipe ? getRecipeNotes(recipe) : []
 
   const handleDelete = async () => {
     if (onDelete && recipe) {
@@ -389,7 +399,7 @@ export function RecipeDetailDialog({
             recipeImageUrl={recipeImageUrl}
             timesMade={timesMade}
             lastMade={lastMade}
-            onStartCooking={recipe.instructions?.length ? () => {
+            onStartCooking={instructionGroups.some((group) => group.steps.length > 0) ? () => {
               cookModeRecipeRef.current = recipe
               onOpenChange(false)
               setIsCookMode(true)
@@ -458,24 +468,57 @@ export function RecipeDetailDialog({
             </div>
             <div className="md:col-span-8">
               <h2 className="text-xl font-bold text-primary dark:text-stone-200 mb-6">Instructions</h2>
-              <div className="space-y-10">
-                {recipe.instructions?.map((step, index) =>
-                  isInstructionSectionLabel(step) ? (
-                    <div key={index} className="pt-2">
-                      <h3 className="text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                        {step.replace(/:\s*$/, "")}
-                      </h3>
-                    </div>
-                  ) : (
-                    <div key={index} className="grid grid-cols-[2rem_1fr] items-start gap-x-4">
-                      <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
-                        {index + 1}
-                      </span>
-                      <p className="min-w-0 leading-7 text-stone-700 dark:text-stone-300">{step}</p>
-                    </div>
-                  )
-                )}
-              </div>
+              {instructionGroups.length > 0 ? (
+                <div className="space-y-10">
+                  {(() => {
+                    let stepNumber = 0
+
+                    return instructionGroups.map((group, groupIndex) => (
+                      <div key={`${group.label || "main"}-${groupIndex}`} className="space-y-6">
+                        {group.label ? (
+                          <div className="pt-2">
+                            <h3 className="text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                              {group.label}
+                            </h3>
+                          </div>
+                        ) : null}
+                        {group.steps.map((step, stepIndex) => {
+                          stepNumber += 1
+
+                          return (
+                            <div
+                              key={`${groupIndex}-${stepIndex}`}
+                              className="grid grid-cols-[2rem_1fr] items-start gap-x-4"
+                            >
+                              <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+                                {stepNumber}
+                              </span>
+                              <p className="min-w-0 leading-7 text-stone-700 dark:text-stone-300">{step}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))
+                  })()}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No instructions available.</p>
+              )}
+              {notes.length > 0 ? (
+                <div className="mt-10">
+                  <h2 className="mb-4 text-xl font-bold text-primary dark:text-stone-200">Notes</h2>
+                  <ul className="space-y-3">
+                    {notes.map((note, index) => (
+                      <li
+                        key={index}
+                        className="rounded-2xl bg-stone-50 px-4 py-3 text-sm leading-6 text-stone-700 dark:bg-zinc-900 dark:text-stone-300"
+                      >
+                        {note}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           </div>
 

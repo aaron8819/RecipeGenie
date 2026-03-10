@@ -1,5 +1,11 @@
 import type { ParsedRecipe } from "@/lib/recipe-parser"
 import type { Ingredient, Recipe, RecipeInsert } from "@/types/database"
+import {
+  buildInstructionEditorText,
+  getRecipeNotes,
+  normalizeRecipeNotes,
+  parseInstructionEditorText,
+} from "@/lib/recipe-structure"
 
 export const DEFAULT_RECIPE_SERVINGS = 4
 
@@ -50,9 +56,13 @@ export interface RecipeDialogFormValues {
   name: string
   category: string
   servings: number
+  prepTimeMinutes: number | null
+  cookTimeMinutes: number | null
+  totalTimeMinutes: number | null
   tags: string[]
   ingredients: Ingredient[]
   instructions: string
+  notes: string
   imageUrl: string | null
 }
 
@@ -63,9 +73,16 @@ export function buildEditingRecipeDialogFormValues(
     name: recipe.name,
     category: recipe.category,
     servings: recipe.servings,
+    prepTimeMinutes: recipe.prep_time_minutes ?? null,
+    cookTimeMinutes: recipe.cook_time_minutes ?? null,
+    totalTimeMinutes: recipe.total_time_minutes ?? null,
     tags: recipe.tags || [],
     ingredients: normalizeRecipeIngredientsForEditing(recipe.ingredients || []),
-    instructions: (recipe.instructions || []).join("\n"),
+    instructions: buildInstructionEditorText(
+      recipe.instructions || [],
+      recipe.instruction_groups
+    ),
+    notes: getRecipeNotes(recipe).join("\n"),
     imageUrl: recipe.image_url || null,
   }
 }
@@ -77,9 +94,13 @@ export function buildNewRecipeDialogFormValues(
     name: "",
     category: categories[0] || "",
     servings: DEFAULT_RECIPE_SERVINGS,
+    prepTimeMinutes: null,
+    cookTimeMinutes: null,
+    totalTimeMinutes: null,
     tags: [],
     ingredients: [{ ...EMPTY_RECIPE_INGREDIENT }],
     instructions: "",
+    notes: "",
     imageUrl: null,
   }
 }
@@ -92,30 +113,52 @@ export function applyParsedRecipeToFormValues(
     ...values,
     name: parsedRecipe.name || values.name,
     servings: parsedRecipe.servings || values.servings,
+    prepTimeMinutes: parsedRecipe.metadata?.prepTimeMinutes ?? values.prepTimeMinutes,
+    cookTimeMinutes: parsedRecipe.metadata?.cookTimeMinutes ?? values.cookTimeMinutes,
+    totalTimeMinutes: parsedRecipe.metadata?.totalTimeMinutes ?? values.totalTimeMinutes,
     ingredients:
       parsedRecipe.ingredients.length > 0
         ? parsedRecipe.ingredients
         : values.ingredients,
     instructions:
       parsedRecipe.instructions.length > 0
-        ? parsedRecipe.instructions.join("\n")
+        ? buildInstructionEditorText(
+            parsedRecipe.instructions,
+            parsedRecipe.instructionGroups
+          )
         : values.instructions,
+    notes:
+      parsedRecipe.notes && parsedRecipe.notes.length > 0
+        ? parsedRecipe.notes.join("\n")
+        : values.notes,
   }
 }
 
 export function buildRecipeSubmissionData(
   values: RecipeDialogFormValues
 ): Omit<RecipeInsert, "id" | "user_id"> {
+  const parsedInstructions = parseInstructionEditorText(values.instructions)
+  const notes = normalizeRecipeNotes(
+    values.notes
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+  )
+
   return {
     name: values.name.trim(),
     category: values.category,
     servings: values.servings,
+    prep_time_minutes: values.prepTimeMinutes,
+    cook_time_minutes: values.cookTimeMinutes,
+    total_time_minutes: values.totalTimeMinutes,
     tags: values.tags || [],
     ingredients: normalizeRecipeIngredientsForSubmission(values.ingredients),
-    instructions: values.instructions
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line),
+    instructions: parsedInstructions.instructions,
+    ...(parsedInstructions.instructionGroups
+      ? { instruction_groups: parsedInstructions.instructionGroups }
+      : {}),
+    notes,
     image_url: values.imageUrl,
   }
 }
@@ -126,13 +169,21 @@ export function hasValidRecipeIngredients(ingredients: Ingredient[]): boolean {
 
 export function isNewRecipeDialogDirty(values: {
   name: string
+  prepTimeMinutes: number | null
+  cookTimeMinutes: number | null
+  totalTimeMinutes: number | null
   ingredients: Ingredient[]
   instructions: string
+  notes: string
 }): boolean {
   return (
     values.name.trim() !== "" ||
+    values.prepTimeMinutes !== null ||
+    values.cookTimeMinutes !== null ||
+    values.totalTimeMinutes !== null ||
     values.ingredients.some((ingredient) => ingredient.item.trim() !== "") ||
-    values.instructions.trim() !== ""
+    values.instructions.trim() !== "" ||
+    values.notes.trim() !== ""
   )
 }
 
@@ -144,17 +195,25 @@ export function isEditingRecipeDialogDirty(
     name: initialValues.name,
     category: initialValues.category,
     servings: initialValues.servings,
+    prepTimeMinutes: initialValues.prepTimeMinutes,
+    cookTimeMinutes: initialValues.cookTimeMinutes,
+    totalTimeMinutes: initialValues.totalTimeMinutes,
     tags: initialValues.tags,
     ingredients: initialValues.ingredients,
     instructions: initialValues.instructions,
+    notes: initialValues.notes,
     imageReference: initialValues.imageUrl,
   }) !== JSON.stringify({
     name: currentValues.name,
     category: currentValues.category,
     servings: currentValues.servings,
+    prepTimeMinutes: currentValues.prepTimeMinutes,
+    cookTimeMinutes: currentValues.cookTimeMinutes,
+    totalTimeMinutes: currentValues.totalTimeMinutes,
     tags: currentValues.tags,
     ingredients: currentValues.ingredients,
     instructions: currentValues.instructions,
+    notes: currentValues.notes,
     imageReference: currentValues.imageReference,
   })
 }

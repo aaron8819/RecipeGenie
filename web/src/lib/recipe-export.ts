@@ -1,4 +1,5 @@
 import type { Recipe, Ingredient } from '@/types/database';
+import { getFlatRecipeInstructions } from '@/lib/recipe-structure';
 
 /**
  * Convert an ingredient to a display string.
@@ -34,10 +35,19 @@ export function recipesToSchemaOrg(
     ...(recipe.tags && recipe.tags.length > 0
       ? { keywords: recipe.tags.join(', ') }
       : {}),
+    ...(recipe.prep_time_minutes
+      ? { prepTime: minutesToDuration(recipe.prep_time_minutes) }
+      : {}),
+    ...(recipe.cook_time_minutes
+      ? { cookTime: minutesToDuration(recipe.cook_time_minutes) }
+      : {}),
+    ...(recipe.total_time_minutes
+      ? { totalTime: minutesToDuration(recipe.total_time_minutes) }
+      : {}),
     recipeIngredient: (recipe.ingredients || []).map(
       ingredientToString
     ),
-    recipeInstructions: (recipe.instructions || []).map(
+    recipeInstructions: getFlatRecipeInstructions(recipe).map(
       (step, i) => ({
         '@type': 'HowToStep',
         position: i + 1,
@@ -47,6 +57,16 @@ export function recipesToSchemaOrg(
     dateCreated: recipe.created_at,
     dateModified: recipe.updated_at,
   }));
+}
+
+function minutesToDuration(minutes: number): string {
+  if (minutes <= 0) return 'PT0M';
+
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  const hoursPart = hours > 0 ? `${hours}H` : '';
+  const minutesPart = remainder > 0 ? `${remainder}M` : '';
+  return `PT${hoursPart}${minutesPart || (hoursPart ? '' : '0M')}`;
 }
 
 /**

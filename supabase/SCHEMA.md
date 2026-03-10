@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-03-09 (v2.16.0)*
+*Last updated: 2026-03-10 (v2.17.0)*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -38,7 +38,7 @@ The Recipe Genie database is designed for multi-user support with complete data 
 - New migrations must be created incrementally on top of the baseline schema.
 
 The schema supports:
-- Recipe storage with ingredients, instructions, and images
+- Recipe storage with ingredients, instructions, grouped instructions, notes, and images
 - Pantry item management
 - User configuration and preferences
 - Recipe history tracking
@@ -62,8 +62,13 @@ Stores all recipe information including ingredients, instructions, and metadata.
 | `servings` | INTEGER | NOT NULL, DEFAULT 4 | Number of servings |
 | `favorite` | BOOLEAN | DEFAULT FALSE | Whether recipe is marked as favorite |
 | `tags` | TEXT[] | DEFAULT '{}' | Array of tags for the recipe |
+| `prep_time_minutes` | INTEGER | NULL | Optional prep time in minutes |
+| `cook_time_minutes` | INTEGER | NULL | Optional cook time in minutes |
+| `total_time_minutes` | INTEGER | NULL | Optional total time in minutes |
 | `ingredients` | JSONB | NOT NULL, DEFAULT '[]' | Array of ingredient objects — see structure below |
 | `instructions` | TEXT[] | NOT NULL, DEFAULT '{}' | Array of instruction steps |
+| `notes` | JSONB | NOT NULL, DEFAULT '[]' | Array of recipe note strings |
+| `instruction_groups` | JSONB | NULL | Array of grouped instruction objects for higher-fidelity imported recipes |
 | `image_url` | TEXT | NULL | URL or path to recipe image (Supabase Storage path or external URL) |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was created |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was last updated |
@@ -90,6 +95,21 @@ Stores all recipe information including ingredients, instructions, and metadata.
 ```
 
 All fields except `item`, `unit`, and `amount` are optional. `modifier` is a post-comma descriptor (e.g., "rinsed", "chopped"). `alternatives` are parsed from "X or Y" patterns; `item` stores the display string including the parenthetical "(or Y)". `originalText` captures the raw unparsed line for reference.
+
+**Instruction group JSONB structure:**
+```json
+[
+  {
+    "label": "Pan Sauce",
+    "steps": [
+      "Lower heat to medium.",
+      "Add stock and scrape the pan."
+    ]
+  }
+]
+```
+
+`instruction_groups` is additive. `instructions` remains persisted for backward compatibility, simple textarea editing, and consumers that still expect a flat step list.
 
 ### pantry_items
 
@@ -414,6 +434,9 @@ Materializes a shared recipe snapshot into the recipient's `recipes` table and
 marks the share as accepted. Function is idempotent and returns existing
 `accepted_recipe_id` if called again after acceptance.
 
+The accepted snapshot now includes recipe times, notes, and `instruction_groups`
+alongside the legacy flat `instructions` payload.
+
 **Parameters:**
 - `p_share_id` (UUID) - Share request ID
 
@@ -530,7 +553,7 @@ All enforced foreign keys use `ON DELETE CASCADE`, meaning if a user is deleted,
 The repository now uses a baseline-first bootstrap strategy:
 
 1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap through the pantry row-id baseline cut on 2026-03-09.
-2. **Post-baseline incrementals** - New schema changes must be added as fresh migrations after the baseline cut. There are currently no active post-baseline incrementals in `supabase/migrations/`.
+2. **002_recipe_structure_parity.sql** - Added first-class recipe time fields, first-class recipe notes, additive grouped-instruction persistence, and share-acceptance parity for those fields.
 
 Legacy notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.

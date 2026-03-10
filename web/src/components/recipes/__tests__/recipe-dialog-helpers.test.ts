@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   applyParsedRecipeToFormValues,
+  buildEditingRecipeDialogFormValues,
   buildNewRecipeDialogFormValues,
   buildRecipeSubmissionData,
   clampRecipeServings,
@@ -9,6 +10,7 @@ import {
   isNewRecipeDialogDirty,
   normalizeRecipeIngredient,
 } from "../recipe-dialog.defaults"
+import type { Recipe } from "@/types/database"
 import {
   analyzeIngredientDuplicates,
   autoFixIngredients,
@@ -191,9 +193,13 @@ describe("recipe dialog defaults helpers", () => {
       name: "",
       category: "dinner",
       servings: 4,
+      prepTimeMinutes: null,
+      cookTimeMinutes: null,
+      totalTimeMinutes: null,
       tags: [],
       ingredients: [{ item: "", amount: null, unit: "" }],
       instructions: "",
+      notes: "",
       imageUrl: null,
     })
 
@@ -212,9 +218,13 @@ describe("recipe dialog defaults helpers", () => {
       name: "Soup",
       category: "dinner",
       servings: 4,
+      prep_time_minutes: null,
+      cook_time_minutes: null,
+      total_time_minutes: null,
       tags: ["easy"],
       ingredients: [{ item: "water", amount: 1, unit: "cup", modifier: "chilled" }],
       instructions: ["Boil", "Serve"],
+      notes: [],
       image_url: null,
     })
   })
@@ -225,22 +235,30 @@ describe("recipe dialog defaults helpers", () => {
         name: "Grouped",
         category: "dinner",
         servings: 2,
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
         tags: [],
         ingredients: [
           { item: "butter", amount: 1, unit: "Tablespoons", groupLabel: " Pan Sauce " },
         ],
         instructions: "Cook",
+        notes: "",
         imageUrl: null,
       })
     ).toEqual({
       name: "Grouped",
       category: "dinner",
       servings: 2,
+      prep_time_minutes: null,
+      cook_time_minutes: null,
+      total_time_minutes: null,
       tags: [],
       ingredients: [
         { item: "butter", amount: 1, unit: "tbsp", groupLabel: "Pan Sauce" },
       ],
       instructions: ["Cook"],
+      notes: [],
       image_url: null,
     })
   })
@@ -252,9 +270,13 @@ describe("recipe dialog defaults helpers", () => {
           name: "Fallback",
           category: "dinner",
           servings: 4,
+          prepTimeMinutes: null,
+          cookTimeMinutes: null,
+          totalTimeMinutes: null,
           tags: [],
           ingredients: [{ item: "Eggs", amount: 2, unit: "" }],
           instructions: "Cook",
+          notes: "",
           imageUrl: null,
         },
         {
@@ -268,26 +290,112 @@ describe("recipe dialog defaults helpers", () => {
       name: "Fallback",
       category: "dinner",
       servings: 4,
+      prepTimeMinutes: null,
+      cookTimeMinutes: null,
+      totalTimeMinutes: null,
       tags: [],
       ingredients: [{ item: "Bread", amount: 1, unit: "slice" }],
       instructions: "Cook",
+      notes: "",
       imageUrl: null,
     })
+  })
+
+  it("round-trips imported times, notes, and grouped instructions through save payload and edit hydration", () => {
+    const preview = parseRecipeImportPreview(STRUCTURED_LAMB_RECIPE_TEXT)
+    expect(preview).not.toBeNull()
+
+    const applied = applyParsedRecipeToFormValues(
+      buildNewRecipeDialogFormValues(["dinner"]),
+      preview!
+    )
+    const submission = buildRecipeSubmissionData({
+      ...applied,
+      category: "dinner",
+    })
+
+    expect(submission.prep_time_minutes).toBe(10)
+    expect(submission.cook_time_minutes).toBe(12)
+    expect(submission.total_time_minutes).toBe(22)
+    expect(submission.notes).toHaveLength(3)
+    expect(submission.instructions).not.toContain("Notes:")
+    expect(submission.instructions).not.toContain("Pan Sauce:")
+    expect(submission.instruction_groups).toHaveLength(2)
+    expect(submission.instruction_groups?.[0].steps[0]).toContain("Remove lamb shoulder chops")
+    expect(submission.instruction_groups?.[1]).toMatchObject({
+      label: "Pan Sauce",
+    })
+    expect(submission.instruction_groups?.[1].steps[0]).toBe("Lower heat to medium.")
+
+    const hydrated = buildEditingRecipeDialogFormValues({
+      id: "lamb-1",
+      user_id: "user-1",
+      name: submission.name,
+      category: submission.category,
+      servings: submission.servings ?? 4,
+      favorite: false,
+      tags: submission.tags ?? [],
+      ingredients: submission.ingredients ?? [],
+      instructions: submission.instructions ?? [],
+      instruction_groups: submission.instruction_groups ?? null,
+      notes: submission.notes ?? [],
+      prep_time_minutes: submission.prep_time_minutes ?? null,
+      cook_time_minutes: submission.cook_time_minutes ?? null,
+      total_time_minutes: submission.total_time_minutes ?? null,
+      image_url: submission.image_url ?? null,
+      created_at: "2026-03-10T00:00:00.000Z",
+      updated_at: "2026-03-10T00:00:00.000Z",
+    } satisfies Recipe)
+
+    expect(hydrated.prepTimeMinutes).toBe(10)
+    expect(hydrated.cookTimeMinutes).toBe(12)
+    expect(hydrated.totalTimeMinutes).toBe(22)
+    expect(hydrated.notes).toContain("Lamb shoulder chops are flavorful")
+    expect(hydrated.instructions).toContain("Pan Sauce:")
+    expect(hydrated.instructions).not.toContain("Notes:")
+  })
+
+  it("separates legacy note label lines from instructions when hydrating older recipes", () => {
+    const hydrated = buildEditingRecipeDialogFormValues({
+      id: "legacy-1",
+      user_id: "user-1",
+      name: "Legacy",
+      category: "dinner",
+      servings: 4,
+      favorite: false,
+      tags: [],
+      ingredients: [{ item: "Butter", amount: 1, unit: "tbsp" }],
+      instructions: ["Pan Sauce:", "Whisk the sauce.", "Notes:", "Serve immediately."],
+      image_url: null,
+      created_at: "2026-03-10T00:00:00.000Z",
+      updated_at: "2026-03-10T00:00:00.000Z",
+    } satisfies Recipe)
+
+    expect(hydrated.instructions).toBe("Pan Sauce:\nWhisk the sauce.")
+    expect(hydrated.notes).toBe("Serve immediately.")
   })
 
   it("detects dirty state and clamps servings", () => {
     expect(
       isNewRecipeDialogDirty({
         name: "",
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
         ingredients: [{ item: "", amount: null, unit: "" }],
         instructions: "",
+        notes: "",
       })
     ).toBe(false)
     expect(
       isNewRecipeDialogDirty({
         name: "",
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
         ingredients: [{ item: "Flour", amount: null, unit: "" }],
         instructions: "",
+        notes: "",
       })
     ).toBe(true)
     expect(
@@ -296,18 +404,26 @@ describe("recipe dialog defaults helpers", () => {
           name: "Soup",
           category: "dinner",
           servings: 4,
+          prepTimeMinutes: null,
+          cookTimeMinutes: null,
+          totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
           instructions: "Boil",
+          notes: "",
           imageUrl: "https://example.com/soup.jpg",
         },
         {
           name: "Soup",
           category: "dinner",
           servings: 4,
+          prepTimeMinutes: null,
+          cookTimeMinutes: null,
+          totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
           instructions: "Boil",
+          notes: "",
           imageUrl: "https://example.com/soup.jpg",
           imageReference: "https://example.com/soup.jpg",
         }
@@ -319,18 +435,26 @@ describe("recipe dialog defaults helpers", () => {
           name: "Soup",
           category: "dinner",
           servings: 4,
+          prepTimeMinutes: null,
+          cookTimeMinutes: null,
+          totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
           instructions: "Boil",
+          notes: "",
           imageUrl: "https://example.com/soup.jpg",
         },
         {
           name: "Soup Deluxe",
           category: "dinner",
           servings: 4,
+          prepTimeMinutes: null,
+          cookTimeMinutes: null,
+          totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
           instructions: "Boil",
+          notes: "",
           imageUrl: "https://example.com/soup.jpg",
           imageReference: "https://example.com/soup.jpg",
         }

@@ -227,6 +227,12 @@ describe("RecipeMetadataSection", () => {
         onCategoryChange={() => {}}
         servings={4}
         onServingsChange={onServingsChange}
+        prepTimeMinutes={null}
+        onPrepTimeMinutesChange={() => {}}
+        cookTimeMinutes={null}
+        onCookTimeMinutesChange={() => {}}
+        totalTimeMinutes={null}
+        onTotalTimeMinutesChange={() => {}}
         tags={[]}
         onTagsChange={() => {}}
         allTags={[]}
@@ -237,7 +243,7 @@ describe("RecipeMetadataSection", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g. Grandma's Roast Chicken"), {
       target: { value: "Pasta" },
     })
-    fireEvent.change(screen.getByRole("spinbutton"), {
+    fireEvent.change(screen.getByLabelText("Servings"), {
       target: { value: "101" },
     })
 

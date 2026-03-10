@@ -7,6 +7,10 @@ import { useAuthContext } from "@/lib/auth-context"
 import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
+import {
+  normalizeRecipeInstructionGroups,
+  normalizeRecipeNotes,
+} from "@/lib/recipe-structure"
 
 const RECIPES_KEY = ["recipes"]
 export { useCategories } from "@/hooks/shared/user-config"
@@ -37,6 +41,14 @@ export function normalizeRecipeUpdates(updates: RecipeUpdate): RecipeUpdate {
   return {
     ...updates,
     ...(updates.tags !== undefined ? { tags: updates.tags ?? [] } : {}),
+    ...(updates.notes !== undefined ? { notes: normalizeRecipeNotes(updates.notes) } : {}),
+    ...(updates.instruction_groups !== undefined
+      ? {
+          instruction_groups: updates.instruction_groups
+            ? normalizeRecipeInstructionGroups(updates.instruction_groups)
+            : null,
+        }
+      : {}),
   }
 }
 
@@ -231,10 +243,17 @@ export function useCreateRecipe() {
         name: recipe.name,
         category: recipe.category,
         servings: recipe.servings ?? 4,
+        prep_time_minutes: recipe.prep_time_minutes ?? null,
+        cook_time_minutes: recipe.cook_time_minutes ?? null,
+        total_time_minutes: recipe.total_time_minutes ?? null,
         favorite: recipe.favorite ?? false,
         tags: recipe.tags ?? [],
         ingredients: recipe.ingredients ?? [],
         instructions: recipe.instructions ?? [],
+        notes: normalizeRecipeNotes(recipe.notes),
+        instruction_groups: recipe.instruction_groups
+          ? normalizeRecipeInstructionGroups(recipe.instruction_groups)
+          : null,
         image_url: recipe.image_url ?? null,
         created_at: now,
         updated_at: now,

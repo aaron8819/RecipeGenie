@@ -11,6 +11,9 @@ function makeRecipe(
     name: 'Test Recipe',
     category: 'dinner',
     servings: 4,
+    prep_time_minutes: null,
+    cook_time_minutes: null,
+    total_time_minutes: null,
     favorite: false,
     tags: ['quick', 'easy'],
     ingredients: [
@@ -30,6 +33,8 @@ function makeRecipe(
       'Mix ingredients.',
       'Bake at 350F.',
     ],
+    notes: [],
+    instruction_groups: null,
     image_url: 'https://example.com/img.jpg',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-02T00:00:00Z',
@@ -101,5 +106,19 @@ describe('recipesToSchemaOrg', () => {
     ]);
     expect(result[0].recipeIngredient[0])
       .toBe('1 onion , diced');
+  });
+
+  it('should include ISO-8601 duration fields when recipe times are present', () => {
+    const result = recipesToSchemaOrg([
+      makeRecipe({
+        prep_time_minutes: 10,
+        cook_time_minutes: 25,
+        total_time_minutes: 35,
+      }),
+    ]);
+
+    expect(result[0].prepTime).toBe('PT10M');
+    expect(result[0].cookTime).toBe('PT25M');
+    expect(result[0].totalTime).toBe('PT35M');
   });
 });

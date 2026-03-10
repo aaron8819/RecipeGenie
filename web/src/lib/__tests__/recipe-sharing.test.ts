@@ -10,10 +10,15 @@ describe('buildRecipeShareSnapshot', () => {
       name: 'Chicken Curry',
       category: 'chicken',
       servings: 4,
+      prep_time_minutes: 10,
+      cook_time_minutes: 15,
+      total_time_minutes: 25,
       favorite: true,
       tags: ['quick', 'spicy'],
       ingredients: [{ item: 'chicken', amount: 1, unit: 'lb' }],
       instructions: ['Cook chicken', 'Serve hot'],
+      notes: ['Serve with rice'],
+      instruction_groups: [{ steps: ['Cook chicken', 'Serve hot'] }],
       image_url: 'images/chicken-curry.webp',
       created_at: '2026-02-01T00:00:00.000Z',
       updated_at: '2026-02-01T00:00:00.000Z',
@@ -27,6 +32,11 @@ describe('buildRecipeShareSnapshot', () => {
       ingredients: [{ item: 'chicken', amount: 1, unit: 'lb' }],
       instructions: ['Cook chicken', 'Serve hot'],
       image_url: 'images/chicken-curry.webp',
+      prep_time_minutes: 10,
+      cook_time_minutes: 15,
+      total_time_minutes: 25,
+      notes: ['Serve with rice'],
+      instruction_groups: [{ steps: ['Cook chicken', 'Serve hot'] }],
     });
   });
 });

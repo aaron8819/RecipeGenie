@@ -221,6 +221,12 @@ function getInstructionGroups(preview: ParsedRecipe): Array<{
     : []
 }
 
+function countInstructionSteps(
+  groups: Array<{ label?: string; steps: string[] }>
+): number {
+  return groups.reduce((total, group) => total + group.steps.length, 0)
+}
+
 export function RecipeImportSection({
   importStep,
   importUrl,
@@ -239,6 +245,7 @@ export function RecipeImportSection({
   const previewRecipe = importStep === "preview" ? parsedPreview : livePreview
   const ingredientGroups = previewRecipe ? getIngredientGroups(previewRecipe) : []
   const instructionGroups = previewRecipe ? getInstructionGroups(previewRecipe) : []
+  const instructionStepCount = countInstructionSteps(instructionGroups)
   const notes = previewRecipe?.notes || []
 
   if (importStep === "preview") {
@@ -346,7 +353,7 @@ export function RecipeImportSection({
 
           <div>
             <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
-              Instructions ({parsedPreview?.instructions?.length || 0} steps)
+              Instructions ({instructionStepCount} steps)
             </div>
             {instructionGroups.length > 0 ? (
               <div className="space-y-3 text-sm">
@@ -545,10 +552,10 @@ Instructions:
                 </div>
                 <div>
                   <div className="text-lg font-bold">
-                    {livePreview.instructions.length}
+                    {instructionStepCount}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    step{livePreview.instructions.length !== 1 ? "s" : ""}
+                    step{instructionStepCount !== 1 ? "s" : ""}
                   </div>
                 </div>
               </div>
@@ -683,6 +690,12 @@ type RecipeMetadataSectionProps = {
   onCategoryChange: (value: string) => void
   servings: number
   onServingsChange: (value: number) => void
+  prepTimeMinutes: number | null
+  onPrepTimeMinutesChange: (value: number | null) => void
+  cookTimeMinutes: number | null
+  onCookTimeMinutesChange: (value: number | null) => void
+  totalTimeMinutes: number | null
+  onTotalTimeMinutesChange: (value: number | null) => void
   tags: string[]
   onTagsChange: (value: string[]) => void
   allTags: string[]
@@ -698,6 +711,12 @@ export function RecipeMetadataSection({
   onCategoryChange,
   servings,
   onServingsChange,
+  prepTimeMinutes,
+  onPrepTimeMinutesChange,
+  cookTimeMinutes,
+  onCookTimeMinutesChange,
+  totalTimeMinutes,
+  onTotalTimeMinutesChange,
   tags,
   onTagsChange,
   allTags,
@@ -707,6 +726,38 @@ export function RecipeMetadataSection({
   const addLabelClass =
     "text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent"
   const nameInputId = variant === "edit" ? "name-edit" : "name-add"
+  const servingsInputId = variant === "edit" ? "servings-edit" : "servings-add"
+  const renderTimeInput = (
+    id: string,
+    label: string,
+    value: number | null,
+    onChange: (value: number | null) => void,
+    inputClassName: string
+  ) => (
+    <div>
+      <Label htmlFor={id} className="block text-sm font-semibold text-primary mb-2">
+        {label}
+      </Label>
+      <Input
+        id={id}
+        type="number"
+        min={0}
+        value={value ?? ""}
+        onChange={(e) => {
+          const nextValue = e.target.value.trim()
+          if (!nextValue) {
+            onChange(null)
+            return
+          }
+
+          const parsedValue = Number.parseInt(nextValue, 10)
+          onChange(Number.isNaN(parsedValue) || parsedValue < 0 ? null : parsedValue)
+        }}
+        placeholder="Optional"
+        className={inputClassName}
+      />
+    </div>
+  )
 
   if (variant === "edit") {
     return (
@@ -745,10 +796,11 @@ export function RecipeMetadataSection({
             </Select>
           </div>
           <div>
-            <Label className="block text-sm font-semibold text-primary mb-2">
+            <Label htmlFor={servingsInputId} className="block text-sm font-semibold text-primary mb-2">
               Servings
             </Label>
             <Input
+              id={servingsInputId}
               type="number"
               min={1}
               max={100}
@@ -761,6 +813,29 @@ export function RecipeMetadataSection({
               className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
             />
           </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {renderTimeInput(
+            "prep-time-edit",
+            "Prep (min)",
+            prepTimeMinutes,
+            onPrepTimeMinutesChange,
+            "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
+          )}
+          {renderTimeInput(
+            "cook-time-edit",
+            "Cook (min)",
+            cookTimeMinutes,
+            onCookTimeMinutesChange,
+            "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
+          )}
+          {renderTimeInput(
+            "total-time-edit",
+            "Total (min)",
+            totalTimeMinutes,
+            onTotalTimeMinutesChange,
+            "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
+          )}
         </div>
         <div>
           <Label className="block text-sm font-semibold text-primary mb-2">
@@ -809,8 +884,9 @@ export function RecipeMetadataSection({
           </Select>
         </div>
         <div className="space-y-2">
-          <label className={addLabelClass}>Servings</label>
+          <label htmlFor={servingsInputId} className={addLabelClass}>Servings</label>
           <Input
+            id={servingsInputId}
             type="number"
             min={1}
             max={100}
@@ -820,6 +896,71 @@ export function RecipeMetadataSection({
               if (isNaN(val)) onServingsChange(1)
               else onServingsChange(clampRecipeServings(val))
             }}
+            className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="space-y-2">
+          <label htmlFor="prep-time-add" className={addLabelClass}>Prep (min)</label>
+          <Input
+            id="prep-time-add"
+            type="number"
+            min={0}
+            value={prepTimeMinutes ?? ""}
+            onChange={(e) => {
+              const nextValue = e.target.value.trim()
+              if (!nextValue) {
+                onPrepTimeMinutesChange(null)
+                return
+              }
+
+              const parsedValue = Number.parseInt(nextValue, 10)
+              onPrepTimeMinutesChange(Number.isNaN(parsedValue) || parsedValue < 0 ? null : parsedValue)
+            }}
+            placeholder="Optional"
+            className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="cook-time-add" className={addLabelClass}>Cook (min)</label>
+          <Input
+            id="cook-time-add"
+            type="number"
+            min={0}
+            value={cookTimeMinutes ?? ""}
+            onChange={(e) => {
+              const nextValue = e.target.value.trim()
+              if (!nextValue) {
+                onCookTimeMinutesChange(null)
+                return
+              }
+
+              const parsedValue = Number.parseInt(nextValue, 10)
+              onCookTimeMinutesChange(Number.isNaN(parsedValue) || parsedValue < 0 ? null : parsedValue)
+            }}
+            placeholder="Optional"
+            className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="total-time-add" className={addLabelClass}>Total (min)</label>
+          <Input
+            id="total-time-add"
+            type="number"
+            min={0}
+            value={totalTimeMinutes ?? ""}
+            onChange={(e) => {
+              const nextValue = e.target.value.trim()
+              if (!nextValue) {
+                onTotalTimeMinutesChange(null)
+                return
+              }
+
+              const parsedValue = Number.parseInt(nextValue, 10)
+              onTotalTimeMinutesChange(Number.isNaN(parsedValue) || parsedValue < 0 ? null : parsedValue)
+            }}
+            placeholder="Optional"
             className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
           />
         </div>
@@ -835,6 +976,57 @@ export function RecipeMetadataSection({
           showAddIconInInput
         />
       </div>
+    </div>
+  )
+}
+
+type RecipeNotesSectionProps = {
+  variant: "add" | "edit"
+  notes: string
+  onNotesChange: (value: string) => void
+}
+
+export function RecipeNotesSection({
+  variant,
+  notes,
+  onNotesChange,
+}: RecipeNotesSectionProps) {
+  const addLabelClass =
+    "text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent"
+  const notesId = variant === "edit" ? "notes-edit" : "notes-add"
+
+  if (variant === "edit") {
+    return (
+      <div className="flex flex-col">
+        <Label
+          htmlFor={notesId}
+          className="block text-sm font-semibold text-primary mb-2"
+        >
+          Notes
+        </Label>
+        <Textarea
+          id={notesId}
+          value={notes}
+          onChange={(e) => onNotesChange(e.target.value)}
+          placeholder="One note per line..."
+          className="min-h-[140px] w-full rounded-2xl bg-background border-stone-200 dark:border-zinc-800 focus:ring-primary focus:border-primary resize-none leading-relaxed px-5 py-4"
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <label htmlFor={notesId} className={`${addLabelClass} block`}>
+        Notes
+      </label>
+      <Textarea
+        id={notesId}
+        value={notes}
+        onChange={(e) => onNotesChange(e.target.value)}
+        placeholder="One note per line..."
+        className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-4 text-sm min-h-[140px] resize-none focus:ring-2 focus:ring-primary"
+      />
     </div>
   )
 }

@@ -10,6 +10,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getFlatRecipeInstructions } from '@/lib/recipe-structure';
 import { useWakeLock } from '@/hooks/use-wake-lock';
 import { cn, toFraction } from '@/lib/utils';
 import type { Recipe } from '@/types/database';
@@ -28,7 +29,7 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
   const [isMounted, setIsMounted] = useState(false);
 
   const wakeLock = useWakeLock();
-  const steps = recipe.instructions || [];
+  const steps = getFlatRecipeInstructions(recipe);
   const ingredients = recipe.ingredients || [];
   const totalSteps = steps.length;
 

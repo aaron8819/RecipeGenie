@@ -80,10 +80,15 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
     name: "Curry",
     category: "dinner",
     servings: 4,
+    prep_time_minutes: null,
+    cook_time_minutes: null,
+    total_time_minutes: null,
     favorite: false,
     tags: [],
     ingredients: [{ item: "Onion", amount: 1, unit: "" }],
     instructions: ["Cook it"],
+    notes: [],
+    instruction_groups: null,
     image_url: null,
     created_at: "2026-03-01T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
@@ -179,5 +184,39 @@ describe("RecipeDetailDialog cache consistency", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit Recipe" }))
     expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
+  })
+
+  it("renders persisted times, notes, and grouped instructions without legacy note duplication", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RecipeDetailDialog
+          open={true}
+          onOpenChange={() => {}}
+          recipeId="recipe-1"
+          recipe={makeRecipe({
+            prep_time_minutes: 10,
+            cook_time_minutes: 15,
+            total_time_minutes: 25,
+            instructions: ["Sear chicken.", "Finish sauce."],
+            instruction_groups: [
+              { steps: ["Sear chicken."] },
+              { label: "Sauce", steps: ["Finish sauce."] },
+            ],
+            notes: ["Rest before serving."],
+          })}
+        />
+      </QueryClientProvider>
+    )
+
+    expect(screen.getByText("Prep 10 min")).toBeInTheDocument()
+    expect(screen.getByText("Cook 15 min")).toBeInTheDocument()
+    expect(screen.getByText("Total 25 min")).toBeInTheDocument()
+    expect(screen.getByText("Sauce")).toBeInTheDocument()
+    expect(screen.getByText("Rest before serving.")).toBeInTheDocument()
+    expect(screen.queryByText("Notes:")).not.toBeInTheDocument()
   })
 })

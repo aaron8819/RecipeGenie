@@ -9,6 +9,8 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - The recipe dialog presentation extraction wave is complete.
 - `recipe-dialog.tsx` still owns form/dialog orchestration, import parsing flow, and submit sequencing.
 - `recipe-list.tsx` still owns recipe browsing orchestration, including search/filter state, mobile-vs-desktop toolbar structure, and modal coordination.
+- Recipe persistence now has first-class support for `prep_time_minutes`, `cook_time_minutes`, `total_time_minutes`, and `notes`, plus additive `instruction_groups` persistence.
+- Legacy flat `instructions` remains persisted for compatibility and the current textarea-based edit model.
 - The recipe detail dialog is query-backed and action-complete for common follow-up actions:
   - favorite toggle
   - add to plan
@@ -34,6 +36,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/hooks/use-recipe-shares.ts` | Share lifecycle data access and mutations. |
 | `web/src/hooks/use-recipe-image-storage.ts` | Upload/delete boundary for Supabase-backed recipe image storage. |
 | `web/src/lib/recipe-parser.ts` | Plain-text recipe parsing. |
+| `web/src/lib/recipe-structure.ts` | Compatibility helpers for notes, grouped instructions, and flat/grouped rendering. |
 | `web/src/lib/recipe-url-parser.ts` | Server-side URL fetch and recipe extraction. |
 | `web/src/lib/supabase/storage.ts` | Storage helpers including pure `getRecipeImageUrl()`. |
 
@@ -67,11 +70,20 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - Text parsing is local and deterministic.
 - URL import remains server-side because it needs SSRF protection, rate limiting, and HTML/JSON-LD extraction.
+- Import apply/save/reopen parity now preserves structured recipe times and notes directly, and preserves grouped instructions through additive `instruction_groups`.
 
 ### Sharing
 
 - Share acceptance creates a recipient-owned copy from the snapshot payload.
 - Sharing is not a live-sync relationship between users.
+- Share snapshots now include recipe times, notes, and grouped instructions.
+
+### Recipe structure compatibility
+
+- `recipe-structure.ts` is the canonical compatibility layer for recipe notes and grouped instructions.
+- When `instruction_groups` exists, render/export/cook flows should prefer it.
+- Older recipes that only have flat `instructions` must continue to render correctly.
+- Legacy `Notes:` label lines inside flat instructions are still supported at hydration/render time and should not be reintroduced into persisted notes-aware recipes.
 
 ### Dialog discard protection
 
@@ -92,4 +104,4 @@ npm run test -- --run src/lib/__tests__/recipe-parser.test.ts
 npx playwright test recipes.spec.ts --project=chromium
 ```
 
-Last updated: 2026-03-08
+Last updated: 2026-03-10

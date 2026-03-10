@@ -43,6 +43,7 @@ import {
   RecipeInstructionsSection,
   RecipeImportSection,
   RecipeMetadataSection,
+  RecipeNotesSection,
 } from "./recipe-dialog-components"
 import {
   applyParsedRecipeToFormValues,
@@ -110,9 +111,13 @@ export function RecipeDialog({
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
   const [servings, setServings] = useState(4)
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState<number | null>(null)
+  const [cookTimeMinutes, setCookTimeMinutes] = useState<number | null>(null)
+  const [totalTimeMinutes, setTotalTimeMinutes] = useState<number | null>(null)
   const [tags, setTags] = useState<string[]>([])
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [instructions, setInstructions] = useState("")
+  const [notes, setNotes] = useState("")
   
   // Image state
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -148,9 +153,13 @@ export function RecipeDialog({
       setName(formValues.name)
       setCategory(formValues.category)
       setServings(formValues.servings)
+      setPrepTimeMinutes(formValues.prepTimeMinutes)
+      setCookTimeMinutes(formValues.cookTimeMinutes)
+      setTotalTimeMinutes(formValues.totalTimeMinutes)
       setTags(formValues.tags)
       setIngredients(formValues.ingredients)
       setInstructions(formValues.instructions)
+      setNotes(formValues.notes)
       setImageUrl(formValues.imageUrl)
       setImageFile(null)
       setImagePreview(null)
@@ -165,9 +174,13 @@ export function RecipeDialog({
       setName(formValues.name)
       setCategory(formValues.category)
       setServings(formValues.servings)
+      setPrepTimeMinutes(formValues.prepTimeMinutes)
+      setCookTimeMinutes(formValues.cookTimeMinutes)
+      setTotalTimeMinutes(formValues.totalTimeMinutes)
       setTags(formValues.tags)
       setIngredients(formValues.ingredients)
       setInstructions(formValues.instructions)
+      setNotes(formValues.notes)
       setImageUrl(formValues.imageUrl)
       setImageFile(null)
       setImagePreview(null)
@@ -272,26 +285,49 @@ export function RecipeDialog({
     }
   }
 
-  const handleApplyPreview = () => {
-    if (!parsedPreview) return
-
+  const applyPreviewToCurrentForm = useCallback((preview: ParsedRecipe) => {
     const formValues = applyParsedRecipeToFormValues(
       {
         name,
         category,
         servings,
+        prepTimeMinutes,
+        cookTimeMinutes,
+        totalTimeMinutes,
         tags,
         ingredients,
         instructions,
+        notes,
         imageUrl,
       },
-      parsedPreview
+      preview
     )
 
     setName(formValues.name)
     setServings(formValues.servings)
+    setPrepTimeMinutes(formValues.prepTimeMinutes)
+    setCookTimeMinutes(formValues.cookTimeMinutes)
+    setTotalTimeMinutes(formValues.totalTimeMinutes)
     setIngredients(formValues.ingredients)
     setInstructions(formValues.instructions)
+    setNotes(formValues.notes)
+  }, [
+    name,
+    category,
+    servings,
+    prepTimeMinutes,
+    cookTimeMinutes,
+    totalTimeMinutes,
+    tags,
+    ingredients,
+    instructions,
+    notes,
+    imageUrl,
+  ])
+
+  const handleApplyPreview = () => {
+    if (!parsedPreview) return
+    applyPreviewToCurrentForm(parsedPreview)
 
     // Switch to manual mode to allow editing
     setMode("manual")
@@ -411,9 +447,13 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        prepTimeMinutes,
+        cookTimeMinutes,
+        totalTimeMinutes,
         tags,
         ingredients,
         instructions,
+        notes,
         imageUrl: finalImageUrl,
       })
 
@@ -449,16 +489,24 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        prepTimeMinutes,
+        cookTimeMinutes,
+        totalTimeMinutes,
         tags,
         ingredients,
         instructions,
+        notes,
         imageUrl,
         imageReference: imagePreview ?? imageUrl,
       })
     : isNewRecipeDialogDirty({
         name,
+        prepTimeMinutes,
+        cookTimeMinutes,
+        totalTimeMinutes,
         ingredients,
         instructions,
+        notes,
       })
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isDirty) {
@@ -565,10 +613,7 @@ export function RecipeDialog({
                 onApplyLivePreview={() => {
                   if (!livePreview) return
                   setParsedPreview(livePreview)
-                  setName(livePreview.name)
-                  setIngredients(livePreview.ingredients)
-                  setInstructions(livePreview.instructions.join("\n"))
-                  setServings(livePreview.servings || 4)
+                  applyPreviewToCurrentForm(livePreview)
                   setMode("manual")
                 }}
                 onBackToInput={handleBackToInput}
@@ -584,6 +629,12 @@ export function RecipeDialog({
                 setCategory={setCategory}
                 servings={servings}
                 setServings={setServings}
+                prepTimeMinutes={prepTimeMinutes}
+                setPrepTimeMinutes={setPrepTimeMinutes}
+                cookTimeMinutes={cookTimeMinutes}
+                setCookTimeMinutes={setCookTimeMinutes}
+                totalTimeMinutes={totalTimeMinutes}
+                setTotalTimeMinutes={setTotalTimeMinutes}
                 tags={tags}
                 setTags={setTags}
                 allTags={allTags}
@@ -591,6 +642,8 @@ export function RecipeDialog({
                 ingredients={ingredients}
                 instructions={instructions}
                 setInstructions={setInstructions}
+                notes={notes}
+                setNotes={setNotes}
                 categories={categories}
                 onAddIngredient={handleAddIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
@@ -620,6 +673,12 @@ export function RecipeDialog({
             setCategory={setCategory}
             servings={servings}
             setServings={setServings}
+            prepTimeMinutes={prepTimeMinutes}
+            setPrepTimeMinutes={setPrepTimeMinutes}
+            cookTimeMinutes={cookTimeMinutes}
+            setCookTimeMinutes={setCookTimeMinutes}
+            totalTimeMinutes={totalTimeMinutes}
+            setTotalTimeMinutes={setTotalTimeMinutes}
             tags={tags}
             setTags={setTags}
             allTags={allTags}
@@ -627,6 +686,8 @@ export function RecipeDialog({
             ingredients={ingredients}
             instructions={instructions}
             setInstructions={setInstructions}
+            notes={notes}
+            setNotes={setNotes}
             categories={categories}
             onAddIngredient={handleAddIngredient}
             onRemoveIngredient={handleRemoveIngredient}
@@ -681,6 +742,12 @@ interface RecipeFormContentProps {
   setCategory: (category: string) => void
   servings: number
   setServings: (servings: number) => void
+  prepTimeMinutes: number | null
+  setPrepTimeMinutes: (value: number | null) => void
+  cookTimeMinutes: number | null
+  setCookTimeMinutes: (value: number | null) => void
+  totalTimeMinutes: number | null
+  setTotalTimeMinutes: (value: number | null) => void
   tags: string[]
   setTags: (tags: string[]) => void
   allTags: string[]
@@ -688,6 +755,8 @@ interface RecipeFormContentProps {
   ingredients: Ingredient[]
   instructions: string
   setInstructions: (instructions: string) => void
+  notes: string
+  setNotes: (notes: string) => void
   categories: string[]
   onAddIngredient: () => void
   onRemoveIngredient: (index: number) => void
@@ -722,6 +791,12 @@ function RecipeFormContent({
   setCategory,
   servings,
   setServings,
+  prepTimeMinutes,
+  setPrepTimeMinutes,
+  cookTimeMinutes,
+  setCookTimeMinutes,
+  totalTimeMinutes,
+  setTotalTimeMinutes,
   tags,
   setTags,
   allTags,
@@ -729,6 +804,8 @@ function RecipeFormContent({
   ingredients,
   instructions,
   setInstructions,
+  notes,
+  setNotes,
   categories,
   onAddIngredient,
   onRemoveIngredient,
@@ -778,6 +855,12 @@ function RecipeFormContent({
             onCategoryChange={setCategory}
             servings={servings}
             onServingsChange={setServings}
+            prepTimeMinutes={prepTimeMinutes}
+            onPrepTimeMinutesChange={setPrepTimeMinutes}
+            cookTimeMinutes={cookTimeMinutes}
+            onCookTimeMinutesChange={setCookTimeMinutes}
+            totalTimeMinutes={totalTimeMinutes}
+            onTotalTimeMinutesChange={setTotalTimeMinutes}
             tags={tags}
             onTagsChange={setTags}
             allTags={allTags}
@@ -813,6 +896,11 @@ function RecipeFormContent({
             instructions={instructions}
             onInstructionsChange={setInstructions}
           />
+          <RecipeNotesSection
+            variant="edit"
+            notes={notes}
+            onNotesChange={setNotes}
+          />
         </div>
       </div>
     )
@@ -840,6 +928,12 @@ function RecipeFormContent({
           onCategoryChange={setCategory}
           servings={servings}
           onServingsChange={setServings}
+          prepTimeMinutes={prepTimeMinutes}
+          onPrepTimeMinutesChange={setPrepTimeMinutes}
+          cookTimeMinutes={cookTimeMinutes}
+          onCookTimeMinutesChange={setCookTimeMinutes}
+          totalTimeMinutes={totalTimeMinutes}
+          onTotalTimeMinutesChange={setTotalTimeMinutes}
           tags={tags}
           onTagsChange={setTags}
           allTags={allTags}
@@ -875,6 +969,11 @@ function RecipeFormContent({
           variant="add"
           instructions={instructions}
           onInstructionsChange={setInstructions}
+        />
+        <RecipeNotesSection
+          variant="add"
+          notes={notes}
+          onNotesChange={setNotes}
         />
       </div>
     </div>
