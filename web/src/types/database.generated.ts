@@ -131,8 +131,8 @@ export type Database = {
       }
       recipes: {
         Row: {
-          cook_time_minutes: number | null
           category: string
+          cook_time_minutes: number | null
           created_at: string | null
           favorite: boolean | null
           id: string
@@ -141,7 +141,7 @@ export type Database = {
           instruction_groups: Json | null
           instructions: string[]
           name: string
-          notes: Json | null
+          notes: Json
           prep_time_minutes: number | null
           servings: number
           tags: string[] | null
@@ -150,8 +150,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          cook_time_minutes?: number | null
           category: string
+          cook_time_minutes?: number | null
           created_at?: string | null
           favorite?: boolean | null
           id: string
@@ -160,7 +160,7 @@ export type Database = {
           instruction_groups?: Json | null
           instructions?: string[]
           name: string
-          notes?: Json | null
+          notes?: Json
           prep_time_minutes?: number | null
           servings?: number
           tags?: string[] | null
@@ -169,8 +169,8 @@ export type Database = {
           user_id: string
         }
         Update: {
-          cook_time_minutes?: number | null
           category?: string
+          cook_time_minutes?: number | null
           created_at?: string | null
           favorite?: boolean | null
           id?: string
@@ -179,7 +179,7 @@ export type Database = {
           instruction_groups?: Json | null
           instructions?: string[]
           name?: string
-          notes?: Json | null
+          notes?: Json
           prep_time_minutes?: number | null
           servings?: number
           tags?: string[] | null
@@ -319,8 +319,8 @@ export type Database = {
       filter_recipes_by_tags: {
         Args: { p_tags: string[]; p_user_id: string }
         Returns: {
-          cook_time_minutes: number | null
           category: string
+          cook_time_minutes: number | null
           created_at: string | null
           favorite: boolean | null
           id: string
@@ -329,7 +329,7 @@ export type Database = {
           instruction_groups: Json | null
           instructions: string[]
           name: string
-          notes: Json | null
+          notes: Json
           prep_time_minutes: number | null
           servings: number
           tags: string[] | null
