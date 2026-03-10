@@ -1953,7 +1953,7 @@ export function MealPlanner() {
       ) : null}
 
       {planLoading ? (
-        <p className="text-muted-foreground text-center py-8">Loading...</p>
+        <p className="text-muted-foreground text-center py-8">Loading this week's plan...</p>
         ) : !displayedRecipes || displayedRecipes.length === 0 ? (
           !hasAnyRecipes ? (
             <EmptyState

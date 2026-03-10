@@ -118,6 +118,16 @@ describe("PantryList", () => {
     expect(screen.getByRole("button", { name: /add excluded keywords/i })).toBeInTheDocument()
   })
 
+  it("uses specific loading copy for pantry items and excluded keywords", () => {
+    pantryItemsState.isLoading = true
+    excludedKeywordsState.isLoading = true
+
+    render(<PantryList />)
+
+    expect(screen.getByText("Loading pantry items...")).toBeInTheDocument()
+    expect(screen.getByText("Loading excluded keywords...")).toBeInTheDocument()
+  })
+
   it("queues undo toasts for pantry and keyword removals", async () => {
     pantryItemsState.data = [{ id: "pantry-1", item: "garlic" }]
     excludedKeywordsState.data = ["pepper"]

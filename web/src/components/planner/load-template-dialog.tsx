@@ -183,13 +183,13 @@ export function LoadTemplateDialog({
           ) : null}
           <div className="flex-1 overflow-y-auto py-4">
             {isLoading ? (
-              <div className="flex items-center justify-center py-8">
+              <div className="flex flex-col items-center justify-center gap-3 py-8 text-center text-muted-foreground">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <p className="text-sm">Loading saved templates...</p>
               </div>
             ) : !templates || templates.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
-                No saved templates yet. Generate a plan
-                and save it as a template to get started.
+                No saved templates yet. Save a week from Planner to reuse it later.
               </p>
             ) : (
               <div className="space-y-2">
@@ -386,7 +386,7 @@ export function LoadTemplateDialog({
               {loadingTemplateId === loadTarget?.id ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Loading...
+                  Loading template...
                 </>
               ) : (
                 'Load Template'

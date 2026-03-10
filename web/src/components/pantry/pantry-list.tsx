@@ -262,7 +262,7 @@ export function PantryList() {
           )}
 
           {showPantryLoading ? (
-            <p className="text-muted-foreground text-center py-4">Loading...</p>
+            <p className="text-muted-foreground text-center py-4">Loading pantry items...</p>
           ) : displayedPantryItems.length === 0 ? (
             <EmptyState
               icon={Package}
@@ -359,7 +359,7 @@ export function PantryList() {
           )}
 
           {showKeywordsLoading ? (
-            <p className="text-muted-foreground text-center py-4">Loading...</p>
+            <p className="text-muted-foreground text-center py-4">Loading excluded keywords...</p>
           ) : displayedKeywords.length === 0 ? (
             <EmptyState
               icon={Ban}

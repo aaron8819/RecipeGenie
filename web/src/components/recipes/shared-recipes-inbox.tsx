@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { Check, Inbox, Loader2, Mail, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -48,7 +49,7 @@ export function SharedRecipesInbox({
             {incoming.isLoading ? (
               <div className="py-10 flex items-center justify-center text-slate-500">
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Loading inbox...
+                Loading recipes shared with you...
               </div>
             ) : incomingError ? (
               <p className="text-sm text-destructive">{incomingError}</p>
@@ -113,7 +114,10 @@ export function SharedRecipesInbox({
             ) : (
               <div className="py-10 text-center text-slate-500 dark:text-slate-400">
                 <Inbox className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                No shared recipes yet.
+                <p className="font-medium text-slate-700 dark:text-slate-200">No recipes shared with you yet</p>
+                <p className="mt-2 text-sm">
+                  When someone shares a recipe with you, it will appear here to review and accept.
+                </p>
               </div>
             )}
           </TabsContent>
@@ -122,7 +126,7 @@ export function SharedRecipesInbox({
             {sent.isLoading ? (
               <div className="py-10 flex items-center justify-center text-slate-500">
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Loading sent shares...
+                Loading recipes you have shared...
               </div>
             ) : sentError ? (
               <p className="text-sm text-destructive">{sentError}</p>
@@ -154,7 +158,10 @@ export function SharedRecipesInbox({
             ) : (
               <div className="py-10 text-center text-slate-500 dark:text-slate-400">
                 <Mail className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                No sent shares yet.
+                <p className="font-medium text-slate-700 dark:text-slate-200">No shared recipes sent yet</p>
+                <p className="mt-2 text-sm">
+                  Open any recipe and use Share when you want to send one to someone else.
+                </p>
               </div>
             )}
           </TabsContent>

@@ -1572,7 +1572,7 @@ export function ShoppingListView() {
       <div className="flex-1 min-h-0 flex flex-col">
       {/* Shopping List */}
       {showLoading ? (
-        <p className="text-center text-muted-foreground py-8">Loading...</p>
+        <p className="text-center text-muted-foreground py-8">Loading your shopping list...</p>
       ) : filteredItems.length === 0 && mergedAlreadyHave.length === 0 && projectedShoppingList.excluded.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <EmptyState

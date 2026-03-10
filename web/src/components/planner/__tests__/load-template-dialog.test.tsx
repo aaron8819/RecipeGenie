@@ -9,11 +9,12 @@ const renameTemplateMutateAsync = vi.fn()
 
 let templates: PlanTemplate[] = []
 let recipes: Recipe[] = []
+let isTemplatesLoading = false
 
 vi.mock("@/hooks/use-plan-templates", () => ({
   usePlanTemplates: () => ({
     data: templates,
-    isLoading: false,
+    isLoading: isTemplatesLoading,
   }),
   useDeletePlanTemplate: () => ({
     mutateAsync: deleteTemplateMutateAsync,
@@ -71,6 +72,7 @@ describe("LoadTemplateDialog", () => {
   beforeEach(() => {
     deleteTemplateMutateAsync.mockReset()
     renameTemplateMutateAsync.mockReset()
+    isTemplatesLoading = false
     templates = [templateFixture()]
     recipes = [recipeFixture(), recipeFixture({ id: "recipe-2" })]
   })
@@ -144,5 +146,36 @@ describe("LoadTemplateDialog", () => {
     })
 
     expect(screen.getByRole("button", { name: "Load" })).toBeInTheDocument()
+  })
+
+  it("uses clearer loading and empty-state copy", () => {
+    isTemplatesLoading = true
+
+    const { rerender } = render(
+      <LoadTemplateDialog
+        open
+        onOpenChange={vi.fn()}
+        onLoadTemplate={vi.fn()}
+        weekLabel="Mar 2 - Mar 8"
+        currentRecipeCount={0}
+      />
+    )
+
+    expect(screen.getByText("Loading saved templates...")).toBeInTheDocument()
+
+    isTemplatesLoading = false
+    templates = []
+
+    rerender(
+      <LoadTemplateDialog
+        open
+        onOpenChange={vi.fn()}
+        onLoadTemplate={vi.fn()}
+        weekLabel="Mar 2 - Mar 8"
+        currentRecipeCount={0}
+      />
+    )
+
+    expect(screen.getByText("No saved templates yet. Save a week from Planner to reuse it later.")).toBeInTheDocument()
   })
 })
