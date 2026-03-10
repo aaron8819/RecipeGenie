@@ -56,21 +56,70 @@ export function getRecipeColor(index: number) {
   return RECIPE_COLORS[index % RECIPE_COLORS.length]
 }
 
+const DISPLAY_UNIT_PLURALS: Record<string, string> = {
+  piece: "pieces",
+  clove: "cloves",
+  slice: "slices",
+  can: "cans",
+  bunch: "bunches",
+  head: "heads",
+  stalk: "stalks",
+  sprig: "sprigs",
+  package: "packages",
+  bag: "bags",
+  box: "boxes",
+  jar: "jars",
+  bottle: "bottles",
+}
+
+function formatDisplayUnit(amount: number, unit: string): string {
+  const trimmedUnit = unit.trim()
+  if (!trimmedUnit) return ""
+
+  const sizedPackageMatch = trimmedUnit.match(/^([a-z]+)\s+\((.+)\)$/)
+  if (sizedPackageMatch) {
+    const singularUnit = sizedPackageMatch[1]
+    const packageSize = sizedPackageMatch[2]
+    const displayUnit =
+      Math.abs(amount) === 1 ? singularUnit : (DISPLAY_UNIT_PLURALS[singularUnit] ?? singularUnit)
+    return `${displayUnit} (${packageSize})`
+  }
+
+  if (Math.abs(amount) === 1) {
+    return trimmedUnit
+  }
+
+  return DISPLAY_UNIT_PLURALS[trimmedUnit] ?? trimmedUnit
+}
+
+export function formatAmountPart(amount: number | null | undefined, unit: string): string {
+  if (!amount) return ""
+
+  const displayAmount = toFraction(amount)
+  const displayUnit = formatDisplayUnit(amount, unit)
+  return `${displayAmount}${displayUnit ? ` ${displayUnit}` : ""}`
+}
+
+export function formatAdditionalAmountParts(
+  additionalAmounts: ShoppingItem["additionalAmounts"]
+): string[] {
+  if (!additionalAmounts || additionalAmounts.length === 0) return []
+
+  return additionalAmounts
+    .filter((additional) => Boolean(additional.amount))
+    .map((additional) => formatAmountPart(additional.amount, additional.unit))
+    .filter(Boolean)
+}
+
 export function formatShoppingItemAmount(item: ShoppingItem): string {
   const parts: string[] = []
 
-  if (item.amount) {
-    const amount = toFraction(item.amount)
-    parts.push(`${amount}${item.unit ? ` ${item.unit}` : ""}`)
+  const primaryAmount = formatAmountPart(item.amount, item.unit)
+  if (primaryAmount) {
+    parts.push(primaryAmount)
   }
 
-  if (item.additionalAmounts && item.additionalAmounts.length > 0) {
-    for (const additional of item.additionalAmounts) {
-      if (!additional.amount) continue
-      const amount = toFraction(additional.amount)
-      parts.push(`${amount}${additional.unit ? ` ${additional.unit}` : ""}`)
-    }
-  }
+  parts.push(...formatAdditionalAmountParts(item.additionalAmounts))
 
   return parts.join(" + ")
 }
@@ -219,11 +268,15 @@ export function ShoppingItemRow({
   onRemove: () => void
 }) {
   const isChecked = item.checked || false
-  const amountLabel = formatShoppingItemAmount(item)
+  const amountLabel = formatAmountPart(item.amount, item.unit)
+  const additionalAmountLabels = formatAdditionalAmountParts(item.additionalAmounts)
   const uniqueSources = dedupeSources(item)
   const nonManualSources = uniqueSources.filter((source) => source.recipeName !== "Manual")
   const sourceSummary = buildSourceSummary(uniqueSources)
   const singleRecipeSource = nonManualSources.length === 1 ? nonManualSources[0] : null
+  const secondaryMetaLabel = additionalAmountLabels.length > 0
+    ? `Also: ${additionalAmountLabels.join(", ")}`
+    : null
 
   return (
     <div
@@ -319,19 +372,28 @@ export function ShoppingItemRow({
               : null}
           </div>
           {sourceDisplay === "summary" && sourceSummary ? (
-            singleRecipeSource && onViewRecipe ? (
-              <button
-                type="button"
-                onClick={() => onViewRecipe(singleRecipeSource.recipeId, singleRecipeSource.recipeName)}
-                className="mt-1 max-w-full truncate text-left text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-              >
-                {sourceSummary}
-              </button>
-            ) : (
-              <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                {sourceSummary}
-              </p>
-            )
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+              {secondaryMetaLabel ? (
+                <span className="max-w-full truncate font-medium text-slate-500">
+                  {secondaryMetaLabel}
+                </span>
+              ) : null}
+              {singleRecipeSource && onViewRecipe ? (
+                <button
+                  type="button"
+                  onClick={() => onViewRecipe(singleRecipeSource.recipeId, singleRecipeSource.recipeName)}
+                  className="max-w-full truncate text-left underline-offset-2 hover:text-foreground hover:underline"
+                >
+                  {sourceSummary}
+                </button>
+              ) : (
+                <p className="max-w-full truncate">{sourceSummary}</p>
+              )}
+            </div>
+          ) : secondaryMetaLabel ? (
+            <p className="mt-1 truncate text-[11px] font-medium text-slate-500">
+              {secondaryMetaLabel}
+            </p>
           ) : null}
         </div>
       </div>

@@ -3,6 +3,9 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { ShoppingItem } from "@/types/database"
 import {
+  formatAdditionalAmountParts,
+  formatAmountPart,
+  formatShoppingItemAmount,
   ManualShoppingItemEditor,
   ShoppingCategorySection,
   ShoppingItemRow,
@@ -265,6 +268,57 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByText("From Weeknight Pasta + 2 more")).toBeInTheDocument()
   })
 
+  it("moves additional amounts into a secondary line for easier scanning", () => {
+    render(
+      <ShoppingItemRow
+        item={item({
+          item: "garlic",
+          amount: 3,
+          unit: "clove",
+          additionalAmounts: [{ amount: 1, unit: "head" }],
+          sources: [{ recipeName: "Roast Chicken" }],
+        })}
+        isDesktop={false}
+        sourceDisplay="summary"
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.getByText("3 cloves")).toBeInTheDocument()
+    expect(screen.queryByText("3 cloves + 1 head")).not.toBeInTheDocument()
+    expect(screen.getByText("Also: 1 head")).toBeInTheDocument()
+    expect(screen.getByText("From Roast Chicken")).toBeInTheDocument()
+  })
+
+  it("pluralizes preserved package units for display", () => {
+    render(
+      <ShoppingItemRow
+        item={item({
+          item: "tomatoes",
+          amount: 2,
+          unit: "can",
+        })}
+        isDesktop={true}
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.getByText("2 cans")).toBeInTheDocument()
+    expect(screen.queryByText("2 can")).not.toBeInTheDocument()
+  })
+
   it("adds manual edit actions to the mobile item menu when editing is allowed", () => {
     const onEdit = vi.fn()
 
@@ -287,6 +341,31 @@ describe("ShoppingItemRow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit item" }))
 
     expect(onEdit).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("shopping amount formatting", () => {
+  it("pluralizes count and package units while preserving singular values", () => {
+    expect(formatAmountPart(1, "jar")).toBe("1 jar")
+    expect(formatAmountPart(2, "jar")).toBe("2 jars")
+    expect(formatAmountPart(3, "clove")).toBe("3 cloves")
+    expect(formatAmountPart(2, "can (14 oz)")).toBe("2 cans (14 oz)")
+  })
+
+  it("formats additional amounts independently from the primary amount", () => {
+    expect(formatAdditionalAmountParts([{ amount: 2, unit: "package" }, { amount: 1, unit: "head" }])).toEqual([
+      "2 packages",
+      "1 head",
+    ])
+    expect(
+      formatShoppingItemAmount(
+        item({
+          amount: 1,
+          unit: "jar",
+          additionalAmounts: [{ amount: 2, unit: "can" }],
+        })
+      )
+    ).toBe("1 jar + 2 cans")
   })
 })
 
