@@ -1629,7 +1629,7 @@ export function MealPlanner() {
   const plannerShoppingSummary = useMemo(() => {
     if (plannedRecipeCount === 0) return null
     if (plannedRecipesInShoppingCount === 0) {
-      return "None of this plan has been sent to Shopping yet."
+      return null
     }
     if (plannedRecipesRemainingForShopping === 0) {
       return "All planned recipes are already in Shopping. Re-adding merges any ingredient changes."

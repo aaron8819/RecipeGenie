@@ -581,6 +581,19 @@ describe("MealPlanner interactions", () => {
     ).toBeInTheDocument()
   })
 
+  it("does not show a shopping warning when no planned recipes have been sent to Shopping", () => {
+    currentShoppingSourceRecipes = []
+
+    render(<MealPlanner />)
+
+    expect(screen.queryByText("None of this plan has been sent to Shopping yet.")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText("Shopping rows keep recipe source labels, so you can trace each item back to this plan.")
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Add planned meal ingredients to Shopping" })).toBeInTheDocument()
+    expect(screen.getByText("Planner Recipe")).toBeInTheDocument()
+  })
+
   it("keeps the bulk shopping action in its neutral state when nothing new is added", async () => {
     addToShoppingListMutateAsync.mockResolvedValueOnce({
       added: 0,
