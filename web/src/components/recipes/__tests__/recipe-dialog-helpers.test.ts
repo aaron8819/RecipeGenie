@@ -25,6 +25,7 @@ import {
   toParsedRecipeImport,
   validateRecipeImportUrl,
 } from "../recipe-import.parser"
+import { STRUCTURED_LAMB_RECIPE_TEXT } from "@/lib/__tests__/recipe-parser.fixtures"
 
 describe("recipe dialog validation helpers", () => {
   it("ignores untouched blank rows and validates inconsistent amount/unit pairs", () => {
@@ -80,6 +81,17 @@ describe("recipe dialog validation helpers", () => {
     expect(result.rowWarnings[4]).toContain("Possible duplicate of row 4")
   })
 
+  it("does not flag exact duplicates across different imported ingredient groups", () => {
+    const result = analyzeIngredientDuplicates([
+      { item: "butter", amount: 1, unit: "tbsp" },
+      { item: "butter", amount: 1, unit: "tbsp", groupLabel: "Pan Sauce" },
+    ])
+
+    expect(result.exactGroups).toHaveLength(0)
+    expect(result.nearGroups).toHaveLength(0)
+    expect(result.rowWarnings).toEqual({})
+  })
+
   it("removes only exact duplicates and preserves near-duplicates", () => {
     const result = removeExactDuplicateIngredients([
       { item: "olive oil", amount: 1, unit: "tbsp" },
@@ -111,6 +123,16 @@ describe("recipe import helpers", () => {
       name: "Toast",
       ingredients: [{ item: "bread", amount: 1, unit: "slice" }],
     })
+  })
+
+  it("keeps grouped ingredient metadata and note fallback in import previews", () => {
+    const preview = parseRecipeImportPreview(STRUCTURED_LAMB_RECIPE_TEXT)
+
+    expect(preview).not.toBeNull()
+    expect(preview?.ingredientGroups?.[1].label).toBe("Pan Sauce")
+    expect(preview?.ingredients[7].groupLabel).toBe("Pan Sauce")
+    expect(preview?.instructions).toContain("Notes:")
+    expect(preview?.notes).toHaveLength(3)
   })
 
   it("validates URL imports and maps extracted URL results", () => {
@@ -193,6 +215,32 @@ describe("recipe dialog defaults helpers", () => {
       tags: ["easy"],
       ingredients: [{ item: "water", amount: 1, unit: "cup", modifier: "chilled" }],
       instructions: ["Boil", "Serve"],
+      image_url: null,
+    })
+  })
+
+  it("preserves ingredient group labels through normalization and submission", () => {
+    expect(
+      buildRecipeSubmissionData({
+        name: "Grouped",
+        category: "dinner",
+        servings: 2,
+        tags: [],
+        ingredients: [
+          { item: "butter", amount: 1, unit: "Tablespoons", groupLabel: " Pan Sauce " },
+        ],
+        instructions: "Cook",
+        imageUrl: null,
+      })
+    ).toEqual({
+      name: "Grouped",
+      category: "dinner",
+      servings: 2,
+      tags: [],
+      ingredients: [
+        { item: "butter", amount: 1, unit: "tbsp", groupLabel: "Pan Sauce" },
+      ],
+      instructions: ["Cook"],
       image_url: null,
     })
   })

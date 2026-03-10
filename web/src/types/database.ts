@@ -19,6 +19,7 @@ export interface Ingredient {
   amount: number | null
   unit: string
   shoppingCategory?: string
+  groupLabel?: string
   modifier?: string
   alternatives?: string[]
   originalText?: string

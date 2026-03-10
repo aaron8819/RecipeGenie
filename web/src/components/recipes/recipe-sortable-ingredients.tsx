@@ -124,6 +124,20 @@ function SortableIngredientRow({
   const issueMessages = issues.map(getValidationMessage)
   const rowWarnings = [...issueMessages, ...(duplicateWarnings || [])]
   const hasRowWarnings = rowWarnings.length > 0
+  const stackedGroupBadge = ingredient.groupLabel ? (
+    <div className="pl-6 sm:pl-9">
+      <span className="inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-600 dark:bg-zinc-800 dark:text-stone-300">
+        {ingredient.groupLabel}
+      </span>
+    </div>
+  ) : null
+  const gridGroupBadge = ingredient.groupLabel ? (
+    <div className="col-span-full pl-11">
+      <span className="inline-flex rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-600 dark:bg-zinc-800 dark:text-stone-300">
+        {ingredient.groupLabel}
+      </span>
+    </div>
+  ) : null
 
   const maybeParseSingleLineIngredient = (rawValue: string) => {
     const parsed = parseIngredientLine(rawValue)
@@ -283,6 +297,7 @@ function SortableIngredientRow({
             </div>
           </div>
         )}
+        {stackedGroupBadge}
         {isWideViewport ? (
           <div className="grid grid-cols-[24px_1fr_60px_80px_1fr_32px] gap-3 items-center">
             {dragHandle}
@@ -323,6 +338,7 @@ function SortableIngredientRow({
         data-has-issues={hasRowWarnings ? "true" : undefined}
         className={`flex flex-col gap-2 sm:flex-row sm:items-center group ${isDragging ? "z-50" : ""}`}
       >
+        {stackedGroupBadge}
         <div className="flex items-center gap-2 sm:flex-[3]">
           {dragHandle}
           <div className="flex-1 min-w-0">
@@ -352,6 +368,7 @@ function SortableIngredientRow({
         data-has-issues={hasRowWarnings ? "true" : undefined}
         className={`grid grid-cols-[32px_2fr_0.8fr_1fr_1.5fr_32px] gap-3 items-center group px-1 ${isDragging ? "z-50" : ""}`}
       >
+        {gridGroupBadge}
         {dragHandle}
         {itemInput}
         {amountInput}

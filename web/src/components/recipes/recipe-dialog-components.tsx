@@ -179,6 +179,48 @@ type RecipeImportSectionProps = {
   onApplyPreview: () => void
 }
 
+function formatIngredientAmount(ingredient: Ingredient): string {
+  return ingredient.amount !== null
+    ? `${ingredient.amount} ${ingredient.unit || ""}`.trim()
+    : "-"
+}
+
+function formatIngredientText(ingredient: Ingredient): string {
+  const alternatives =
+    ingredient.alternatives && ingredient.alternatives.length > 0
+      ? ` or ${ingredient.alternatives.join(" or ")}`
+      : ""
+  const modifier = ingredient.modifier ? `, ${ingredient.modifier}` : ""
+
+  return `${ingredient.item}${alternatives}${modifier}`
+}
+
+function getIngredientGroups(preview: ParsedRecipe): Array<{
+  label?: string
+  ingredients: Ingredient[]
+}> {
+  if (preview.ingredientGroups && preview.ingredientGroups.length > 0) {
+    return preview.ingredientGroups
+  }
+
+  return preview.ingredients.length > 0
+    ? [{ ingredients: preview.ingredients }]
+    : []
+}
+
+function getInstructionGroups(preview: ParsedRecipe): Array<{
+  label?: string
+  steps: string[]
+}> {
+  if (preview.instructionGroups && preview.instructionGroups.length > 0) {
+    return preview.instructionGroups
+  }
+
+  return preview.instructions.length > 0
+    ? [{ steps: preview.instructions }]
+    : []
+}
+
 export function RecipeImportSection({
   importStep,
   importUrl,
@@ -194,6 +236,11 @@ export function RecipeImportSection({
   onBackToInput,
   onApplyPreview,
 }: RecipeImportSectionProps) {
+  const previewRecipe = importStep === "preview" ? parsedPreview : livePreview
+  const ingredientGroups = previewRecipe ? getIngredientGroups(previewRecipe) : []
+  const instructionGroups = previewRecipe ? getInstructionGroups(previewRecipe) : []
+  const notes = previewRecipe?.notes || []
+
   if (importStep === "preview") {
     return (
       <div className="space-y-4">
@@ -237,30 +284,59 @@ export function RecipeImportSection({
             </div>
           ) : null}
 
+          {parsedPreview?.metadata ? (
+            <div className="grid gap-3 sm:grid-cols-3">
+              {parsedPreview.metadata.prepTime ? (
+                <div>
+                  <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+                    Prep Time
+                  </div>
+                  <div>{parsedPreview.metadata.prepTime}</div>
+                </div>
+              ) : null}
+              {parsedPreview.metadata.cookTime ? (
+                <div>
+                  <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+                    Cook Time
+                  </div>
+                  <div>{parsedPreview.metadata.cookTime}</div>
+                </div>
+              ) : null}
+              {parsedPreview.metadata.totalTime ? (
+                <div>
+                  <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+                    Total Time
+                  </div>
+                  <div>{parsedPreview.metadata.totalTime}</div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div>
             <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
               Ingredients ({parsedPreview?.ingredients?.length || 0})
             </div>
-            {parsedPreview?.ingredients && parsedPreview.ingredients.length > 0 ? (
-              <ul className="space-y-1 text-sm">
-                {parsedPreview.ingredients.map((ingredient, index) => (
-                  <li key={index} className="flex gap-2">
-                    <span className="text-muted-foreground">
-                      {ingredient.amount
-                        ? `${ingredient.amount} ${ingredient.unit || ""}`.trim()
-                        : "-"}
-                    </span>
-                    <span>
-                      {ingredient.item}
-                      {ingredient.modifier ? (
-                        <span className="text-muted-foreground">
-                          , {ingredient.modifier}
-                        </span>
-                      ) : null}
-                    </span>
-                  </li>
+            {ingredientGroups.length > 0 ? (
+              <div className="space-y-3 text-sm">
+                {ingredientGroups.map((group, groupIndex) => (
+                  <div key={`${group.label || "main"}-${groupIndex}`} className="space-y-1">
+                    {group.label ? (
+                      <div className="font-semibold text-primary">{group.label}</div>
+                    ) : null}
+                    <ul className="space-y-1">
+                      {group.ingredients.map((ingredient, index) => (
+                        <li key={`${groupIndex}-${index}`} className="flex gap-2">
+                          <span className="text-muted-foreground">
+                            {formatIngredientAmount(ingredient)}
+                          </span>
+                          <span>{formatIngredientText(ingredient)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             ) : (
               <div className="text-sm italic text-muted-foreground">
                 No ingredients found
@@ -272,18 +348,40 @@ export function RecipeImportSection({
             <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
               Instructions ({parsedPreview?.instructions?.length || 0} steps)
             </div>
-            {parsedPreview?.instructions && parsedPreview.instructions.length > 0 ? (
-              <ol className="list-inside list-decimal space-y-1 text-sm">
-                {parsedPreview.instructions.map((step, index) => (
-                  <li key={index}>{step}</li>
+            {instructionGroups.length > 0 ? (
+              <div className="space-y-3 text-sm">
+                {instructionGroups.map((group, groupIndex) => (
+                  <div key={`${group.label || "main"}-${groupIndex}`} className="space-y-1">
+                    {group.label ? (
+                      <div className="font-semibold text-primary">{group.label}</div>
+                    ) : null}
+                    <ol className="list-inside list-decimal space-y-1">
+                      {group.steps.map((step, index) => (
+                        <li key={`${groupIndex}-${index}`}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
                 ))}
-              </ol>
+              </div>
             ) : (
               <div className="text-sm italic text-muted-foreground">
                 No instructions found
               </div>
             )}
           </div>
+
+          {notes.length > 0 ? (
+            <div>
+              <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+                Notes ({notes.length})
+              </div>
+              <ul className="space-y-1 text-sm">
+                {notes.map((note, index) => (
+                  <li key={index}>- {note}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
 
         <Button onClick={onApplyPreview} className="w-full">
@@ -405,6 +503,25 @@ Instructions:
                   Serves {livePreview.servings}
                 </div>
               ) : null}
+              {livePreview.metadata ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  {livePreview.metadata.prepTime ? (
+                    <span className="rounded-full bg-background/70 px-2.5 py-1">
+                      Prep {livePreview.metadata.prepTime}
+                    </span>
+                  ) : null}
+                  {livePreview.metadata.cookTime ? (
+                    <span className="rounded-full bg-background/70 px-2.5 py-1">
+                      Cook {livePreview.metadata.cookTime}
+                    </span>
+                  ) : null}
+                  {livePreview.metadata.totalTime ? (
+                    <span className="rounded-full bg-background/70 px-2.5 py-1">
+                      Total {livePreview.metadata.totalTime}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex gap-6 text-sm">
@@ -466,21 +583,21 @@ Instructions:
                   Ingredients Preview
                 </div>
                 <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg bg-background/50 p-3 text-sm">
-                  {livePreview.ingredients.slice(0, 8).map((ingredient, index) => (
-                    <div key={index} className="flex items-start gap-3">
-                      <span className="mt-0.5 min-w-[70px] flex-shrink-0 text-right font-mono text-xs text-muted-foreground">
-                        {ingredient.amount !== null
-                          ? `${ingredient.amount} ${ingredient.unit}`.trim()
-                          : "-"}
-                      </span>
-                      <span className="flex-1">
-                        {ingredient.item}
-                        {ingredient.modifier ? (
-                          <span className="text-xs text-muted-foreground">
-                            , {ingredient.modifier}
+                  {ingredientGroups.slice(0, 3).map((group, groupIndex) => (
+                    <div key={`${group.label || "main"}-${groupIndex}`} className="space-y-2">
+                      {group.label ? (
+                        <div className="text-xs font-semibold uppercase tracking-wide text-primary">
+                          {group.label}
+                        </div>
+                      ) : null}
+                      {group.ingredients.slice(0, 4).map((ingredient, index) => (
+                        <div key={`${groupIndex}-${index}`} className="flex items-start gap-3">
+                          <span className="mt-0.5 min-w-[70px] flex-shrink-0 text-right font-mono text-xs text-muted-foreground">
+                            {formatIngredientAmount(ingredient)}
                           </span>
-                        ) : null}
-                      </span>
+                          <span className="flex-1">{formatIngredientText(ingredient)}</span>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -493,16 +610,40 @@ Instructions:
                   Instructions Preview
                 </div>
                 <div className="max-h-32 space-y-2 overflow-y-auto rounded-lg bg-background/50 p-3 text-sm">
-                  {livePreview.instructions.slice(0, 3).map((step, index) => (
-                    <div key={index} className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                        {index + 1}
-                      </span>
-                      <span className="flex-1 leading-relaxed">
-                        {step.length > 100 ? `${step.substring(0, 100)}...` : step}
-                      </span>
+                  {instructionGroups.slice(0, 2).map((group, groupIndex) => (
+                    <div key={`${group.label || "main"}-${groupIndex}`} className="space-y-2">
+                      {group.label ? (
+                        <div className="text-xs font-semibold uppercase tracking-wide text-primary">
+                          {group.label}
+                        </div>
+                      ) : null}
+                      {group.steps.slice(0, 2).map((step, index) => (
+                        <div key={`${groupIndex}-${index}`} className="flex items-start gap-2">
+                          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                            {index + 1}
+                          </span>
+                          <span className="flex-1 leading-relaxed">
+                            {step.length > 100 ? `${step.substring(0, 100)}...` : step}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   ))}
+                </div>
+              </div>
+            ) : null}
+
+            {livePreview.notes && livePreview.notes.length > 0 ? (
+              <div>
+                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Notes Preview
+                </div>
+                <div className="rounded-lg bg-background/50 p-3 text-sm">
+                  <ul className="space-y-1">
+                    {livePreview.notes.slice(0, 3).map((note, index) => (
+                      <li key={index}>- {note}</li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             ) : null}

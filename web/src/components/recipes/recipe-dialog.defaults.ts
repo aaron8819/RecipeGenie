@@ -175,6 +175,7 @@ export function normalizeIngredientUnit(unit?: string | null): string {
 export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
   const item = normalizeIngredientWhitespace(ingredient.item)
   const unit = normalizeIngredientUnit(ingredient.unit)
+  const groupLabel = normalizeIngredientWhitespace(ingredient.groupLabel)
   const modifier = normalizeIngredientWhitespace(ingredient.modifier)
   const alternatives = ingredient.alternatives
     ?.map((alternative) => normalizeIngredientWhitespace(alternative))
@@ -184,6 +185,7 @@ export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
     ...ingredient,
     item,
     unit,
+    groupLabel: groupLabel || undefined,
     modifier: modifier || undefined,
     alternatives: alternatives && alternatives.length > 0 ? alternatives : undefined,
     originalText: normalizeIngredientWhitespace(ingredient.originalText) || undefined,

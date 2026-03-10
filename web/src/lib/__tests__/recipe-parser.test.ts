@@ -3,6 +3,7 @@ import {
   parseRecipeText,
   parseIngredientLine,
 } from '../recipe-parser';
+import { STRUCTURED_LAMB_RECIPE_TEXT } from './recipe-parser.fixtures';
 
 describe('parseIngredientLine', () => {
   it('should populate originalText with the cleaned line', () => {
@@ -103,6 +104,100 @@ Cook and serve.`;
     expect(result.ingredients).toHaveLength(10);
     expect(result.ingredients.some((i) => i.item.toLowerCase().includes('sesame seeds'))).toBe(true);
     expect(result.ingredients.some((i) => i.item.toLowerCase().includes('green onions'))).toBe(true);
+  });
+
+  it('parses field-prefixed metadata, grouped sections, and notes from structured recipe text', () => {
+    const result = parseRecipeText(STRUCTURED_LAMB_RECIPE_TEXT);
+
+    expect(result.name).toBe('Cast Iron Lamb Shoulder Chops with Garlic Herb Pan Sauce');
+    expect(result.servings).toBe(2);
+    expect(result.metadata).toMatchObject({
+      prepTime: '10 minutes',
+      prepTimeMinutes: 10,
+      cookTime: '12 minutes',
+      cookTimeMinutes: 12,
+      totalTime: '22 minutes',
+      totalTimeMinutes: 22,
+    });
+
+    expect(result.ingredientGroups).toHaveLength(2);
+    expect(result.ingredientGroups?.[0].label).toBeUndefined();
+    expect(result.ingredientGroups?.[0].ingredients).toHaveLength(7);
+    expect(result.ingredientGroups?.[1].label).toBe('Pan Sauce');
+    expect(result.ingredientGroups?.[1].ingredients).toHaveLength(3);
+
+    expect(result.ingredients).toHaveLength(10);
+    expect(result.ingredients[7]).toMatchObject({
+      item: 'red wine',
+      amount: 0.25,
+      unit: 'cup',
+      groupLabel: 'Pan Sauce',
+      alternatives: ['beef broth'],
+      originalText: '1/4 cup red wine or beef broth',
+    });
+    expect(result.ingredients[9]).toMatchObject({
+      item: 'butter',
+      amount: 1,
+      unit: 'tbsp',
+      groupLabel: 'Pan Sauce',
+    });
+
+    expect(result.instructionGroups).toHaveLength(2);
+    expect(result.instructionGroups?.[0].steps).toHaveLength(8);
+    expect(result.instructionGroups?.[1]).toMatchObject({
+      label: 'Pan Sauce',
+    });
+    expect(result.instructionGroups?.[1].steps).toHaveLength(5);
+    expect(result.instructionGroups?.[1].steps[0]).toBe('Lower heat to medium.');
+
+    expect(result.notes).toEqual([
+      'Lamb shoulder chops are flavorful but slightly tougher than loin chops, so slicing along the natural seam after cooking improves tenderness.',
+      'Best served medium-rare to medium (130–140°F).',
+      'Pairs well with crispy potatoes, Greek salad, or roasted vegetables.',
+    ]);
+  });
+
+  it('preserves grouped instructions and notes losslessly in the current flat model fallback', () => {
+    const result = parseRecipeText(STRUCTURED_LAMB_RECIPE_TEXT);
+
+    expect(result.instructions).toEqual([
+      'Remove lamb shoulder chops from the refrigerator 20–30 minutes before cooking. Pat dry thoroughly.',
+      'Season both sides generously with salt and black pepper.',
+      'Heat a heavy skillet (preferably cast iron) over medium-high heat until very hot.',
+      'Add olive oil to the pan.',
+      'Place lamb shoulder chops in the skillet and sear for 4–5 minutes on the first side.',
+      'Flip and cook for 4–6 minutes on the second side.',
+      'During the last minute of cooking, add butter, smashed garlic, and rosemary. Tilt the pan and spoon the melted butter over the chops repeatedly.',
+      'Remove lamb from the pan when internal temperature reaches about 130°F for medium-rare. Rest for 5 minutes.',
+      'Pan Sauce:',
+      'Lower heat to medium.',
+      'Add red wine or beef broth to the skillet and scrape the browned bits from the pan.',
+      'Add lemon juice and simmer for 1–2 minutes until slightly reduced.',
+      'Stir in butter until the sauce becomes glossy.',
+      'Spoon the pan sauce over the rested lamb chops and serve.',
+      'Notes:',
+      'Lamb shoulder chops are flavorful but slightly tougher than loin chops, so slicing along the natural seam after cooking improves tenderness.',
+      'Best served medium-rare to medium (130–140°F).',
+      'Pairs well with crispy potatoes, Greek salad, or roasted vegetables.',
+    ]);
+  });
+
+  it('does not lose content from the structured regression fixture', () => {
+    const result = parseRecipeText(STRUCTURED_LAMB_RECIPE_TEXT);
+
+    const flattenedContent = [
+      result.name,
+      ...result.ingredients.map((ingredient) => ingredient.originalText || ingredient.item),
+      ...result.instructions,
+      ...(result.notes || []),
+    ].join('\n');
+
+    expect(flattenedContent).toContain('Cast Iron Lamb Shoulder Chops with Garlic Herb Pan Sauce');
+    expect(flattenedContent).toContain('1 sprig fresh rosemary (or thyme)');
+    expect(flattenedContent).toContain('1/4 cup red wine or beef broth');
+    expect(flattenedContent).toContain('Pan Sauce:');
+    expect(flattenedContent).toContain('Lower heat to medium.');
+    expect(flattenedContent).toContain('Best served medium-rare to medium (130–140°F).');
   });
 });
 

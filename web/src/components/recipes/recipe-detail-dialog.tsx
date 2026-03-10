@@ -46,6 +46,51 @@ interface RecipeDetailDialogProps {
   isSharing?: boolean
 }
 
+function groupIngredientsByLabel(recipe: Recipe): Array<{
+  label?: string
+  ingredients: Recipe["ingredients"]
+}> {
+  const groups: Array<{ label?: string; ingredients: Recipe["ingredients"] }> = []
+  let currentLabel: string | undefined
+  let currentIngredients: Recipe["ingredients"] = []
+
+  const flushGroup = () => {
+    if (currentIngredients.length === 0) {
+      return
+    }
+
+    groups.push({
+      label: currentLabel,
+      ingredients: currentIngredients,
+    })
+  }
+
+  for (const ingredient of recipe.ingredients || []) {
+    const ingredientLabel = ingredient.groupLabel || undefined
+
+    if (ingredientLabel !== currentLabel) {
+      flushGroup()
+      currentLabel = ingredientLabel
+      currentIngredients = []
+    }
+
+    currentIngredients.push(ingredient)
+  }
+
+  flushGroup()
+  return groups
+}
+
+function isInstructionSectionLabel(step: string): boolean {
+  const trimmed = step.trim()
+  if (!trimmed.endsWith(":")) {
+    return false
+  }
+
+  const words = trimmed.replace(/:\s*$/, "").split(/\s+/).filter(Boolean)
+  return words.length > 0 && words.length <= 6
+}
+
 export function RecipeDetailDialog({
   open,
   onOpenChange,
@@ -74,6 +119,7 @@ export function RecipeDetailDialog({
   const cookModeRecipeRef = useRef<Recipe | null>(null)
 
   const recipeImageUrl = recipe ? getRecipeImageUrl(recipe.image_url) : null
+  const ingredientGroups = recipe ? groupIngredientsByLabel(recipe) : []
 
   const handleDelete = async () => {
     if (onDelete && recipe) {
@@ -306,40 +352,59 @@ export function RecipeDetailDialog({
                   {recipe.servings} {recipe.servings === 1 ? "serving" : "servings"}
                 </span>
               </div>
-              <ul className="space-y-4">
-                {recipe.ingredients?.map((ingredient, index) => (
-                  <li key={index} className="flex items-start gap-3 text-stone-700 dark:text-stone-300">
-                    <span className="w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-600 mt-2 flex-shrink-0" />
-                    <span className="font-medium">
-                      {ingredient.amount != null && (
-                        <>{toFraction(ingredient.amount)} {ingredient.unit}{" "}</>
-                      )}
-                      {ingredient.item}
-                      {ingredient.alternatives && ingredient.alternatives.length > 0 && (
-                        <span className="text-stone-600 dark:text-stone-400 font-normal">
-                          {' or '}
-                          {ingredient.alternatives.join(' or ')}
-                        </span>
-                      )}
-                      {ingredient.modifier && (
-                        <span className="text-stone-500 dark:text-stone-400 font-normal">, {ingredient.modifier}</span>
-                      )}
-                    </span>
-                  </li>
+              <div className="space-y-6">
+                {ingredientGroups.map((group, groupIndex) => (
+                  <div key={`${group.label || "main"}-${groupIndex}`}>
+                    {group.label ? (
+                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {group.label}
+                      </h3>
+                    ) : null}
+                    <ul className="space-y-4">
+                      {group.ingredients.map((ingredient, index) => (
+                        <li key={index} className="flex items-start gap-3 text-stone-700 dark:text-stone-300">
+                          <span className="w-2 h-2 rounded-full bg-stone-300 dark:bg-stone-600 mt-2 flex-shrink-0" />
+                          <span className="font-medium">
+                            {ingredient.amount != null && (
+                              <>{toFraction(ingredient.amount)} {ingredient.unit}{" "}</>
+                            )}
+                            {ingredient.item}
+                            {ingredient.alternatives && ingredient.alternatives.length > 0 && (
+                              <span className="text-stone-600 dark:text-stone-400 font-normal">
+                                {" or "}
+                                {ingredient.alternatives.join(" or ")}
+                              </span>
+                            )}
+                            {ingredient.modifier && (
+                              <span className="text-stone-500 dark:text-stone-400 font-normal">, {ingredient.modifier}</span>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
             <div className="md:col-span-8">
               <h2 className="text-xl font-bold text-primary dark:text-stone-200 mb-6">Instructions</h2>
               <div className="space-y-8">
-                {recipe.instructions?.map((step, index) => (
-                  <div key={index} className="flex gap-4">
-                    <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm">
-                      {index + 1}
-                    </span>
-                    <p className="text-stone-700 dark:text-stone-300 leading-relaxed pt-1">{step}</p>
-                  </div>
-                ))}
+                {recipe.instructions?.map((step, index) =>
+                  isInstructionSectionLabel(step) ? (
+                    <div key={index} className="pt-2">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                        {step.replace(/:\s*$/, "")}
+                      </h3>
+                    </div>
+                  ) : (
+                    <div key={index} className="flex gap-4">
+                      <span className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-sm">
+                        {index + 1}
+                      </span>
+                      <p className="text-stone-700 dark:text-stone-300 leading-relaxed pt-1">{step}</p>
+                    </div>
+                  )
+                )}
               </div>
             </div>
           </div>

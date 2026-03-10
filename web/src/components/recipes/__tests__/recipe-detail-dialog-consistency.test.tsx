@@ -143,7 +143,7 @@ describe("RecipeDetailDialog cache consistency", () => {
     )
 
     fireEvent.click(screen.getByRole("button", { name: "Add to Plan" }))
-    fireEvent.click(screen.getByRole("button", { name: "Add to Shopping" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
     fireEvent.click(screen.getByRole("button", { name: "Mark Made" }))
     fireEvent.click(screen.getByRole("button", { name: "Share" }))
 

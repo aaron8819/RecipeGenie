@@ -168,7 +168,7 @@ export function analyzeIngredientDuplicates(
     .map(({ key, rowIndexes }) => ({
       key,
       type: "near" as const,
-      canonicalItem: key,
+      canonicalItem: key.split("|").pop() || key,
       rowIndexes,
     }))
 
@@ -230,16 +230,18 @@ function createExactDuplicateKey(ingredient: Ingredient): string | null {
   const normalizedItem = normalizeText(ingredient.item)
   if (!normalizedItem) return null
 
+  const groupKey = normalizeText(ingredient.groupLabel)
   const amountKey = ingredient.amount === null ? "" : ingredient.amount.toString()
   const unitKey = normalizeUnit(ingredient.unit || "")
   const modifierKey = normalizeText(ingredient.modifier)
 
-  return `${normalizedItem}|${amountKey}|${unitKey}|${modifierKey}`
+  return `${groupKey}|${normalizedItem}|${amountKey}|${unitKey}|${modifierKey}`
 }
 
 function createCanonicalNearDuplicateKey(ingredient: Ingredient): string | null {
   const normalizedItem = normalizeItemName(ingredient.item)
-  return normalizedItem || null
+  const groupKey = normalizeText(ingredient.groupLabel)
+  return normalizedItem ? `${groupKey}|${normalizedItem}` : null
 }
 
 function hasLikelyNamingVariant(rowIndexes: number[], ingredients: Ingredient[]): boolean {
