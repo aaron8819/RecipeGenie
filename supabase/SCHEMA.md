@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-03-07 (v2.15.1)*
+*Last updated: 2026-03-09 (v2.16.0)*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -32,8 +32,9 @@ The Recipe Genie database is designed for multi-user support with complete data 
 ### Baseline-First Migration Strategy
 
 - Canonical bootstrap migration: `supabase/migrations/001_baseline.sql`
-- Legacy historical migrations: `supabase/migrations/012_*.sql` through `026_*.sql`
-- Historical migrations are kept for audit/history but are no longer the source of truth for fresh environments.
+- Canonical baseline includes all stable schema changes through the pantry row-id update previously developed as `028_pantry_item_ids.sql`.
+- Archived historical migrations live under `supabase/migrations/archive/2026-03-09-pre-028-squash/`.
+- Archived migrations are kept for audit/history but are no longer the source of truth for fresh environments.
 - New migrations must be created incrementally on top of the baseline schema.
 
 The schema supports:
@@ -96,11 +97,12 @@ Stores items in the user's pantry.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
-| `item` | TEXT | PRIMARY KEY (composite with user_id) | Pantry item name |
+| `id` | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | Stable pantry row identity |
+| `item` | TEXT | NOT NULL | Pantry item name |
 | `user_id` | UUID | FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the pantry item |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when item was added |
 
-**Note:** The primary key is a composite of `(user_id, item)` enforced by a unique index.
+**Note:** Pantry rows now use `id` as the primary key while preserving logical uniqueness with a unique constraint on `(user_id, item)`.
 
 ### user_config
 
@@ -298,7 +300,7 @@ Public storage bucket for recipe images. Images are organized by user ID in fold
 
 ### pantry_items
 - `idx_pantry_items_user_id` - Index on `user_id` for user-specific queries
-- `idx_pantry_items_user_item` - Unique index on `(user_id, item)` for composite primary key
+- `idx_pantry_items_user_id_item` - Index on `(user_id, item)` for pantry lookup and uniqueness enforcement
 
 ### user_config
 - `idx_user_config_user_id` - Index on `user_id` for user-specific queries
@@ -527,11 +529,11 @@ All enforced foreign keys use `ON DELETE CASCADE`, meaning if a user is deleted,
 
 The repository now uses a baseline-first bootstrap strategy:
 
-1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap.
-2. **012-026** - Legacy historical migrations retained in version control (incomplete earlier history means they are no longer authoritative for clean bootstrap).
+1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap through the pantry row-id baseline cut on 2026-03-09.
+2. **Post-baseline incrementals** - New schema changes must be added as fresh migrations after the baseline cut. There are currently no active post-baseline incrementals in `supabase/migrations/`.
 
 Legacy notes:
-- Historical migrations are preserved for context and backward auditability.
+- Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments should start from the baseline and then apply only new incremental migrations added after it.
 - Missing historical `001-011` incremental files are intentionally not reconstructed.
 
@@ -563,6 +565,7 @@ Pre-baseline historical evolution (for context only):
 24. **025_atomic_mark_recipe_made.sql** - Added atomic weekly made/unmade toggle RPC for planner/history consistency
 25. **026_normalize_legacy_steak_defaults.sql** - Normalized known legacy default `steak` category payloads in `user_config` to canonical `beef`
 26. **027_shopping_row_identity_rpc_parity.sql** - Updated shopping RPC contracts to target stable `rowId` identity instead of name-based matching
+27. **028_pantry_item_ids.sql** - Added stable pantry row ids, preserved `(user_id, item)` uniqueness, and updated pantry/shopping RPC parity to return pantry row identity
 
 ## Query Examples
 
@@ -623,8 +626,10 @@ ORDER BY created_at DESC;
 
 ## Archived Migrations
 
-One-time data fixes and inspection queries are kept in `migrations/archive/`:
+Historical schema migrations superseded by the 2026-03-09 baseline cut are kept in `migrations/archive/2026-03-09-pre-028-squash/`.
+
+One-time data fixes and inspection queries are also kept in `migrations/archive/`:
 - `check-user-recipes.sql` - Data inspection query for debugging recipe ownership
 - `migrate-bad-recipe-id.sql` - One-time fix for malformed recipe IDs
 
-These are not schema migrations and should not be re-run.
+Archived files are not part of the active bootstrap chain and should not be re-run during normal `db reset` workflows.

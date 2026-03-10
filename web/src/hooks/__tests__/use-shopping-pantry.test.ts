@@ -78,7 +78,7 @@ beforeEach(() => {
   mockSupabase.rpc.mockResolvedValue({
     data: [{
       removed_item: { rowId: 'row-garlic-cup-1', item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
-      pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: new Date().toISOString() },
+      pantry_item: { id: 'pantry-garlic', user_id: 'test-user-id', item: 'garlic', created_at: new Date().toISOString() },
       shopping_list_updated_at: new Date().toISOString(),
       pantry_was_inserted: true,
     }],
@@ -165,12 +165,12 @@ describe('useAddToPantryAndRemove', () => {
     )
     queryClient.setQueryData(
       [...PANTRY_KEY],
-      [{ user_id: 'test-user-id', item: 'garlic', created_at: '2026-01-01T00:00:00.000Z' }] as PantryItem[]
+      [{ id: 'pantry-garlic', user_id: 'test-user-id', item: 'garlic', created_at: '2026-01-01T00:00:00.000Z' }] as PantryItem[]
     )
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [{
         removed_item: { rowId: 'row-garlic-cup-1', item: 'garlic', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 },
-        pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: '2026-01-01T00:00:00.000Z' },
+        pantry_item: { id: 'pantry-garlic', user_id: 'test-user-id', item: 'garlic', created_at: '2026-01-01T00:00:00.000Z' },
         shopping_list_updated_at: new Date().toISOString(),
         pantry_was_inserted: false,
       }],
@@ -209,7 +209,7 @@ describe('useAddToPantryAndRemove', () => {
     mockSupabase.rpc.mockResolvedValueOnce({
       data: [{
         removed_item: { rowId: 'row-garlic-bulb', item: 'garlic', amount: 1, unit: 'bulb', categoryKey: 'produce', categoryOrder: 1 },
-        pantry_item: { user_id: 'test-user-id', item: 'garlic', created_at: new Date().toISOString() },
+        pantry_item: { id: 'pantry-garlic', user_id: 'test-user-id', item: 'garlic', created_at: new Date().toISOString() },
         shopping_list_updated_at: new Date().toISOString(),
         pantry_was_inserted: true,
       }],

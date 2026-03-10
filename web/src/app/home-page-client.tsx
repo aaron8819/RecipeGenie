@@ -127,7 +127,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
           queryFn: async () => {
             const { data, error } = await supabase
               .from("pantry_items")
-              .select("created_at,item,user_id")
+              .select("id,created_at,item,user_id")
               .order("item", { ascending: true })
             if (error) throw error
             return data

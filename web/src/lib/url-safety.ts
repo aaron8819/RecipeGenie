@@ -81,6 +81,13 @@ function isDisallowedHostname(hostname: string): boolean {
   return false
 }
 
+function normalizeHostname(hostname: string): string {
+  if (hostname.startsWith("[") && hostname.endsWith("]")) {
+    return hostname.slice(1, -1)
+  }
+  return hostname
+}
+
 export type LookupAddresses = (hostname: string) => Promise<string[]>
 
 async function defaultLookupAddresses(hostname: string): Promise<string[]> {
@@ -108,19 +115,21 @@ export async function assertSafePublicRecipeUrl(
     throw new UnsafeUrlError("URLs with embedded credentials are not allowed")
   }
 
-  if (isDisallowedHostname(parsed.hostname)) {
+  const normalizedHostname = normalizeHostname(parsed.hostname)
+
+  if (isDisallowedHostname(normalizedHostname)) {
     throw new UnsafeUrlError("Hostname is not allowed")
   }
 
-  const hostnameIpKind = net.isIP(parsed.hostname)
+  const hostnameIpKind = net.isIP(normalizedHostname)
   if (hostnameIpKind !== 0) {
-    if (isPrivateIpAddress(parsed.hostname)) {
+    if (isPrivateIpAddress(normalizedHostname)) {
       throw new UnsafeUrlError("Target resolves to a private network")
     }
     return parsed
   }
 
-  const addresses = await lookupAddresses(parsed.hostname)
+  const addresses = await lookupAddresses(normalizedHostname)
   if (addresses.length === 0) {
     throw new UnsafeUrlError("Could not resolve hostname")
   }

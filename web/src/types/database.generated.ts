@@ -12,16 +12,19 @@ export type Database = {
       pantry_items: {
         Row: {
           created_at: string | null
+          id: string
           item: string
           user_id: string
         }
         Insert: {
           created_at?: string | null
+          id?: string
           item: string
           user_id: string
         }
         Update: {
           created_at?: string | null
+          id?: string
           item?: string
           user_id?: string
         }
@@ -338,12 +341,7 @@ export type Database = {
         Returns: undefined
       }
       move_shopping_item_to_pantry: {
-        Args: {
-          p_item_index: number
-          p_item_name: string
-          p_pantry_qty: number
-          p_pantry_unit: string
-        }
+        Args: { p_pantry_qty: number; p_pantry_unit: string; p_row_id: string }
         Returns: {
           pantry_item: Json
           pantry_was_inserted: boolean
@@ -356,10 +354,10 @@ export type Database = {
         Returns: undefined
       }
       toggle_shopping_item_checked: {
-        Args: { p_item_name: string }
+        Args: { p_row_id: string }
         Returns: {
           checked: boolean
-          item_name: string
+          row_id: string
           updated_at: string
         }[]
       }

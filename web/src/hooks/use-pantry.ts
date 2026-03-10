@@ -1,14 +1,69 @@
 "use client"
 
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { PantryItem } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
+import { normalizePantryItemName, parsePantryCandidates, getPantryFailureInput } from "@/lib/pantry"
 import { getSupabase } from "@/lib/supabase/client"
-import { DEFAULT_RECIPE_CATEGORIES, DEFAULT_RECIPE_SELECTION, DEFAULT_USER_CONFIG } from "@/lib/user-config"
 
-const PANTRY_KEY = ["pantry"]
-const CONFIG_KEY = ["user_config"]
-type SupabaseWriteError = { message: string } | null
+export const PANTRY_KEY = ["pantry"]
+export const PANTRY_WRITE_SCOPE_ID = "pantry-write"
+type SupabaseWriteError = { code?: string; message: string } | null
+
+export type PantryAddOutcomeStatus = "success" | "duplicate" | "failure"
+
+export interface PantryAddOutcome {
+  input: string
+  normalizedItem: string
+  status: PantryAddOutcomeStatus
+  item?: PantryItem
+  error?: string
+}
+
+export interface PantryAddResult {
+  outcomes: PantryAddOutcome[]
+  unresolvedInput: string
+}
+
+function sortPantryItems(items: PantryItem[]): PantryItem[] {
+  return [...items].sort((a, b) => a.item.localeCompare(b.item))
+}
+
+function createOptimisticPantryItem(userId: string, item: string): PantryItem {
+  return {
+    id: `temp-${crypto.randomUUID()}`,
+    user_id: userId,
+    item,
+    created_at: new Date().toISOString(),
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505"
+}
+
+async function insertPantryItem(
+  userId: string,
+  item: string,
+  id?: string
+): Promise<PantryItem> {
+  const supabase = getSupabase()
+  const pantryInsert = supabase.from("pantry_items") as unknown as {
+    insert: (values: { id?: string; user_id: string; item: string }) => {
+      select: () => {
+        single: () => Promise<{ data: PantryItem | null; error: SupabaseWriteError }>
+      }
+    }
+  }
+
+  const { data, error } = await pantryInsert
+    .insert(id ? { id, user_id: userId, item } : { user_id: userId, item })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as PantryItem
+}
 
 /**
  * Hook to fetch all pantry items
@@ -28,350 +83,198 @@ export function usePantryItems() {
       if (error) throw error
       return data as PantryItem[]
     },
-    // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
-    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+    staleTime: 30 * 1000,
     enabled: !!user,
   })
 }
 
 /**
- * Hook to add a pantry item
- * Implements optimistic updates for instant UI feedback
+ * Hook to add pantry items from raw comma-separated input.
+ * Returns structured per-item outcomes instead of swallowing failures.
  */
-export function useAddPantryItem() {
+export function useAddPantryItems() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
 
   return useMutation({
-    mutationFn: async (itemName: string) => {
-      const normalizedItem = itemName.toLowerCase().trim()
-      const now = new Date().toISOString()
+    scope: { id: PANTRY_WRITE_SCOPE_ID },
+    mutationFn: async (rawInput: string): Promise<PantryAddResult> => {
+      const candidates = parsePantryCandidates(rawInput)
+      const knownItems = new Set(
+        (queryClient.getQueryData<PantryItem[]>(PANTRY_KEY) || []).map((item) => item.item)
+      )
+      const outcomes: PantryAddOutcome[] = []
+      const insertedItems: PantryItem[] = []
 
-      const supabase = getSupabase()
-      const pantryInsert = supabase.from("pantry_items") as unknown as {
-        insert: (values: { user_id: string; item: string }) => {
-          select: () => {
-            single: () => Promise<{ data: PantryItem | null; error: SupabaseWriteError }>
+      for (const candidate of candidates) {
+        const normalizedItem = normalizePantryItemName(candidate)
+        if (knownItems.has(normalizedItem)) {
+          outcomes.push({
+            input: candidate,
+            normalizedItem,
+            status: "duplicate",
+          })
+          continue
+        }
+
+        try {
+          const insertedItem = await insertPantryItem(user!.id, normalizedItem, crypto.randomUUID())
+          knownItems.add(normalizedItem)
+          insertedItems.push(insertedItem)
+          outcomes.push({
+            input: candidate,
+            normalizedItem,
+            status: "success",
+            item: insertedItem,
+          })
+        } catch (error) {
+          if (isUniqueViolation(error)) {
+            knownItems.add(normalizedItem)
+            outcomes.push({
+              input: candidate,
+              normalizedItem,
+              status: "duplicate",
+            })
+            continue
           }
+
+          outcomes.push({
+            input: candidate,
+            normalizedItem,
+            status: "failure",
+            error: error instanceof Error ? error.message : "Failed to add pantry item",
+          })
         }
       }
-      const { data, error } = await pantryInsert
-        .insert({ user_id: user!.id, item: normalizedItem })
-        .select()
-        .single()
 
-      if (error) throw error
-      return data as PantryItem
-    },
-    // Optimistic update
-    onMutate: async (itemName) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
-
-      // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<PantryItem[]>({ queryKey: PANTRY_KEY })
-
-      const normalizedItem = itemName.toLowerCase().trim()
-      const now = new Date().toISOString()
-      const optimisticItem: PantryItem = {
-        user_id: user!.id || "",
-        item: normalizedItem,
-        created_at: now,
+      if (insertedItems.length > 0) {
+        queryClient.setQueryData<PantryItem[]>(
+          PANTRY_KEY,
+          (old) => sortPantryItems([...(old || []), ...insertedItems.filter((item) =>
+            !(old || []).some((existing) => existing.id === item.id)
+          )])
+        )
       }
 
-      // Optimistically add to all pantry queries
-      queryClient.setQueriesData<PantryItem[]>(
-        { queryKey: PANTRY_KEY },
-        (old) => {
-          if (!old) return [optimisticItem]
-          if (old.some((p) => p.item === normalizedItem)) return old
-          return [...old, optimisticItem].sort((a, b) => a.item.localeCompare(b.item))
-        }
-      )
-
-      return { previousQueries }
-    },
-    onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousQueries) {
-        context.previousQueries.forEach(([queryKey, data]) => {
-          queryClient.setQueryData(queryKey, data)
-        })
+      return {
+        outcomes,
+        unresolvedInput: getPantryFailureInput(outcomes),
       }
-    },
-    onSuccess: (newItem) => {
-      // Update with server response
-      queryClient.setQueriesData<PantryItem[]>(
-        { queryKey: PANTRY_KEY },
-        (old) => {
-          if (!old) return [newItem]
-          // Replace optimistic with real data
-          const filtered = old.filter((p) => p.item !== newItem.item)
-          return [...filtered, newItem].sort((a, b) => a.item.localeCompare(b.item))
-        }
-      )
     },
     onSettled: () => {
-      // Always refetch to ensure consistency
       queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
     },
   })
 }
 
 /**
- * Hook to remove a pantry item
- * Implements optimistic updates for instant UI feedback
+ * Hook to restore a previously removed pantry item.
+ * Reuses the same item id so undo targets the exact entity.
+ */
+export function useRestorePantryItem() {
+  const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+
+  return useMutation({
+    scope: { id: PANTRY_WRITE_SCOPE_ID },
+    mutationFn: async (item: PantryItem) => {
+      try {
+        return await insertPantryItem(user!.id, item.item, item.id)
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error
+
+        const supabase = getSupabase()
+        const { data, error: fetchError } = await supabase
+          .from("pantry_items")
+          .select("*")
+          .eq("user_id", user!.id)
+          .eq("item", item.item)
+          .single()
+
+        if (fetchError) throw fetchError
+        return data as PantryItem
+      }
+    },
+    onMutate: async (item) => {
+      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
+      const previousPantry = queryClient.getQueryData<PantryItem[]>(PANTRY_KEY)
+
+      queryClient.setQueryData<PantryItem[]>(
+        PANTRY_KEY,
+        (old) => {
+          if (!old) return [item]
+          if (old.some((existing) => existing.id === item.id || existing.item === item.item)) {
+            return old
+          }
+          return sortPantryItems([...old, item])
+        }
+      )
+
+      return { previousPantry }
+    },
+    onError: (_error, _item, context) => {
+      if (context?.previousPantry) {
+        queryClient.setQueryData(PANTRY_KEY, context.previousPantry)
+      }
+    },
+    onSuccess: (restoredItem) => {
+      queryClient.setQueryData<PantryItem[]>(
+        PANTRY_KEY,
+        (old) => {
+          const next = (old || []).filter((candidate) => candidate.id !== restoredItem.id && candidate.item !== restoredItem.item)
+          return sortPantryItems([...next, restoredItem])
+        }
+      )
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
+    },
+  })
+}
+
+/**
+ * Hook to remove a pantry item using stable row identity.
  */
 export function useRemovePantryItem() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
 
   return useMutation({
-    mutationFn: async (itemName: string) => {
-      const normalizedItem = itemName.toLowerCase().trim()
-
+    scope: { id: PANTRY_WRITE_SCOPE_ID },
+    mutationFn: async (item: PantryItem) => {
       const supabase = getSupabase()
       const { error } = await supabase
         .from("pantry_items")
         .delete()
         .eq("user_id", user!.id)
-        .eq("item", normalizedItem)
+        .eq("id", item.id)
 
       if (error) throw error
-      return normalizedItem
+      return item
     },
-    // Optimistic update
-    onMutate: async (itemName) => {
-      // Cancel outgoing refetches
+    onMutate: async (item) => {
       await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
+      const previousPantry = queryClient.getQueryData<PantryItem[]>(PANTRY_KEY)
 
-      // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<PantryItem[]>({ queryKey: PANTRY_KEY })
-
-      const normalizedItem = itemName.toLowerCase().trim()
-
-      // Optimistically remove from all pantry queries
-      queryClient.setQueriesData<PantryItem[]>(
-        { queryKey: PANTRY_KEY },
-        (old) => old?.filter((p) => p.item !== normalizedItem)
+      queryClient.setQueryData<PantryItem[]>(
+        PANTRY_KEY,
+        (old) => old?.filter((candidate) => candidate.id !== item.id)
       )
 
-      return { previousQueries }
+      return { previousPantry }
     },
-    onError: (err, itemName, context) => {
-      // Rollback on error
-      if (context?.previousQueries) {
-        context.previousQueries.forEach(([queryKey, data]) => {
-          queryClient.setQueryData(queryKey, data)
-        })
+    onError: (_error, _item, context) => {
+      if (context?.previousPantry) {
+        queryClient.setQueryData(PANTRY_KEY, context.previousPantry)
       }
     },
-    onSuccess: (removedItem) => {
-      // Always refetch to ensure consistency
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
     },
   })
 }
 
-/**
- * Hook to fetch excluded keywords
- */
-export function useExcludedKeywords() {
-  const { user } = useAuthContext()
-
-  return useQuery({
-    queryKey: [...CONFIG_KEY, "excluded_keywords"],
-    queryFn: async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("user_config")
-        .select("excluded_keywords")
-        .single()
-
-      if (error) {
-        console.warn("Config not found:", error.message)
-        return []
-      }
-      const typedData = data as { excluded_keywords?: string[] } | null
-      return typedData?.excluded_keywords || []
-    },
-    // Show cached data immediately while refetching (stale-while-revalidate)
-    placeholderData: (previousData) => previousData,
-    staleTime: 30 * 1000, // Consider data fresh for 30 seconds
-    enabled: !!user,
-  })
-}
-
-/**
- * Hook to add an excluded keyword
- * Implements optimistic updates for instant UI feedback
- */
-export function useAddExcludedKeyword() {
-  const queryClient = useQueryClient()
-  const { user } = useAuthContext()
-
-  return useMutation({
-    mutationFn: async (keyword: string) => {
-      const normalizedKeyword = keyword.toLowerCase().trim()
-
-      const supabase = getSupabase()
-      const { data: config } = await supabase
-        .from("user_config")
-        .select("excluded_keywords")
-        .eq("user_id", user!.id)
-        .maybeSingle()
-
-      const typedConfig = config as { excluded_keywords?: string[] } | null
-      const currentKeywords = typedConfig?.excluded_keywords || []
-      if (currentKeywords.includes(normalizedKeyword)) {
-        throw new Error("Keyword already exists")
-      }
-
-      if (config) {
-        // Update existing config
-        const userConfigUpdate = supabase.from("user_config") as unknown as {
-          update: (values: { excluded_keywords: string[] }) => {
-            eq: (column: string, value: string) => Promise<{ error: SupabaseWriteError }>
-          }
-        }
-        const { error } = await userConfigUpdate
-          .update({ excluded_keywords: [...currentKeywords, normalizedKeyword] })
-          .eq("user_id", user!.id)
-        if (error) throw error
-      } else {
-        // Insert new config (shouldn't happen normally, but handle it)
-        const userConfigInsert = supabase.from("user_config") as unknown as {
-          insert: (values: {
-            user_id: string
-            excluded_keywords: string[]
-            categories: string[]
-            default_selection: Record<string, number>
-            category_overrides: Record<string, string>
-            history_exclusion_days: number | null
-            week_start_day: number | null
-          }) => Promise<{ error: SupabaseWriteError }>
-        }
-        const { error } = await userConfigInsert
-          .insert({
-            user_id: user!.id,
-            excluded_keywords: [normalizedKeyword],
-            categories: [...DEFAULT_RECIPE_CATEGORIES],
-            default_selection: { ...DEFAULT_RECIPE_SELECTION },
-            category_overrides: { ...DEFAULT_USER_CONFIG.category_overrides },
-            history_exclusion_days: DEFAULT_USER_CONFIG.history_exclusion_days,
-            week_start_day: DEFAULT_USER_CONFIG.week_start_day,
-          })
-        if (error) throw error
-      }
-      return normalizedKeyword
-    },
-    // Optimistic update
-    onMutate: async (keyword) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
-
-      // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<string[]>({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
-
-      const normalizedKeyword = keyword.toLowerCase().trim()
-
-      // Optimistically add to all excluded keywords queries
-      queryClient.setQueriesData<string[]>(
-        { queryKey: [...CONFIG_KEY, "excluded_keywords"] },
-        (old) => {
-          if (!old) return [normalizedKeyword]
-          if (old.includes(normalizedKeyword)) return old
-          return [...old, normalizedKeyword]
-        }
-      )
-
-      return { previousQueries }
-    },
-    onError: (err, keyword, context) => {
-      // Rollback on error
-      if (context?.previousQueries) {
-        context.previousQueries.forEach(([queryKey, data]) => {
-          queryClient.setQueryData(queryKey, data)
-        })
-      }
-    },
-    onSuccess: (newKeyword) => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
-    },
-  })
-}
-
-/**
- * Hook to remove an excluded keyword
- * Implements optimistic updates for instant UI feedback
- */
-export function useRemoveExcludedKeyword() {
-  const queryClient = useQueryClient()
-  const { user } = useAuthContext()
-
-  return useMutation({
-    mutationFn: async (keyword: string) => {
-      const normalizedKeyword = keyword.toLowerCase().trim()
-
-      const supabase = getSupabase()
-      const { data: config } = await supabase
-        .from("user_config")
-        .select("excluded_keywords")
-        .eq("user_id", user!.id)
-        .maybeSingle()
-
-      if (!config) {
-        // Config doesn't exist, nothing to remove
-        return normalizedKeyword
-      }
-
-      const typedConfig = config as { excluded_keywords?: string[] }
-      const currentKeywords = typedConfig.excluded_keywords || []
-      const updatedKeywords = currentKeywords.filter((k) => k !== normalizedKeyword)
-
-      const userConfigUpdate = supabase.from("user_config") as unknown as {
-        update: (values: { excluded_keywords: string[] }) => {
-          eq: (column: string, value: string) => Promise<{ error: SupabaseWriteError }>
-        }
-      }
-      const { error } = await userConfigUpdate
-        .update({ excluded_keywords: updatedKeywords })
-        .eq("user_id", user!.id)
-
-      if (error) throw error
-      return normalizedKeyword
-    },
-    // Optimistic update
-    onMutate: async (keyword) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
-
-      // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<string[]>({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
-
-      const normalizedKeyword = keyword.toLowerCase().trim()
-
-      // Optimistically remove from all excluded keywords queries
-      queryClient.setQueriesData<string[]>(
-        { queryKey: [...CONFIG_KEY, "excluded_keywords"] },
-        (old) => old?.filter((k) => k !== normalizedKeyword)
-      )
-
-      return { previousQueries }
-    },
-    onError: (err, keyword, context) => {
-      // Rollback on error
-      if (context?.previousQueries) {
-        context.previousQueries.forEach(([queryKey, data]) => {
-          queryClient.setQueryData(queryKey, data)
-        })
-      }
-    },
-    onSuccess: (removedKeyword) => {
-      // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: [...CONFIG_KEY, "excluded_keywords"] })
-    },
-  })
+export function createPendingPantryUndoItem(itemName: string, userId: string): PantryItem {
+  return createOptimisticPantryItem(userId, normalizePantryItemName(itemName))
 }

@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { UserConfig } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { resolveUserConfig } from "@/lib/user-config"
+import { DEFAULT_USER_CONFIG, resolveUserConfig } from "@/lib/user-config"
+import { normalizePantryItemName } from "@/lib/pantry"
 
-const CONFIG_KEY = ["user_config"]
+export const CONFIG_KEY = ["user_config"]
 const CATEGORY_QUERY_KEY = [...CONFIG_KEY, "categories"]
 const DEFAULT_CATEGORY_ORDER = ["chicken", "beef", "lamb", "turkey", "vegetarian"]
+export const USER_CONFIG_WRITE_SCOPE_ID = "user-config-write"
 
 function sortDefaultCategories(categories: string[]): string[] {
   return [...categories].sort((a, b) => {
@@ -68,6 +70,105 @@ export function useUpdateUserConfig() {
     },
     onSuccess: (data) => {
       queryClient.setQueryData([...CONFIG_KEY], data)
+    },
+  })
+}
+
+function normalizeExcludedKeywords(keywords: string[]): string[] {
+  return Array.from(
+    new Set(
+      keywords
+        .map((keyword) => normalizePantryItemName(keyword))
+        .filter((keyword) => keyword.length > 0)
+    )
+  )
+}
+
+function buildOptimisticUserConfig(
+  current: UserConfig | undefined,
+  userId: string,
+  excludedKeywords: string[]
+): UserConfig {
+  const baseConfig = current
+    ? { ...current }
+    : { ...DEFAULT_USER_CONFIG, user_id: userId }
+
+  return {
+    ...baseConfig,
+    user_id: userId,
+    excluded_keywords: excludedKeywords,
+  }
+}
+
+export function useUpdateExcludedKeywords() {
+  const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+
+  return useMutation({
+    scope: { id: USER_CONFIG_WRITE_SCOPE_ID },
+    mutationFn: async (keywords: string[]) => {
+      const excludedKeywords = normalizeExcludedKeywords(keywords)
+      const supabase = getSupabase()
+
+      const { data, error } = await supabase
+        .from("user_config")
+        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
+        .update({ excluded_keywords: excludedKeywords })
+        .eq("user_id", user!.id)
+        .select()
+        .single()
+
+      if (!error) {
+        return resolveUserConfig(data as UserConfig | null, null)
+      }
+
+      if (error.code === "PGRST116") {
+        const { data: upsertData, error: upsertError } = await supabase
+          .from("user_config")
+          // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
+          .upsert(
+            {
+              ...DEFAULT_USER_CONFIG,
+              user_id: user!.id,
+              excluded_keywords: excludedKeywords,
+            },
+            { onConflict: "user_id" }
+          )
+          .select()
+          .single()
+
+        if (upsertError) throw upsertError
+        return resolveUserConfig(upsertData as UserConfig | null, null)
+      }
+
+      throw error
+    },
+    onMutate: async (keywords) => {
+      const excludedKeywords = normalizeExcludedKeywords(keywords)
+
+      await queryClient.cancelQueries({ queryKey: [...CONFIG_KEY] })
+      const previousConfig = queryClient.getQueryData<UserConfig>([...CONFIG_KEY])
+
+      queryClient.setQueryData<UserConfig>(
+        [...CONFIG_KEY],
+        buildOptimisticUserConfig(previousConfig, user!.id, excludedKeywords)
+      )
+
+      return { previousConfig }
+    },
+    onError: (_error, _keywords, context) => {
+      if (context?.previousConfig) {
+        queryClient.setQueryData([...CONFIG_KEY], context.previousConfig)
+        return
+      }
+
+      queryClient.removeQueries({ queryKey: [...CONFIG_KEY], exact: true })
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData([...CONFIG_KEY], data)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [...CONFIG_KEY] })
     },
   })
 }

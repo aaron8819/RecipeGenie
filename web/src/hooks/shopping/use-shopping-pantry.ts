@@ -11,6 +11,7 @@ import {
   findShoppingItemIndexByRowId,
   requireShoppingRowId,
 } from "@/lib/shopping-row-identity"
+import { normalizePantryItemName } from "@/lib/pantry"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import {
@@ -216,7 +217,7 @@ export function useAddToPantryAndRemove() {
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async (item: ShoppingItem) => {
       const rowId = requireShoppingRowId(item, "pantry move shopping item")
-      const normalizedItem = item.item.toLowerCase().trim()
+      const normalizedItem = normalizePantryItemName(item.item)
       const supabase = getSupabase()
 
       const rpcClient = supabase as unknown as {
@@ -237,6 +238,7 @@ export function useAddToPantryAndRemove() {
               categoryOrder?: number
             } | null
             pantry_item: {
+              id: string
               user_id: string
               item: string
               created_at: string
@@ -278,7 +280,7 @@ export function useAddToPantryAndRemove() {
       })
 
       const rowId = requireShoppingRowId(item, "optimistic pantry move shopping item")
-      const normalizedItem = item.item.toLowerCase().trim()
+      const normalizedItem = normalizePantryItemName(item.item)
       const resolvedIndex = findShoppingItemIndexByRowId(previousList?.items || [], rowId)
       if (resolvedIndex === -1) {
         throw new Error(`Shopping item not found: ${rowId}`)
@@ -304,6 +306,7 @@ export function useAddToPantryAndRemove() {
 
       const now = new Date().toISOString()
       const optimisticItem: PantryItem = {
+        id: `temp-${crypto.randomUUID()}`,
         user_id: user!.id,
         item: normalizedItem,
         created_at: now,
@@ -371,12 +374,13 @@ export function useAddToPantryAndRemove() {
           PANTRY_KEY,
           (old) => {
             const pantryRow: PantryItem = {
+              id: pantryItem.id,
               user_id: pantryItem.user_id,
               item: pantryItem.item,
               created_at: pantryItem.created_at,
             }
             if (!old) return [pantryRow]
-            const existingIndex = old.findIndex((candidate) => candidate.item === pantryRow.item)
+            const existingIndex = old.findIndex((candidate) => candidate.id === pantryRow.id || candidate.item === pantryRow.item)
             if (existingIndex === -1) {
               return [...old, pantryRow].sort((a, b) => a.item.localeCompare(b.item))
             }
