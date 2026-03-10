@@ -10,6 +10,13 @@ function rowById(page: Page, rowId: string): Locator {
   return page.getByTestId(`shopping-row-${rowId}`)
 }
 
+function requireRowId(rowId: string | undefined): string {
+  if (!rowId) {
+    throw new Error('Expected seeded shopping row to include a rowId')
+  }
+  return rowId
+}
+
 function restoreButton(page: Page, itemName: string, amountLabel: string, reasonLabel: string): Locator {
   return page.getByRole('button', {
     name: new RegExp(`restore ${itemName} ${amountLabel} ${reasonLabel}`, 'i'),
@@ -56,6 +63,7 @@ test.describe('Shopping List', () => {
 
     cleanupState = await seedShoppingState({ items: [seededRow] })
     await page.reload()
+    const seededRowId = requireRowId(seededRow.rowId)
 
     const addInput = page.getByPlaceholder('Add tomatoes, milk...')
     const manualItemA = `manual apples ${seed}`
@@ -66,7 +74,7 @@ test.describe('Shopping List', () => {
 
     await expect(page.getByText(manualItemA, { exact: true })).toBeVisible()
     await expect(page.getByText(manualItemB, { exact: true })).toBeVisible()
-    await expect(rowById(page, seededRow.rowId)).toContainText(recipeName)
+    await expect(rowById(page, seededRowId)).toContainText(recipeName)
     await expect(page.getByText('Manage Mode', { exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
 
@@ -75,7 +83,7 @@ test.describe('Shopping List', () => {
 
     await expect(page.getByText('Manage Mode', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /drag to reorder/i }).first()).toBeVisible()
-    await expect(rowById(page, seededRow.rowId)).toBeVisible()
+    await expect(rowById(page, seededRowId)).toBeVisible()
 
     await page.getByRole('button', { name: /^done$/i }).click()
     await expect(page.getByText('Manage Mode', { exact: true })).toHaveCount(0)
@@ -121,6 +129,39 @@ test.describe('Shopping List', () => {
     await expect(firstRow).toHaveCount(0)
     await expect(secondRow).toBeVisible()
     await expect(secondRow).toContainText(/1 tbsp/i)
+  })
+
+  test('edits a manual shopping row inline without removing it first @core', async ({ page }) => {
+    const seed = `${Date.now()}-edit`
+    const rowId = `row-manual-edit-${seed}`
+
+    cleanupState = await seedShoppingState({
+      items: [
+        buildShoppingItem({
+          rowId,
+          item: `manual garlic ${seed}`,
+          amount: 1,
+          unit: '',
+          sources: [{ recipeName: 'Manual' }],
+        }),
+      ],
+    })
+    await page.reload()
+
+    const row = rowById(page, rowId)
+    await expect(row).toBeVisible()
+
+    await row.getByRole('button', { name: /edit item/i }).click()
+    await expect(page.getByText(/edit manual item/i)).toBeVisible()
+
+    await page.getByLabel('Manual item name').fill(`manual shallots ${seed}`)
+    await page.getByLabel('Manual item amount').fill('0.5')
+    await page.getByLabel('Manual item unit').fill('lb')
+    await page.getByRole('button', { name: /save changes/i }).click()
+
+    await expect(page.getByText(`manual shallots ${seed}`)).toBeVisible()
+    await expect(row).toContainText(/lb/i)
+    await expect(page.getByText(/edit manual item/i)).toHaveCount(0)
   })
 
   test('restores only the targeted duplicate row from In Pantry and keeps trust context visible @core', async ({ page }) => {

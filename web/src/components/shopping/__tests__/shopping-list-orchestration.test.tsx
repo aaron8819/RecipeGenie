@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
-import { act, fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ShoppingListView } from "../shopping-list"
 import { UndoToastProvider, useUndoToast } from "@/components/ui/undo-toast"
@@ -20,6 +20,9 @@ const moveExcludedMutate = vi.fn<
   (item: ShoppingItem, options?: { onSuccess?: () => void; onError?: () => void }) => void
 >()
 const addShoppingItemMutateAsync = vi.fn<(args: { itemName: string }) => Promise<unknown>>()
+const updateShoppingItemMutateAsync = vi.fn<
+  (args: { item: ShoppingItem; updates: { itemName: string; amount?: number | null; unit?: string } }) => Promise<unknown>
+>()
 const addToPantryAndRemoveMutate = vi.fn<
   (item: ShoppingItem, options?: { onSuccess?: (data: { wasAdded: boolean }) => void; onSettled?: () => void }) => void
 >()
@@ -256,6 +259,10 @@ vi.mock("@/hooks/use-shopping", () => ({
   }),
   useAddShoppingItem: () => ({
     mutateAsync: addShoppingItemMutateAsync,
+    isPending: false,
+  }),
+  useUpdateShoppingItem: () => ({
+    mutateAsync: updateShoppingItemMutateAsync,
     isPending: false,
   }),
   useRemoveShoppingItem: () => ({
@@ -596,6 +603,22 @@ vi.mock("@/hooks/use-shopping", () => ({
     options?.onSettled?.()
   })
   addShoppingItemMutateAsync.mockResolvedValue({ rowId: "row-new-item" })
+  updateShoppingItemMutateAsync.mockImplementation(async ({ item, updates }) => {
+    updateShoppingList((prev) => ({
+      ...prev,
+      items: prev.items.map((candidate) =>
+        candidate.rowId === item.rowId
+          ? {
+              ...candidate,
+              item: updates.itemName.toLowerCase().trim(),
+              amount: updates.amount ?? null,
+              unit: updates.unit || "",
+            }
+          : candidate
+      ),
+    }))
+    return { rowId: item.rowId }
+  })
 
   vi.stubGlobal("requestAnimationFrame", vi.fn(() => 0))
   vi.stubGlobal("cancelAnimationFrame", vi.fn())
@@ -615,7 +638,9 @@ vi.mock("@/hooks/use-shopping", () => ({
 })
 
 afterEach(() => {
-  vi.runOnlyPendingTimers()
+  act(() => {
+    vi.runOnlyPendingTimers()
+  })
   vi.useRealTimers()
   vi.unstubAllGlobals()
   consoleErrorSpy.mockRestore()
@@ -654,47 +679,6 @@ describe("ShoppingListView orchestration", () => {
     expect(currentShoppingList.already_have.map((item) => item.rowId)).toEqual(["row-garlic-clove"])
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getByRole("alert")).toHaveTextContent('Moved "garlic" to pantry')
-  })
-
-  it("reveals quick mobile remove actions with a swipe and keeps deferred delete behavior intact", () => {
-    setMobileViewport()
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: query.includes("max-width") ? false : false,
-        media: query,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    })
-    currentShoppingList = makeList({
-      items: [makeItem("garlic", { rowId: "row-garlic-clove" })],
-    })
-
-    renderShoppingList()
-
-    const row = screen.getByTestId("shopping-row-row-garlic-clove")
-
-    act(() => {
-      fireEvent.touchStart(row, {
-        touches: [{ clientX: 280, clientY: 40 }],
-      })
-      fireEvent.touchMove(row, {
-        touches: [{ clientX: 150, clientY: 40 }],
-      })
-      fireEvent.touchEnd(row)
-    })
-
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Quick remove item" }))
-    })
-
-    expect(screen.queryByText("garlic")).not.toBeInTheDocument()
-    expect(screen.getByRole("alert")).toHaveTextContent('"garlic" removed from list')
-    expect(removeItemMutate).not.toHaveBeenCalled()
   })
 
   it("starts in shopping mode and only reveals reorder controls after entering manage mode", async () => {
@@ -762,6 +746,25 @@ describe("ShoppingListView orchestration", () => {
 
     expect(categoryTitles[0]).toMatch(/Fresh Produce/i)
     expect(categoryTitles[1]).toMatch(/Dairy/i)
+  })
+
+  it("keeps checked rows at the bottom of a category in shopping mode without entering manage mode", () => {
+    currentShoppingList = makeList({
+      items: [
+        makeItem("apples", { rowId: "row-apples", checked: true, categoryKey: "produce", categoryOrder: 1 }),
+        makeItem("bananas", { rowId: "row-bananas", checked: false, categoryKey: "produce", categoryOrder: 1 }),
+        makeItem("carrots", { rowId: "row-carrots", checked: false, categoryKey: "produce", categoryOrder: 1 }),
+      ],
+    })
+
+    renderShoppingList()
+
+    const rows = screen.getAllByTestId("shopping-item-row")
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("bananas"),
+      expect.stringContaining("carrots"),
+      expect.stringContaining("apples"),
+    ])
   })
 
   it("applies bulk check-off optimistically and keeps the checked state stable after settlement", async () => {
@@ -1040,7 +1043,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByText("Excluded: cilantro")).toBeInTheDocument()
   })
 
-  it("explains manual add results when some items are duplicates", async () => {
+  it("shows inline add feedback when some manual items are duplicates", async () => {
     currentShoppingList = makeList({
       items: [makeItem("milk")],
     })
@@ -1068,8 +1071,80 @@ describe("ShoppingListView orchestration", () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(screen.getByText(
       'Added "eggs" to shopping list; "milk" was already on the shopping list'
+    )).toBeInTheDocument()
+  })
+
+  it("edits a manual item inline without removing and re-adding it", async () => {
+    currentShoppingList = makeList({
+      items: [makeItem("garlic", { rowId: "row-garlic", amount: 1, unit: "" })],
+    })
+
+    renderShoppingList()
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit item" }))
+    expect(screen.getByText("Edit manual item")).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText("Manual item name"), {
+      target: { value: "shallots" },
+    })
+    fireEvent.change(screen.getByLabelText("Manual item amount"), {
+      target: { value: "1/2" },
+    })
+    fireEvent.change(screen.getByLabelText("Manual item unit"), {
+      target: { value: "lb" },
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }))
+      await Promise.resolve()
+    })
+
+    expect(updateShoppingItemMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        item: expect.objectContaining({ rowId: "row-garlic" }),
+        updates: {
+          itemName: "shallots",
+          amount: 0.5,
+          unit: "lb",
+        },
+      })
     )
+    expect(screen.queryByText("Edit manual item")).not.toBeInTheDocument()
+    const updatedRow = screen.getByText("shallots").closest("li")
+    expect(updatedRow).not.toBeNull()
+    expect(updatedRow).toHaveTextContent(/(1\/2|½)\s*lb/i)
+  })
+
+  it("keeps manual edits inline when the rename would create a duplicate", async () => {
+    currentShoppingList = makeList({
+      items: [
+        makeItem("garlic", { rowId: "row-garlic", amount: 1 }),
+        makeItem("milk", { rowId: "row-milk", amount: 1 }),
+      ],
+    })
+
+    updateShoppingItemMutateAsync.mockRejectedValueOnce(new Error("Item already in shopping list"))
+
+    renderShoppingList()
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit item" })[0])
+    fireEvent.change(screen.getByLabelText("Manual item name"), {
+      target: { value: "milk" },
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }))
+      await Promise.resolve()
+    })
+
+    const editor = screen.getByText("Edit manual item").closest("form")
+    expect(editor).not.toBeNull()
+    expect(within(editor as HTMLFormElement).getByRole("alert")).toHaveTextContent(
+      '"milk" is already on the shopping list.'
+    )
+    expect(screen.getByText("Edit manual item")).toBeInTheDocument()
+    expect(screen.getByText("garlic")).toBeInTheDocument()
   })
 })

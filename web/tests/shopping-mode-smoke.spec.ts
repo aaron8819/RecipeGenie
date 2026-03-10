@@ -212,7 +212,7 @@ test.describe('Shopping Mode Smoke @core', () => {
     await clearShoppingListIfNeeded(page, navigateToTab)
     await ensureRecipeAddedToShopping(page, navigateToTab, smokeRecipe)
 
-    const addItemInput = page.getByPlaceholder('Add item...').first()
+    const addItemInput = page.getByPlaceholder('Add milk, apples, basil...').first()
     await addItemInput.fill('apples')
     await page.keyboard.press('Enter')
     await expect(page.getByText(/^apples$/i)).toBeVisible()

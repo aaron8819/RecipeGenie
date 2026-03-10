@@ -49,6 +49,21 @@ export function sortItemsWithinGroups(groupedItems: Record<string, ShoppingItem[
   return sorted
 }
 
+export function prioritizeUncheckedItems(items: ShoppingItem[]): ShoppingItem[] {
+  const unchecked: ShoppingItem[] = []
+  const checked: ShoppingItem[] = []
+
+  for (const item of items) {
+    if (item.checked) {
+      checked.push(item)
+    } else {
+      unchecked.push(item)
+    }
+  }
+
+  return [...unchecked, ...checked]
+}
+
 export function deriveOrderedCategories(params: {
   customCategories: CustomShoppingCategory[] | null | undefined
   categoryOrder: unknown

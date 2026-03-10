@@ -16,6 +16,7 @@ export {
 // Item operations (add, remove, check, reorder)
 export {
   useAddShoppingItem,
+  useUpdateShoppingItem,
   useRemoveShoppingItem,
   useCheckOffItem,
   useBulkCheckOff,

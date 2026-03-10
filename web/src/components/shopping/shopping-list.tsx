@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react"
-import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles, MoreVertical } from "lucide-react"
+import { useState, useMemo, useCallback, useRef, useEffect, memo, type ReactNode } from "react"
+import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -34,6 +34,7 @@ import {
 import {
   useShoppingList,
   useAddShoppingItem,
+  useUpdateShoppingItem,
   useRemoveShoppingItem,
   useRemoveRecipeItems,
   useClearShoppingList,
@@ -70,12 +71,14 @@ import {
   deriveVisibleShoppingItems,
   groupItemsByCategory,
   mergeAlreadyHaveItems,
+  prioritizeUncheckedItems,
   sortItemsWithinGroups,
 } from "./shopping-list.selectors"
 import {
   formatShoppingItemAmount,
   getRecipeColor,
   getRecipeColorIndex,
+  ManualShoppingItemEditor,
   ShoppingCategorySection,
   ShoppingItemRow,
   ShoppingRestoreChip,
@@ -84,6 +87,53 @@ import {
 } from "./shopping-list-components"
 
 type ShoppingMode = "shop" | "manage"
+type AddFeedbackTone = "neutral" | "success" | "warning" | "error"
+
+type AddFeedback = {
+  tone: AddFeedbackTone
+  message: string
+}
+
+type ManualEditDraft = {
+  itemName: string
+  amount: string
+  unit: string
+}
+
+function isManualOnlyItem(item: ShoppingItem) {
+  const sources = item.sources || []
+  return sources.length > 0 && sources.every((source) => source.recipeName === "Manual")
+}
+
+function parseEditableAmount(value: string): number | null | "invalid" {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const mixedFractionMatch = trimmed.match(/^(\d+)\s+(\d+)\/(\d+)$/)
+  if (mixedFractionMatch) {
+    const whole = Number(mixedFractionMatch[1])
+    const numerator = Number(mixedFractionMatch[2])
+    const denominator = Number(mixedFractionMatch[3])
+    if (Number.isFinite(whole) && Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+      return whole + numerator / denominator
+    }
+    return "invalid"
+  }
+
+  const fractionMatch = trimmed.match(/^(\d+)\/(\d+)$/)
+  if (fractionMatch) {
+    const numerator = Number(fractionMatch[1])
+    const denominator = Number(fractionMatch[2])
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+      return numerator / denominator
+    }
+    return "invalid"
+  }
+
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || parsed < 0) return "invalid"
+  return parsed
+}
 
 function RecipeTag({ 
   recipeName, 
@@ -141,6 +191,8 @@ function SwipeableItem({
   isRemoving,
   isAddingToPantry,
   recipeColorMap,
+  onViewRecipe,
+  onEdit,
   dragHandleProps,
   dragStyle,
   isDragging,
@@ -157,6 +209,8 @@ function SwipeableItem({
   isRemoving: boolean
   isAddingToPantry: boolean
   recipeColorMap: Map<string, number>
+  onViewRecipe?: (recipeId: string | undefined, recipeName: string) => void
+  onEdit?: () => void
   dragHandleProps?: any
   dragStyle?: React.CSSProperties
   isDragging?: boolean
@@ -333,6 +387,8 @@ function SwipeableItem({
           isRemoving={isRemoving}
           isAddingToPantry={isAddingToPantry}
           recipeColorMap={recipeColorMap}
+          onViewRecipe={onViewRecipe}
+          onEdit={onEdit}
           dragHandleProps={dragHandleProps}
           dragStyle={dragStyle}
           isDragging={isDragging}
@@ -355,6 +411,9 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isRemoving,
   isAddingToPantry,
   recipeColorMap,
+  onViewRecipe,
+  onEdit,
+  editorContent,
   showSwipeHint,
 }: {
   item: ShoppingItem
@@ -368,6 +427,9 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isRemoving: boolean
   isAddingToPantry: boolean
   recipeColorMap: Map<string, number>
+  onViewRecipe?: (recipeId: string | undefined, recipeName: string) => void
+  onEdit?: () => void
+  editorContent?: ReactNode
   showSwipeHint?: boolean
 }) {
   const {
@@ -395,14 +457,17 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
         isCheckingOff={isCheckingOff}
         isRemoving={isRemoving}
         isAddingToPantry={isAddingToPantry}
-        recipeColorMap={recipeColorMap}
         showDragHandle={showDragHandle}
         sourceDisplay={sourceDisplay}
+        recipeColorMap={recipeColorMap}
+        onViewRecipe={onViewRecipe}
+        onEdit={onEdit}
         dragHandleProps={{ ...attributes, ...listeners }}
         dragStyle={dragStyle}
         isDragging={isDragging}
         showSwipeHint={showSwipeHint}
       />
+      {editorContent}
     </li>
   )
 }, (prevProps, nextProps) => {
@@ -420,6 +485,8 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     prevProps.isDesktop === nextProps.isDesktop &&
     prevProps.showDragHandle === nextProps.showDragHandle &&
     prevProps.showSwipeHint === nextProps.showSwipeHint &&
+    prevProps.onEdit === nextProps.onEdit &&
+    prevProps.editorContent === nextProps.editorContent &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 })
@@ -435,6 +502,9 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
   isRemoving,
   isAddingToPantry,
   recipeColorMap,
+  onViewRecipe,
+  onEdit,
+  editorContent,
   showSwipeHint,
 }: {
   item: ShoppingItem
@@ -447,6 +517,9 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
   isRemoving: boolean
   isAddingToPantry: boolean
   recipeColorMap: Map<string, number>
+  onViewRecipe?: (recipeId: string | undefined, recipeName: string) => void
+  onEdit?: () => void
+  editorContent?: ReactNode
   showSwipeHint?: boolean
 }) {
   return (
@@ -462,8 +535,11 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
         isRemoving={isRemoving}
         isAddingToPantry={isAddingToPantry}
         recipeColorMap={recipeColorMap}
+        onViewRecipe={onViewRecipe}
+        onEdit={onEdit}
         showSwipeHint={showSwipeHint}
       />
+      {editorContent}
     </li>
   )
 }, (prevProps, nextProps) => {
@@ -479,6 +555,8 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
     prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
     prevProps.isDesktop === nextProps.isDesktop &&
     prevProps.showSwipeHint === nextProps.showSwipeHint &&
+    prevProps.onEdit === nextProps.onEdit &&
+    prevProps.editorContent === nextProps.editorContent &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 })
@@ -549,10 +627,18 @@ export function ShoppingListView() {
   const [manuallyCollapsedCategories, setManuallyCollapsedCategories] = useState<Set<string>>(new Set())
   const [viewingRecipeId, setViewingRecipeId] = useState<string | null>(null)
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
+  const [editingItemRowId, setEditingItemRowId] = useState<string | null>(null)
+  const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>({
+    itemName: "",
+    amount: "",
+    unit: "",
+  })
+  const [manualEditError, setManualEditError] = useState<string | null>(null)
   const [pendingCheckItems, setPendingCheckItems] = useState<Set<string>>(new Set())
   const [pendingPantryItems, setPendingPantryItems] = useState<Set<string>>(new Set())
   // Tracks items currently being added to prevent duplicate concurrent submissions
   const [activeAdditions, setActiveAdditions] = useState<Set<string>>(new Set())
+  const [addFeedback, setAddFeedback] = useState<AddFeedback | null>(null)
   const { showSwipeHint } = useSwipeHint()
   const isManageMode = shoppingMode === "manage"
 
@@ -581,6 +667,7 @@ export function ShoppingListView() {
   const updateConfig = useUpdateShoppingConfig()
 
   const addItem = useAddShoppingItem()
+  const updateItem = useUpdateShoppingItem()
   const removeItem = useRemoveShoppingItem()
   const removeRecipeItems = useRemoveRecipeItems()
   const clearList = useClearShoppingList()
@@ -612,6 +699,24 @@ export function ShoppingListView() {
     }
   }, [allRecipes])
 
+  const handleStartEditingManualItem = useCallback((item: ShoppingItem) => {
+    const rowId = item.rowId || null
+    if (!rowId) return
+
+    setEditingItemRowId(rowId)
+    setManualEditDraft({
+      itemName: item.item,
+      amount: item.amount != null ? String(item.amount) : "",
+      unit: item.unit || "",
+    })
+    setManualEditError(null)
+  }, [])
+
+  const handleCancelEditingManualItem = useCallback(() => {
+    setEditingItemRowId(null)
+    setManualEditError(null)
+  }, [])
+
   // Handle item removal with undo
   const handleRemoveItem = useCallback((item: ShoppingItem) => {
     pendingActions.enqueueRemoveItem(item)
@@ -628,7 +733,7 @@ export function ShoppingListView() {
   }, [pendingActions])
 
   // Handle bulk check-off (check all items in a category)
-  const handleBulkCheckOff = useCallback((items: ShoppingItem[], categoryName: string) => {
+  const handleBulkCheckOff = useCallback((items: ShoppingItem[]) => {
     if (items.length === 0) return
 
     // Perform the bulk check-off immediately (with optimistic update)
@@ -764,6 +869,64 @@ export function ShoppingListView() {
     return deriveVisibleShoppingItems(projectedShoppingList.items || [])
   }, [projectedShoppingList.items])
 
+  useEffect(() => {
+    if (!editingItemRowId) return
+
+    const stillExists = filteredItems.some((item) => item.rowId === editingItemRowId)
+    if (!stillExists || isManageMode) {
+      setEditingItemRowId(null)
+      setManualEditError(null)
+    }
+  }, [editingItemRowId, filteredItems, isManageMode])
+
+  const handleSaveManualItemEdit = useCallback(async () => {
+    if (!editingItemRowId) return
+
+    const targetItem = filteredItems.find((candidate) => candidate.rowId === editingItemRowId)
+    if (!targetItem || !isManualOnlyItem(targetItem)) {
+      setEditingItemRowId(null)
+      setManualEditError(null)
+      return
+    }
+
+    const trimmedName = manualEditDraft.itemName.trim()
+    if (!trimmedName) {
+      setManualEditError("Enter an item name.")
+      return
+    }
+
+    const parsedAmount = parseEditableAmount(manualEditDraft.amount)
+    if (parsedAmount === "invalid") {
+      setManualEditError("Enter a valid amount like 2, 0.5, or 1/2.")
+      return
+    }
+
+    try {
+      await updateItem.mutateAsync({
+        item: targetItem,
+        updates: {
+          itemName: trimmedName,
+          amount: parsedAmount,
+          unit: manualEditDraft.unit,
+        },
+      })
+
+      setEditingItemRowId(null)
+      setManualEditError(null)
+      undoToast.show({
+        message: `Updated "${trimmedName}"`,
+        duration: 2000,
+      })
+    } catch (error) {
+      if (isAlreadyInShoppingListError(error)) {
+        setManualEditError(`"${trimmedName}" is already on the shopping list.`)
+        return
+      }
+
+      setManualEditError("Could not save that change right now.")
+    }
+  }, [editingItemRowId, filteredItems, manualEditDraft, undoToast, updateItem])
+
   // Group items by category
   const groupedItems = useMemo(() => {
     return sortItemsWithinGroups(groupItemsByCategory(filteredItems))
@@ -870,6 +1033,10 @@ export function ShoppingListView() {
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newItem.trim()) {
+      setAddFeedback({
+        tone: "warning",
+        message: "Enter an item or paste a comma-separated list.",
+      })
       addItemInputRef.current?.focus()
       return
     }
@@ -886,9 +1053,9 @@ export function ShoppingListView() {
     const itemsToAdd = items.filter(item => !activeAdditions.has(item.toLowerCase().trim()))
 
     if (itemsToAdd.length === 0) {
-      undoToast.show({
+      setAddFeedback({
+        tone: "warning",
         message: items.length === 1 ? `"${items[0]}" is already being added` : "Those items are already being added",
-        duration: 2000,
       })
       return
     }
@@ -921,6 +1088,8 @@ export function ShoppingListView() {
       }
 
       setNewItem(failedItems.join(", "))
+      const nextFeedbackTone: AddFeedbackTone =
+        failedItems.length > 0 ? "error" : duplicateItems.length > 0 ? "warning" : "success"
       addItemInputRef.current?.focus()
 
       if (addedItems.length > 0 || duplicateItems.length > 0 || failedItems.length > 0) {
@@ -950,13 +1119,17 @@ export function ShoppingListView() {
           )
         }
 
-        undoToast.show({
+        setAddFeedback({
+          tone: nextFeedbackTone,
           message: messageParts.join("; "),
-          duration: 3000,
         })
       }
     } catch (error) {
       console.error("Failed to add items:", error)
+      setAddFeedback({
+        tone: "error",
+        message: "Could not add those items right now. Try again.",
+      })
     }
   }
 
@@ -1134,10 +1307,22 @@ export function ShoppingListView() {
     </DropdownMenu>
   )
 
+  const addHelperMessage = addFeedback?.message || "Tip: separate items with commas to add several at once."
+  const addHelperTone: AddFeedbackTone = addFeedback?.tone || "neutral"
+  const addHelperClassName = cn(
+    "mt-2 text-sm",
+    addHelperTone === "success" && "text-primary",
+    addHelperTone === "warning" && "text-amber-700",
+    addHelperTone === "error" && "text-destructive",
+    addHelperTone === "neutral" && "text-muted-foreground"
+  )
+
   const shoppingListContent = (
     <>
       {displayedCategoryViewModels.map((categoryData, categoryIndex) => {
-        const items = categoryData.items
+        const items = isManageMode
+          ? categoryData.items
+          : prioritizeUncheckedItems(categoryData.items)
         const isDragTarget =
           isManageMode &&
           activeItem &&
@@ -1155,7 +1340,7 @@ export function ShoppingListView() {
             isDragTarget={!!isDragTarget}
             isBulkCheckOffPending={bulkCheckOff.isPending}
             onToggleCategory={() => toggleCategory(categoryData.key)}
-            onBulkCheckOff={() => handleBulkCheckOff(items, categoryData.name)}
+            onBulkCheckOff={() => handleBulkCheckOff(items)}
             compact={!isManageMode}
           >
             <ul className="divide-y divide-stone-100" style={{ contain: "layout style paint" }}>
@@ -1165,6 +1350,34 @@ export function ShoppingListView() {
                   item.rowId ||
                   `${categoryData.key}-${item.item}-${item.unit || ""}-${index}`
                 const sourceDisplay: "tags" | "summary" = isManageMode ? "tags" : "summary"
+                const isEditingManualItem =
+                  !isManageMode &&
+                  !!item.rowId &&
+                  editingItemRowId === item.rowId &&
+                  isManualOnlyItem(item)
+                const editorContent = isEditingManualItem ? (
+                  <ManualShoppingItemEditor
+                    itemName={manualEditDraft.itemName}
+                    amount={manualEditDraft.amount}
+                    unit={manualEditDraft.unit}
+                    isSaving={updateItem.isPending}
+                    errorMessage={manualEditError}
+                    onItemNameChange={(value) => {
+                      setManualEditDraft((prev) => ({ ...prev, itemName: value }))
+                      if (manualEditError) setManualEditError(null)
+                    }}
+                    onAmountChange={(value) => {
+                      setManualEditDraft((prev) => ({ ...prev, amount: value }))
+                      if (manualEditError) setManualEditError(null)
+                    }}
+                    onUnitChange={(value) => {
+                      setManualEditDraft((prev) => ({ ...prev, unit: value }))
+                      if (manualEditError) setManualEditError(null)
+                    }}
+                    onSave={() => void handleSaveManualItemEdit()}
+                    onCancel={handleCancelEditingManualItem}
+                  />
+                ) : null
 
                 const sharedProps = {
                   item,
@@ -1172,11 +1385,14 @@ export function ShoppingListView() {
                   onCheckOff: () => handleCheckOff(item),
                   onRemove: () => handleRemoveItem(item),
                   onAddToPantry: () => handleAddToPantry(item),
+                  onEdit: isManualOnlyItem(item) ? () => handleStartEditingManualItem(item) : undefined,
                   isCheckingOff: pendingCheckItems.has(item.rowId || item.item.toLowerCase().trim()),
                   isRemoving: false,
                   isAddingToPantry: pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim()),
                   recipeColorMap,
+                  onViewRecipe: handleRecipeTagClick,
                   sourceDisplay,
+                  editorContent,
                   showSwipeHint: showHintForThisItem,
                 }
 
@@ -1201,9 +1417,12 @@ export function ShoppingListView() {
         <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
-            placeholder="Add item..."
+            placeholder="Add milk, apples, basil..."
             value={newItem}
-            onChange={(e) => setNewItem(e.target.value)}
+            onChange={(e) => {
+              setNewItem(e.target.value)
+              if (addFeedback) setAddFeedback(null)
+            }}
             className="w-full h-11 pl-4 pr-14 py-2.5 text-base bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
           <Button
@@ -1215,6 +1434,11 @@ export function ShoppingListView() {
             <span className="text-lg leading-none font-semibold">+</span>
           </Button>
         </form>
+        {!isDesktop ? (
+          <p aria-live="polite" className={addHelperClassName}>
+            {addHelperMessage}
+          </p>
+        ) : null}
       </div>
 
       {/* Mobile header - compact title and icon buttons only */}
@@ -1268,7 +1492,10 @@ export function ShoppingListView() {
             ref={addItemInputRef}
             placeholder="Add tomatoes, milk..."
             value={newItem}
-            onChange={(e) => setNewItem(e.target.value)}
+            onChange={(e) => {
+              setNewItem(e.target.value)
+              if (addFeedback) setAddFeedback(null)
+            }}
             className="w-full h-12 pl-6 pr-32 py-3 text-lg bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
           />
           <Button
@@ -1281,6 +1508,11 @@ export function ShoppingListView() {
             <span>Add Item</span>
           </Button>
         </form>
+        {isDesktop ? (
+          <p aria-live="polite" className={cn("-mt-3 mb-6", addHelperClassName)}>
+            {addHelperMessage}
+          </p>
+        ) : null}
       </header>
 
       {/* Shopping List — full width (sidebar removed) */}
@@ -1292,8 +1524,8 @@ export function ShoppingListView() {
         <div className="flex-1 flex items-center justify-center">
           <EmptyState
             icon={ShoppingCart}
-            title="No shopping list yet"
-            description="Add items manually above, or generate a meal plan and add it to your shopping list."
+            title="Your shopping list is clear"
+            description="Add a few items above with commas, or add recipes to build the list automatically."
           />
         </div>
       ) : (

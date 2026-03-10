@@ -7,6 +7,7 @@ import {
   deriveSortableItemIds,
   deriveVisibleShoppingItems,
   groupItemsByCategory,
+  prioritizeUncheckedItems,
   sortItemsWithinGroups,
 } from "../shopping-list.selectors"
 
@@ -65,6 +66,22 @@ describe("shopping-list selectors", () => {
       allChecked: false,
     })
     expect(deriveCheckedPartition([item({ item: "x", checked: true })]).allChecked).toBe(true)
+  })
+
+  it("keeps unchecked rows ahead of checked rows without changing relative order", () => {
+    const items = [
+      item({ rowId: "row-a", item: "apples", checked: true }),
+      item({ rowId: "row-b", item: "bananas", checked: false }),
+      item({ rowId: "row-c", item: "carrots", checked: false }),
+      item({ rowId: "row-d", item: "dates", checked: true }),
+    ]
+
+    expect(prioritizeUncheckedItems(items).map((entry) => entry.rowId)).toEqual([
+      "row-b",
+      "row-c",
+      "row-a",
+      "row-d",
+    ])
   })
 
   it("filters visible items for pending item and recipe deletions", () => {

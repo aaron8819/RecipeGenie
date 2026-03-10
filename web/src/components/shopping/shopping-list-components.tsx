@@ -15,10 +15,12 @@ import {
   Leaf,
   MoreVertical,
   Package,
+  Pencil,
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,6 +84,24 @@ function dedupeSources(item: ShoppingItem) {
     seen.add(source.recipeName)
     return true
   })
+}
+
+function buildSourceSummary(sources: ReturnType<typeof dedupeSources>): string | null {
+  const nonManualSources = sources.filter((source) => source.recipeName !== "Manual")
+
+  if (nonManualSources.length === 0) {
+    return sources.some((source) => source.recipeName === "Manual") ? "Added manually" : null
+  }
+
+  if (nonManualSources.length === 1) {
+    return `From ${nonManualSources[0].recipeName}`
+  }
+
+  if (nonManualSources.length === 2) {
+    return `From ${nonManualSources[0].recipeName} and ${nonManualSources[1].recipeName}`
+  }
+
+  return `From ${nonManualSources[0].recipeName} + ${nonManualSources.length - 1} more`
 }
 
 export function SourceTag({
@@ -174,6 +194,8 @@ export function ShoppingItemRow({
   dragStyle,
   isDragging,
   showSwipeHint,
+  onViewRecipe,
+  onEdit,
   onCheckOff,
   onAddToPantry,
   onRemove,
@@ -190,6 +212,8 @@ export function ShoppingItemRow({
   dragStyle?: CSSProperties
   isDragging?: boolean
   showSwipeHint?: boolean
+  onViewRecipe?: (recipeId: string | undefined, recipeName: string) => void
+  onEdit?: () => void
   onCheckOff: () => void
   onAddToPantry: () => void
   onRemove: () => void
@@ -198,11 +222,8 @@ export function ShoppingItemRow({
   const amountLabel = formatShoppingItemAmount(item)
   const uniqueSources = dedupeSources(item)
   const nonManualSources = uniqueSources.filter((source) => source.recipeName !== "Manual")
-  const sourceSummary = nonManualSources.length === 1
-    ? `from ${nonManualSources[0].recipeName}`
-    : nonManualSources.length > 1
-      ? `from ${nonManualSources.length} recipes`
-      : null
+  const sourceSummary = buildSourceSummary(uniqueSources)
+  const singleRecipeSource = nonManualSources.length === 1 ? nonManualSources[0] : null
 
   return (
     <div
@@ -287,15 +308,30 @@ export function ShoppingItemRow({
                     key={`${source.recipeName}-${index}`}
                     recipeName={source.recipeName}
                     colorIndex={recipeColorMap.get(source.recipeName)}
+                    onClick={
+                      source.recipeName !== "Manual" && onViewRecipe
+                        ? () => onViewRecipe(source.recipeId, source.recipeName)
+                        : undefined
+                    }
                     className="shrink-0 px-1.5 py-0.5 text-[9px] md:px-2 md:py-0.5 md:text-[10px]"
                   />
                 ))
               : null}
           </div>
           {sourceDisplay === "summary" && sourceSummary ? (
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">
-              {sourceSummary}
-            </p>
+            singleRecipeSource && onViewRecipe ? (
+              <button
+                type="button"
+                onClick={() => onViewRecipe(singleRecipeSource.recipeId, singleRecipeSource.recipeName)}
+                className="mt-1 max-w-full truncate text-left text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+              >
+                {sourceSummary}
+              </button>
+            ) : (
+              <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                {sourceSummary}
+              </p>
+            )
           ) : null}
         </div>
       </div>
@@ -314,6 +350,12 @@ export function ShoppingItemRow({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {onEdit ? (
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit item
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onClick={onAddToPantry} disabled={isAddingToPantry}>
             <Package className="mr-2 h-4 w-4" />
             Add to pantry
@@ -331,10 +373,22 @@ export function ShoppingItemRow({
 
       <div
         className={cn(
-          "self-center items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100",
+          "self-center items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
           isDesktop ? "flex" : "hidden"
         )}
       >
+        {onEdit ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={onEdit}
+            title="Edit item"
+            aria-label="Edit item"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon"
@@ -359,6 +413,93 @@ export function ShoppingItemRow({
         </Button>
       </div>
     </div>
+  )
+}
+
+export function ManualShoppingItemEditor({
+  itemName,
+  amount,
+  unit,
+  isSaving,
+  errorMessage,
+  onItemNameChange,
+  onAmountChange,
+  onUnitChange,
+  onSave,
+  onCancel,
+}: {
+  itemName: string
+  amount: string
+  unit: string
+  isSaving: boolean
+  errorMessage?: string | null
+  onItemNameChange: (value: string) => void
+  onAmountChange: (value: string) => void
+  onUnitChange: (value: string) => void
+  onSave: () => void
+  onCancel: () => void
+}) {
+  return (
+    <form
+      className="border-t border-stone-100 bg-stone-50/80 px-4 py-3 md:px-5"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave()
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Edit manual item</p>
+          <p className="text-xs text-muted-foreground">
+            Update the name, amount, or unit without removing the row.
+          </p>
+        </div>
+        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-stone-500">
+          Manual
+        </span>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1.6fr)_100px_110px]">
+        <Input
+          value={itemName}
+          onChange={(event) => onItemNameChange(event.target.value)}
+          placeholder="Item name"
+          aria-label="Manual item name"
+          autoFocus
+          className="h-10 bg-white"
+        />
+        <Input
+          value={amount}
+          onChange={(event) => onAmountChange(event.target.value)}
+          placeholder="Amount"
+          aria-label="Manual item amount"
+          inputMode="decimal"
+          className="h-10 bg-white"
+        />
+        <Input
+          value={unit}
+          onChange={(event) => onUnitChange(event.target.value)}
+          placeholder="Unit"
+          aria-label="Manual item unit"
+          className="h-10 bg-white"
+        />
+      </div>
+
+      {errorMessage ? (
+        <p className="mt-2 text-sm text-destructive" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onCancel} disabled={isSaving}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isSaving}>
+          Save changes
+        </Button>
+      </div>
+    </form>
   )
 }
 

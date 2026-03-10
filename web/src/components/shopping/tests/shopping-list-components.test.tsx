@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { ShoppingItem } from "@/types/database"
 import {
+  ManualShoppingItemEditor,
   ShoppingCategorySection,
   ShoppingItemRow,
   ShoppingRestoreChip,
@@ -113,6 +114,7 @@ describe("ShoppingItemRow", () => {
     const onCheckOff = vi.fn()
     const onAddToPantry = vi.fn()
     const onRemove = vi.fn()
+    const onEdit = vi.fn()
 
     render(
       <ShoppingItemRow
@@ -128,6 +130,7 @@ describe("ShoppingItemRow", () => {
         isAddingToPantry={false}
         recipeColorMap={new Map([["Autumn Soup", 1]])}
         showDragHandle={true}
+        onEdit={onEdit}
         onCheckOff={onCheckOff}
         onAddToPantry={onAddToPantry}
         onRemove={onRemove}
@@ -138,12 +141,15 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByText("apples")).toBeInTheDocument()
     expect(screen.getAllByText("Autumn Soup")).toHaveLength(1)
     expect(screen.getByRole("button", { name: "Drag to reorder" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Add to pantry" }).parentElement?.className).toContain("opacity-70")
 
     fireEvent.click(screen.getByRole("button", { name: "Check off item" }))
+    fireEvent.click(screen.getByRole("button", { name: "Edit item" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to pantry" }))
     fireEvent.click(screen.getByRole("button", { name: "Remove from list" }))
 
     expect(onCheckOff).toHaveBeenCalledTimes(1)
+    expect(onEdit).toHaveBeenCalledTimes(1)
     expect(onAddToPantry).toHaveBeenCalledTimes(1)
     expect(onRemove).toHaveBeenCalledTimes(1)
 
@@ -175,10 +181,39 @@ describe("ShoppingItemRow", () => {
   })
 
   it("renders compact provenance summaries in shopping mode", () => {
+    const onViewRecipe = vi.fn()
+
     render(
       <ShoppingItemRow
         item={item({
           sources: [{ recipeName: "Weeknight Pasta" }],
+        })}
+        isDesktop={false}
+        sourceDisplay="summary"
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onViewRecipe={onViewRecipe}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "From Weeknight Pasta" }))
+    expect(onViewRecipe).toHaveBeenCalledWith(undefined, "Weeknight Pasta")
+  })
+
+  it("summarizes multi-recipe provenance without flooding the row", () => {
+    render(
+      <ShoppingItemRow
+        item={item({
+          sources: [
+            { recipeName: "Weeknight Pasta" },
+            { recipeName: "Sunday Chili" },
+            { recipeName: "Lunch Bowl" },
+          ],
         })}
         isDesktop={false}
         sourceDisplay="summary"
@@ -192,7 +227,31 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("from Weeknight Pasta")).toBeInTheDocument()
+    expect(screen.getByText("From Weeknight Pasta + 2 more")).toBeInTheDocument()
+  })
+
+  it("adds manual edit actions to the mobile item menu when editing is allowed", () => {
+    const onEdit = vi.fn()
+
+    render(
+      <ShoppingItemRow
+        item={item({ item: "garlic" })}
+        isDesktop={false}
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onEdit={onEdit}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.getByRole("button", { name: "Item actions" })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Edit item" }))
+
+    expect(onEdit).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -281,5 +340,36 @@ describe("ShoppingRestoreChip", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Restore milk 1 cup Excluded: dairy" }))
     expect(onRestore).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("ManualShoppingItemEditor", () => {
+  it("submits and cancels without adding extra row noise", () => {
+    const onSave = vi.fn()
+    const onCancel = vi.fn()
+
+    render(
+      <ManualShoppingItemEditor
+        itemName="garlic"
+        amount="1/2"
+        unit="lb"
+        isSaving={false}
+        errorMessage="Duplicate item"
+        onItemNameChange={() => {}}
+        onAmountChange={() => {}}
+        onUnitChange={() => {}}
+        onSave={onSave}
+        onCancel={onCancel}
+      />
+    )
+
+    expect(screen.getByText("Edit manual item")).toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent("Duplicate item")
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }))
+
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onSave).toHaveBeenCalledTimes(1)
   })
 })
