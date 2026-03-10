@@ -9,6 +9,43 @@ export const EMPTY_RECIPE_INGREDIENT: Ingredient = {
   unit: "",
 }
 
+const UNIT_NORMALIZATION_MAP: Record<string, string> = {
+  teaspoon: "tsp",
+  teaspoons: "tsp",
+  tbsps: "tbsp",
+  tablespoon: "tbsp",
+  tablespoons: "tbsp",
+  cups: "cup",
+  ounce: "oz",
+  ounces: "oz",
+  pounds: "lb",
+  lbs: "lb",
+  pound: "lb",
+  grams: "g",
+  kilograms: "kg",
+  milliliter: "ml",
+  milliliters: "ml",
+  liter: "l",
+  liters: "l",
+  pint: "pt",
+  pints: "pt",
+  quart: "qt",
+  quarts: "qt",
+  gallon: "gal",
+  gallons: "gal",
+  cans: "can",
+  cloves: "clove",
+  heads: "head",
+  pieces: "piece",
+  pcs: "piece",
+  slices: "slice",
+  pinches: "pinch",
+  dashes: "dash",
+  packages: "pkg",
+  package: "pkg",
+  pkgs: "pkg",
+}
+
 export interface RecipeDialogFormValues {
   name: string
   category: string
@@ -27,7 +64,7 @@ export function buildEditingRecipeDialogFormValues(
     category: recipe.category,
     servings: recipe.servings,
     tags: recipe.tags || [],
-    ingredients: recipe.ingredients || [],
+    ingredients: normalizeRecipeIngredientsForEditing(recipe.ingredients || []),
     instructions: (recipe.instructions || []).join("\n"),
     imageUrl: recipe.image_url || null,
   }
@@ -74,7 +111,7 @@ export function buildRecipeSubmissionData(
     category: values.category,
     servings: values.servings,
     tags: values.tags || [],
-    ingredients: values.ingredients.filter((ingredient) => ingredient.item.trim()),
+    ingredients: normalizeRecipeIngredientsForSubmission(values.ingredients),
     instructions: values.instructions
       .split("\n")
       .map((line) => line.trim())
@@ -124,4 +161,45 @@ export function isEditingRecipeDialogDirty(
 
 export function clampRecipeServings(value: number): number {
   return Math.min(100, Math.max(1, value))
+}
+
+function normalizeIngredientWhitespace(value?: string | null): string {
+  return (value || "").replace(/\s+/g, " ").trim()
+}
+
+export function normalizeIngredientUnit(unit?: string | null): string {
+  const normalized = normalizeIngredientWhitespace(unit).toLowerCase()
+  return UNIT_NORMALIZATION_MAP[normalized] || normalized
+}
+
+export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
+  const item = normalizeIngredientWhitespace(ingredient.item)
+  const unit = normalizeIngredientUnit(ingredient.unit)
+  const modifier = normalizeIngredientWhitespace(ingredient.modifier)
+  const alternatives = ingredient.alternatives
+    ?.map((alternative) => normalizeIngredientWhitespace(alternative))
+    .filter(Boolean)
+
+  return {
+    ...ingredient,
+    item,
+    unit,
+    modifier: modifier || undefined,
+    alternatives: alternatives && alternatives.length > 0 ? alternatives : undefined,
+    originalText: normalizeIngredientWhitespace(ingredient.originalText) || undefined,
+  }
+}
+
+export function normalizeRecipeIngredientsForEditing(
+  ingredients: Ingredient[]
+): Ingredient[] {
+  return ingredients.map((ingredient) => normalizeRecipeIngredient(ingredient))
+}
+
+export function normalizeRecipeIngredientsForSubmission(
+  ingredients: Ingredient[]
+): Ingredient[] {
+  return ingredients
+    .map((ingredient) => normalizeRecipeIngredient(ingredient))
+    .filter((ingredient) => ingredient.item)
 }

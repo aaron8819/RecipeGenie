@@ -767,7 +767,38 @@ export function RecipeIngredientsSection({
 
   return (
     <div className="space-y-4">
-      <h3 className={addLabelClass}>Ingredients</h3>
+      <div className="space-y-2">
+        <h3 className={addLabelClass}>Ingredients</h3>
+        <p className="text-xs text-muted-foreground">
+          Enter one ingredient per row. You can paste full lines like `1 cup flour`
+          or paste multiple lines into an ingredient field to fill several rows.
+        </p>
+      </div>
+      {ingredientIssueCount > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-500" />
+            <div className="flex-1">
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                {ingredientIssueCount} ingredient(s) need attention. Highlighted rows
+                may not save cleanly downstream.
+              </p>
+              {onAutoFix ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onAutoFix}
+                  className="mt-2 h-7 text-xs"
+                >
+                  <Wand2 className="mr-1.5 h-3 w-3" />
+                  Attempt Auto-Fix
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {children}
       <button
         type="button"

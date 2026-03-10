@@ -270,6 +270,26 @@ describe("RecipeIngredientsSection", () => {
     expect(onAutoFix).toHaveBeenCalledTimes(1)
     expect(onAddIngredient).toHaveBeenCalledTimes(1)
   })
+
+  it("renders add-mode paste guidance and validation summary", () => {
+    const onAutoFix = vi.fn()
+
+    render(
+      <RecipeIngredientsSection
+        variant="add"
+        ingredientIssueCount={1}
+        onAutoFix={onAutoFix}
+        onAddIngredient={() => {}}
+      >
+        <div>ingredient-list</div>
+      </RecipeIngredientsSection>
+    )
+
+    expect(screen.getByText(/paste full lines like/i)).toBeInTheDocument()
+    expect(screen.getByText(/may not save cleanly downstream/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Attempt Auto-Fix" }))
+    expect(onAutoFix).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe("RecipeInstructionsSection", () => {

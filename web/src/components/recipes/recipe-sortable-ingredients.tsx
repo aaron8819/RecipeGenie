@@ -4,7 +4,7 @@
 // @dnd-kit bundle (~60–90 KB gzipped) is excluded from the initial JS payload
 // and only fetched when the recipe dialog is first opened.
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import {
   DndContext,
   DragOverlay,
@@ -27,7 +27,12 @@ import { GripVertical, Trash2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, toFraction } from "@/lib/utils"
+import { parseIngredientLine } from "@/lib/recipe-parser"
 import type { Ingredient } from "@/types/database"
+import {
+  validateIngredient,
+  type IngredientValidationIssue,
+} from "./recipe-dialog.validation"
 
 // ─── constants / helpers ─────────────────────────────────────────────────────
 
@@ -50,17 +55,7 @@ function parseAmountStr(str: string): number | null {
   return isNaN(n) ? null : n
 }
 
-// Duplicated from recipe-dialog.tsx to avoid a cross-file import that would
-// prevent proper code-splitting (and because it's a tiny pure function).
-function validateIngredient(ingredient: Ingredient): string[] {
-  const issues: string[] = []
-  if (!ingredient.item || !ingredient.item.trim()) issues.push('missing-item')
-  if (ingredient.unit && ingredient.unit.trim() && !ingredient.amount) issues.push('unit-without-amount')
-  if (ingredient.amount && ingredient.amount > 0 && !ingredient.unit?.trim()) issues.push('amount-without-unit')
-  return issues
-}
-
-function getValidationMessage(issueCode: string): string {
+function getValidationMessage(issueCode: IngredientValidationIssue): string {
   switch (issueCode) {
     case 'missing-item': return 'Missing ingredient name'
     case 'unit-without-amount': return 'Unit specified without amount'
@@ -82,11 +77,13 @@ function SortableIngredientRow({
   editModeTwoColLayout,
   addRecipeModalLayout,
   isWideViewport,
+  onBulkPasteIngredients,
 }: {
   ingredient: Ingredient
   index: number
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
+  onBulkPasteIngredients: (index: number, text: string) => void
   ingredients: Ingredient[]
   isEditing: boolean
   editModeLayout?: boolean
@@ -122,6 +119,33 @@ function SortableIngredientRow({
 
   const issues = validateIngredient(ingredient)
   const hasIssues = issues.length > 0
+  const issueMessages = issues.map(getValidationMessage)
+
+  const maybeParseSingleLineIngredient = (rawValue: string) => {
+    const parsed = parseIngredientLine(rawValue)
+    if (!parsed.item) {
+      return
+    }
+
+    const looksStructured =
+      parsed.amount !== null ||
+      !!parsed.unit ||
+      !!parsed.modifier ||
+      normalizeForComparison(parsed.item) !== normalizeForComparison(rawValue)
+
+    if (!looksStructured) {
+      return
+    }
+
+    if (ingredient.amount !== null || ingredient.unit.trim() || ingredient.modifier?.trim()) {
+      return
+    }
+
+    onIngredientChange(index, "amount", parsed.amount)
+    onIngredientChange(index, "unit", parsed.unit || "")
+    onIngredientChange(index, "item", parsed.item)
+    onIngredientChange(index, "modifier", parsed.modifier || null)
+  }
 
   const compactInput = editModeTwoColLayout
   const addRecipeInput = addRecipeModalLayout
@@ -203,6 +227,13 @@ function SortableIngredientRow({
       placeholder="Ingredient"
       value={ingredient.item}
       onChange={(e) => onIngredientChange(index, "item", e.target.value)}
+      onBlur={(e) => maybeParseSingleLineIngredient(e.target.value)}
+      onPaste={(e) => {
+        const pastedText = e.clipboardData.getData("text")
+        if (!pastedText.includes("\n")) return
+        e.preventDefault()
+        onBulkPasteIngredients(index, pastedText)
+      }}
     />
   )
   const modifierInput = (
@@ -271,6 +302,11 @@ function SortableIngredientRow({
             </div>
           </div>
         )}
+        {issueMessages.length > 0 ? (
+          <p className="px-2 pt-1 text-[11px] text-amber-700 dark:text-amber-400">
+            {issueMessages.join(" • ")}
+          </p>
+        ) : null}
       </div>
     )
   }
@@ -295,6 +331,11 @@ function SortableIngredientRow({
           {modifierInput}
           {deleteButton}
         </div>
+        {issueMessages.length > 0 ? (
+          <p className="pl-6 text-[11px] text-amber-700 dark:text-amber-400 sm:basis-full sm:pl-9">
+            {issueMessages.join(" • ")}
+          </p>
+        ) : null}
       </div>
     )
   }
@@ -313,6 +354,11 @@ function SortableIngredientRow({
         {unitInput}
         {modifierInput}
         {deleteButton}
+        {issueMessages.length > 0 ? (
+          <p className="col-span-full pl-11 text-[11px] text-amber-700 dark:text-amber-400">
+            {issueMessages.join(" • ")}
+          </p>
+        ) : null}
       </div>
     )
   }
@@ -330,6 +376,11 @@ function SortableIngredientRow({
       {unitInput}
       {modifierInput}
       {deleteButton}
+      {issueMessages.length > 0 ? (
+        <p className="basis-full pl-6 text-[11px] text-amber-700 dark:text-amber-400">
+          {issueMessages.join(" • ")}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -360,6 +411,7 @@ export interface SortableIngredientListProps {
   onReorderIngredients: (event: DragEndEvent) => void
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
+  onBulkPasteIngredients: (index: number, text: string) => void
 }
 
 export function SortableIngredientList({
@@ -370,6 +422,7 @@ export function SortableIngredientList({
   onReorderIngredients,
   onRemoveIngredient,
   onIngredientChange,
+  onBulkPasteIngredients,
 }: SortableIngredientListProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
@@ -420,6 +473,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onBulkPasteIngredients={onBulkPasteIngredients}
                 ingredients={ingredients}
                 isEditing={true}
                 addRecipeModalLayout
@@ -436,6 +490,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onBulkPasteIngredients={onBulkPasteIngredients}
                 ingredients={ingredients}
                 isEditing={true}
                 editModeTwoColLayout
@@ -449,4 +504,8 @@ export function SortableIngredientList({
       </DragOverlay>
     </DndContext>
   )
+}
+
+function normalizeForComparison(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase()
 }

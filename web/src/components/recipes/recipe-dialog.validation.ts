@@ -6,10 +6,23 @@ export type IngredientValidationIssue =
   | "unit-without-amount"
   | "amount-without-unit"
 
+export function isIngredientRowTouched(ingredient: Ingredient): boolean {
+  return Boolean(
+    ingredient.item?.trim() ||
+      ingredient.unit?.trim() ||
+      ingredient.modifier?.trim() ||
+      ingredient.amount !== null
+  )
+}
+
 export function validateIngredient(
   ingredient: Ingredient
 ): IngredientValidationIssue[] {
   const issues: IngredientValidationIssue[] = []
+
+  if (!isIngredientRowTouched(ingredient)) {
+    return issues
+  }
 
   if (!ingredient.item || !ingredient.item.trim()) {
     issues.push("missing-item")

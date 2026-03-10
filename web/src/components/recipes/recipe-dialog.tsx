@@ -32,7 +32,7 @@ import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts, useRec
 import { useRecipeImageStorage } from "@/hooks/use-recipe-image-storage"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
-import type { ParsedRecipe } from "@/lib/recipe-parser"
+import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
@@ -52,6 +52,7 @@ import {
   hasValidRecipeIngredients,
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
+  normalizeRecipeIngredientsForEditing,
 } from "./recipe-dialog.defaults"
 import {
   getImportErrorMessage,
@@ -210,6 +211,36 @@ export function RecipeDialog({
         return newItems
       })
     }
+  }, [])
+
+  const handleBulkPasteIngredients = useCallback((startIndex: number, text: string) => {
+    const parsedLines = text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => parseIngredientLine(line))
+      .filter((ingredient) => ingredient.item)
+
+    if (parsedLines.length === 0) {
+      return
+    }
+
+    setIngredients((currentIngredients) => {
+      const nextIngredients = [...currentIngredients]
+
+      while (nextIngredients.length < startIndex + parsedLines.length) {
+        nextIngredients.push({ item: "", amount: null, unit: "" })
+      }
+
+      parsedLines.forEach((ingredient, offset) => {
+        nextIngredients[startIndex + offset] = {
+          ...nextIngredients[startIndex + offset],
+          ...ingredient,
+        }
+      })
+
+      return normalizeRecipeIngredientsForEditing(nextIngredients)
+    })
   }, [])
 
   // Debounced live preview parser
@@ -550,6 +581,7 @@ export function RecipeDialog({
                 onIngredientChange={handleIngredientChange}
                 isEditing={false}
                 onReorderIngredients={handleReorderIngredients}
+                onBulkPasteIngredients={handleBulkPasteIngredients}
                 handleAutoFix={handleAutoFix}
                 isWideViewport={isWideViewport}
                 imagePreview={imagePreview}
@@ -584,6 +616,7 @@ export function RecipeDialog({
             onIngredientChange={handleIngredientChange}
             isEditing={true}
             onReorderIngredients={handleReorderIngredients}
+            onBulkPasteIngredients={handleBulkPasteIngredients}
             handleAutoFix={handleAutoFix}
             isWideViewport={isWideViewport}
             imagePreview={imagePreview}
@@ -647,6 +680,7 @@ interface RecipeFormContentProps {
   ) => void
   isEditing: boolean
   onReorderIngredients: (event: DragEndEvent) => void
+  onBulkPasteIngredients: (index: number, text: string) => void
   handleAutoFix: () => void
   isWideViewport: boolean
 }
@@ -682,6 +716,7 @@ function RecipeFormContent({
   onIngredientChange,
   isEditing,
   onReorderIngredients,
+  onBulkPasteIngredients,
   isWideViewport,
   imagePreview,
   imageUrl,
@@ -734,6 +769,7 @@ function RecipeFormContent({
               ingredients={ingredients}
               editModeTwoColLayout
               onReorderIngredients={onReorderIngredients}
+              onBulkPasteIngredients={onBulkPasteIngredients}
               onRemoveIngredient={onRemoveIngredient}
               onIngredientChange={onIngredientChange}
             />
@@ -781,12 +817,18 @@ function RecipeFormContent({
 
       {/* Right: lg:col-span-7 - Ingredients, Instructions */}
       <div className="lg:col-span-7 p-4 sm:p-8 space-y-8">
-        <RecipeIngredientsSection variant="add" onAddIngredient={onAddIngredient}>
+        <RecipeIngredientsSection
+          variant="add"
+          ingredientIssueCount={ingredientIssueCount}
+          onAutoFix={handleAutoFix}
+          onAddIngredient={onAddIngredient}
+        >
           <SortableIngredientList
             ingredients={ingredients}
             addRecipeModalLayout
             isWideViewport={isWideViewport}
             onReorderIngredients={onReorderIngredients}
+            onBulkPasteIngredients={onBulkPasteIngredients}
             onRemoveIngredient={onRemoveIngredient}
             onIngredientChange={onIngredientChange}
           />

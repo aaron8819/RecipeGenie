@@ -7,6 +7,7 @@ import {
   clampRecipeServings,
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
+  normalizeRecipeIngredient,
 } from "../recipe-dialog.defaults"
 import {
   autoFixIngredients,
@@ -24,9 +25,11 @@ import {
 } from "../recipe-import.parser"
 
 describe("recipe dialog validation helpers", () => {
-  it("validates missing items and inconsistent amount/unit pairs", () => {
-    expect(validateIngredient({ item: "", amount: null, unit: "" })).toEqual([
+  it("ignores untouched blank rows and validates inconsistent amount/unit pairs", () => {
+    expect(validateIngredient({ item: "", amount: null, unit: "" })).toEqual([])
+    expect(validateIngredient({ item: "   ", amount: 1, unit: "" })).toEqual([
       "missing-item",
+      "amount-without-unit",
     ])
     expect(validateIngredient({ item: "Flour", amount: null, unit: "cups" })).toEqual([
       "unit-without-amount",
@@ -52,8 +55,8 @@ describe("recipe dialog validation helpers", () => {
       { item: "Bananas", amount: 3, unit: "" },
     ]
 
-    expect(countIngredientsWithIssues(ingredients)).toBe(3)
-    expect(countBlockingIngredientIssues(ingredients)).toBe(2)
+    expect(countIngredientsWithIssues(ingredients)).toBe(2)
+    expect(countBlockingIngredientIssues(ingredients)).toBe(1)
   })
 })
 
@@ -104,6 +107,26 @@ describe("recipe import helpers", () => {
 })
 
 describe("recipe dialog defaults helpers", () => {
+  it("normalizes ingredient data for cleaner downstream storage", () => {
+    expect(
+      normalizeRecipeIngredient({
+        item: "  green   onions  ",
+        amount: 2,
+        unit: "Tablespoons",
+        modifier: "  finely   chopped ",
+        alternatives: [" sour cream ", " greek  yogurt "],
+        originalText: " 2 Tablespoons green onions, finely chopped ",
+      })
+    ).toEqual({
+      item: "green onions",
+      amount: 2,
+      unit: "tbsp",
+      modifier: "finely chopped",
+      alternatives: ["sour cream", "greek yogurt"],
+      originalText: "2 Tablespoons green onions, finely chopped",
+    })
+  })
+
   it("builds new form defaults and submission payloads", () => {
     const defaults = buildNewRecipeDialogFormValues(["dinner"])
 
@@ -123,7 +146,7 @@ describe("recipe dialog defaults helpers", () => {
         name: "  Soup  ",
         tags: ["easy"],
         ingredients: [
-          { item: " water ", amount: 1, unit: "cup" },
+          { item: " water ", amount: 1, unit: " Cups ", modifier: "  chilled " },
           { item: "", amount: null, unit: "" },
         ],
         instructions: " Boil \n\n Serve ",
@@ -133,7 +156,7 @@ describe("recipe dialog defaults helpers", () => {
       category: "dinner",
       servings: 4,
       tags: ["easy"],
-      ingredients: [{ item: " water ", amount: 1, unit: "cup" }],
+      ingredients: [{ item: "water", amount: 1, unit: "cup", modifier: "chilled" }],
       instructions: ["Boil", "Serve"],
       image_url: null,
     })
