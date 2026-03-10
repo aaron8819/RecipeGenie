@@ -29,7 +29,7 @@ export function formatShoppingAddMessage(
   const sourceSuffix = options.sourceName ? ` from "${options.sourceName}"` : ""
 
   if (result.added > 0 && result.merged > 0) {
-    return `Added ${formatCount(result.added, itemLabel)}${sourceSuffix} to shopping list; updated ${formatCount(result.merged, itemLabel)} already there`
+    return `Added ${formatCount(result.added, itemLabel)}${sourceSuffix} to shopping list; merged ${formatCount(result.merged, itemLabel)} with items already there`
   }
 
   if (result.added > 0) {
@@ -37,7 +37,7 @@ export function formatShoppingAddMessage(
   }
 
   if (result.merged > 0) {
-    return `Updated ${formatCount(result.merged, itemLabel)}${sourceSuffix} already on the shopping list`
+    return `Merged ${formatCount(result.merged, itemLabel)}${sourceSuffix} with items already on the shopping list`
   }
 
   return options.zeroMessage ?? `Everything${sourceSuffix} is already on the shopping list`

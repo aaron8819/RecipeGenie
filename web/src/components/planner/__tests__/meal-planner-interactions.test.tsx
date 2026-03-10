@@ -30,6 +30,7 @@ let currentWeeklyPlan: WeeklyPlan
 let currentUserConfig: UserConfig
 let currentRecipes: Recipe[]
 let currentWeeklyPlanRecipes: Recipe[]
+let currentShoppingSourceRecipes: string[]
 
 vi.mock("next/image", () => ({
   default: ({
@@ -139,6 +140,11 @@ vi.mock("@/hooks/use-shopping", () => ({
   useAddToShoppingList: () => ({
     mutateAsync: addToShoppingListMutateAsync,
     isPending: false,
+  }),
+  useShoppingList: () => ({
+    data: {
+      source_recipes: currentShoppingSourceRecipes,
+    },
   }),
 }))
 
@@ -428,6 +434,7 @@ describe("MealPlanner interactions", () => {
     currentUserConfig = userConfigFixture()
     currentRecipes = [recipeFixture()]
     currentWeeklyPlanRecipes = [recipeFixture()]
+    currentShoppingSourceRecipes = []
   })
 
   it("keeps regenerate confirmation in context on failure and closes it only after a confirmed retry success", async () => {
@@ -551,6 +558,20 @@ describe("MealPlanner interactions", () => {
     })
   })
 
+  it("shows when a planned recipe is already in Shopping and explains that re-adding will merge updates", () => {
+    currentShoppingSourceRecipes = ["recipe-1"]
+
+    render(<MealPlanner />)
+
+    expect(screen.getAllByText("In shopping").length).toBeGreaterThan(0)
+    expect(
+      screen.getByText("All planned recipes are already in Shopping. Re-adding merges any ingredient changes.")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText("Shopping rows keep recipe source labels, so you can trace each item back to this plan.")
+    ).toBeInTheDocument()
+  })
+
   it("keeps the bulk shopping action in its neutral state when nothing new is added", async () => {
     addToShoppingListMutateAsync.mockResolvedValueOnce({
       added: 0,
@@ -559,18 +580,18 @@ describe("MealPlanner interactions", () => {
 
     render(<MealPlanner />)
 
-    const cartButton = screen.getByRole("button", { name: "Cart" })
+    const cartButton = screen.getByRole("button", { name: "Add planned meal ingredients to Shopping" })
     fireEvent.click(cartButton)
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
-        message: "Updated 2 shopping items already on the shopping list",
+        message: "Merged 2 shopping items with items already on the shopping list",
         duration: 4000,
       })
     })
 
-    expect(screen.getByRole("button", { name: "Cart" })).toBeEnabled()
-    expect(screen.queryByRole("button", { name: "Added" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Add planned meal ingredients to Shopping" })).toBeEnabled()
+    expect(screen.queryByRole("button", { name: "Plan Added" })).not.toBeInTheDocument()
   })
 
   it("disables repeat taps on the mobile card action and returns to a neutral state when nothing new is added", async () => {
@@ -580,14 +601,14 @@ describe("MealPlanner interactions", () => {
 
     render(<MealPlanner />)
 
-    const addToCartButton = screen.getByTitle("Add to cart")
+    const addToCartButton = screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })
     fireEvent.click(addToCartButton)
 
     await waitFor(() => {
-      expect(screen.getByTitle("Add to cart")).toBeDisabled()
+      expect(screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })).toBeDisabled()
     })
 
-    fireEvent.click(screen.getByTitle("Add to cart"))
+    fireEvent.click(screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" }))
     expect(addToShoppingListMutateAsync).toHaveBeenCalledTimes(1)
 
     await act(async () => {
@@ -600,11 +621,11 @@ describe("MealPlanner interactions", () => {
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
-        message: 'Updated 2 shopping items from "Planner Recipe" already on the shopping list',
+        message: 'Merged 2 shopping items from "Planner Recipe" with items already on the shopping list',
         duration: 4000,
       })
     })
 
-    expect(screen.getByTitle("Add to cart")).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })).toBeEnabled()
   })
 })

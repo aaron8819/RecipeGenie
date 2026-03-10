@@ -184,6 +184,26 @@ test.describe('Meal Planner', () => {
     await expectAssignedDayDisabled(page, recipe.name, assignedDayLabel)
   })
 
+  test('sends planned meal ingredients to Shopping and keeps the recipe linked back to Shopping on return @core', async ({ page, navigateToTab }) => {
+    const seed = `${Date.now()}-shopping`
+    const recipe = buildRecipe(seed)
+
+    await navigateToTab('recipes')
+    await createRecipe(page, recipe)
+    await navigateToTab('planner')
+
+    await addRecipeToCurrentWeek(page, recipe.name)
+
+    await page.getByRole('button', { name: /add planned meal ingredients to shopping/i }).click()
+
+    await navigateToTab('shopping')
+    await expect(page.getByText(new RegExp(recipe.ingredients[0].item, 'i')).first()).toBeVisible()
+    await expect(page.getByText(new RegExp(`from ${escapeRegex(recipe.name)}`, 'i')).first()).toBeVisible()
+
+    await navigateToTab('planner')
+    await expect(plannerRecipeCard(page, recipe.name).getByText(/in shopping/i)).toBeVisible()
+  })
+
   test('loads a saved template into the currently visible week @extended', async ({ page, navigateToTab }) => {
     const seed = `${Date.now()}-template`
     const recipe = buildRecipe(seed)

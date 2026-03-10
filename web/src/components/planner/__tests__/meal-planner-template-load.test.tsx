@@ -129,6 +129,11 @@ vi.mock("@/hooks/use-shopping", () => ({
     mutateAsync: vi.fn(),
     isPending: false,
   }),
+  useShoppingList: () => ({
+    data: {
+      source_recipes: [],
+    },
+  }),
 }))
 
 vi.mock("@/hooks/use-undo-toast", () => ({

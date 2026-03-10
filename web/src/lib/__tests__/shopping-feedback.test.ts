@@ -16,7 +16,7 @@ describe("formatShoppingAddMessage", () => {
         { added: 2, merged: 1 },
         { sourceName: "Pasta", itemLabel }
       )
-    ).toBe('Added 2 shopping items from "Pasta" to shopping list; updated 1 shopping item already there')
+    ).toBe('Added 2 shopping items from "Pasta" to shopping list; merged 1 shopping item with items already there')
   })
 
   it("describes update-only results without claiming new additions", () => {
@@ -25,7 +25,7 @@ describe("formatShoppingAddMessage", () => {
         { added: 0, merged: 2 },
         { sourceName: "Pasta", itemLabel }
       )
-    ).toBe('Updated 2 shopping items from "Pasta" already on the shopping list')
+    ).toBe('Merged 2 shopping items from "Pasta" with items already on the shopping list')
   })
 
   it("supports a custom zero-state message", () => {

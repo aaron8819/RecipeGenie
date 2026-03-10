@@ -65,7 +65,7 @@ import {
   useSaveDayAssignments,
   usePlannerCategories,
 } from "@/hooks/use-planner"
-import { useAddToShoppingList } from "@/hooks/use-shopping"
+import { useAddToShoppingList, useShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useCategories, useToggleFavorite, useRecipes } from "@/hooks/use-recipes"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -360,6 +360,7 @@ function DayColumn({
   cartAddedRecipeId,
   swappingRecipeId,
   removingRecipeId,
+  isInShopping,
   onViewRecipe,
   onSwapRecipe,
   onMarkMade,
@@ -381,6 +382,7 @@ function DayColumn({
   cartAddedRecipeId: string | null
   swappingRecipeId: string | null
   removingRecipeId: string | null
+  isInShopping: (recipeId: string) => boolean
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
   onMarkMade: (recipeId: string, isMade: boolean) => void
@@ -441,6 +443,7 @@ function DayColumn({
                   isJustAddedToCart={cartAddedRecipeId === mainRecipe.id}
                   isSwapping={swappingRecipeId === mainRecipe.id}
                   isRemoving={removingRecipeId === mainRecipe.id}
+                  isInShopping={isInShopping(mainRecipe.id)}
                   isToday={isToday}
                   onView={() => onViewRecipe(mainRecipe)}
                   onSwap={() => onSwapRecipe(mainRecipe)}
@@ -470,6 +473,7 @@ function DayColumn({
                     isJustAddedToCart={cartAddedRecipeId === r.id}
                     isSwapping={swappingRecipeId === r.id}
                     isRemoving={removingRecipeId === r.id}
+                    isInShopping={isInShopping(r.id)}
                     isToday={false}
                     onView={() => onViewRecipe(r)}
                     onSwap={() => onSwapRecipe(r)}
@@ -514,6 +518,7 @@ function MobileDayColumn({
   swappingRecipeId,
   cartAddedRecipeId,
   removingRecipeId,
+  isInShopping,
   onViewRecipe,
   onSwapRecipe,
   onMarkMade,
@@ -534,6 +539,7 @@ function MobileDayColumn({
   swappingRecipeId: string | null
   cartAddedRecipeId: string | null
   removingRecipeId: string | null
+  isInShopping: (recipeId: string) => boolean
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
   onMarkMade: (recipeId: string, isMade: boolean) => void
@@ -587,6 +593,7 @@ function MobileDayColumn({
                   isSwapping={swappingRecipeId === recipe.id}
                   isJustAddedToCart={cartAddedRecipeId === recipe.id}
                   isRemoving={removingRecipeId === recipe.id}
+                  isInShopping={isInShopping(recipe.id)}
                   isToday={isToday}
                   onView={() => onViewRecipe(recipe)}
                   onSwap={() => onSwapRecipe(recipe)}
@@ -626,6 +633,7 @@ function StitchRecipeCard({
   isJustAddedToCart,
   isSwapping,
   isRemoving,
+  isInShopping,
   isToday,
   onView,
   onSwap,
@@ -647,6 +655,7 @@ function StitchRecipeCard({
   isJustAddedToCart: boolean
   isSwapping: boolean
   isRemoving: boolean
+  isInShopping: boolean
   isToday?: boolean
   onView: () => void
   onSwap: () => void
@@ -713,6 +722,12 @@ function StitchRecipeCard({
             {recipe.name}
           </h4>
           <p className="text-[10px] text-slate-500 dark:text-slate-400">{recipe.servings} serves</p>
+          {isInShopping ? (
+            <p className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+              <ShoppingCart className="h-3 w-3" />
+              In shopping
+            </p>
+          ) : null}
         </div>
         {(timesMade > 0 || lastMade) && (
           <p className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 mt-auto pt-1 pb-1">
@@ -801,7 +816,8 @@ function StitchRecipeCard({
                   ? "text-emerald-500"
                   : "hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500"
               )}
-              title="Add to cart"
+              title={isInShopping ? "Add recipe ingredients again to merge any updates in Shopping" : "Add recipe ingredients to Shopping"}
+              aria-label={`Add ${recipe.name} ingredients to Shopping`}
             >
               {isJustAddedToCart
                 ? <Check className="h-4 w-4" />
@@ -865,6 +881,7 @@ function MobileRecipeCard({
   isSwapping,
   isJustAddedToCart,
   isRemoving,
+  isInShopping,
   isToday,
   onView,
   onSwap,
@@ -884,6 +901,7 @@ function MobileRecipeCard({
   isSwapping: boolean
   isJustAddedToCart: boolean
   isRemoving: boolean
+  isInShopping: boolean
   isToday?: boolean
   onView: () => void
   onSwap: () => void
@@ -952,6 +970,12 @@ function MobileRecipeCard({
         <div className="mb-4">
           <h3 className="font-bold text-lg mb-1 leading-tight">{recipe.name}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">{recipe.servings} serves</p>
+          {isInShopping ? (
+            <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+              <ShoppingCart className="h-3.5 w-3.5" />
+              In shopping
+            </p>
+          ) : null}
         </div>
         {(timesMade > 0 || lastMade) && (
           <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-auto pt-1 pb-3">
@@ -1013,7 +1037,8 @@ function MobileRecipeCard({
                 "flex flex-col items-center gap-1 transition-colors",
                 isJustAddedToCart ? "text-emerald-500" : "text-slate-400 hover:text-primary"
               )}
-              title="Add to cart"
+              title={isInShopping ? "Add recipe ingredients again to merge any updates in Shopping" : "Add recipe ingredients to Shopping"}
+              aria-label={`Add ${recipe.name} ingredients to Shopping`}
             >
               {isAddingToCart ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -1117,6 +1142,7 @@ export function MealPlanner() {
   const { data: config } = useUserConfig()
   const updateConfig = useUpdateUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
+  const { data: shoppingList } = useShoppingList()
 
   const clearPendingAssignmentOverlay = useCallback((weekDate: string) => {
     setPendingAssignmentCounts((prev) => {
@@ -1511,6 +1537,10 @@ export function MealPlanner() {
   const totalMeals = deriveTotalMeals(selection)
 
   const displayedRecipes = recipes
+  const shoppingRecipeIds = useMemo(
+    () => new Set(shoppingList?.source_recipes || []),
+    [shoppingList?.source_recipes]
+  )
   const activeRecipeOverlay = useMemo(() => deriveActiveRecipeOverlay({
     recipes: displayedRecipes,
     activeRecipeId,
@@ -1580,6 +1610,35 @@ export function MealPlanner() {
       lastMadeMap,
     })
   }, [weeklyPlan?.made_recipe_ids, lastMadeMap, currentWeekDate])
+
+  const isRecipeInShopping = useCallback((recipeId: string) => {
+    return shoppingRecipeIds.has(recipeId)
+  }, [shoppingRecipeIds])
+
+  const plannedRecipeCount = displayedRecipes?.length || 0
+  const plannedRecipesInShoppingCount = useMemo(
+    () => (displayedRecipes || []).filter((recipe) => shoppingRecipeIds.has(recipe.id)).length,
+    [displayedRecipes, shoppingRecipeIds]
+  )
+  const plannedRecipesRemainingForShopping = Math.max(
+    0,
+    plannedRecipeCount - plannedRecipesInShoppingCount
+  )
+
+  const plannerShoppingSummary = useMemo(() => {
+    if (plannedRecipeCount === 0) return null
+    if (plannedRecipesInShoppingCount === 0) {
+      return "None of this plan has been sent to Shopping yet."
+    }
+    if (plannedRecipesRemainingForShopping === 0) {
+      return "All planned recipes are already in Shopping. Re-adding merges any ingredient changes."
+    }
+    return `${plannedRecipesInShoppingCount} of ${plannedRecipeCount} planned recipes are already in Shopping. Add to Shopping sends the rest and merges duplicates.`
+  }, [
+    plannedRecipeCount,
+    plannedRecipesInShoppingCount,
+    plannedRecipesRemainingForShopping,
+  ])
 
   const plannerContent = (
     <div className="space-y-6 pb-6">
@@ -1842,6 +1901,8 @@ export function MealPlanner() {
             disabled={addToShoppingList.isPending || !displayedRecipes?.length}
             variant="outline"
             size="default"
+            title="Add ingredients from planned meals to Shopping. Existing items are merged instead of duplicated."
+            aria-label="Add planned meal ingredients to Shopping"
             className={cn(
               "shrink-0 border-2 transition-colors",
               bulkCartJustAdded
@@ -1856,7 +1917,7 @@ export function MealPlanner() {
             ) : (
               <ShoppingCart className="h-4 w-4 mr-2" />
             )}
-            {bulkCartJustAdded ? 'Added' : 'Cart'}
+            {bulkCartJustAdded ? "Plan Added" : isDesktop ? "Add Plan to Shopping" : "To Shopping"}
           </Button>
           <Button
             onClick={() => setIsSaveTemplateOpen(true)}
@@ -1880,6 +1941,15 @@ export function MealPlanner() {
             {isDesktop ? "Load Template" : "Load"}
           </Button>
       </PlannerActionBar>
+
+      {plannerShoppingSummary ? (
+        <div className="rounded-2xl border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-slate-600">
+          <p>{plannerShoppingSummary}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Shopping rows keep recipe source labels, so you can trace each item back to this plan.
+          </p>
+        </div>
+      ) : null}
 
       {planLoading ? (
         <p className="text-muted-foreground text-center py-8">Loading...</p>
@@ -1959,6 +2029,7 @@ export function MealPlanner() {
                         cartAddedRecipeId={cartAddedRecipeId}
                         swappingRecipeId={swappingRecipeId}
                         removingRecipeId={removingRecipeId}
+                        isInShopping={isRecipeInShopping}
                         onViewRecipe={setViewingRecipe}
                         onSwapRecipe={handleSwapRecipe}
                         onMarkMade={handleMarkMade}
@@ -1998,6 +2069,7 @@ export function MealPlanner() {
                       cartAddedRecipeId={cartAddedRecipeId}
                       swappingRecipeId={swappingRecipeId}
                       removingRecipeId={removingRecipeId}
+                      isInShopping={isRecipeInShopping}
                       onViewRecipe={setViewingRecipe}
                       onSwapRecipe={handleSwapRecipe}
                       onMarkMade={handleMarkMade}
@@ -2034,6 +2106,7 @@ export function MealPlanner() {
                       swappingRecipeId={swappingRecipeId}
                       cartAddedRecipeId={cartAddedRecipeId}
                       removingRecipeId={removingRecipeId}
+                      isInShopping={isRecipeInShopping}
                       onViewRecipe={setViewingRecipe}
                       onSwapRecipe={handleSwapRecipe}
                       onMarkMade={handleMarkMade}

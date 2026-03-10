@@ -1646,8 +1646,8 @@ export function ShoppingListView() {
                       </div>
                       <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                         {recipeSectionCollapsed
-                          ? "Recipe context is tucked away while you shop."
-                          : "Recipe provenance stays secondary to the active list."}
+                          ? "Recipe context is tucked away while you shop, but each row still keeps its recipe source."
+                          : "Recipe provenance stays secondary to the active list, and each row keeps its recipe source."}
                       </p>
                     </div>
                     <Button

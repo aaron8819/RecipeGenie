@@ -302,7 +302,7 @@ describe("RecipeList", () => {
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
-        message: 'Updated 2 shopping items from "Chicken Soup" already on the shopping list',
+        message: 'Merged 2 shopping items from "Chicken Soup" with items already on the shopping list',
       })
     })
   })
