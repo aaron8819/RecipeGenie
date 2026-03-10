@@ -62,9 +62,11 @@ import {
   validateRecipeImportUrl,
 } from "./recipe-import.parser"
 import {
+  analyzeIngredientDuplicates,
   autoFixIngredients,
   countBlockingIngredientIssues,
   countIngredientsWithIssues,
+  removeExactDuplicateIngredients,
 } from "./recipe-dialog.validation"
 
 // Lazy-loaded so @dnd-kit (~60–90 KB gzipped) is excluded from the initial bundle
@@ -315,6 +317,20 @@ export function RecipeDialog({
       })
     }
   }, [ingredients, setIngredients, undoToast])
+
+  const handleRemoveExactDuplicates = useCallback(() => {
+    const result = removeExactDuplicateIngredients(ingredients)
+
+    if (result.removedCount === 0) {
+      return
+    }
+
+    setIngredients(result.ingredients)
+    undoToast.show({
+      message: `Removed ${result.removedCount} exact duplicate ingredient row(s)`,
+      duration: 3000,
+    })
+  }, [ingredients, undoToast])
 
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -583,6 +599,7 @@ export function RecipeDialog({
                 onReorderIngredients={handleReorderIngredients}
                 onBulkPasteIngredients={handleBulkPasteIngredients}
                 handleAutoFix={handleAutoFix}
+                onRemoveExactDuplicates={handleRemoveExactDuplicates}
                 isWideViewport={isWideViewport}
                 imagePreview={imagePreview}
                 imageUrl={imageUrl}
@@ -618,6 +635,7 @@ export function RecipeDialog({
             onReorderIngredients={handleReorderIngredients}
             onBulkPasteIngredients={handleBulkPasteIngredients}
             handleAutoFix={handleAutoFix}
+            onRemoveExactDuplicates={handleRemoveExactDuplicates}
             isWideViewport={isWideViewport}
             imagePreview={imagePreview}
             imageUrl={imageUrl}
@@ -682,6 +700,7 @@ interface RecipeFormContentProps {
   onReorderIngredients: (event: DragEndEvent) => void
   onBulkPasteIngredients: (index: number, text: string) => void
   handleAutoFix: () => void
+  onRemoveExactDuplicates: () => void
   isWideViewport: boolean
 }
 
@@ -724,8 +743,18 @@ function RecipeFormContent({
   onRemoveImage,
   fileInputRef,
   handleAutoFix,
+  onRemoveExactDuplicates,
 }: RecipeFormContentPropsWithImage) {
   const ingredientIssueCount = countIngredientsWithIssues(ingredients)
+  const duplicateAnalysis = analyzeIngredientDuplicates(ingredients)
+  const exactDuplicateCount = duplicateAnalysis.exactGroups.reduce(
+    (total, group) => total + group.rowIndexes.length - 1,
+    0
+  )
+  const nearDuplicateCount = duplicateAnalysis.nearGroups.reduce(
+    (total, group) => total + group.rowIndexes.length - 1,
+    0
+  )
 
   // Edit Recipe: 2-col layout per reference/recipemodal_editmode_redesign
   if (isEditing) {
@@ -762,7 +791,10 @@ function RecipeFormContent({
           <RecipeIngredientsSection
             variant="edit"
             ingredientIssueCount={ingredientIssueCount}
+            exactDuplicateCount={exactDuplicateCount}
+            nearDuplicateCount={nearDuplicateCount}
             onAutoFix={handleAutoFix}
+            onRemoveExactDuplicates={onRemoveExactDuplicates}
             onAddIngredient={onAddIngredient}
           >
             <SortableIngredientList
@@ -770,6 +802,7 @@ function RecipeFormContent({
               editModeTwoColLayout
               onReorderIngredients={onReorderIngredients}
               onBulkPasteIngredients={onBulkPasteIngredients}
+              duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
               onRemoveIngredient={onRemoveIngredient}
               onIngredientChange={onIngredientChange}
             />
@@ -820,7 +853,10 @@ function RecipeFormContent({
         <RecipeIngredientsSection
           variant="add"
           ingredientIssueCount={ingredientIssueCount}
+          exactDuplicateCount={exactDuplicateCount}
+          nearDuplicateCount={nearDuplicateCount}
           onAutoFix={handleAutoFix}
+          onRemoveExactDuplicates={onRemoveExactDuplicates}
           onAddIngredient={onAddIngredient}
         >
           <SortableIngredientList
@@ -829,6 +865,7 @@ function RecipeFormContent({
             isWideViewport={isWideViewport}
             onReorderIngredients={onReorderIngredients}
             onBulkPasteIngredients={onBulkPasteIngredients}
+            duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
             onRemoveIngredient={onRemoveIngredient}
             onIngredientChange={onIngredientChange}
           />

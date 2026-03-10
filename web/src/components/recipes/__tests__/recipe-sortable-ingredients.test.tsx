@@ -52,4 +52,21 @@ describe("SortableIngredientList", () => {
 
     expect(onBulkPasteIngredients).toHaveBeenCalledWith(0, "1 cup flour\n2 tbsp oil")
   })
+
+  it("renders duplicate warnings on highlighted rows", () => {
+    render(
+      <SortableIngredientList
+        ingredients={[{ item: "olive oil", amount: 1, unit: "tbsp" }]}
+        addRecipeModalLayout
+        isWideViewport
+        onReorderIngredients={() => {}}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={() => {}}
+        onIngredientChange={() => {}}
+        duplicateWarningsByRow={{ 0: ["Possible duplicate of row 2"] }}
+      />
+    )
+
+    expect(screen.getByText("Possible duplicate of row 2")).toBeInTheDocument()
+  })
 })

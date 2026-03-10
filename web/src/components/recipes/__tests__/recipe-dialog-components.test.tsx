@@ -250,6 +250,7 @@ describe("RecipeMetadataSection", () => {
 describe("RecipeIngredientsSection", () => {
   it("renders edit validation summary and wires auto-fix/add callbacks", () => {
     const onAutoFix = vi.fn()
+    const onRemoveExactDuplicates = vi.fn()
     const onAddIngredient = vi.fn()
 
     render(
@@ -257,6 +258,9 @@ describe("RecipeIngredientsSection", () => {
         variant="edit"
         ingredientIssueCount={2}
         onAutoFix={onAutoFix}
+        exactDuplicateCount={1}
+        nearDuplicateCount={1}
+        onRemoveExactDuplicates={onRemoveExactDuplicates}
         onAddIngredient={onAddIngredient}
       >
         <div>ingredient-list</div>
@@ -265,20 +269,26 @@ describe("RecipeIngredientsSection", () => {
 
     expect(screen.getByText("Ingredient Validation Issues")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Attempt Auto-Fix" }))
+    fireEvent.click(screen.getByRole("button", { name: "Remove Exact Duplicates" }))
     fireEvent.click(screen.getByRole("button", { name: "ADD INGREDIENT" }))
 
     expect(onAutoFix).toHaveBeenCalledTimes(1)
+    expect(onRemoveExactDuplicates).toHaveBeenCalledTimes(1)
     expect(onAddIngredient).toHaveBeenCalledTimes(1)
   })
 
   it("renders add-mode paste guidance and validation summary", () => {
     const onAutoFix = vi.fn()
+    const onRemoveExactDuplicates = vi.fn()
 
     render(
       <RecipeIngredientsSection
         variant="add"
         ingredientIssueCount={1}
+        exactDuplicateCount={2}
+        nearDuplicateCount={1}
         onAutoFix={onAutoFix}
+        onRemoveExactDuplicates={onRemoveExactDuplicates}
         onAddIngredient={() => {}}
       >
         <div>ingredient-list</div>
@@ -287,8 +297,11 @@ describe("RecipeIngredientsSection", () => {
 
     expect(screen.getByText(/paste full lines like/i)).toBeInTheDocument()
     expect(screen.getByText(/may not save cleanly downstream/i)).toBeInTheDocument()
+    expect(screen.getByText(/possible near-duplicate row/i)).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Attempt Auto-Fix" }))
+    fireEvent.click(screen.getByRole("button", { name: "Remove Exact Duplicates" }))
     expect(onAutoFix).toHaveBeenCalledTimes(1)
+    expect(onRemoveExactDuplicates).toHaveBeenCalledTimes(1)
   })
 })
 

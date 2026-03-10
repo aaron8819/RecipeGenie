@@ -78,6 +78,7 @@ function SortableIngredientRow({
   addRecipeModalLayout,
   isWideViewport,
   onBulkPasteIngredients,
+  duplicateWarnings,
 }: {
   ingredient: Ingredient
   index: number
@@ -90,6 +91,7 @@ function SortableIngredientRow({
   editModeTwoColLayout?: boolean
   addRecipeModalLayout?: boolean
   isWideViewport?: boolean
+  duplicateWarnings?: string[]
 }) {
   const {
     attributes,
@@ -120,6 +122,8 @@ function SortableIngredientRow({
   const issues = validateIngredient(ingredient)
   const hasIssues = issues.length > 0
   const issueMessages = issues.map(getValidationMessage)
+  const rowWarnings = [...issueMessages, ...(duplicateWarnings || [])]
+  const hasRowWarnings = rowWarnings.length > 0
 
   const maybeParseSingleLineIngredient = (rawValue: string) => {
     const parsed = parseIngredientLine(rawValue)
@@ -262,17 +266,17 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
-        data-has-issues={hasIssues ? "true" : undefined}
+        data-has-issues={hasRowWarnings ? "true" : undefined}
         className={cn(
           "bg-background dark:bg-zinc-900 border border-stone-100 dark:border-zinc-800 p-1.5 rounded-xl group relative",
           isDragging && "z-50",
-          hasIssues && "ring-2 ring-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20"
+          hasRowWarnings && "ring-2 ring-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20"
         )}
       >
-        {hasIssues && (
+        {hasRowWarnings && (
           <div
             className="absolute -top-2 -right-2 z-10"
-            title={issues.map(getValidationMessage).join(', ')}
+            title={rowWarnings.join(', ')}
           >
             <div className="bg-amber-500 text-white rounded-full p-1 shadow-sm">
               <AlertCircle className="h-3.5 w-3.5" />
@@ -302,9 +306,9 @@ function SortableIngredientRow({
             </div>
           </div>
         )}
-        {issueMessages.length > 0 ? (
+        {rowWarnings.length > 0 ? (
           <p className="px-2 pt-1 text-[11px] text-amber-700 dark:text-amber-400">
-            {issueMessages.join(" • ")}
+            {rowWarnings.join(" • ")}
           </p>
         ) : null}
       </div>
@@ -316,7 +320,7 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
-        data-has-issues={hasIssues ? "true" : undefined}
+        data-has-issues={hasRowWarnings ? "true" : undefined}
         className={`flex flex-col gap-2 sm:flex-row sm:items-center group ${isDragging ? "z-50" : ""}`}
       >
         <div className="flex items-center gap-2 sm:flex-[3]">
@@ -331,9 +335,9 @@ function SortableIngredientRow({
           {modifierInput}
           {deleteButton}
         </div>
-        {issueMessages.length > 0 ? (
+        {rowWarnings.length > 0 ? (
           <p className="pl-6 text-[11px] text-amber-700 dark:text-amber-400 sm:basis-full sm:pl-9">
-            {issueMessages.join(" • ")}
+            {rowWarnings.join(" • ")}
           </p>
         ) : null}
       </div>
@@ -345,7 +349,7 @@ function SortableIngredientRow({
       <div
         ref={setNodeRef}
         style={style}
-        data-has-issues={hasIssues ? "true" : undefined}
+        data-has-issues={hasRowWarnings ? "true" : undefined}
         className={`grid grid-cols-[32px_2fr_0.8fr_1fr_1.5fr_32px] gap-3 items-center group px-1 ${isDragging ? "z-50" : ""}`}
       >
         {dragHandle}
@@ -354,9 +358,9 @@ function SortableIngredientRow({
         {unitInput}
         {modifierInput}
         {deleteButton}
-        {issueMessages.length > 0 ? (
+        {rowWarnings.length > 0 ? (
           <p className="col-span-full pl-11 text-[11px] text-amber-700 dark:text-amber-400">
-            {issueMessages.join(" • ")}
+            {rowWarnings.join(" • ")}
           </p>
         ) : null}
       </div>
@@ -367,7 +371,7 @@ function SortableIngredientRow({
     <div
       ref={setNodeRef}
       style={style}
-      data-has-issues={hasIssues ? "true" : undefined}
+      data-has-issues={hasRowWarnings ? "true" : undefined}
       className={`flex gap-2 items-center ${isDragging ? "z-50" : ""}`}
     >
       {dragHandle}
@@ -376,9 +380,9 @@ function SortableIngredientRow({
       {unitInput}
       {modifierInput}
       {deleteButton}
-      {issueMessages.length > 0 ? (
+      {rowWarnings.length > 0 ? (
         <p className="basis-full pl-6 text-[11px] text-amber-700 dark:text-amber-400">
-          {issueMessages.join(" • ")}
+          {rowWarnings.join(" • ")}
         </p>
       ) : null}
     </div>
@@ -412,6 +416,7 @@ export interface SortableIngredientListProps {
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
   onBulkPasteIngredients: (index: number, text: string) => void
+  duplicateWarningsByRow?: Record<number, string[]>
 }
 
 export function SortableIngredientList({
@@ -423,6 +428,7 @@ export function SortableIngredientList({
   onRemoveIngredient,
   onIngredientChange,
   onBulkPasteIngredients,
+  duplicateWarningsByRow,
 }: SortableIngredientListProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
@@ -474,6 +480,7 @@ export function SortableIngredientList({
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
                 onBulkPasteIngredients={onBulkPasteIngredients}
+                duplicateWarnings={duplicateWarningsByRow?.[index]}
                 ingredients={ingredients}
                 isEditing={true}
                 addRecipeModalLayout
@@ -491,6 +498,7 @@ export function SortableIngredientList({
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
                 onBulkPasteIngredients={onBulkPasteIngredients}
+                duplicateWarnings={duplicateWarningsByRow?.[index]}
                 ingredients={ingredients}
                 isEditing={true}
                 editModeTwoColLayout

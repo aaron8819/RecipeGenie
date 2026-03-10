@@ -701,7 +701,10 @@ export function RecipeMetadataSection({
 type RecipeIngredientsSectionProps = {
   variant: "add" | "edit"
   ingredientIssueCount?: number
+  exactDuplicateCount?: number
+  nearDuplicateCount?: number
   onAutoFix?: () => void
+  onRemoveExactDuplicates?: () => void
   onAddIngredient: () => void
   children: React.ReactNode
 }
@@ -709,7 +712,10 @@ type RecipeIngredientsSectionProps = {
 export function RecipeIngredientsSection({
   variant,
   ingredientIssueCount = 0,
+  exactDuplicateCount = 0,
+  nearDuplicateCount = 0,
   onAutoFix,
+  onRemoveExactDuplicates,
   onAddIngredient,
   children,
 }: RecipeIngredientsSectionProps) {
@@ -745,6 +751,39 @@ export function RecipeIngredientsSection({
                   >
                     <Wand2 className="h-3 w-3 mr-1.5" />
                     Attempt Auto-Fix
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {exactDuplicateCount > 0 || nearDuplicateCount > 0 ? (
+          <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-stone-600 dark:text-stone-300" />
+              <div className="flex-1">
+                <div className="mb-1 text-sm font-semibold text-foreground">
+                  Possible duplicate ingredients
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {exactDuplicateCount > 0
+                    ? `${exactDuplicateCount} exact duplicate row(s)`
+                    : "No exact duplicate rows"}
+                  {nearDuplicateCount > 0
+                    ? ` and ${nearDuplicateCount} possible near-duplicate row(s)`
+                    : ""}
+                  . Review highlighted rows before saving.
+                </p>
+                {exactDuplicateCount > 0 && onRemoveExactDuplicates ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onRemoveExactDuplicates}
+                    className="mt-2 h-7 text-xs"
+                  >
+                    Remove Exact Duplicates
                   </Button>
                 ) : null}
               </div>
@@ -793,6 +832,35 @@ export function RecipeIngredientsSection({
                 >
                   <Wand2 className="mr-1.5 h-3 w-3" />
                   Attempt Auto-Fix
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {exactDuplicateCount > 0 || nearDuplicateCount > 0 ? (
+        <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-stone-600 dark:text-stone-300" />
+            <div className="flex-1">
+              <p className="text-xs text-muted-foreground">
+                {exactDuplicateCount > 0
+                  ? `${exactDuplicateCount} exact duplicate row(s)`
+                  : "No exact duplicate rows"}
+                {nearDuplicateCount > 0
+                  ? ` and ${nearDuplicateCount} possible near-duplicate row(s)`
+                  : ""}
+                . Highlighted rows may describe the same ingredient twice.
+              </p>
+              {exactDuplicateCount > 0 && onRemoveExactDuplicates ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onRemoveExactDuplicates}
+                  className="mt-2 h-7 text-xs"
+                >
+                  Remove Exact Duplicates
                 </Button>
               ) : null}
             </div>

@@ -1,10 +1,24 @@
 import { parseIngredientLine } from "@/lib/recipe-parser"
 import type { Ingredient } from "@/types/database"
+import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 
 export type IngredientValidationIssue =
   | "missing-item"
   | "unit-without-amount"
   | "amount-without-unit"
+
+export interface IngredientDuplicateGroup {
+  key: string
+  type: "exact" | "near"
+  canonicalItem: string
+  rowIndexes: number[]
+}
+
+export interface IngredientDuplicateAnalysis {
+  exactGroups: IngredientDuplicateGroup[]
+  nearGroups: IngredientDuplicateGroup[]
+  rowWarnings: Record<number, string[]>
+}
 
 export function isIngredientRowTouched(ingredient: Ingredient): boolean {
   return Boolean(
@@ -98,4 +112,148 @@ export function autoFixIngredients(ingredients: Ingredient[]): {
     ingredients: fixedIngredients,
     fixedCount,
   }
+}
+
+export function analyzeIngredientDuplicates(
+  ingredients: Ingredient[]
+): IngredientDuplicateAnalysis {
+  const rowWarnings: Record<number, string[]> = {}
+  const exactMap = new Map<string, number[]>()
+  const canonicalMap = new Map<string, number[]>()
+
+  ingredients.forEach((ingredient, index) => {
+    if (!ingredient.item.trim()) return
+
+    const exactKey = createExactDuplicateKey(ingredient)
+    const canonicalKey = createCanonicalNearDuplicateKey(ingredient)
+
+    if (exactKey) {
+      exactMap.set(exactKey, [...(exactMap.get(exactKey) || []), index])
+    }
+
+    if (canonicalKey) {
+      canonicalMap.set(canonicalKey, [...(canonicalMap.get(canonicalKey) || []), index])
+    }
+  })
+
+  const exactGroups = Array.from(exactMap.entries())
+    .filter(([, rowIndexes]) => rowIndexes.length > 1)
+    .map(([key, rowIndexes]) => ({
+      key,
+      type: "exact" as const,
+      canonicalItem: normalizeItemName(ingredients[rowIndexes[0]].item),
+      rowIndexes,
+    }))
+
+  const rowsInExactGroups = new Set(exactGroups.flatMap((group) => group.rowIndexes))
+
+  exactGroups.forEach((group) => {
+    const firstIndex = group.rowIndexes[0]
+    group.rowIndexes.slice(1).forEach((rowIndex) => {
+      appendRowWarning(
+        rowWarnings,
+        rowIndex,
+        `Exact duplicate of row ${firstIndex + 1}`
+      )
+    })
+  })
+
+  const nearGroups = Array.from(canonicalMap.entries())
+    .map(([key, rowIndexes]) => ({
+      key,
+      rowIndexes: rowIndexes.filter((rowIndex) => !rowsInExactGroups.has(rowIndex)),
+    }))
+    .filter((group) => group.rowIndexes.length > 1)
+    .filter((group) => hasLikelyNamingVariant(group.rowIndexes, ingredients))
+    .map(({ key, rowIndexes }) => ({
+      key,
+      type: "near" as const,
+      canonicalItem: key,
+      rowIndexes,
+    }))
+
+  nearGroups.forEach((group) => {
+    const firstIndex = group.rowIndexes[0]
+    group.rowIndexes.slice(1).forEach((rowIndex) => {
+      appendRowWarning(
+        rowWarnings,
+        rowIndex,
+        `Possible duplicate of row ${firstIndex + 1}`
+      )
+    })
+  })
+
+  return {
+    exactGroups,
+    nearGroups,
+    rowWarnings,
+  }
+}
+
+export function removeExactDuplicateIngredients(ingredients: Ingredient[]): {
+  ingredients: Ingredient[]
+  removedCount: number
+} {
+  const seen = new Set<string>()
+  let removedCount = 0
+
+  const dedupedIngredients = ingredients.filter((ingredient) => {
+    const exactKey = createExactDuplicateKey(ingredient)
+    if (!exactKey) {
+      return true
+    }
+
+    if (seen.has(exactKey)) {
+      removedCount += 1
+      return false
+    }
+
+    seen.add(exactKey)
+    return true
+  })
+
+  return {
+    ingredients: dedupedIngredients,
+    removedCount,
+  }
+}
+
+function appendRowWarning(
+  rowWarnings: Record<number, string[]>,
+  rowIndex: number,
+  message: string
+) {
+  rowWarnings[rowIndex] = [...(rowWarnings[rowIndex] || []), message]
+}
+
+function createExactDuplicateKey(ingredient: Ingredient): string | null {
+  const normalizedItem = normalizeText(ingredient.item)
+  if (!normalizedItem) return null
+
+  const amountKey = ingredient.amount === null ? "" : ingredient.amount.toString()
+  const unitKey = normalizeUnit(ingredient.unit || "")
+  const modifierKey = normalizeText(ingredient.modifier)
+
+  return `${normalizedItem}|${amountKey}|${unitKey}|${modifierKey}`
+}
+
+function createCanonicalNearDuplicateKey(ingredient: Ingredient): string | null {
+  const normalizedItem = normalizeItemName(ingredient.item)
+  return normalizedItem || null
+}
+
+function hasLikelyNamingVariant(rowIndexes: number[], ingredients: Ingredient[]): boolean {
+  const itemNames = new Set(
+    rowIndexes.map((rowIndex) => normalizeText(ingredients[rowIndex].item))
+  )
+
+  if (itemNames.size < 2) {
+    return false
+  }
+
+  return true
+}
+
+function normalizeText(value?: string | null): string {
+  return (value || "").trim().toLowerCase().replace(/\s+/g, " ")
 }

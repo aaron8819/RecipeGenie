@@ -10,9 +10,11 @@ import {
   normalizeRecipeIngredient,
 } from "../recipe-dialog.defaults"
 import {
+  analyzeIngredientDuplicates,
   autoFixIngredients,
   countBlockingIngredientIssues,
   countIngredientsWithIssues,
+  removeExactDuplicateIngredients,
   validateIngredient,
 } from "../recipe-dialog.validation"
 import {
@@ -57,6 +59,39 @@ describe("recipe dialog validation helpers", () => {
 
     expect(countIngredientsWithIssues(ingredients)).toBe(2)
     expect(countBlockingIngredientIssues(ingredients)).toBe(1)
+  })
+
+  it("detects exact duplicates and near-duplicate naming variants", () => {
+    const result = analyzeIngredientDuplicates([
+      { item: "olive oil", amount: 1, unit: "tbsp" },
+      { item: "olive oil", amount: 1, unit: "tbsp" },
+      { item: "extra virgin olive oil", amount: 2, unit: "tbsp" },
+      { item: "yellow onion", amount: 1, unit: "" },
+      { item: "onion", amount: 2, unit: "" },
+    ])
+
+    expect(result.exactGroups).toHaveLength(1)
+    expect(result.exactGroups[0].rowIndexes).toEqual([0, 1])
+    expect(result.nearGroups).toHaveLength(1)
+    expect(result.nearGroups.map((group) => group.canonicalItem)).toEqual([
+      "onion",
+    ])
+    expect(result.rowWarnings[1]).toContain("Exact duplicate of row 1")
+    expect(result.rowWarnings[4]).toContain("Possible duplicate of row 4")
+  })
+
+  it("removes only exact duplicates and preserves near-duplicates", () => {
+    const result = removeExactDuplicateIngredients([
+      { item: "olive oil", amount: 1, unit: "tbsp" },
+      { item: "olive oil", amount: 1, unit: "tbsp" },
+      { item: "extra virgin olive oil", amount: 1, unit: "tbsp" },
+    ])
+
+    expect(result.removedCount).toBe(1)
+    expect(result.ingredients).toEqual([
+      { item: "olive oil", amount: 1, unit: "tbsp" },
+      { item: "extra virgin olive oil", amount: 1, unit: "tbsp" },
+    ])
   })
 })
 
