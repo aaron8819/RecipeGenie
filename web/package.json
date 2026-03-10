@@ -31,9 +31,11 @@
     "check:no-new-ts-expect-error": "node scripts/check-no-new-ts-expect-error.mjs",
     "check:cycles": "depcruise --config .dependency-cruiser.cjs src",
     "verify": "npm run lint && npm run typecheck && npm run test -- --run && npm run check:no-new-ts-expect-error && npm run check:no-new-test-skip && npm run check:cycles",
+    "db:preflight": "node scripts/db-preflight.mjs",
     "db:types:regen:tmp": "npx supabase --workdir .. gen types typescript --local --schema public > src/types/database.generated.tmp.ts",
     "db:types:check": "npm run db:types:regen:tmp && node -e \"const fs=require('fs');const norm=(s)=>s.replace(/\\r\\n/g,'\\n');const expectedPath='src/types/database.generated.ts';const actualPath='src/types/database.generated.tmp.ts';const expected=norm(fs.readFileSync(expectedPath,'utf8'));const actual=norm(fs.readFileSync(actualPath,'utf8'));if(expected!==actual){console.error('Schema/type drift detected between '+expectedPath+' and '+actualPath+'.');process.exitCode=1;}else{console.log('Schema/type drift check passed: generated types match baseline.');}fs.unlinkSync(actualPath);if(process.exitCode)process.exit(process.exitCode);\"",
     "db:types:regen": "npx supabase --workdir .. gen types typescript --local --schema public > src/types/database.generated.ts",
+    "db:types:regen:linked": "npx supabase --workdir .. gen types typescript --linked --schema public > src/types/database.generated.ts",
     "db:types:regen:remote": "npx supabase gen types typescript --project-id eyaoahwzixqetjgfghsh --schema public > src/types/database.generated.ts",
     "migrate": "npx tsx scripts/migrate.ts",
     "create-test-account": "npx tsx scripts/create-test-account.ts"

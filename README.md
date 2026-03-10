@@ -51,6 +51,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 - Canonical bootstrap is baseline-first via `supabase/migrations/001_baseline.sql`.
 - Historical `012+` migration files are retained as legacy records (the earlier `001-011` history is incomplete in version control and is intentionally not reconstructed).
 - New schema changes must be added as incremental migrations after the baseline.
+- The operational migration runbook, preflight checklist, drift detection guidance, and baseline-squash repair procedure live in `supabase/SCHEMA.md`.
 
 For local Supabase CLI workflows, use:
 
@@ -125,6 +126,22 @@ npm run db:types:check
 ```
 
 `db:types:check` is CI-equivalent: it generates to a temporary file and fails if it differs from `src/types/database.generated.ts`.
+
+For linked remote workflows after a schema push, run:
+
+```bash
+cd web
+npm run db:types:regen:linked
+```
+
+Before any remote `supabase db push`, run:
+
+```bash
+cd web
+npm run db:preflight
+```
+
+This checks linked migration history alignment and points you to the repair runbook if the repo's squashed-baseline case is the reason for the mismatch.
 
 ## Deployment to Vercel
 

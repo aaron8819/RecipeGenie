@@ -24,6 +24,7 @@ This document describes the complete database schema for the Recipe Genie applic
 - [Functions](#functions)
 - [Triggers](#triggers)
 - [Relationships](#relationships)
+- [Migration Workflow Runbook](#migration-workflow-runbook)
 
 ## Overview
 
@@ -36,6 +37,21 @@ The Recipe Genie database is designed for multi-user support with complete data 
 - Archived historical migrations live under `supabase/migrations/archive/2026-03-09-pre-028-squash/`.
 - Archived migrations are kept for audit/history but are no longer the source of truth for fresh environments.
 - New migrations must be created incrementally on top of the baseline schema.
+
+### Current Active Migration Chain
+
+- `supabase/migrations/001_baseline.sql`
+- `supabase/migrations/002_recipe_structure_parity.sql`
+
+### Recent Drift Root Cause
+
+The recent `supabase db push` failure was caused by migration history drift, not by a bad SQL migration:
+
+- The repository's active chain was rewritten to start from the squashed `001_baseline.sql`.
+- The linked remote still had pre-squash migration history entries recorded for older incremental files such as `012` through `028`.
+- `supabase db push` compares local migration history to the remote migration history table before applying new SQL.
+- Because local history only exposed `001` and `002`, while the remote still reported stale pre-squash entries, the CLI treated the histories as divergent and refused to continue.
+- Repairing those stale remote history entries to `reverted`, then rerunning `supabase db push`, aligned the migration ledger with the intentionally squashed repo state.
 
 The schema supports:
 - Recipe storage with ingredients, instructions, grouped instructions, notes, and images
@@ -656,3 +672,112 @@ One-time data fixes and inspection queries are also kept in `migrations/archive/
 - `migrate-bad-recipe-id.sql` - One-time fix for malformed recipe IDs
 
 Archived files are not part of the active bootstrap chain and should not be re-run during normal `db reset` workflows.
+
+## Migration Workflow Runbook
+
+This section is the operational runbook for schema changes in this repository. It is intentionally explicit because the repo uses a squashed baseline and older linked projects may still carry pre-squash migration history.
+
+### Normal Schema Change Workflow
+
+1. Create a new incremental migration on top of the active chain.
+   Example: `npx supabase migration new add_some_schema_change`
+2. Apply and iterate locally first.
+   Use `npx supabase start` and `npx supabase db reset --local` from the repo root so the full active chain rebuilds deterministically.
+3. Validate the app against the local schema change.
+   At minimum, run the relevant app flow plus `npm run typecheck` from `web/`. Add or run tests when the schema change affects behavior.
+4. Regenerate local types from the local schema.
+   From `web/`, run `npm run db:types:regen`.
+5. Preflight the linked remote before pushing.
+   From `web/`, run `npm run db:preflight`.
+6. Push to the intentionally linked remote project.
+   Run `npx supabase --workdir .. db push`.
+7. Regenerate types from the linked remote after a successful push.
+   From `web/`, run `npm run db:types:regen:linked`.
+8. Re-run validation.
+   At minimum, run `npm run typecheck` and the relevant tests from `web/`.
+
+### Preflight Checklist Before `supabase db push`
+
+- Run `cd web && npm run db:preflight`.
+- Confirm the linked project/environment is the one you intend to change.
+- Review `supabase migration list` output and verify local and remote entries line up row-for-row.
+- Stop if a migration exists only locally, only remotely, or the IDs differ between columns.
+- Stop if you do not understand why the migration list differs.
+- Treat `supabase db push` as unsafe until the history mismatch is explained.
+
+### How To Detect Migration History Drift
+
+Migration history drift means the migration ledger in the linked remote does not match the active migration files in this repository.
+
+Common drift signals:
+
+- `supabase migration list` shows blank local or blank remote cells.
+- The local and remote columns list different IDs on the same row.
+- `supabase db push` refuses to proceed because remote migration versions do not match local migrations.
+- A fresh local reset builds cleanly, but the linked remote reports extra historical versions that are not part of the active chain.
+
+Concrete examples of when to stop and investigate:
+
+- The repo shows only `001_baseline.sql` and `002_recipe_structure_parity.sql`, but the remote still lists pre-squash entries such as `012` through `028`.
+- A teammate added a migration locally and you have not pulled it yet.
+- You are linked to the wrong Supabase project or environment.
+- Someone manually edited migration history or applied SQL outside the repo workflow.
+
+### Squashed Baseline Repair Procedure
+
+This repository's known special case is intentional baseline squashing.
+
+Use this procedure only when all of the following are true:
+
+- The repo's canonical active chain starts with `001_baseline.sql`.
+- The linked remote schema state is already equivalent to that squashed baseline plus any active incremental migrations.
+- The mismatch is explained by stale pre-squash migration history entries still recorded on the remote.
+
+Approved repair workflow:
+
+1. Run `supabase migration list` and confirm the mismatch is the expected squashed-baseline pattern.
+2. Confirm the remote schema itself is the one you expect before changing migration history.
+   Check the relevant tables, columns, functions, or constraints in Supabase before repair.
+3. Mark the stale pre-squash remote history entries as reverted with `supabase migration repair --status reverted ...`.
+   In the known March 2026 case, the stale entries were `012` through `028`.
+4. Run `supabase migration list` again and confirm the linked remote now aligns with the active repo chain.
+5. Only then run `supabase db push` if there is still an unapplied migration to push.
+
+This updates migration bookkeeping. It does not apply missing SQL by itself.
+
+### When `repair` Is Appropriate Vs Not Appropriate
+
+`supabase migration repair` is appropriate when:
+
+- The repository intentionally rewrote or squashed the canonical migration chain.
+- The remote schema is already correct, but the remote migration history table is stale.
+- You can explain every mismatched migration entry concretely.
+- You verify schema state before and after the repair.
+
+`supabase migration repair` is not appropriate when:
+
+- You are using it as a generic force-fix for unexplained drift.
+- The remote schema is actually missing tables, columns, indexes, RLS, or functions.
+- You are unsure whether the linked project is the correct environment.
+- Local and remote histories diverged because different SQL was applied, not because of an intentional squash.
+
+If the reason for drift is not clear, stop. Investigate the schema state and migration history instead of rewriting the ledger.
+`db:preflight` helps detect ledger drift, but it does not prove the remote schema contents are equivalent.
+
+### Post-Migration Checklist
+
+- Regenerate local or linked types, depending on the workflow stage.
+  Use `cd web && npm run db:types:regen` for local parity and `cd web && npm run db:types:regen:linked` after a linked remote push.
+- Run `cd web && npm run typecheck`.
+- Run the relevant tests for the affected behavior.
+- Verify the new database objects exist as intended in the target environment.
+- If the schema change affects docs or operational assumptions, update this file in the same branch.
+
+### Command Reference
+
+- Local rebuild: `npx supabase start` then `npx supabase db reset --local`
+- Preflight linked remote: `cd web && npm run db:preflight`
+- Push linked remote: `npx supabase --workdir .. db push`
+- Generate local types: `cd web && npm run db:types:regen`
+- Generate linked remote types: `cd web && npm run db:types:regen:linked`
+- Check generated type parity against committed baseline: `cd web && npm run db:types:check`
