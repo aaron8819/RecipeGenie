@@ -283,11 +283,13 @@ describe("RecipeList", () => {
 
     render(<RecipeList />)
 
+    expect(screen.getByLabelText("Recipe browse filters")).toBeInTheDocument()
     const utilitiesRow = screen.getByLabelText("Recipe mobile utilities")
     expect(utilitiesRow).toBeInTheDocument()
     expect(within(utilitiesRow).getByRole("button", { name: "Shared" })).toBeInTheDocument()
     expect(within(utilitiesRow).getByRole("button", { name: "Settings" })).toBeInTheDocument()
     expect(screen.getAllByRole("button", { name: "Favorites" }).length).toBeGreaterThan(0)
+    expect(screen.queryByText("Search matches recipe names and categories.")).not.toBeInTheDocument()
   })
 
   it("reports update-only shopping results without claiming new additions", async () => {
