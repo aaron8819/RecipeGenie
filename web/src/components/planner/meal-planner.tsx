@@ -1651,13 +1651,13 @@ export function MealPlanner() {
         progressLabel={`${progress.made} of ${progress.total} meals`}
         progressValue={progress.percentage}
         controls={
-          <div className="flex gap-1">
+          <div className="flex items-center gap-2 rounded-2xl border border-border-muted/80 bg-white/75 p-1.5 shadow-sm">
             {!isTodayMode && (
               <>
                 <button
                   type="button"
                   onClick={handlePrevWeek}
-                  className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+                  className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
                   aria-label="Previous week"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -1665,7 +1665,7 @@ export function MealPlanner() {
                 <button
                   type="button"
                   onClick={handleNextWeek}
-                  className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+                  className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
                   aria-label="Next week"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -1674,7 +1674,7 @@ export function MealPlanner() {
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+                      className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
                       title="Pick a date to jump to that week"
                       aria-label="Open calendar to pick a week"
                     >
@@ -1703,7 +1703,7 @@ export function MealPlanner() {
             <button
               type="button"
               onClick={() => setIsSettingsModalOpen(true)}
-              className="p-2 rounded-lg bg-white border border-border-muted hover:bg-white/90 transition-colors"
+              className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
               aria-label="Open planner settings"
               title="Open planner settings"
             >
@@ -1720,22 +1720,22 @@ export function MealPlanner() {
         {/* Current Schedule */}
         <PlannerSectionShell
           className="lg:col-span-4"
-          headerClassName="flex items-center justify-between mb-6"
+          headerClassName="mb-6 flex items-start justify-between gap-4"
           header={
             <>
-              <div>
-                <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-1">
+              <div className="space-y-1.5">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-secondary">
                   Current Schedule
                 </p>
                 <h2 className="text-2xl font-display text-slate-800 dark:text-white">
                   {formatWeekLabel(currentWeekDate)}
                 </h2>
               </div>
-              <div className="flex gap-1">
+              <div className="flex items-center gap-1 rounded-2xl border border-stone-200 bg-stone-50/90 p-1.5 dark:border-zinc-700 dark:bg-zinc-800/90">
               <button
                 type="button"
                 onClick={handlePrevWeek}
-                className="p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors"
+                className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-white hover:text-primary dark:text-zinc-300 dark:hover:bg-zinc-700"
                 aria-label="Previous week"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -1743,7 +1743,7 @@ export function MealPlanner() {
               <button
                 type="button"
                 onClick={handleNextWeek}
-                className="p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors"
+                className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-white hover:text-primary dark:text-zinc-300 dark:hover:bg-zinc-700"
                 aria-label="Next week"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -1752,7 +1752,7 @@ export function MealPlanner() {
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors"
+                    className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-white hover:text-primary dark:text-zinc-300 dark:hover:bg-zinc-700"
                     title="Pick a date to jump to that week"
                     aria-label="Open calendar to pick a week"
                   >
@@ -1777,14 +1777,14 @@ export function MealPlanner() {
             </>
           }
         >
-          <div className="space-y-4">
-            <div className="flex justify-between items-end">
-              <span className="text-sm font-medium">Weekly Progress</span>
-              <span className="text-sm font-bold text-primary">
+          <div className="space-y-3.5">
+            <div className="flex items-end justify-between gap-4">
+              <span className="text-sm font-medium text-slate-600 dark:text-zinc-300">Weekly Progress</span>
+              <span className="text-sm font-semibold text-primary">
                 {progress.made} of {progress.total} meals
               </span>
             </div>
-            <div className="w-full bg-stone-100 dark:bg-zinc-800 h-3 rounded-full overflow-hidden">
+            <div className="h-3.5 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-zinc-800">
               <div
                 className="bg-primary h-full transition-all duration-300 ease-in-out"
                 style={{ width: `${progress.percentage}%` }}
@@ -1890,9 +1890,9 @@ export function MealPlanner() {
           <Button
             onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
             disabled={!hasAnyRecipes}
-            variant="outline"
+            variant="default"
             size="default"
-            className="shrink-0"
+            className="h-11 shrink-0 rounded-xl px-5 shadow-sm"
           >
             <Plus className="h-4 w-4 mr-2" />
             {isDesktop ? "Add recipe" : "Add"}
@@ -1905,10 +1905,10 @@ export function MealPlanner() {
             title="Add ingredients from planned meals to Shopping. Existing items are merged instead of duplicated."
             aria-label="Add planned meal ingredients to Shopping"
             className={cn(
-              "shrink-0 border-2 transition-colors",
+              "h-11 shrink-0 rounded-xl border transition-colors",
               bulkCartJustAdded
-                ? "border-emerald-400 text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-600"
-                : "border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground hover:border-primary"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+                : "border-primary/25 bg-primary/5 text-primary hover:border-primary/40 hover:bg-primary/10"
             )}
           >
             {addToShoppingList.isPending ? (
@@ -1926,9 +1926,9 @@ export function MealPlanner() {
             variant="outline"
             size="default"
             title="Save current plan as template"
-            className="shrink-0"
+            className="h-11 shrink-0 rounded-xl border-stone-200 bg-white/70 px-3.5 text-slate-700 hover:bg-stone-100/80"
           >
-            <Save className="h-4 w-4 mr-2" />
+            <Save className="mr-1.5 h-4 w-4" />
             {isDesktop ? "Save Template" : "Save"}
           </Button>
           <Button
@@ -1936,9 +1936,9 @@ export function MealPlanner() {
             variant="outline"
             size="default"
             title="Load a saved template"
-            className="shrink-0"
+            className="h-11 shrink-0 rounded-xl border-stone-200 bg-white/70 px-3.5 text-slate-700 hover:bg-stone-100/80"
           >
-            <FolderOpen className="h-4 w-4 mr-2" />
+            <FolderOpen className="mr-1.5 h-4 w-4" />
             {isDesktop ? "Load Template" : "Load"}
           </Button>
       </PlannerActionBar>
