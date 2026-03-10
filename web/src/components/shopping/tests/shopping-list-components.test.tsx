@@ -6,6 +6,7 @@ import {
   ManualShoppingItemEditor,
   ShoppingCategorySection,
   ShoppingItemRow,
+  ShoppingProgressSummary,
   ShoppingRestoreChip,
   ShoppingStateSection,
 } from "../shopping-list-components"
@@ -88,6 +89,40 @@ describe("ShoppingCategorySection", () => {
 
     expect(screen.queryByText("Hidden child")).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
+  })
+})
+
+describe("ShoppingProgressSummary", () => {
+  it("renders progress metrics and active category jump actions", () => {
+    const onToggleCompleted = vi.fn()
+    const onJumpToCategory = vi.fn()
+
+    render(
+      <ShoppingProgressSummary
+        remainingCount={5}
+        completedCount={3}
+        totalCount={8}
+        activeCategoryCount={2}
+        hideCompletedItems={false}
+        onToggleCompleted={onToggleCompleted}
+        activeCategories={[
+          { key: "produce", name: "Fresh Produce", remainingCount: 3 },
+          { key: "pantry", name: "Pantry", remainingCount: 2 },
+        ]}
+        onJumpToCategory={onJumpToCategory}
+      />
+    )
+
+    expect(screen.getByText("Progress")).toBeInTheDocument()
+    expect(screen.getByText("38% done")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Hide 3 done" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Jump to Fresh Produce" })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide 3 done" }))
+    fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
+
+    expect(onToggleCompleted).toHaveBeenCalledTimes(1)
+    expect(onJumpToCategory).toHaveBeenCalledWith("pantry")
   })
 })
 

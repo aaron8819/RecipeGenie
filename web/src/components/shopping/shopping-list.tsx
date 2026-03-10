@@ -81,6 +81,7 @@ import {
   ManualShoppingItemEditor,
   ShoppingCategorySection,
   ShoppingItemRow,
+  ShoppingProgressSummary,
   ShoppingRestoreChip,
   ShoppingStateSection,
   SourceTag,
@@ -634,6 +635,7 @@ export function ShoppingListView() {
     unit: "",
   })
   const [manualEditError, setManualEditError] = useState<string | null>(null)
+  const [hideCompletedItems, setHideCompletedItems] = useState(false)
   const [pendingCheckItems, setPendingCheckItems] = useState<Set<string>>(new Set())
   const [pendingPantryItems, setPendingPantryItems] = useState<Set<string>>(new Set())
   // Tracks items currently being added to prevent duplicate concurrent submissions
@@ -641,6 +643,7 @@ export function ShoppingListView() {
   const [addFeedback, setAddFeedback] = useState<AddFeedback | null>(null)
   const { showSwipeHint } = useSwipeHint()
   const isManageMode = shoppingMode === "manage"
+  const categorySectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // Mobile UX improvements - collapsible sections and scroll-to-top FAB
   const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(true)
@@ -944,18 +947,32 @@ export function ShoppingListView() {
     return buildCategoryViewModel(groupedItems, orderedCategories)
   }, [groupedItems, orderedCategories])
 
+  const shoppingProgress = useMemo(() => {
+    return deriveCheckedPartition(filteredItems)
+  }, [filteredItems])
+
+  const activeCategoryJumpTargets = useMemo(() => {
+    return categoryViewModels
+      .filter((category) => category.uncheckedCount > 0)
+      .map((category) => ({
+        key: category.key,
+        name: category.name,
+        remainingCount: category.uncheckedCount,
+      }))
+  }, [categoryViewModels])
+
   const displayedCategoryViewModels = useMemo(() => {
     if (isManageMode) return categoryViewModels
 
     const activeCategories = categoryViewModels.filter((category) => category.uncheckedCount > 0)
     const completedCategories = categoryViewModels.filter((category) => category.uncheckedCount === 0)
-    return [...activeCategories, ...completedCategories]
-  }, [categoryViewModels, isManageMode])
+    return hideCompletedItems ? activeCategories : [...activeCategories, ...completedCategories]
+  }, [categoryViewModels, hideCompletedItems, isManageMode])
 
   // Check if all items are checked
   const allItemsChecked = useMemo(() => {
-    return deriveCheckedPartition(filteredItems).allChecked
-  }, [filteredItems])
+    return shoppingProgress.allChecked
+  }, [shoppingProgress.allChecked])
 
   // Auto-collapse categories when all items are checked (only if not manually expanded)
   useEffect(() => {
@@ -1213,6 +1230,29 @@ export function ShoppingListView() {
     setDragOverCategory(null)
   }, [])
 
+  const handleJumpToCategory = useCallback((categoryKey: string) => {
+    setCollapsedCategories((prev) => {
+      if (!prev.has(categoryKey)) return prev
+      const next = new Set(prev)
+      next.delete(categoryKey)
+      return next
+    })
+    setManuallyExpandedCategories((prev) => new Set(prev).add(categoryKey))
+    setManuallyCollapsedCategories((prev) => {
+      if (!prev.has(categoryKey)) return prev
+      const next = new Set(prev)
+      next.delete(categoryKey)
+      return next
+    })
+
+    window.requestAnimationFrame(() => {
+      categorySectionRefs.current[categoryKey]?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      })
+    })
+  }, [])
+
   const handleDragStart = (event: DragStartEvent) => {
     if (!isManageMode) return
     const { active } = event
@@ -1322,7 +1362,11 @@ export function ShoppingListView() {
       {displayedCategoryViewModels.map((categoryData, categoryIndex) => {
         const items = isManageMode
           ? categoryData.items
-          : prioritizeUncheckedItems(categoryData.items)
+          : prioritizeUncheckedItems(
+              hideCompletedItems
+                ? categoryData.items.filter((item) => !item.checked)
+                : categoryData.items
+            )
         const isDragTarget =
           isManageMode &&
           activeItem &&
@@ -1332,78 +1376,86 @@ export function ShoppingListView() {
         const isCollapsed = collapsedCategories.has(categoryData.key)
 
         return (
-          <ShoppingCategorySection
+          <div
             key={categoryData.key}
-            categoryData={categoryData}
-            itemCount={items.length}
-            isCollapsed={isCollapsed}
-            isDragTarget={!!isDragTarget}
-            isBulkCheckOffPending={bulkCheckOff.isPending}
-            onToggleCategory={() => toggleCategory(categoryData.key)}
-            onBulkCheckOff={() => handleBulkCheckOff(items)}
-            compact={!isManageMode}
+            ref={(node) => {
+              categorySectionRefs.current[categoryData.key] = node
+            }}
+            data-testid={`shopping-category-${categoryData.key}`}
+            style={{ scrollMarginTop: isDesktop ? "112px" : "140px" }}
           >
-            <ul className="divide-y divide-stone-100" style={{ contain: "layout style paint" }}>
-              {items.map((item, index) => {
-                const showHintForThisItem = categoryIndex === 0 && index === 0 && showSwipeHint
-                const reactKey =
-                  item.rowId ||
-                  `${categoryData.key}-${item.item}-${item.unit || ""}-${index}`
-                const sourceDisplay: "tags" | "summary" = isManageMode ? "tags" : "summary"
-                const isEditingManualItem =
-                  !isManageMode &&
-                  !!item.rowId &&
-                  editingItemRowId === item.rowId &&
-                  isManualOnlyItem(item)
-                const editorContent = isEditingManualItem ? (
-                  <ManualShoppingItemEditor
-                    itemName={manualEditDraft.itemName}
-                    amount={manualEditDraft.amount}
-                    unit={manualEditDraft.unit}
-                    isSaving={updateItem.isPending}
-                    errorMessage={manualEditError}
-                    onItemNameChange={(value) => {
-                      setManualEditDraft((prev) => ({ ...prev, itemName: value }))
-                      if (manualEditError) setManualEditError(null)
-                    }}
-                    onAmountChange={(value) => {
-                      setManualEditDraft((prev) => ({ ...prev, amount: value }))
-                      if (manualEditError) setManualEditError(null)
-                    }}
-                    onUnitChange={(value) => {
-                      setManualEditDraft((prev) => ({ ...prev, unit: value }))
-                      if (manualEditError) setManualEditError(null)
-                    }}
-                    onSave={() => void handleSaveManualItemEdit()}
-                    onCancel={handleCancelEditingManualItem}
-                  />
-                ) : null
+            <ShoppingCategorySection
+              categoryData={categoryData}
+              itemCount={items.length}
+              isCollapsed={isCollapsed}
+              isDragTarget={!!isDragTarget}
+              isBulkCheckOffPending={bulkCheckOff.isPending}
+              onToggleCategory={() => toggleCategory(categoryData.key)}
+              onBulkCheckOff={() => handleBulkCheckOff(items)}
+              compact={!isManageMode}
+            >
+              <ul className="divide-y divide-stone-100" style={{ contain: "layout style paint" }}>
+                {items.map((item, index) => {
+                  const showHintForThisItem = categoryIndex === 0 && index === 0 && showSwipeHint
+                  const reactKey =
+                    item.rowId ||
+                    `${categoryData.key}-${item.item}-${item.unit || ""}-${index}`
+                  const sourceDisplay: "tags" | "summary" = isManageMode ? "tags" : "summary"
+                  const isEditingManualItem =
+                    !isManageMode &&
+                    !!item.rowId &&
+                    editingItemRowId === item.rowId &&
+                    isManualOnlyItem(item)
+                  const editorContent = isEditingManualItem ? (
+                    <ManualShoppingItemEditor
+                      itemName={manualEditDraft.itemName}
+                      amount={manualEditDraft.amount}
+                      unit={manualEditDraft.unit}
+                      isSaving={updateItem.isPending}
+                      errorMessage={manualEditError}
+                      onItemNameChange={(value) => {
+                        setManualEditDraft((prev) => ({ ...prev, itemName: value }))
+                        if (manualEditError) setManualEditError(null)
+                      }}
+                      onAmountChange={(value) => {
+                        setManualEditDraft((prev) => ({ ...prev, amount: value }))
+                        if (manualEditError) setManualEditError(null)
+                      }}
+                      onUnitChange={(value) => {
+                        setManualEditDraft((prev) => ({ ...prev, unit: value }))
+                        if (manualEditError) setManualEditError(null)
+                      }}
+                      onSave={() => void handleSaveManualItemEdit()}
+                      onCancel={handleCancelEditingManualItem}
+                    />
+                  ) : null
 
-                const sharedProps = {
-                  item,
-                  isDesktop,
-                  onCheckOff: () => handleCheckOff(item),
-                  onRemove: () => handleRemoveItem(item),
-                  onAddToPantry: () => handleAddToPantry(item),
-                  onEdit: isManualOnlyItem(item) ? () => handleStartEditingManualItem(item) : undefined,
-                  isCheckingOff: pendingCheckItems.has(item.rowId || item.item.toLowerCase().trim()),
-                  isRemoving: false,
-                  isAddingToPantry: pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim()),
-                  recipeColorMap,
-                  onViewRecipe: handleRecipeTagClick,
-                  sourceDisplay,
-                  editorContent,
-                  showSwipeHint: showHintForThisItem,
-                }
+                  const sharedProps = {
+                    item,
+                    isDesktop,
+                    onCheckOff: () => handleCheckOff(item),
+                    onRemove: () => handleRemoveItem(item),
+                    onAddToPantry: () => handleAddToPantry(item),
+                    onEdit: isManualOnlyItem(item) ? () => handleStartEditingManualItem(item) : undefined,
+                    isCheckingOff: pendingCheckItems.has(item.rowId || item.item.toLowerCase().trim()),
+                    isRemoving: false,
+                    isAddingToPantry: pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim()),
+                    recipeColorMap,
+                    onViewRecipe: handleRecipeTagClick,
+                    sourceDisplay,
+                    editorContent,
+                    showSwipeHint: showHintForThisItem,
+                  }
 
-                if (isManageMode) {
-                  return <SortableShoppingItem key={reactKey} {...sharedProps} showDragHandle={true} />
-                }
+                  if (isManageMode) {
+                    return <SortableShoppingItem key={reactKey} {...sharedProps} showDragHandle={true} />
+                  }
 
-                return <StaticShoppingItem key={reactKey} {...sharedProps} />
-              })}
-            </ul>
-          </ShoppingCategorySection>
+                  return <StaticShoppingItem key={reactKey} {...sharedProps} />
+                })}
+              </ul>
+            </ShoppingCategorySection>
+          </div>
         )
       })}
     </>
@@ -1566,6 +1618,19 @@ export function ShoppingListView() {
             }}
           >
             {/* Recipes in list — collapsed by default to keep active shopping rows near the top */}
+            {!isManageMode && filteredItems.length > 0 ? (
+              <ShoppingProgressSummary
+                remainingCount={shoppingProgress.uncheckedCount}
+                completedCount={shoppingProgress.checkedCount}
+                totalCount={shoppingProgress.totalCount}
+                activeCategoryCount={activeCategoryJumpTargets.length}
+                hideCompletedItems={hideCompletedItems}
+                onToggleCompleted={() => setHideCompletedItems((prev) => !prev)}
+                activeCategories={activeCategoryJumpTargets}
+                onJumpToCategory={handleJumpToCategory}
+              />
+            ) : null}
+
             {uniqueRecipes.length > 0 && (
               <Card className="overflow-hidden rounded-lg border border-stone-100 bg-stone-50/70 shadow-sm">
                 <CardContent className="px-3 py-2.5 md:px-4 md:py-3">

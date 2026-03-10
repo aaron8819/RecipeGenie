@@ -767,6 +767,58 @@ describe("ShoppingListView orchestration", () => {
     ])
   })
 
+  it("hides completed rows and fully completed sections behind a single shopping-mode toggle", () => {
+    currentShoppingList = makeList({
+      items: [
+        makeItem("apples", { rowId: "row-apples", checked: false, categoryKey: "produce", categoryOrder: 1 }),
+        makeItem("bananas", { rowId: "row-bananas", checked: true, categoryKey: "produce", categoryOrder: 1 }),
+        makeItem("milk", { rowId: "row-milk", checked: true, categoryKey: "dairy", categoryOrder: 5 }),
+      ],
+    })
+
+    renderShoppingList()
+
+    expect(screen.getByText("67% done")).toBeInTheDocument()
+    expect(screen.getByText("bananas")).toBeInTheDocument()
+    expect(screen.getByText(/Dairy/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide 2 done" }))
+
+    expect(screen.queryByText("bananas")).not.toBeInTheDocument()
+    expect(screen.queryByText(/Dairy/i)).not.toBeInTheDocument()
+    expect(screen.getByText("1 done")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Show 2 done" })).toBeInTheDocument()
+  })
+
+  it("uses progress jump chips to reopen a collapsed active category and scroll it into view", () => {
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      callback(0)
+      return 0
+    }))
+
+    currentShoppingList = makeList({
+      items: [
+        makeItem("apples", { rowId: "row-apples", checked: false, categoryKey: "produce", categoryOrder: 1 }),
+        makeItem("rice", { rowId: "row-rice", checked: false, categoryKey: "pantry", categoryOrder: 6 }),
+      ],
+    })
+
+    renderShoppingList()
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Collapse category" })[1])
+    expect(screen.queryByText("rice")).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
+
+    expect(screen.getByText("rice")).toBeInTheDocument()
+    expect(scrollIntoView).toHaveBeenCalled()
+  })
+
   it("applies bulk check-off optimistically and keeps the checked state stable after settlement", async () => {
     currentShoppingList = makeList({
       items: [makeItem("apples"), makeItem("bananas")],
@@ -1039,7 +1091,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.queryByText("No shopping list yet")).not.toBeInTheDocument()
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
-    expect(screen.getByText("2 cups")).toBeInTheDocument()
+    expect(screen.getAllByText("2 cups").length).toBeGreaterThan(0)
     expect(screen.getByText("Excluded: cilantro")).toBeInTheDocument()
   })
 

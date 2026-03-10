@@ -584,6 +584,137 @@ type CategoryData = {
   totalCount: number
 }
 
+type ShoppingProgressCategory = {
+  key: string
+  name: string
+  remainingCount: number
+}
+
+export function ShoppingProgressSummary({
+  remainingCount,
+  completedCount,
+  totalCount,
+  activeCategoryCount,
+  hideCompletedItems,
+  onToggleCompleted,
+  activeCategories,
+  onJumpToCategory,
+}: {
+  remainingCount: number
+  completedCount: number
+  totalCount: number
+  activeCategoryCount: number
+  hideCompletedItems: boolean
+  onToggleCompleted: () => void
+  activeCategories: ShoppingProgressCategory[]
+  onJumpToCategory: (categoryKey: string) => void
+}) {
+  const completionPercent =
+    totalCount > 0 ? Math.min(100, Math.round((completedCount / totalCount) * 100)) : 0
+  const showCompletedToggle = completedCount > 0
+  const showJumpChips = activeCategories.length > 1
+
+  return (
+    <Card
+      className="overflow-hidden rounded-xl border border-stone-100 bg-white shadow-sm"
+      data-testid="shopping-progress-summary"
+    >
+      <CardContent className="px-4 py-4 md:px-5">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
+                Progress
+              </p>
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                {completionPercent}% done
+              </span>
+              {hideCompletedItems && completedCount > 0 ? (
+                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                  Completed hidden
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2 text-left">
+              <div className="rounded-xl bg-emerald-50 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                  Left
+                </p>
+                <p className="mt-1 text-lg font-semibold text-emerald-950">{remainingCount}</p>
+              </div>
+              <div className="rounded-xl bg-stone-100 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
+                  Done
+                </p>
+                <p className="mt-1 text-lg font-semibold text-stone-700">{completedCount}</p>
+              </div>
+              <div className="rounded-xl bg-amber-50 px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                  Sections
+                </p>
+                <p className="mt-1 text-lg font-semibold text-amber-900">{activeCategoryCount}</p>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
+                  style={{ width: `${completionPercent}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {remainingCount > 0
+                  ? `${remainingCount} item${remainingCount === 1 ? "" : "s"} still to shop.`
+                  : "Everything on this list is checked off."}
+              </p>
+            </div>
+          </div>
+
+          {showCompletedToggle ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onToggleCompleted}
+              className="h-9 shrink-0 rounded-lg border-stone-200 bg-white px-3 text-xs font-medium"
+            >
+              {hideCompletedItems ? `Show ${completedCount} done` : `Hide ${completedCount} done`}
+            </Button>
+          ) : null}
+        </div>
+
+        {showJumpChips ? (
+          <div className="mt-4 border-t border-stone-100 pt-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+              Jump to active section
+            </p>
+            <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">
+              {activeCategories.map((category) => (
+                <Button
+                  key={category.key}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onJumpToCategory(category.key)}
+                  aria-label={`Jump to ${category.name}`}
+                  className="h-9 shrink-0 rounded-full border-stone-200 bg-stone-50 px-3 text-xs font-medium text-stone-700 hover:bg-white hover:text-foreground"
+                >
+                  {category.name}
+                  <span className="ml-2 rounded-full bg-white px-1.5 py-0.5 text-[10px] text-stone-500">
+                    {category.remainingCount}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function ShoppingCategorySection({
   categoryData,
   itemCount,

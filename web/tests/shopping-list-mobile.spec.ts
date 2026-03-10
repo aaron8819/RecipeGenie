@@ -166,4 +166,61 @@ test.describe('Shopping List Mobile @extended', () => {
     await expect(firstRestore).toHaveCount(0)
     await expect(secondRestore).toBeVisible()
   })
+
+  test('keeps long mobile lists focused with progress controls and active-section jumps', async ({ page }) => {
+    const seed = `${Date.now()}-long-list`
+    const produceRowId = `row-mobile-produce-${seed}`
+    const produceDoneRowId = `row-mobile-produce-done-${seed}`
+    const dairyDoneRowId = `row-mobile-dairy-done-${seed}`
+    const pantryRowId = `row-mobile-pantry-${seed}`
+
+    cleanupState = await seedShoppingState({
+      items: [
+        buildShoppingItem({
+          rowId: produceRowId,
+          item: `mobile apples ${seed}`,
+          checked: false,
+          categoryKey: 'produce',
+          categoryOrder: 1,
+        }),
+        buildShoppingItem({
+          rowId: produceDoneRowId,
+          item: `mobile bananas ${seed}`,
+          checked: true,
+          categoryKey: 'produce',
+          categoryOrder: 1,
+        }),
+        buildShoppingItem({
+          rowId: dairyDoneRowId,
+          item: `mobile milk ${seed}`,
+          checked: true,
+          categoryKey: 'dairy',
+          categoryOrder: 5,
+        }),
+        buildShoppingItem({
+          rowId: pantryRowId,
+          item: `mobile rice ${seed}`,
+          checked: false,
+          categoryKey: 'pantry',
+          categoryOrder: 6,
+        }),
+      ],
+    })
+    await page.reload()
+    await openShoppingFromBottomNav(page)
+
+    await expect(page.getByTestId('shopping-progress-summary')).toBeVisible()
+    await expect(page.getByText(/^Progress$/i)).toBeVisible()
+    await expect(page.getByRole('button', { name: /^jump to pantry$/i })).toBeVisible()
+
+    await page.getByRole('button', { name: /^hide 2 done$/i }).click()
+
+    await expect(rowById(page, produceDoneRowId)).toHaveCount(0)
+    await expect(page.getByTestId('shopping-category-dairy')).toHaveCount(0)
+
+    await page.getByRole('button', { name: /^jump to pantry$/i }).click()
+
+    await expect(rowById(page, pantryRowId)).toBeVisible()
+    await expect(rowById(page, produceRowId)).toBeVisible()
+  })
 })
