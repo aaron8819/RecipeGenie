@@ -170,21 +170,28 @@ export function hasValidRecipeIngredients(ingredients: Ingredient[]): boolean {
 
 export function isNewRecipeDialogDirty(values: {
   name: string
+  defaultCategory: string
+  category: string
+  tags: string[]
   prepTimeMinutes: number | null
   cookTimeMinutes: number | null
   totalTimeMinutes: number | null
   ingredients: Ingredient[]
   instructionGroups: RecipeInstructionGroup[]
   notes: string
+  imageReference: string | null
 }): boolean {
   return (
     values.name.trim() !== "" ||
+    values.category !== values.defaultCategory ||
+    values.tags.length > 0 ||
     values.prepTimeMinutes !== null ||
     values.cookTimeMinutes !== null ||
     values.totalTimeMinutes !== null ||
     values.ingredients.some((ingredient) => ingredient.item.trim() !== "") ||
     normalizeRecipeInstructionGroups(values.instructionGroups).length > 0 ||
-    values.notes.trim() !== ""
+    values.notes.trim() !== "" ||
+    values.imageReference !== null
   )
 }
 

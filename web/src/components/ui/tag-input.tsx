@@ -121,13 +121,13 @@ export function TagInput({
     <div ref={containerRef} className={cn("relative", className)}>
       {/* Selected Tags */}
       {value.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className="mb-2 flex flex-wrap gap-2">
           {value.map((tag) => {
             const colors = getTagClassName(tag, false)
             return (
               <span
                 key={tag}
-                className={cn("inline-flex items-center gap-1", colors)}
+                className={cn("inline-flex min-h-[32px] items-center gap-1 px-2.5 py-1 text-sm", colors)}
               >
                 {tag}
                 <button
@@ -168,7 +168,7 @@ export function TagInput({
           <button
             type="button"
             onClick={() => inputValue.trim() && handleAddTag(inputValue)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors min-h-[32px] min-w-[32px] flex items-center justify-center"
             aria-label="Add tag"
           >
             <Plus className="h-4 w-4" />
@@ -181,7 +181,7 @@ export function TagInput({
             id={listboxId}
             role="listbox"
             aria-label="Tag suggestions"
-            className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md max-h-64 overflow-auto"
+            className="absolute z-50 mt-2 max-h-72 w-full overflow-auto rounded-xl border border-border bg-popover shadow-md"
           >
             {inputValue.length === 0 && showAllTags && unselectedTags.length > 0 ? (
               // Show all available tags as clickable chips when input is empty
@@ -189,7 +189,7 @@ export function TagInput({
                 <div className="text-xs font-medium text-muted-foreground mb-2">
                   Click to add tags:
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2.5">
                   {unselectedTags.map((tag) => {
                     const count = tagCountMap.get(tag)
                     const colors = getTagClassName(tag, false)
@@ -200,6 +200,7 @@ export function TagInput({
                         onClick={() => handleSuggestionClick(tag)}
                         className={cn(
                           "inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-sm transition-colors hover:opacity-80",
+                          "min-h-[36px]",
                           colors
                         )}
                       >
@@ -222,7 +223,7 @@ export function TagInput({
                       key={suggestion}
                       type="button"
                       onClick={() => handleSuggestionClick(suggestion)}
-                      className="w-full text-left px-3 py-2 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground transition-colors flex items-center justify-between"
+                      className="flex min-h-[42px] w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
                     >
                       <span>{suggestion}</span>
                       {count !== undefined && (

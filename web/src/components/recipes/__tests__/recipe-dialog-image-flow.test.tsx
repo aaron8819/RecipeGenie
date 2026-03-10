@@ -24,6 +24,7 @@ class MockFileReader {
 }
 
 let currentCreatedRecipe: Recipe
+let mockLiveRecipeData: Recipe | undefined
 
 vi.mock("next/dynamic", () => ({
   default: () =>
@@ -69,7 +70,7 @@ vi.mock("@/hooks/use-recipes", () => ({
     data: [],
   }),
   useRecipe: () => ({
-    data: undefined,
+    data: mockLiveRecipeData,
   }),
 }))
 
@@ -325,6 +326,23 @@ function renderEditDialog(recipe: Recipe, onOpenChange?: (open: boolean) => void
   )
 }
 
+function renderDialog(props: {
+  open: boolean
+  recipe?: Recipe
+  recipeId?: string
+  onOpenChange?: (open: boolean) => void
+}) {
+  return render(
+    <RecipeDialog
+      open={props.open}
+      onOpenChange={props.onOpenChange ?? vi.fn()}
+      recipe={props.recipe}
+      recipeId={props.recipeId}
+      categories={["Dinner"]}
+    />
+  )
+}
+
 async function selectImage(file: File) {
   const input = screen.getByLabelText("Recipe image input")
   fireEvent.change(input, { target: { files: [file] } })
@@ -340,6 +358,7 @@ describe("RecipeDialog image orchestration", () => {
     uploadImageMock.mockReset()
     deleteImageMock.mockReset()
     undoToastShow.mockReset()
+    mockLiveRecipeData = undefined
 
     currentCreatedRecipe = recipeFixture({ id: "created-recipe", name: "Fancy Soup" })
     createRecipeMutateAsync.mockResolvedValue(currentCreatedRecipe)
@@ -535,5 +554,63 @@ describe("RecipeDialog image orchestration", () => {
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false)
     })
+  })
+
+  it("does not reset edit form state when the same recipe refetches while open", async () => {
+    const recipe = recipeFixture({
+      id: "edit-recipe",
+      name: "Original Soup",
+    })
+
+    const view = renderEditDialog(recipe)
+
+    fireEvent.change(screen.getByLabelText("Recipe Name"), { target: { value: "Edited Soup" } })
+    expect(screen.getByLabelText("Recipe Name")).toHaveValue("Edited Soup")
+
+    mockLiveRecipeData = recipeFixture({
+      id: "edit-recipe",
+      name: "Server Soup",
+      updated_at: "2026-03-02T00:00:00.000Z",
+    })
+
+    view.rerender(
+      <RecipeDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        recipe={recipe}
+        categories={["Dinner"]}
+      />
+    )
+
+    expect(screen.getByLabelText("Recipe Name")).toHaveValue("Edited Soup")
+  })
+
+  it("hydrates edit form values when the dialog opens", async () => {
+    const recipe = recipeFixture({
+      id: "edit-recipe",
+      name: "Hydrated Soup",
+      category: "Dinner",
+      servings: 6,
+    })
+
+    const view = renderDialog({
+      open: false,
+      recipe,
+    })
+
+    expect(screen.queryByLabelText("Recipe Name")).not.toBeInTheDocument()
+
+    view.rerender(
+      <RecipeDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        recipe={recipe}
+        categories={["Dinner"]}
+      />
+    )
+
+    expect(screen.getByLabelText("Recipe Name")).toHaveValue("Hydrated Soup")
+    expect(screen.getByLabelText("Recipe Category")).toHaveValue("Dinner")
+    expect(screen.getByLabelText("Servings")).toHaveValue(6)
   })
 })

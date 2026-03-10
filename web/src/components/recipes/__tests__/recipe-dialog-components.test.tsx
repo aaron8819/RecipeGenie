@@ -9,6 +9,8 @@ import {
   RecipeImportSection,
   RecipeInstructionsSection,
   RecipeMetadataSection,
+  RecipeNotesSection,
+  RecipeTagsSection,
 } from "../recipe-dialog-components"
 
 vi.mock("next/image", () => ({
@@ -94,6 +96,20 @@ describe("RecipeImageField", () => {
     expect(screen.getByAltText("Recipe")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Remove image" }))
     expect(onRemoveImage).toHaveBeenCalledTimes(1)
+  })
+
+  it("supports mobile collapsible edit rendering", () => {
+    render(
+      <RecipeImageField
+        variant="edit"
+        imageUrl="https://example.com/recipe.jpg"
+        mobileCollapsible
+      />
+    )
+
+    expect(screen.queryByAltText("Recipe")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /image/i }))
+    expect(screen.getByAltText("Recipe")).toBeInTheDocument()
   })
 })
 
@@ -250,6 +266,39 @@ describe("RecipeMetadataSection", () => {
     expect(onNameChange).toHaveBeenCalledWith("Pasta")
     expect(onServingsChange).toHaveBeenCalledWith(100)
     expect(screen.getByText("Recipe Name")).toBeInTheDocument()
+  })
+})
+
+describe("Secondary mobile sections", () => {
+  it("collapses notes content behind a mobile section trigger", () => {
+    render(
+      <RecipeNotesSection
+        variant="edit"
+        notes="Use fresh herbs"
+        onNotesChange={() => {}}
+        mobileCollapsible
+      />
+    )
+
+    expect(screen.queryByLabelText("Notes")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /notes/i }))
+    expect(screen.getByLabelText("Notes")).toBeInTheDocument()
+  })
+
+  it("shows a compact tag summary before expanding the editor", () => {
+    render(
+      <RecipeTagsSection
+        variant="edit"
+        tags={["easy", "quick", "weeknight"]}
+        onTagsChange={() => {}}
+        allTags={["easy", "quick", "weeknight"]}
+        mobileCollapsible
+      />
+    )
+
+    expect(screen.getByText(/3 tags:/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /tags/i }))
+    expect(screen.getByText(/add another tag/i)).toBeInTheDocument()
   })
 })
 

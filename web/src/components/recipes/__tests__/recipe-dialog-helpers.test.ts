@@ -422,23 +422,91 @@ describe("recipe dialog defaults helpers", () => {
     expect(
       isNewRecipeDialogDirty({
         name: "",
+        defaultCategory: "",
+        category: "",
+        tags: [],
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
         ingredients: [{ item: "", amount: null, unit: "" }],
         instructionGroups: [{ steps: [""] }],
         notes: "",
+        imageReference: null,
       })
     ).toBe(false)
     expect(
       isNewRecipeDialogDirty({
         name: "",
+        defaultCategory: "dinner",
+        category: "dinner",
+        tags: [],
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
+        ingredients: [{ item: "", amount: null, unit: "" }],
+        instructionGroups: [{ steps: [""] }],
+        notes: "",
+        imageReference: null,
+      })
+    ).toBe(false)
+    expect(
+      isNewRecipeDialogDirty({
+        name: "",
+        defaultCategory: "",
+        category: "",
+        tags: [],
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
         ingredients: [{ item: "Flour", amount: null, unit: "" }],
         instructionGroups: [{ steps: [""] }],
         notes: "",
+        imageReference: null,
+      })
+    ).toBe(true)
+    expect(
+      isNewRecipeDialogDirty({
+        name: "",
+        defaultCategory: "breakfast",
+        category: "dinner",
+        tags: [],
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
+        ingredients: [{ item: "", amount: null, unit: "" }],
+        instructionGroups: [{ steps: [""] }],
+        notes: "",
+        imageReference: null,
+      })
+    ).toBe(true)
+    expect(
+      isNewRecipeDialogDirty({
+        name: "",
+        defaultCategory: "",
+        category: "",
+        tags: ["easy"],
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
+        ingredients: [{ item: "", amount: null, unit: "" }],
+        instructionGroups: [{ steps: [""] }],
+        notes: "",
+        imageReference: null,
+      })
+    ).toBe(true)
+    expect(
+      isNewRecipeDialogDirty({
+        name: "",
+        defaultCategory: "",
+        category: "",
+        tags: [],
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
+        ingredients: [{ item: "", amount: null, unit: "" }],
+        instructionGroups: [{ steps: [""] }],
+        notes: "",
+        imageReference: "data:image/png;base64,mock",
       })
     ).toBe(true)
     expect(

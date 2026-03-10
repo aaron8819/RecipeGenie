@@ -38,6 +38,44 @@ import {
   normalizeInstructionGroupsForEditor,
 } from "@/lib/recipe-structure"
 
+type RecipeMobileSectionProps = {
+  title: string
+  summary?: string
+  defaultOpen?: boolean
+  children: React.ReactNode
+}
+
+function RecipeMobileSection({
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: RecipeMobileSectionProps) {
+  const [open, setOpen] = React.useState(defaultOpen)
+
+  return (
+    <section className="rounded-2xl border border-stone-200 bg-background/95 dark:border-zinc-800 dark:bg-zinc-950/70">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex min-h-[52px] w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-primary">{title}</div>
+          {summary ? (
+            <div className="truncate pt-0.5 text-xs text-muted-foreground">{summary}</div>
+          ) : null}
+        </div>
+        <ChevronDown
+          className={`h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open ? <div className="border-t border-stone-200 px-4 py-4 dark:border-zinc-800">{children}</div> : null}
+    </section>
+  )
+}
+
 type RecipeImageFieldProps = {
   variant: "add" | "edit"
   imagePreview?: string | null
@@ -45,6 +83,7 @@ type RecipeImageFieldProps = {
   onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
   onRemoveImage?: () => void
   fileInputRef?: React.RefObject<HTMLInputElement>
+  mobileCollapsible?: boolean
 }
 
 export function RecipeImageField({
@@ -54,66 +93,63 @@ export function RecipeImageField({
   onImageSelect,
   onRemoveImage,
   fileInputRef,
+  mobileCollapsible = false,
 }: RecipeImageFieldProps) {
   const hasImage = !!(imagePreview || imageUrl)
   const imageSrc = imagePreview || imageUrl || ""
   const unoptimized = imageUrl ? !imageUrl.includes("supabase.co") : false
 
-  if (variant === "edit") {
-    return (
-      <div className="relative">
-        <Label className="mb-2 block text-sm font-semibold text-primary">
-          Recipe Image
-        </Label>
-        {hasImage ? (
-          <div className="relative aspect-video overflow-hidden rounded-2xl bg-muted">
-            <Image
-              src={imageSrc}
-              alt="Recipe"
-              fill
-              className="object-cover"
-              unoptimized={unoptimized}
-            />
-            {onRemoveImage ? (
-              <Button
-                type="button"
-                variant="destructive"
-                size="icon"
-                className="absolute right-2 top-2"
-                onClick={onRemoveImage}
-                aria-label="Remove image"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            ) : null}
-          </div>
-        ) : fileInputRef && onImageSelect ? (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full aspect-video rounded-2xl border-2 border-dashed border-stone-200 bg-muted/50 text-muted-foreground transition-colors hover:bg-muted hover:text-primary dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:bg-zinc-900 flex flex-col items-center justify-center group/up"
-          >
-            <Upload className="h-12 w-12 text-stone-300 transition-colors group-hover/up:text-primary dark:text-zinc-600 sm:h-14 sm:w-14" />
-            <span className="mt-2 text-sm font-medium">Upload Image</span>
-            <span className="mt-1 text-xs uppercase tracking-wider">
-              JPG, PNG, WebP. Max 5MB
-            </span>
-          </button>
-        ) : null}
-        {fileInputRef && onImageSelect ? (
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/jpg,image/png,image/webp"
-            onChange={onImageSelect}
-            className="hidden"
+  const imageContent = variant === "edit" ? (
+    <div className="relative">
+      <Label className="mb-2 block text-sm font-semibold text-primary">
+        Recipe Image
+      </Label>
+      {hasImage ? (
+        <div className="relative aspect-video overflow-hidden rounded-2xl bg-muted">
+          <Image
+            src={imageSrc}
+            alt="Recipe"
+            fill
+            className="object-cover"
+            unoptimized={unoptimized}
           />
-        ) : null}
-      </div>
-    )
-  }
-
-  return (
+          {onRemoveImage ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className="absolute right-2 top-2"
+              onClick={onRemoveImage}
+              aria-label="Remove image"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
+      ) : fileInputRef && onImageSelect ? (
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-stone-200 bg-muted/50 text-muted-foreground transition-colors hover:bg-muted hover:text-primary dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:bg-zinc-900 aspect-video"
+        >
+          <Upload className="h-12 w-12 text-stone-300 transition-colors dark:text-zinc-600 sm:h-14 sm:w-14" />
+          <span className="mt-2 text-sm font-medium">Upload Image</span>
+          <span className="mt-1 text-xs uppercase tracking-wider">
+            JPG, PNG, WebP. Max 5MB
+          </span>
+        </button>
+      ) : null}
+      {fileInputRef && onImageSelect ? (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/jpg,image/png,image/webp"
+          onChange={onImageSelect}
+          className="hidden"
+        />
+      ) : null}
+    </div>
+  ) : (
     <div className="space-y-3 order-last lg:order-first">
       <h3 className="text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent">
         Recipe Image
@@ -168,6 +204,19 @@ export function RecipeImageField({
       ) : null}
     </div>
   )
+
+  if (variant === "edit" && mobileCollapsible) {
+    return (
+      <RecipeMobileSection
+        title="Image"
+        summary={hasImage ? "Recipe image added" : "No image"}
+      >
+        {imageContent}
+      </RecipeMobileSection>
+    )
+  }
+
+  return imageContent
 }
 
 type RecipeImportSectionProps = {
@@ -708,6 +757,7 @@ type RecipeMetadataSectionProps = {
   allTags: string[]
   tagCounts?: Array<{ tag: string; count: number }>
   categories: string[]
+  showTags?: boolean
 }
 
 export function RecipeMetadataSection({
@@ -729,6 +779,7 @@ export function RecipeMetadataSection({
   allTags,
   tagCounts,
   categories,
+  showTags = true,
 }: RecipeMetadataSectionProps) {
   const addLabelClass =
     "text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent"
@@ -821,42 +872,49 @@ export function RecipeMetadataSection({
             />
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {renderTimeInput(
-            "prep-time-edit",
-            "Prep (min)",
-            prepTimeMinutes,
-            onPrepTimeMinutesChange,
-            "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
-          )}
-          {renderTimeInput(
-            "cook-time-edit",
-            "Cook (min)",
-            cookTimeMinutes,
-            onCookTimeMinutesChange,
-            "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
-          )}
-          {renderTimeInput(
-            "total-time-edit",
-            "Total (min)",
-            totalTimeMinutes,
-            onTotalTimeMinutesChange,
-            "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
-          )}
+        <div className="rounded-2xl border border-stone-200 bg-muted/30 p-3 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Time
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {renderTimeInput(
+              "prep-time-edit",
+              "Prep",
+              prepTimeMinutes,
+              onPrepTimeMinutesChange,
+              "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary px-3 py-2.5 text-sm"
+            )}
+            {renderTimeInput(
+              "cook-time-edit",
+              "Cook",
+              cookTimeMinutes,
+              onCookTimeMinutesChange,
+              "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary px-3 py-2.5 text-sm"
+            )}
+            {renderTimeInput(
+              "total-time-edit",
+              "Total",
+              totalTimeMinutes,
+              onTotalTimeMinutesChange,
+              "w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary px-3 py-2.5 text-sm"
+            )}
+          </div>
         </div>
-        <div>
-          <Label className="block text-sm font-semibold text-primary mb-2">
-            Tags
-          </Label>
-          <TagInput
-            value={tags}
-            onChange={onTagsChange}
-            suggestions={allTags}
-            tagCounts={tagCounts}
-            placeholder="Add another tag..."
-            showAddIconInInput
-          />
-        </div>
+        {showTags ? (
+          <div>
+            <Label className="block text-sm font-semibold text-primary mb-2">
+              Tags
+            </Label>
+            <TagInput
+              value={tags}
+              onChange={onTagsChange}
+              suggestions={allTags}
+              tagCounts={tagCounts}
+              placeholder="Add another tag..."
+              showAddIconInInput
+            />
+          </div>
+        ) : null}
       </div>
     )
   }
@@ -987,23 +1045,70 @@ export function RecipeMetadataSection({
   )
 }
 
+type RecipeTagsSectionProps = {
+  variant: "add" | "edit"
+  tags: string[]
+  onTagsChange: (value: string[]) => void
+  allTags: string[]
+  tagCounts?: Array<{ tag: string; count: number }>
+  mobileCollapsible?: boolean
+}
+
+export function RecipeTagsSection({
+  variant,
+  tags,
+  onTagsChange,
+  allTags,
+  tagCounts,
+  mobileCollapsible = false,
+}: RecipeTagsSectionProps) {
+  const summary = tags.length === 0 ? "No tags" : `${tags.length} tag${tags.length === 1 ? "" : "s"}: ${tags.slice(0, 2).join(", ")}${tags.length > 2 ? "..." : ""}`
+  const content = (
+    <div>
+      <Label className="mb-2 block text-sm font-semibold text-primary">
+        Tags
+      </Label>
+      <TagInput
+        value={tags}
+        onChange={onTagsChange}
+        suggestions={allTags}
+        tagCounts={tagCounts}
+        placeholder={variant === "edit" ? "Add another tag..." : "Add tag..."}
+        showAddIconInInput
+      />
+    </div>
+  )
+
+  if (variant === "edit" && mobileCollapsible) {
+    return (
+      <RecipeMobileSection title="Tags" summary={summary}>
+        {content}
+      </RecipeMobileSection>
+    )
+  }
+
+  return content
+}
+
 type RecipeNotesSectionProps = {
   variant: "add" | "edit"
   notes: string
   onNotesChange: (value: string) => void
+  mobileCollapsible?: boolean
 }
 
 export function RecipeNotesSection({
   variant,
   notes,
   onNotesChange,
+  mobileCollapsible = false,
 }: RecipeNotesSectionProps) {
   const addLabelClass =
     "text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent"
   const notesId = variant === "edit" ? "notes-edit" : "notes-add"
 
   if (variant === "edit") {
-    return (
+    const content = (
       <div className="flex flex-col">
         <Label
           htmlFor={notesId}
@@ -1019,6 +1124,25 @@ export function RecipeNotesSection({
           className="min-h-[140px] w-full rounded-2xl bg-background border-stone-200 dark:border-zinc-800 focus:ring-primary focus:border-primary resize-none leading-relaxed px-5 py-4"
         />
       </div>
+    )
+
+    if (mobileCollapsible) {
+      const noteCount = notes
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean).length
+      return (
+        <RecipeMobileSection
+          title="Notes"
+          summary={noteCount > 0 ? `${noteCount} note${noteCount === 1 ? "" : "s"} added` : "No notes"}
+        >
+          {content}
+        </RecipeMobileSection>
+      )
+    }
+
+    return (
+      content
     )
   }
 

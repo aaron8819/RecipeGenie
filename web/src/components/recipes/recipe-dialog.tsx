@@ -44,6 +44,7 @@ import {
   RecipeImportSection,
   RecipeMetadataSection,
   RecipeNotesSection,
+  RecipeTagsSection,
 } from "./recipe-dialog-components"
 import {
   applyParsedRecipeToFormValues,
@@ -125,6 +126,8 @@ export function RecipeDialog({
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const wasOpenRef = useRef(false)
+  const hydratedRecipeIdRef = useRef<string | null>(null)
   
   // Import state
   const [importText, setImportText] = useState("")
@@ -146,52 +149,94 @@ export function RecipeDialog({
     return () => mq.removeEventListener("change", onChange)
   }, [])
 
-  // Reset form when dialog opens/closes or recipe changes
+  const applyFormValues = useCallback((formValues: ReturnType<typeof buildNewRecipeDialogFormValues>) => {
+    setName(formValues.name)
+    setCategory(formValues.category)
+    setServings(formValues.servings)
+    setPrepTimeMinutes(formValues.prepTimeMinutes)
+    setCookTimeMinutes(formValues.cookTimeMinutes)
+    setTotalTimeMinutes(formValues.totalTimeMinutes)
+    setTags(formValues.tags)
+    setIngredients(formValues.ingredients)
+    setInstructionGroups(formValues.instructionGroups)
+    setNotes(formValues.notes)
+    setImageUrl(formValues.imageUrl)
+    setImageFile(null)
+    setImagePreview(null)
+    setMode("manual")
+    setImportText("")
+    setImportUrl("")
+    setParseError(null)
+    setImportStep('input')
+    setParsedPreview(null)
+    setLivePreview(null)
+  }, [])
+
+  // Reset form when the dialog opens or the edited recipe target changes.
   useEffect(() => {
-    if (open && editingRecipe) {
-      const formValues = buildEditingRecipeDialogFormValues(editingRecipe)
-      setName(formValues.name)
-      setCategory(formValues.category)
-      setServings(formValues.servings)
-      setPrepTimeMinutes(formValues.prepTimeMinutes)
-      setCookTimeMinutes(formValues.cookTimeMinutes)
-      setTotalTimeMinutes(formValues.totalTimeMinutes)
-      setTags(formValues.tags)
-      setIngredients(formValues.ingredients)
-      setInstructionGroups(formValues.instructionGroups)
-      setNotes(formValues.notes)
-      setImageUrl(formValues.imageUrl)
-      setImageFile(null)
-      setImagePreview(null)
-      setMode("manual")
-      setImportText("")
-      setImportUrl("")
-      setParseError(null)
-      setImportStep('input')
-      setParsedPreview(null)
-    } else if (open && !isEditing) {
-      const formValues = buildNewRecipeDialogFormValues(categories)
-      setName(formValues.name)
-      setCategory(formValues.category)
-      setServings(formValues.servings)
-      setPrepTimeMinutes(formValues.prepTimeMinutes)
-      setCookTimeMinutes(formValues.cookTimeMinutes)
-      setTotalTimeMinutes(formValues.totalTimeMinutes)
-      setTags(formValues.tags)
-      setIngredients(formValues.ingredients)
-      setInstructionGroups(formValues.instructionGroups)
-      setNotes(formValues.notes)
-      setImageUrl(formValues.imageUrl)
-      setImageFile(null)
-      setImagePreview(null)
-      setMode("manual")
-      setImportText("")
-      setImportUrl("")
-      setParseError(null)
-      setImportStep('input')
-      setParsedPreview(null)
+    if (!open) {
+      wasOpenRef.current = false
+      hydratedRecipeIdRef.current = null
+      return
     }
-  }, [open, editingRecipe, isEditing, categories])
+
+    const justOpened = !wasOpenRef.current
+    wasOpenRef.current = true
+
+    if (isEditing) {
+      if (!editingRecipe || !resolvedRecipeId) {
+        return
+      }
+
+      if (justOpened || hydratedRecipeIdRef.current !== resolvedRecipeId) {
+        applyFormValues(buildEditingRecipeDialogFormValues(editingRecipe))
+        hydratedRecipeIdRef.current = resolvedRecipeId
+      }
+      return
+    }
+
+    const shouldHydrateNewRecipe =
+      justOpened ||
+      (
+        !isNewRecipeDialogDirty({
+          name,
+          defaultCategory: categories[0] || "",
+          category,
+          tags,
+          prepTimeMinutes,
+          cookTimeMinutes,
+          totalTimeMinutes,
+          ingredients,
+          instructionGroups,
+          notes,
+          imageReference: imagePreview ?? imageUrl,
+        }) &&
+        !category &&
+        categories.length > 0
+      )
+
+    if (shouldHydrateNewRecipe) {
+      applyFormValues(buildNewRecipeDialogFormValues(categories))
+    }
+  }, [
+    open,
+    editingRecipe,
+    isEditing,
+    resolvedRecipeId,
+    categories,
+    applyFormValues,
+    name,
+    category,
+    tags,
+    prepTimeMinutes,
+    cookTimeMinutes,
+    totalTimeMinutes,
+    ingredients,
+    instructionGroups,
+    notes,
+    imagePreview,
+    imageUrl,
+  ])
 
   const handleAddIngredient = () => {
     setIngredients([...ingredients, { item: "", amount: null, unit: "" }])
@@ -501,12 +546,16 @@ export function RecipeDialog({
       })
     : isNewRecipeDialogDirty({
         name,
+        defaultCategory: categories[0] || "",
+        category,
+        tags,
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
         ingredients,
         instructionGroups,
         notes,
+        imageReference: imagePreview ?? imageUrl,
       })
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && isDirty) {
@@ -539,13 +588,13 @@ export function RecipeDialog({
         hideCloseButton
         className={
           isEditing
-            ? "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-2xl sm:rounded-3xl overflow-hidden bg-card h-[90vh] max-h-[90vh] flex flex-col"
+            ? "max-w-6xl w-full sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-t-3xl rounded-b-none sm:rounded-3xl overflow-hidden bg-card h-[100dvh] max-h-[100dvh] sm:h-[90vh] sm:max-h-[90vh] flex flex-col !top-0 !translate-y-0 sm:!top-1/2 sm:!-translate-y-1/2"
             : "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92dvh] flex flex-col"
         }
       >
         <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
         {isEditing && (
-          <div className="px-6 sm:px-8 py-4 sm:py-6 flex justify-between items-center border-b border-stone-200 dark:border-zinc-800 flex-shrink-0">
+          <div className="sticky top-0 z-20 px-4 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-6 flex justify-between items-center border-b border-stone-200 dark:border-zinc-800 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-primary">Edit Recipe</h1>
               <p className="text-sm text-muted-foreground">Update your culinary masterpiece details.</p>
@@ -665,7 +714,7 @@ export function RecipeDialog({
         )}
 
         {isEditing && (
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 lg:p-8 scrollbar-recipe-dialog">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4 sm:p-6 lg:p-8 scrollbar-recipe-dialog">
           <RecipeFormContent
             name={name}
             setName={setName}
@@ -710,7 +759,7 @@ export function RecipeDialog({
         <DialogFooter
           className={
             isEditing
-              ? "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] bg-muted/50 dark:bg-zinc-900/50 border-t border-stone-200 dark:border-zinc-800 flex flex-col items-end flex-shrink-0"
+              ? "sticky bottom-0 z-20 px-4 sm:px-8 py-4 sm:py-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-muted/85 dark:bg-zinc-900/85 border-t border-stone-200 dark:border-zinc-800 backdrop-blur supports-[backdrop-filter]:bg-muted/70 flex flex-col items-end flex-shrink-0"
               : "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col items-end flex-shrink-0"
           }
         >
@@ -832,9 +881,10 @@ function RecipeFormContent({
     (total, group) => total + group.rowIndexes.length - 1,
     0
   )
+  const isMobileEdit = isEditing && !isWideViewport
 
   // Edit Recipe: 2-col layout per reference/recipemodal_editmode_redesign
-  if (isEditing) {
+  if (isEditing && !isMobileEdit) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
         {/* Left: Image, Name, Category, Servings, Tags */}
@@ -902,6 +952,92 @@ function RecipeFormContent({
             onNotesChange={setNotes}
           />
         </div>
+      </div>
+    )
+  }
+
+  if (isMobileEdit) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-stone-200 bg-background/95 p-4 dark:border-zinc-800 dark:bg-zinc-950/70">
+          <RecipeMetadataSection
+            variant="edit"
+            name={name}
+            onNameChange={setName}
+            category={category}
+            onCategoryChange={setCategory}
+            servings={servings}
+            onServingsChange={setServings}
+            prepTimeMinutes={prepTimeMinutes}
+            onPrepTimeMinutesChange={setPrepTimeMinutes}
+            cookTimeMinutes={cookTimeMinutes}
+            onCookTimeMinutesChange={setCookTimeMinutes}
+            totalTimeMinutes={totalTimeMinutes}
+            onTotalTimeMinutesChange={setTotalTimeMinutes}
+            tags={tags}
+            onTagsChange={setTags}
+            allTags={allTags}
+            tagCounts={tagCounts}
+            categories={categories}
+            showTags={false}
+          />
+        </div>
+
+        <div className="rounded-2xl border border-stone-200 bg-background/95 p-4 dark:border-zinc-800 dark:bg-zinc-950/70">
+          <RecipeIngredientsSection
+            variant="edit"
+            ingredientIssueCount={ingredientIssueCount}
+            exactDuplicateCount={exactDuplicateCount}
+            nearDuplicateCount={nearDuplicateCount}
+            onAutoFix={handleAutoFix}
+            onRemoveExactDuplicates={onRemoveExactDuplicates}
+            onAddIngredient={onAddIngredient}
+          >
+            <SortableIngredientList
+              ingredients={ingredients}
+              editModeTwoColLayout
+              onReorderIngredients={onReorderIngredients}
+              onBulkPasteIngredients={onBulkPasteIngredients}
+              duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
+              onRemoveIngredient={onRemoveIngredient}
+              onIngredientChange={onIngredientChange}
+            />
+          </RecipeIngredientsSection>
+        </div>
+
+        <div className="rounded-2xl border border-stone-200 bg-background/95 p-4 dark:border-zinc-800 dark:bg-zinc-950/70">
+          <RecipeInstructionsSection
+            variant="edit"
+            instructionGroups={instructionGroups}
+            onInstructionGroupsChange={setInstructionGroups}
+          />
+        </div>
+
+        <RecipeTagsSection
+          variant="edit"
+          tags={tags}
+          onTagsChange={setTags}
+          allTags={allTags}
+          tagCounts={tagCounts}
+          mobileCollapsible
+        />
+
+        <RecipeNotesSection
+          variant="edit"
+          notes={notes}
+          onNotesChange={setNotes}
+          mobileCollapsible
+        />
+
+        <RecipeImageField
+          variant="edit"
+          imagePreview={imagePreview}
+          imageUrl={imageUrl}
+          onImageSelect={onImageSelect}
+          onRemoveImage={onRemoveImage}
+          fileInputRef={fileInputRef}
+          mobileCollapsible
+        />
       </div>
     )
   }
