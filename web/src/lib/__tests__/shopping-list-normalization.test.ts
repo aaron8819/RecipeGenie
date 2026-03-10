@@ -96,42 +96,51 @@ describe('normalizeUnit', () => {
     })
   })
 
-  describe('count units (normalized to empty string)', () => {
-    it('should normalize piece/count units to empty string', () => {
-      expect(normalizeUnit('piece')).toBe('')
-      expect(normalizeUnit('pieces')).toBe('')
-      expect(normalizeUnit('whole')).toBe('')
-      expect(normalizeUnit('count')).toBe('')
+  describe('count units', () => {
+    it('should normalize piece/count units to canonical singular forms', () => {
+      expect(normalizeUnit('piece')).toBe('piece')
+      expect(normalizeUnit('pieces')).toBe('piece')
+      expect(normalizeUnit('pc')).toBe('piece')
+      expect(normalizeUnit('pcs')).toBe('piece')
+      expect(normalizeUnit('whole')).toBe('whole')
+      expect(normalizeUnit('count')).toBe('count')
     })
 
-    it('should normalize container units to empty string', () => {
-      expect(normalizeUnit('can')).toBe('')
-      expect(normalizeUnit('cans')).toBe('')
-      expect(normalizeUnit('jar')).toBe('')
-      expect(normalizeUnit('jars')).toBe('')
-      expect(normalizeUnit('bottle')).toBe('')
-      expect(normalizeUnit('bottles')).toBe('')
-      expect(normalizeUnit('box')).toBe('')
-      expect(normalizeUnit('boxes')).toBe('')
-      expect(normalizeUnit('bag')).toBe('')
-      expect(normalizeUnit('bags')).toBe('')
-      expect(normalizeUnit('package')).toBe('')
-      expect(normalizeUnit('packages')).toBe('')
+    it('should normalize container units to canonical singular forms', () => {
+      expect(normalizeUnit('can')).toBe('can')
+      expect(normalizeUnit('cans')).toBe('can')
+      expect(normalizeUnit('jar')).toBe('jar')
+      expect(normalizeUnit('jars')).toBe('jar')
+      expect(normalizeUnit('bottle')).toBe('bottle')
+      expect(normalizeUnit('bottles')).toBe('bottle')
+      expect(normalizeUnit('box')).toBe('box')
+      expect(normalizeUnit('boxes')).toBe('box')
+      expect(normalizeUnit('bag')).toBe('bag')
+      expect(normalizeUnit('bags')).toBe('bag')
+      expect(normalizeUnit('package')).toBe('package')
+      expect(normalizeUnit('packages')).toBe('package')
+      expect(normalizeUnit('pkg')).toBe('package')
+      expect(normalizeUnit('pkgs')).toBe('package')
     })
 
-    it('should normalize produce count units to empty string', () => {
-      expect(normalizeUnit('clove')).toBe('')
-      expect(normalizeUnit('cloves')).toBe('')
-      expect(normalizeUnit('slice')).toBe('')
-      expect(normalizeUnit('slices')).toBe('')
-      expect(normalizeUnit('bunch')).toBe('')
-      expect(normalizeUnit('bunches')).toBe('')
-      expect(normalizeUnit('head')).toBe('')
-      expect(normalizeUnit('heads')).toBe('')
-      expect(normalizeUnit('stalk')).toBe('')
-      expect(normalizeUnit('stalks')).toBe('')
-      expect(normalizeUnit('sprig')).toBe('')
-      expect(normalizeUnit('sprigs')).toBe('')
+    it('should normalize produce count units to canonical singular forms', () => {
+      expect(normalizeUnit('clove')).toBe('clove')
+      expect(normalizeUnit('cloves')).toBe('clove')
+      expect(normalizeUnit('slice')).toBe('slice')
+      expect(normalizeUnit('slices')).toBe('slice')
+      expect(normalizeUnit('bunch')).toBe('bunch')
+      expect(normalizeUnit('bunches')).toBe('bunch')
+      expect(normalizeUnit('head')).toBe('head')
+      expect(normalizeUnit('heads')).toBe('head')
+      expect(normalizeUnit('stalk')).toBe('stalk')
+      expect(normalizeUnit('stalks')).toBe('stalk')
+      expect(normalizeUnit('sprig')).toBe('sprig')
+      expect(normalizeUnit('sprigs')).toBe('sprig')
+    })
+
+    it('should normalize sized package units without dropping the package type', () => {
+      expect(normalizeUnit('can (28 ounces)')).toBe('can (28 oz)')
+      expect(normalizeUnit('Jars (16 oz)')).toBe('jar (16 oz)')
     })
   })
 
@@ -173,7 +182,7 @@ describe('normalizeItemName', () => {
   it('should preserve internal spaces', () => {
     expect(normalizeItemName('Chicken Breast')).toBe('chicken breast')
     expect(normalizeItemName('Black Pepper')).toBe('black pepper')
-    expect(normalizeItemName('Extra Virgin Olive Oil')).toBe('extra virgin olive oil')
+    expect(normalizeItemName('Extra Virgin Olive Oil')).toBe('olive oil')
   })
 
   it('should handle empty string', () => {
@@ -191,12 +200,19 @@ describe('normalizeItemName', () => {
     expect(normalizeItemName('7-Up')).toBe('7-up')
     expect(normalizeItemName('14oz Can')).toBe('14oz can')
   })
+
+  it('should collapse high-frequency ingredient variants to cleaner canonical names', () => {
+    expect(normalizeItemName('Yellow Onion')).toBe('onion')
+    expect(normalizeItemName('white onions')).toBe('onion')
+    expect(normalizeItemName('garlic cloves')).toBe('garlic')
+    expect(normalizeItemName('EVOO')).toBe('olive oil')
+  })
 })
 
 describe('createItemKey', () => {
   it('should create key from normalized item and unit', () => {
     expect(createItemKey('Chicken Breast', 'pounds')).toBe('chicken breast|lb')
-    expect(createItemKey('GARLIC', 'cloves')).toBe('garlic|')
+    expect(createItemKey('GARLIC', 'cloves')).toBe('garlic|clove')
     expect(createItemKey('Milk', 'CUPS')).toBe('milk|cup')
   })
 

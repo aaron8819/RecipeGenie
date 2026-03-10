@@ -5,6 +5,7 @@
  */
 
 import type { CustomShoppingCategory } from "@/types/database"
+import { normalizeItemName } from "./shopping-list-normalization"
 
 export interface ShoppingCategory {
   order: number
@@ -218,11 +219,12 @@ export function categorizeIngredient(
   overrideCategory?: string | null,
   userOverrides?: Record<string, string> | null
 ): [string, number] {
-  const itemLower = itemName.toLowerCase().trim()
+  const rawItemLower = itemName.toLowerCase().trim()
+  const itemLower = normalizeItemName(itemName)
 
   // First check user overrides (highest priority)
-  if (userOverrides && itemLower in userOverrides) {
-    const userCatKey = userOverrides[itemLower]
+  if (userOverrides) {
+    const userCatKey = userOverrides[rawItemLower] ?? userOverrides[itemLower]
     if (userCatKey in SHOPPING_CATEGORIES) {
       const cat = SHOPPING_CATEGORIES[userCatKey]
       return [userCatKey, cat.order]

@@ -15,6 +15,31 @@ export interface MergeOptions {
   userCategoryOverrides?: Record<string, string> | null
 }
 
+function mergeIntoAdditionalAmounts(
+  existing: { amount: number; unit: string }[] | undefined,
+  amount: number,
+  unit: string
+): { amount: number; unit: string }[] {
+  const next = [...(existing || [])]
+
+  for (let index = 0; index < next.length; index++) {
+    const merged = mergeAmounts(next[index].amount, next[index].unit, amount, unit)
+    if (merged) {
+      next[index] = {
+        amount: roundForDisplay(merged.amount),
+        unit: merged.unit,
+      }
+      return next
+    }
+  }
+
+  next.push({
+    amount: roundForDisplay(amount),
+    unit,
+  })
+  return next
+}
+
 /**
  * Merge new shopping items into existing items
  * 
@@ -179,10 +204,13 @@ function mergeTwoItems(
     }
   } else {
     // Units are incompatible, use additionalAmounts
-    const existingAdditional = normalized1.additionalAmounts || []
-    const newAdditional = normalized2.amount
-      ? [{ amount: normalized2.amount, unit: normalized2.unit }]
-      : []
+    const additionalAmounts = normalized2.amount
+      ? mergeIntoAdditionalAmounts(
+          normalized1.additionalAmounts,
+          normalized2.amount,
+          normalized2.unit
+        )
+      : normalized1.additionalAmounts
 
     return {
       ...baseItem,
@@ -192,7 +220,7 @@ function mergeTwoItems(
       categoryKey,
       categoryOrder,
       sources: combinedSources,
-      additionalAmounts: [...existingAdditional, ...newAdditional],
+      additionalAmounts,
     }
   }
 }

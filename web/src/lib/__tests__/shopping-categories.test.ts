@@ -163,6 +163,11 @@ describe('categorizeIngredient', () => {
       expect(categorizeIngredient('olive oil')[0]).toBe('pantry')
     })
 
+    it('should categorize canonicalized ingredient variants correctly', () => {
+      expect(categorizeIngredient('yellow onion')[0]).toBe('produce')
+      expect(categorizeIngredient('extra virgin olive oil')[0]).toBe('pantry')
+    })
+
     it('should prioritize longer keyword matches', () => {
       // "sun dried tomatoes" should match pantry (longer keyword)
       // NOT produce (tomatoes keyword)

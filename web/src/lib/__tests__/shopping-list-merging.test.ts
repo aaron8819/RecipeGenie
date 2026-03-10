@@ -122,6 +122,74 @@ describe('mergeShoppingItems', () => {
       expect(result[0].additionalAmounts![0].amount).toBe(8)
       expect(result[0].additionalAmounts![0].unit).toBe('oz')
     })
+
+    it('should not merge different count units for the same ingredient', () => {
+      const existing: ShoppingItem[] = [
+        createMockItem({ item: 'garlic', amount: 3, unit: 'clove' }),
+      ]
+      const newItems: ShoppingItem[] = [
+        createMockItem({ item: 'garlic', amount: 1, unit: '' }),
+      ]
+
+      const result = mergeShoppingItems(existing, newItems)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].amount).toBe(3)
+      expect(result[0].unit).toBe('clove')
+      expect(result[0].additionalAmounts).toEqual([{ amount: 1, unit: '' }])
+    })
+
+    it('should consolidate repeated incompatible additional amounts', () => {
+      const existing: ShoppingItem[] = [
+        createMockItem({
+          item: 'cheese',
+          amount: 1,
+          unit: 'cup',
+          categoryKey: 'dairy',
+          categoryOrder: 5,
+          additionalAmounts: [{ amount: 8, unit: 'oz' }],
+        }),
+      ]
+      const newItems: ShoppingItem[] = [
+        createMockItem({ item: 'cheese', amount: 4, unit: 'oz', categoryKey: 'dairy', categoryOrder: 5 }),
+      ]
+
+      const result = mergeShoppingItems(existing, newItems)
+
+      expect(result[0].additionalAmounts).toEqual([{ amount: 12, unit: 'oz' }])
+    })
+  })
+
+  describe('ingredient canonicalization', () => {
+    it('should merge onion variants under a shared canonical key', () => {
+      const existing: ShoppingItem[] = [
+        createMockItem({ item: 'yellow onion', amount: 1, unit: '' }),
+      ]
+      const newItems: ShoppingItem[] = [
+        createMockItem({ item: 'onion', amount: 2, unit: '' }),
+      ]
+
+      const result = mergeShoppingItems(existing, newItems)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].item).toBe('onion')
+      expect(result[0].amount).toBe(3)
+    })
+
+    it('should merge olive oil variants under a cleaner display name', () => {
+      const existing: ShoppingItem[] = [
+        createMockItem({ item: 'extra virgin olive oil', amount: 2, unit: 'tbsp', categoryKey: 'pantry', categoryOrder: 6 }),
+      ]
+      const newItems: ShoppingItem[] = [
+        createMockItem({ item: 'olive oil', amount: 1, unit: 'tbsp', categoryKey: 'pantry', categoryOrder: 6 }),
+      ]
+
+      const result = mergeShoppingItems(existing, newItems)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].item).toBe('olive oil')
+      expect(result[0].amount).toBe(3)
+    })
   })
 
   describe('source deduplication', () => {

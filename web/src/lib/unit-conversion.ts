@@ -62,6 +62,8 @@ const UNIT_CONVERSIONS: Record<string, { family: UnitFamily; toBase: number }> =
   "count": { family: "count", toBase: 1 },
   "piece": { family: "count", toBase: 1 },
   "pieces": { family: "count", toBase: 1 },
+  "pc": { family: "count", toBase: 1 },
+  "pcs": { family: "count", toBase: 1 },
   "whole": { family: "count", toBase: 1 },
   "clove": { family: "count", toBase: 1 },
   "cloves": { family: "count", toBase: 1 },
@@ -79,6 +81,8 @@ const UNIT_CONVERSIONS: Record<string, { family: UnitFamily; toBase: number }> =
   "sprigs": { family: "count", toBase: 1 },
   "package": { family: "count", toBase: 1 },
   "packages": { family: "count", toBase: 1 },
+  "pkg": { family: "count", toBase: 1 },
+  "pkgs": { family: "count", toBase: 1 },
   "bag": { family: "count", toBase: 1 },
   "bags": { family: "count", toBase: 1 },
   "box": { family: "count", toBase: 1 },
@@ -125,12 +129,20 @@ export function getUnitFamily(unit: string): UnitFamily {
  * Check if two units are in the same family and can be merged
  */
 export function areUnitsCompatible(unit1: string, unit2: string): boolean {
-  const family1 = getUnitFamily(unit1)
-  const family2 = getUnitFamily(unit2)
+  const normalized1 = unit1.toLowerCase().trim()
+  const normalized2 = unit2.toLowerCase().trim()
+  const family1 = getUnitFamily(normalized1)
+  const family2 = getUnitFamily(normalized2)
   
   // Unknown units are not compatible with anything (except identical units)
   if (family1 === "unknown" || family2 === "unknown") {
-    return unit1.toLowerCase().trim() === unit2.toLowerCase().trim()
+    return normalized1 === normalized2
+  }
+
+  // Count and package units should only merge when the semantic unit matches exactly.
+  // "clove" vs "" and "head" vs "piece" are not safely interchangeable.
+  if (family1 === "count" && family2 === "count") {
+    return normalized1 === normalized2
   }
   
   return family1 === family2

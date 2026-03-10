@@ -17,6 +17,28 @@ export interface ShoppingListResult {
   totalServings: number
 }
 
+function mergeIntoAdditionalAmounts(
+  existing: { amount: number; unit: string }[] | undefined,
+  amount: number,
+  unit: string
+): { amount: number; unit: string }[] {
+  const next = [...(existing || [])]
+
+  for (let index = 0; index < next.length; index++) {
+    const merged = mergeAmounts(next[index].amount, next[index].unit, amount, unit)
+    if (merged) {
+      next[index] = {
+        amount: merged.amount,
+        unit: merged.unit,
+      }
+      return next
+    }
+  }
+
+  next.push({ amount, unit })
+  return next
+}
+
 /**
  * Generate a shopping list from selected recipes with optional scaling.
  *
@@ -86,10 +108,11 @@ export function generateShoppingList(
           existing.additionalAmounts = undefined // Clear if we successfully merged
         } else {
           // Units are incompatible, use additionalAmounts
-          if (!existing.additionalAmounts) {
-            existing.additionalAmounts = []
-          }
-          existing.additionalAmounts.push({ amount, unit })
+          existing.additionalAmounts = mergeIntoAdditionalAmounts(
+            existing.additionalAmounts,
+            amount,
+            unit
+          )
         }
         
         // Add source (deduplicate by recipeId)

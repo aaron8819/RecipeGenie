@@ -36,6 +36,7 @@ function createMockRecipe(overrides: Partial<Recipe> = {}): Recipe {
 // Helper to create mock pantry item
 function createMockPantryItem(item: string): PantryItem {
   return {
+    id: `pantry-${item.toLowerCase().replace(/\s+/g, '-')}`,
     user_id: 'user-1',
     item,
     created_at: new Date().toISOString(),
@@ -154,6 +155,26 @@ describe('generateShoppingList', () => {
       expect(cheese?.additionalAmounts?.length).toBeGreaterThan(0)
     })
 
+    it('should consolidate repeated incompatible additional amounts across recipes', () => {
+      const recipe1 = createMockRecipe({
+        id: 'recipe-1',
+        ingredients: [{ item: 'Cheese', amount: 1, unit: 'cup' }],
+      })
+      const recipe2 = createMockRecipe({
+        id: 'recipe-2',
+        ingredients: [{ item: 'Cheese', amount: 8, unit: 'oz' }],
+      })
+      const recipe3 = createMockRecipe({
+        id: 'recipe-3',
+        ingredients: [{ item: 'Cheese', amount: 4, unit: 'oz' }],
+      })
+
+      const result = generateShoppingList([recipe1, recipe2, recipe3], [], [])
+
+      const cheese = result.items.find(i => i.item === 'cheese')
+      expect(cheese?.additionalAmounts).toEqual([{ amount: 12, unit: 'oz' }])
+    })
+
     it('should deduplicate recipe sources', () => {
       const recipe = createMockRecipe({
         id: 'recipe-1',
@@ -168,6 +189,59 @@ describe('generateShoppingList', () => {
 
       const salt = result.items.find(i => i.item === 'salt')
       expect(salt?.sources).toHaveLength(1) // Same recipe, should not duplicate
+    })
+
+    it('should canonicalize onion variants before merging', () => {
+      const recipe1 = createMockRecipe({
+        id: 'recipe-1',
+        ingredients: [{ item: 'Yellow Onion', amount: 1, unit: '' }],
+      })
+      const recipe2 = createMockRecipe({
+        id: 'recipe-2',
+        ingredients: [{ item: 'Onion', amount: 2, unit: '' }],
+      })
+
+      const result = generateShoppingList([recipe1, recipe2], [], [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0].item).toBe('onion')
+      expect(result.items[0].amount).toBe(3)
+    })
+
+    it('should canonicalize olive oil variants before merging', () => {
+      const recipe1 = createMockRecipe({
+        id: 'recipe-1',
+        ingredients: [{ item: 'Extra Virgin Olive Oil', amount: 2, unit: 'tbsp' }],
+      })
+      const recipe2 = createMockRecipe({
+        id: 'recipe-2',
+        ingredients: [{ item: 'olive oil', amount: 1, unit: 'tbsp' }],
+      })
+
+      const result = generateShoppingList([recipe1, recipe2], [], [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0].item).toBe('olive oil')
+      expect(result.items[0].amount).toBe(3)
+    })
+
+    it('should keep garlic count forms separate when units differ', () => {
+      const recipe1 = createMockRecipe({
+        id: 'recipe-1',
+        ingredients: [{ item: 'Garlic', amount: 3, unit: 'cloves' }],
+      })
+      const recipe2 = createMockRecipe({
+        id: 'recipe-2',
+        ingredients: [{ item: 'Garlic', amount: 1, unit: '' }],
+      })
+
+      const result = generateShoppingList([recipe1, recipe2], [], [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0].item).toBe('garlic')
+      expect(result.items[0].amount).toBe(3)
+      expect(result.items[0].unit).toBe('clove')
+      expect(result.items[0].additionalAmounts).toEqual([{ amount: 1, unit: '' }])
     })
   })
 
