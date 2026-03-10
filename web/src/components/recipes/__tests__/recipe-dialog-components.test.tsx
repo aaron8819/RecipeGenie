@@ -312,21 +312,62 @@ describe("RecipeIngredientsSection", () => {
 })
 
 describe("RecipeInstructionsSection", () => {
-  it("renders add variant textarea and forwards change callback", () => {
-    const onInstructionsChange = vi.fn()
+  it("renders grouped steps and forwards step edits", () => {
+    const onInstructionGroupsChange = vi.fn()
 
     render(
       <RecipeInstructionsSection
         variant="add"
-        instructions=""
-        onInstructionsChange={onInstructionsChange}
+        instructionGroups={[{ steps: [""] }]}
+        onInstructionGroupsChange={onInstructionGroupsChange}
       />
     )
 
-    fireEvent.change(screen.getByLabelText("Instructions"), {
+    fireEvent.change(screen.getByLabelText("Instruction group 1 step 1"), {
       target: { value: "Step 1" },
     })
 
-    expect(onInstructionsChange).toHaveBeenCalledWith("Step 1")
+    expect(onInstructionGroupsChange).toHaveBeenCalledWith([{ label: "", steps: ["Step 1"] }])
+  })
+
+  it("supports adding and renaming groups", () => {
+    const onInstructionGroupsChange = vi.fn()
+
+    render(
+      <RecipeInstructionsSection
+        variant="edit"
+        instructionGroups={[{ steps: ["Mix batter"] }]}
+        onInstructionGroupsChange={onInstructionGroupsChange}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Add group" }))
+    expect(onInstructionGroupsChange).toHaveBeenCalledWith([
+      { label: "", steps: ["Mix batter"] },
+      { steps: [""] },
+    ])
+
+    fireEvent.change(screen.getByLabelText("Instruction group 1 label"), {
+      target: { value: "Cake" },
+    })
+    expect(onInstructionGroupsChange).toHaveBeenLastCalledWith([
+      { label: "Cake", steps: ["Mix batter"] },
+    ])
+  })
+
+  it("keeps one empty group when the last group is removed", () => {
+    const onInstructionGroupsChange = vi.fn()
+
+    render(
+      <RecipeInstructionsSection
+        variant="edit"
+        instructionGroups={[{ label: "Sauce", steps: ["Whisk"] }]}
+        onInstructionGroupsChange={onInstructionGroupsChange}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove instruction group 1" }))
+
+    expect(onInstructionGroupsChange).toHaveBeenCalledWith([{ steps: [""] }])
   })
 })

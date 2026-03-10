@@ -34,7 +34,7 @@ import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
 import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
-import type { Recipe, Ingredient } from "@/types/database"
+import type { Recipe, Ingredient, RecipeInstructionGroup } from "@/types/database"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
 import {
   RecipeDialogActions,
@@ -116,7 +116,7 @@ export function RecipeDialog({
   const [totalTimeMinutes, setTotalTimeMinutes] = useState<number | null>(null)
   const [tags, setTags] = useState<string[]>([])
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
-  const [instructions, setInstructions] = useState("")
+  const [instructionGroups, setInstructionGroups] = useState<RecipeInstructionGroup[]>([])
   const [notes, setNotes] = useState("")
   
   // Image state
@@ -158,7 +158,7 @@ export function RecipeDialog({
       setTotalTimeMinutes(formValues.totalTimeMinutes)
       setTags(formValues.tags)
       setIngredients(formValues.ingredients)
-      setInstructions(formValues.instructions)
+      setInstructionGroups(formValues.instructionGroups)
       setNotes(formValues.notes)
       setImageUrl(formValues.imageUrl)
       setImageFile(null)
@@ -179,7 +179,7 @@ export function RecipeDialog({
       setTotalTimeMinutes(formValues.totalTimeMinutes)
       setTags(formValues.tags)
       setIngredients(formValues.ingredients)
-      setInstructions(formValues.instructions)
+      setInstructionGroups(formValues.instructionGroups)
       setNotes(formValues.notes)
       setImageUrl(formValues.imageUrl)
       setImageFile(null)
@@ -296,7 +296,7 @@ export function RecipeDialog({
         totalTimeMinutes,
         tags,
         ingredients,
-        instructions,
+        instructionGroups,
         notes,
         imageUrl,
       },
@@ -309,7 +309,7 @@ export function RecipeDialog({
     setCookTimeMinutes(formValues.cookTimeMinutes)
     setTotalTimeMinutes(formValues.totalTimeMinutes)
     setIngredients(formValues.ingredients)
-    setInstructions(formValues.instructions)
+    setInstructionGroups(formValues.instructionGroups)
     setNotes(formValues.notes)
   }, [
     name,
@@ -320,7 +320,7 @@ export function RecipeDialog({
     totalTimeMinutes,
     tags,
     ingredients,
-    instructions,
+    instructionGroups,
     notes,
     imageUrl,
   ])
@@ -452,7 +452,7 @@ export function RecipeDialog({
         totalTimeMinutes,
         tags,
         ingredients,
-        instructions,
+        instructionGroups,
         notes,
         imageUrl: finalImageUrl,
       })
@@ -494,7 +494,7 @@ export function RecipeDialog({
         totalTimeMinutes,
         tags,
         ingredients,
-        instructions,
+        instructionGroups,
         notes,
         imageUrl,
         imageReference: imagePreview ?? imageUrl,
@@ -505,7 +505,7 @@ export function RecipeDialog({
         cookTimeMinutes,
         totalTimeMinutes,
         ingredients,
-        instructions,
+        instructionGroups,
         notes,
       })
   const handleOpenChange = (nextOpen: boolean) => {
@@ -640,8 +640,8 @@ export function RecipeDialog({
                 allTags={allTags}
                 tagCounts={tagCounts}
                 ingredients={ingredients}
-                instructions={instructions}
-                setInstructions={setInstructions}
+                instructionGroups={instructionGroups}
+                setInstructionGroups={setInstructionGroups}
                 notes={notes}
                 setNotes={setNotes}
                 categories={categories}
@@ -684,8 +684,8 @@ export function RecipeDialog({
             allTags={allTags}
             tagCounts={tagCounts}
             ingredients={ingredients}
-            instructions={instructions}
-            setInstructions={setInstructions}
+            instructionGroups={instructionGroups}
+            setInstructionGroups={setInstructionGroups}
             notes={notes}
             setNotes={setNotes}
             categories={categories}
@@ -753,8 +753,8 @@ interface RecipeFormContentProps {
   allTags: string[]
   tagCounts?: Array<{ tag: string; count: number }>
   ingredients: Ingredient[]
-  instructions: string
-  setInstructions: (instructions: string) => void
+  instructionGroups: RecipeInstructionGroup[]
+  setInstructionGroups: (instructionGroups: RecipeInstructionGroup[]) => void
   notes: string
   setNotes: (notes: string) => void
   categories: string[]
@@ -802,8 +802,8 @@ function RecipeFormContent({
   allTags,
   tagCounts,
   ingredients,
-  instructions,
-  setInstructions,
+  instructionGroups,
+  setInstructionGroups,
   notes,
   setNotes,
   categories,
@@ -893,8 +893,8 @@ function RecipeFormContent({
 
           <RecipeInstructionsSection
             variant="edit"
-            instructions={instructions}
-            onInstructionsChange={setInstructions}
+            instructionGroups={instructionGroups}
+            onInstructionGroupsChange={setInstructionGroups}
           />
           <RecipeNotesSection
             variant="edit"
@@ -967,8 +967,8 @@ function RecipeFormContent({
 
         <RecipeInstructionsSection
           variant="add"
-          instructions={instructions}
-          onInstructionsChange={setInstructions}
+          instructionGroups={instructionGroups}
+          onInstructionGroupsChange={setInstructionGroups}
         />
         <RecipeNotesSection
           variant="add"

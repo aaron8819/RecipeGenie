@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   Check,
   ChefHat,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Link,
   List as ListIcon,
@@ -11,6 +13,7 @@ import {
   AlertTriangle,
   AlertCircle,
   Plus,
+  Trash2,
   Upload,
   Wand2,
   X,
@@ -28,8 +31,12 @@ import {
 import { TagInput } from "@/components/ui/tag-input"
 import { Textarea } from "@/components/ui/textarea"
 import { clampRecipeServings } from "./recipe-dialog.defaults"
-import type { Ingredient } from "@/types/database"
+import type { Ingredient, RecipeInstructionGroup } from "@/types/database"
 import type { ParsedRecipe } from "@/lib/recipe-parser"
+import {
+  createEmptyInstructionGroup,
+  normalizeInstructionGroupsForEditor,
+} from "@/lib/recipe-structure"
 
 type RecipeImageFieldProps = {
   variant: "add" | "edit"
@@ -1215,53 +1222,236 @@ export function RecipeIngredientsSection({
 
 type RecipeInstructionsSectionProps = {
   variant: "add" | "edit"
-  instructions: string
-  onInstructionsChange: (value: string) => void
+  instructionGroups: RecipeInstructionGroup[]
+  onInstructionGroupsChange: (groups: RecipeInstructionGroup[]) => void
 }
 
 export function RecipeInstructionsSection({
   variant,
-  instructions,
-  onInstructionsChange,
+  instructionGroups,
+  onInstructionGroupsChange,
 }: RecipeInstructionsSectionProps) {
   const addLabelClass =
     "text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent"
-  const instructionsId = variant === "edit" ? "instructions-edit" : "instructions-add"
+  const groups = normalizeInstructionGroupsForEditor(instructionGroups)
 
-  if (variant === "edit") {
-    return (
-      <div className="flex-1 flex flex-col min-h-0">
-        <Label
-          htmlFor={instructionsId}
-          className="block text-sm font-semibold text-primary mb-2"
-        >
-          Instructions
-        </Label>
-        <Textarea
-          id={instructionsId}
-          value={instructions}
-          onChange={(e) => onInstructionsChange(e.target.value)}
-          placeholder="Step by step process..."
-          className="flex-1 min-h-[180px] sm:min-h-[200px] w-full rounded-2xl bg-background border-stone-200 dark:border-zinc-800 focus:ring-primary focus:border-primary resize-none leading-relaxed px-5 py-4"
-        />
-      </div>
+  const updateGroups = (nextGroups: RecipeInstructionGroup[]) => {
+    onInstructionGroupsChange(nextGroups)
+  }
+
+  const updateGroup = (
+    groupIndex: number,
+    updater: (group: RecipeInstructionGroup) => RecipeInstructionGroup
+  ) => {
+    updateGroups(
+      groups.map((group, index) => (index === groupIndex ? updater(group) : group))
     )
   }
 
+  const moveGroup = (groupIndex: number, direction: -1 | 1) => {
+    const nextIndex = groupIndex + direction
+    if (nextIndex < 0 || nextIndex >= groups.length) {
+      return
+    }
+
+    const nextGroups = [...groups]
+    const [group] = nextGroups.splice(groupIndex, 1)
+    nextGroups.splice(nextIndex, 0, group)
+    updateGroups(nextGroups)
+  }
+
+  const removeGroup = (groupIndex: number) => {
+    const nextGroups = groups.filter((_, index) => index !== groupIndex)
+    updateGroups(nextGroups.length > 0 ? nextGroups : [createEmptyInstructionGroup()])
+  }
+
+  const addGroup = () => {
+    updateGroups([...groups, createEmptyInstructionGroup()])
+  }
+
+  const addStep = (groupIndex: number) => {
+    updateGroup(groupIndex, (group) => ({
+      ...group,
+      steps: [...group.steps, ""],
+    }))
+  }
+
+  const removeStep = (groupIndex: number, stepIndex: number) => {
+    updateGroup(groupIndex, (group) => {
+      const nextSteps = group.steps.filter((_, index) => index !== stepIndex)
+      return {
+        ...group,
+        steps: nextSteps.length > 0 ? nextSteps : [""],
+      }
+    })
+  }
+
+  const moveStep = (groupIndex: number, stepIndex: number, direction: -1 | 1) => {
+    updateGroup(groupIndex, (group) => {
+      const nextIndex = stepIndex + direction
+      if (nextIndex < 0 || nextIndex >= group.steps.length) {
+        return group
+      }
+
+      const nextSteps = [...group.steps]
+      const [step] = nextSteps.splice(stepIndex, 1)
+      nextSteps.splice(nextIndex, 0, step)
+      return {
+        ...group,
+        steps: nextSteps,
+      }
+    })
+  }
+
   return (
-    <div className="space-y-4">
-      <label htmlFor={instructionsId} className={`${addLabelClass} block`}>
-        Instructions
-      </label>
-      <Textarea
-        id={instructionsId}
-        value={instructions}
-        onChange={(e) => onInstructionsChange(e.target.value)}
-        placeholder={
-          "Step 1: Preheat oven to 400Â°F...\nStep 2: Season the chicken generously..."
+    <div className={variant === "edit" ? "flex-1 flex flex-col min-h-0" : "space-y-4"}>
+      {variant === "edit" ? (
+        <Label className="block text-sm font-semibold text-primary mb-2">
+          Instructions
+        </Label>
+      ) : (
+        <label className={`${addLabelClass} block`}>
+          Instructions
+        </label>
+      )}
+      <p className={variant === "edit" ? "mb-4 text-xs text-muted-foreground" : "text-xs text-muted-foreground"}>
+        Keep notes separate. Leave the main method unlabeled, or add labels for subsections like sauces or toppings.
+      </p>
+      <div className="space-y-4">
+        {groups.map((group, groupIndex) => (
+          <div
+            key={`instruction-group-${groupIndex}`}
+            className={
+              variant === "edit"
+                ? "rounded-2xl border border-stone-200 bg-background p-4 dark:border-zinc-800"
+                : "rounded-xl border border-stone-100 bg-background p-4 dark:border-zinc-800"
+            }
+          >
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Input
+                aria-label={`Instruction group ${groupIndex + 1} label`}
+                value={group.label ?? ""}
+                onChange={(event) =>
+                  updateGroup(groupIndex, (currentGroup) => ({
+                    ...currentGroup,
+                    label: event.target.value,
+                  }))
+                }
+                placeholder={groupIndex === 0 ? "Optional section label" : "Optional group label"}
+                className="min-w-[13rem] flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => moveGroup(groupIndex, -1)}
+                disabled={groupIndex === 0}
+                aria-label={`Move instruction group ${groupIndex + 1} up`}
+              >
+                <ChevronUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => moveGroup(groupIndex, 1)}
+                disabled={groupIndex === groups.length - 1}
+                aria-label={`Move instruction group ${groupIndex + 1} down`}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => removeGroup(groupIndex)}
+                aria-label={`Remove instruction group ${groupIndex + 1}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {group.steps.map((step, stepIndex) => (
+                <div
+                  key={`instruction-group-${groupIndex}-step-${stepIndex}`}
+                  className="flex items-start gap-2"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
+                    {stepIndex + 1}
+                  </span>
+                  <Textarea
+                    aria-label={`Instruction group ${groupIndex + 1} step ${stepIndex + 1}`}
+                    value={step}
+                    onChange={(event) =>
+                      updateGroup(groupIndex, (currentGroup) => ({
+                        ...currentGroup,
+                        steps: currentGroup.steps.map((currentStep, currentStepIndex) =>
+                          currentStepIndex === stepIndex ? event.target.value : currentStep
+                        ),
+                      }))
+                    }
+                    placeholder={stepIndex === 0 ? "Describe the step..." : "Describe this step..."}
+                    className="min-h-[88px] flex-1 resize-none"
+                  />
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => moveStep(groupIndex, stepIndex, -1)}
+                      disabled={stepIndex === 0}
+                      aria-label={`Move step ${stepIndex + 1} up in group ${groupIndex + 1}`}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => moveStep(groupIndex, stepIndex, 1)}
+                      disabled={stepIndex === group.steps.length - 1}
+                      aria-label={`Move step ${stepIndex + 1} down in group ${groupIndex + 1}`}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => removeStep(groupIndex, stepIndex)}
+                      aria-label={`Remove step ${stepIndex + 1} from group ${groupIndex + 1}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => addStep(groupIndex)}
+              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary transition-opacity hover:opacity-80"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add step
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={addGroup}
+        className={
+          variant === "edit"
+            ? "mt-4 inline-flex items-center gap-1 text-xs font-bold text-primary transition-opacity hover:opacity-80"
+            : "inline-flex min-h-[44px] w-full items-center justify-center gap-1 rounded-lg border border-dashed border-accent px-4 text-[10px] font-bold uppercase text-accent transition-colors hover:text-primary"
         }
-        className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-4 text-sm min-h-[160px] resize-none focus:ring-2 focus:ring-primary"
-      />
+      >
+        <Plus className="h-3.5 w-3.5" />
+        Add group
+      </button>
     </div>
   )
 }

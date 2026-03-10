@@ -2,6 +2,12 @@ import type { Recipe, RecipeInstructionGroup } from "@/types/database"
 
 type RecipeWithStructure = Pick<Recipe, "instructions" | "notes" | "instruction_groups">
 
+export function createEmptyInstructionGroup(): RecipeInstructionGroup {
+  return {
+    steps: [""],
+  }
+}
+
 export function normalizeRecipeNotes(notes?: string[] | null): string[] {
   return (notes ?? []).map((note) => note.trim()).filter(Boolean)
 }
@@ -40,18 +46,24 @@ export function getFlatRecipeInstructions(recipe: RecipeWithStructure): string[]
   return getRecipeInstructionGroups(recipe).flatMap((group) => group.steps)
 }
 
+export function buildInstructionEditorGroups(
+  instructions: string[],
+  instructionGroups?: RecipeInstructionGroup[] | null
+): RecipeInstructionGroup[] {
+  const normalizedGroups = normalizeRecipeInstructionGroups(instructionGroups)
+  const legacyInstructions = splitLegacyNotesFromInstructions(instructions).instructions
+  return (
+    normalizedGroups.length > 0
+      ? normalizedGroups
+      : parseInstructionLines(legacyInstructions).instructionGroups
+  )
+}
+
 export function buildInstructionEditorText(
   instructions: string[],
   instructionGroups?: RecipeInstructionGroup[] | null
 ): string {
-  const normalizedGroups = normalizeRecipeInstructionGroups(instructionGroups)
-  const legacyInstructions = splitLegacyNotesFromInstructions(instructions).instructions
-  const groupsToRender =
-    normalizedGroups.length > 0
-      ? normalizedGroups
-      : parseInstructionLines(legacyInstructions).instructionGroups
-
-  return groupsToRender
+  return buildInstructionEditorGroups(instructions, instructionGroups)
     .flatMap((group) => [
       ...(group.label ? [`${group.label}:`] : []),
       ...group.steps,
@@ -73,6 +85,24 @@ export function parseInstructionEditorText(text: string): {
     instructions: parsed.instructions,
     instructionGroups: parsed.hasStructuralGrouping ? parsed.instructionGroups : undefined,
   }
+}
+
+export function normalizeInstructionGroupsForEditor(
+  groups?: RecipeInstructionGroup[] | null
+): RecipeInstructionGroup[] {
+  const normalizedGroups = (groups ?? []).map((group) => ({
+    label: group.label?.trim() || "",
+    steps: (group.steps ?? []).map((step) => step ?? ""),
+  }))
+
+  if (normalizedGroups.length === 0) {
+    return [createEmptyInstructionGroup()]
+  }
+
+  return normalizedGroups.map((group) => ({
+    label: group.label,
+    steps: group.steps.length > 0 ? group.steps : [""],
+  }))
 }
 
 export function formatRecipeTime(minutes?: number | null): string | null {

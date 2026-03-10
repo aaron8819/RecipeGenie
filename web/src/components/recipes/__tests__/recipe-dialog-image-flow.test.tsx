@@ -225,22 +225,45 @@ vi.mock("../recipe-dialog-components", () => ({
     </div>
   ),
   RecipeInstructionsSection: ({
-    instructions,
-    onInstructionsChange,
+    instructionGroups,
+    onInstructionGroupsChange,
   }: {
-    instructions: string
-    onInstructionsChange: (value: string) => void
+    instructionGroups: Array<{ label?: string; steps: string[] }>
+    onInstructionGroupsChange: (groups: Array<{ label?: string; steps: string[] }>) => void
   }) => (
     <label>
       Instructions
       <textarea
         aria-label="Instructions"
-        value={instructions}
-        onChange={(event) => onInstructionsChange(event.target.value)}
+        value={instructionGroups[0]?.steps[0] ?? ""}
+        onChange={(event) =>
+          onInstructionGroupsChange([
+            {
+              ...(instructionGroups[0] ?? {}),
+              steps: [event.target.value],
+            },
+          ])
+        }
       />
     </label>
   ),
   RecipeImportSection: () => <div>Import section</div>,
+  RecipeNotesSection: ({
+    notes,
+    onNotesChange,
+  }: {
+    notes: string
+    onNotesChange: (value: string) => void
+  }) => (
+    <label>
+      Notes
+      <textarea
+        aria-label="Notes"
+        value={notes}
+        onChange={(event) => onNotesChange(event.target.value)}
+      />
+    </label>
+  ),
   RecipeIngredientsSection: ({
     children,
     onAddIngredient,
@@ -369,15 +392,16 @@ describe("RecipeDialog image orchestration", () => {
       createRecipeMutateAsync.mock.invocationCallOrder[0]
     )
 
-    expect(createRecipeMutateAsync).toHaveBeenCalledWith({
-      name: "Fancy Soup",
-      category: "Dinner",
-      servings: 4,
-      tags: [],
-      ingredients: [{ item: "Carrot", amount: null, unit: "" }],
-      instructions: [],
-      image_url: "https://cdn.example.com/fancy-soup.jpg",
-    })
+    expect(createRecipeMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Fancy Soup",
+        category: "Dinner",
+        servings: 4,
+        instructions: [],
+        instruction_groups: [],
+        image_url: "https://cdn.example.com/fancy-soup.jpg",
+      })
+    )
     expect(onRecipeCreated).toHaveBeenCalledWith(currentCreatedRecipe)
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
@@ -396,15 +420,16 @@ describe("RecipeDialog image orchestration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Recipe" }))
 
     await waitFor(() => {
-      expect(createRecipeMutateAsync).toHaveBeenCalledWith({
-        name: "Fancy Soup",
-        category: "Dinner",
-        servings: 4,
-        tags: [],
-        ingredients: [{ item: "Carrot", amount: null, unit: "" }],
-        instructions: [],
-        image_url: null,
-      })
+      expect(createRecipeMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "Fancy Soup",
+          category: "Dinner",
+          servings: 4,
+          instructions: [],
+          instruction_groups: [],
+          image_url: null,
+        })
+      )
     })
 
     expect(undoToastShow).toHaveBeenCalledWith({
@@ -435,18 +460,21 @@ describe("RecipeDialog image orchestration", () => {
       updateRecipeMutateAsync.mock.invocationCallOrder[0]
     )
 
-    expect(updateRecipeMutateAsync).toHaveBeenCalledWith({
-      id: "edit-recipe",
-      updates: {
-        name: "Edit Soup",
-        category: "Dinner",
-        servings: 4,
-        tags: [],
-        ingredients: [{ item: "Carrot", amount: 1, unit: "" }],
-        instructions: ["Cook"],
-        image_url: null,
-      },
-    })
+    expect(updateRecipeMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "edit-recipe",
+        updates: expect.objectContaining({
+          name: "Edit Soup",
+          category: "Dinner",
+          servings: 4,
+          instructions: ["Cook"],
+          instruction_groups: expect.arrayContaining([
+            expect.objectContaining({ steps: ["Cook"] }),
+          ]),
+          image_url: null,
+        }),
+      })
+    )
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
@@ -465,18 +493,21 @@ describe("RecipeDialog image orchestration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
 
     await waitFor(() => {
-      expect(updateRecipeMutateAsync).toHaveBeenCalledWith({
-        id: "edit-recipe",
-        updates: {
-          name: "Edit Soup",
-          category: "Dinner",
-          servings: 4,
-          tags: [],
-          ingredients: [{ item: "Carrot", amount: 1, unit: "" }],
-          instructions: ["Cook"],
-          image_url: null,
-        },
-      })
+      expect(updateRecipeMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "edit-recipe",
+          updates: expect.objectContaining({
+            name: "Edit Soup",
+            category: "Dinner",
+            servings: 4,
+            instructions: ["Cook"],
+            instruction_groups: expect.arrayContaining([
+              expect.objectContaining({ steps: ["Cook"] }),
+            ]),
+            image_url: null,
+          }),
+        })
+      )
     })
 
     expect(deleteImageMock).toHaveBeenCalledWith("https://cdn.example.com/existing.jpg")

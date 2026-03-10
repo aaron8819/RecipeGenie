@@ -198,7 +198,7 @@ describe("recipe dialog defaults helpers", () => {
       totalTimeMinutes: null,
       tags: [],
       ingredients: [{ item: "", amount: null, unit: "" }],
-      instructions: "",
+      instructionGroups: [{ steps: [""] }],
       notes: "",
       imageUrl: null,
     })
@@ -212,7 +212,7 @@ describe("recipe dialog defaults helpers", () => {
           { item: " water ", amount: 1, unit: " Cups ", modifier: "  chilled " },
           { item: "", amount: null, unit: "" },
         ],
-        instructions: " Boil \n\n Serve ",
+        instructionGroups: [{ steps: [" Boil ", "", " Serve "] }],
       })
     ).toEqual({
       name: "Soup",
@@ -224,6 +224,7 @@ describe("recipe dialog defaults helpers", () => {
       tags: ["easy"],
       ingredients: [{ item: "water", amount: 1, unit: "cup", modifier: "chilled" }],
       instructions: ["Boil", "Serve"],
+      instruction_groups: [{ steps: ["Boil", "Serve"] }],
       notes: [],
       image_url: null,
     })
@@ -242,7 +243,7 @@ describe("recipe dialog defaults helpers", () => {
         ingredients: [
           { item: "butter", amount: 1, unit: "Tablespoons", groupLabel: " Pan Sauce " },
         ],
-        instructions: "Cook",
+        instructionGroups: [{ steps: ["Cook"] }],
         notes: "",
         imageUrl: null,
       })
@@ -258,7 +259,46 @@ describe("recipe dialog defaults helpers", () => {
         { item: "butter", amount: 1, unit: "tbsp", groupLabel: "Pan Sauce" },
       ],
       instructions: ["Cook"],
+      instruction_groups: [{ steps: ["Cook"] }],
       notes: [],
+      image_url: null,
+    })
+  })
+
+  it("removes empty instruction groups, blank labels, and whitespace-only steps on submit", () => {
+    expect(
+      buildRecipeSubmissionData({
+        name: "Normalized",
+        category: "dinner",
+        servings: 2,
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
+        tags: [],
+        ingredients: [{ item: "water", amount: 1, unit: "cup" }],
+        instructionGroups: [
+          { label: "  ", steps: ["  Boil water  ", "   "] },
+          { label: " Sauce ", steps: [" ", "Finish with butter"] },
+          { steps: ["   "] },
+        ],
+        notes: "  Serve warm  ",
+        imageUrl: null,
+      })
+    ).toEqual({
+      name: "Normalized",
+      category: "dinner",
+      servings: 2,
+      prep_time_minutes: null,
+      cook_time_minutes: null,
+      total_time_minutes: null,
+      tags: [],
+      ingredients: [{ item: "water", amount: 1, unit: "cup" }],
+      instructions: ["Boil water", "Finish with butter"],
+      instruction_groups: [
+        { steps: ["Boil water"] },
+        { label: "Sauce", steps: ["Finish with butter"] },
+      ],
+      notes: ["Serve warm"],
       image_url: null,
     })
   })
@@ -275,7 +315,7 @@ describe("recipe dialog defaults helpers", () => {
           totalTimeMinutes: null,
           tags: [],
           ingredients: [{ item: "Eggs", amount: 2, unit: "" }],
-          instructions: "Cook",
+          instructionGroups: [{ steps: ["Cook"] }],
           notes: "",
           imageUrl: null,
         },
@@ -295,7 +335,7 @@ describe("recipe dialog defaults helpers", () => {
       totalTimeMinutes: null,
       tags: [],
       ingredients: [{ item: "Bread", amount: 1, unit: "slice" }],
-      instructions: "Cook",
+      instructionGroups: [{ steps: ["Cook"] }],
       notes: "",
       imageUrl: null,
     })
@@ -351,8 +391,9 @@ describe("recipe dialog defaults helpers", () => {
     expect(hydrated.cookTimeMinutes).toBe(12)
     expect(hydrated.totalTimeMinutes).toBe(22)
     expect(hydrated.notes).toContain("Lamb shoulder chops are flavorful")
-    expect(hydrated.instructions).toContain("Pan Sauce:")
-    expect(hydrated.instructions).not.toContain("Notes:")
+    expect(hydrated.instructionGroups).toHaveLength(2)
+    expect(hydrated.instructionGroups[1]?.label).toBe("Pan Sauce")
+    expect(hydrated.instructionGroups[1]?.steps[0]).toBe("Lower heat to medium.")
   })
 
   it("separates legacy note label lines from instructions when hydrating older recipes", () => {
@@ -371,7 +412,9 @@ describe("recipe dialog defaults helpers", () => {
       updated_at: "2026-03-10T00:00:00.000Z",
     } satisfies Recipe)
 
-    expect(hydrated.instructions).toBe("Pan Sauce:\nWhisk the sauce.")
+    expect(hydrated.instructionGroups).toEqual([
+      { label: "Pan Sauce", steps: ["Whisk the sauce."] },
+    ])
     expect(hydrated.notes).toBe("Serve immediately.")
   })
 
@@ -383,7 +426,7 @@ describe("recipe dialog defaults helpers", () => {
         cookTimeMinutes: null,
         totalTimeMinutes: null,
         ingredients: [{ item: "", amount: null, unit: "" }],
-        instructions: "",
+        instructionGroups: [{ steps: [""] }],
         notes: "",
       })
     ).toBe(false)
@@ -394,7 +437,7 @@ describe("recipe dialog defaults helpers", () => {
         cookTimeMinutes: null,
         totalTimeMinutes: null,
         ingredients: [{ item: "Flour", amount: null, unit: "" }],
-        instructions: "",
+        instructionGroups: [{ steps: [""] }],
         notes: "",
       })
     ).toBe(true)
@@ -409,7 +452,7 @@ describe("recipe dialog defaults helpers", () => {
           totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
-          instructions: "Boil",
+          instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",
         },
@@ -422,7 +465,7 @@ describe("recipe dialog defaults helpers", () => {
           totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
-          instructions: "Boil",
+          instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",
           imageReference: "https://example.com/soup.jpg",
@@ -440,7 +483,7 @@ describe("recipe dialog defaults helpers", () => {
           totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
-          instructions: "Boil",
+          instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",
         },
@@ -453,7 +496,7 @@ describe("recipe dialog defaults helpers", () => {
           totalTimeMinutes: null,
           tags: ["easy"],
           ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
-          instructions: "Boil",
+          instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",
           imageReference: "https://example.com/soup.jpg",

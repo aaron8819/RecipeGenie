@@ -1,10 +1,12 @@
 import type { ParsedRecipe } from "@/lib/recipe-parser"
-import type { Ingredient, Recipe, RecipeInsert } from "@/types/database"
+import type { Ingredient, Recipe, RecipeInsert, RecipeInstructionGroup } from "@/types/database"
 import {
-  buildInstructionEditorText,
+  buildInstructionEditorGroups,
+  createEmptyInstructionGroup,
   getRecipeNotes,
+  normalizeInstructionGroupsForEditor,
+  normalizeRecipeInstructionGroups,
   normalizeRecipeNotes,
-  parseInstructionEditorText,
 } from "@/lib/recipe-structure"
 
 export const DEFAULT_RECIPE_SERVINGS = 4
@@ -61,7 +63,7 @@ export interface RecipeDialogFormValues {
   totalTimeMinutes: number | null
   tags: string[]
   ingredients: Ingredient[]
-  instructions: string
+  instructionGroups: RecipeInstructionGroup[]
   notes: string
   imageUrl: string | null
 }
@@ -78,10 +80,10 @@ export function buildEditingRecipeDialogFormValues(
     totalTimeMinutes: recipe.total_time_minutes ?? null,
     tags: recipe.tags || [],
     ingredients: normalizeRecipeIngredientsForEditing(recipe.ingredients || []),
-    instructions: buildInstructionEditorText(
+    instructionGroups: normalizeInstructionGroupsForEditor(buildInstructionEditorGroups(
       recipe.instructions || [],
       recipe.instruction_groups
-    ),
+    )),
     notes: getRecipeNotes(recipe).join("\n"),
     imageUrl: recipe.image_url || null,
   }
@@ -99,7 +101,7 @@ export function buildNewRecipeDialogFormValues(
     totalTimeMinutes: null,
     tags: [],
     ingredients: [{ ...EMPTY_RECIPE_INGREDIENT }],
-    instructions: "",
+    instructionGroups: [createEmptyInstructionGroup()],
     notes: "",
     imageUrl: null,
   }
@@ -120,13 +122,14 @@ export function applyParsedRecipeToFormValues(
       parsedRecipe.ingredients.length > 0
         ? parsedRecipe.ingredients
         : values.ingredients,
-    instructions:
+    instructionGroups:
+      (parsedRecipe.instructionGroups && parsedRecipe.instructionGroups.length > 0) ||
       parsedRecipe.instructions.length > 0
-        ? buildInstructionEditorText(
+        ? normalizeInstructionGroupsForEditor(buildInstructionEditorGroups(
             parsedRecipe.instructions,
             parsedRecipe.instructionGroups
-          )
-        : values.instructions,
+          ))
+        : values.instructionGroups,
     notes:
       parsedRecipe.notes && parsedRecipe.notes.length > 0
         ? parsedRecipe.notes.join("\n")
@@ -137,7 +140,7 @@ export function applyParsedRecipeToFormValues(
 export function buildRecipeSubmissionData(
   values: RecipeDialogFormValues
 ): Omit<RecipeInsert, "id" | "user_id"> {
-  const parsedInstructions = parseInstructionEditorText(values.instructions)
+  const instructionGroups = normalizeRecipeInstructionGroups(values.instructionGroups)
   const notes = normalizeRecipeNotes(
     values.notes
       .split(/\r?\n/)
@@ -154,10 +157,8 @@ export function buildRecipeSubmissionData(
     total_time_minutes: values.totalTimeMinutes,
     tags: values.tags || [],
     ingredients: normalizeRecipeIngredientsForSubmission(values.ingredients),
-    instructions: parsedInstructions.instructions,
-    ...(parsedInstructions.instructionGroups
-      ? { instruction_groups: parsedInstructions.instructionGroups }
-      : {}),
+    instructions: instructionGroups.flatMap((group) => group.steps),
+    instruction_groups: instructionGroups,
     notes,
     image_url: values.imageUrl,
   }
@@ -173,7 +174,7 @@ export function isNewRecipeDialogDirty(values: {
   cookTimeMinutes: number | null
   totalTimeMinutes: number | null
   ingredients: Ingredient[]
-  instructions: string
+  instructionGroups: RecipeInstructionGroup[]
   notes: string
 }): boolean {
   return (
@@ -182,7 +183,7 @@ export function isNewRecipeDialogDirty(values: {
     values.cookTimeMinutes !== null ||
     values.totalTimeMinutes !== null ||
     values.ingredients.some((ingredient) => ingredient.item.trim() !== "") ||
-    values.instructions.trim() !== "" ||
+    normalizeRecipeInstructionGroups(values.instructionGroups).length > 0 ||
     values.notes.trim() !== ""
   )
 }
@@ -200,7 +201,7 @@ export function isEditingRecipeDialogDirty(
     totalTimeMinutes: initialValues.totalTimeMinutes,
     tags: initialValues.tags,
     ingredients: initialValues.ingredients,
-    instructions: initialValues.instructions,
+    instructionGroups: normalizeRecipeInstructionGroups(initialValues.instructionGroups),
     notes: initialValues.notes,
     imageReference: initialValues.imageUrl,
   }) !== JSON.stringify({
@@ -212,7 +213,7 @@ export function isEditingRecipeDialogDirty(
     totalTimeMinutes: currentValues.totalTimeMinutes,
     tags: currentValues.tags,
     ingredients: currentValues.ingredients,
-    instructions: currentValues.instructions,
+    instructionGroups: normalizeRecipeInstructionGroups(currentValues.instructionGroups),
     notes: currentValues.notes,
     imageReference: currentValues.imageReference,
   })
