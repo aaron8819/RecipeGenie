@@ -308,7 +308,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
         <div
           className={
             activeTab === "shopping"
-              ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
+              ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[calc(72px+env(safe-area-inset-bottom))] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
           data-home-tab-panel="shopping"

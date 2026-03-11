@@ -1191,9 +1191,10 @@ describe("ShoppingListView orchestration", () => {
       await Promise.resolve()
     })
 
-    expect(screen.getByText(
+    expect(screen.getByText("eggs")).toBeInTheDocument()
+    expect(screen.queryByText(
       'Added "eggs" to shopping list; "milk" was already on the shopping list'
-    )).toBeInTheDocument()
+    )).not.toBeInTheDocument()
   })
 
   it("edits a manual item inline without removing and re-adding it", async () => {

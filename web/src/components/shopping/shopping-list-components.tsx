@@ -726,11 +726,6 @@ export function ShoppingProgressSummary({
                   style={{ width: `${completionPercent}%` }}
                 />
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {remainingCount > 0
-                  ? `${remainingCount} item${remainingCount === 1 ? "" : "s"} still to shop.`
-                  : "Everything on this list is checked off."}
-              </p>
             </div>
           </div>
 

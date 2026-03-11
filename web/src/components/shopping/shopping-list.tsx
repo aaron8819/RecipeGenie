@@ -1357,7 +1357,6 @@ export function ShoppingListView() {
     </DropdownMenu>
   )
 
-  const addHelperMessage = addFeedback?.message || "Tip: separate items with commas to add several at once."
   const addHelperTone: AddFeedbackTone = addFeedback?.tone || "neutral"
   const addHelperClassName = cn(
     "mt-2 text-sm",
@@ -1495,11 +1494,6 @@ export function ShoppingListView() {
             <span className="text-lg leading-none font-semibold">+</span>
           </Button>
         </form>
-        {!isDesktop ? (
-          <p aria-live="polite" className={addHelperClassName}>
-            {addHelperMessage}
-          </p>
-        ) : null}
       </div>
 
       {/* Mobile header - compact title and icon buttons only */}
@@ -1569,11 +1563,6 @@ export function ShoppingListView() {
             <span>Add Item</span>
           </Button>
         </form>
-        {isDesktop ? (
-          <p aria-live="polite" className={cn("-mt-3 mb-6", addHelperClassName)}>
-            {addHelperMessage}
-          </p>
-        ) : null}
       </header>
 
       {/* Shopping List — full width (sidebar removed) */}
@@ -1628,7 +1617,7 @@ export function ShoppingListView() {
             </div>
           )}
           <div
-            className="space-y-3"
+            className="space-y-3 pb-[calc(72px+env(safe-area-inset-bottom))] md:pb-0"
             style={{
               WebkitOverflowScrolling: 'touch',
               overscrollBehavior: 'contain',
