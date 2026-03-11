@@ -310,6 +310,68 @@ test.describe('Shopping List Mobile @extended', () => {
     await expect(rowById(page, produceRowId)).toBeVisible()
   })
 
+  test('keeps the active Shopping pane scrollable after repeated section jumps and tab switches', async ({ page }) => {
+    const seed = `${Date.now()}-jump-stability`
+    const produceRowId = `row-mobile-produce-${seed}`
+    const proteinRowId = `row-mobile-protein-${seed}`
+    const pantryRowId = `row-mobile-pantry-${seed}`
+
+    cleanupState = await seedShoppingState({
+      items: [
+        buildShoppingItem({
+          rowId: produceRowId,
+          item: `mobile apples ${seed}`,
+          checked: false,
+          categoryKey: 'produce',
+          categoryOrder: 1,
+        }),
+        buildShoppingItem({
+          rowId: proteinRowId,
+          item: `mobile chicken ${seed}`,
+          checked: false,
+          categoryKey: 'protein',
+          categoryOrder: 4,
+        }),
+        buildShoppingItem({
+          rowId: pantryRowId,
+          item: `mobile rice ${seed}`,
+          checked: false,
+          categoryKey: 'pantry',
+          categoryOrder: 6,
+        }),
+      ],
+    })
+    await page.reload()
+    await openShoppingFromBottomNav(page)
+
+    await expect(page.getByRole('button', { name: /^jump to protein$/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^jump to pantry$/i })).toBeVisible()
+
+    const paneBefore = await readActivePaneState(page)
+    expect(paneBefore).not.toBeNull()
+    expect(paneBefore?.after).toBeGreaterThan(paneBefore?.before ?? 0)
+
+    await page.getByRole('button', { name: /^jump to protein$/i }).click()
+    await expect(rowById(page, proteinRowId)).toBeVisible()
+
+    await page.getByRole('button', { name: /^jump to pantry$/i }).click()
+    await expect(rowById(page, pantryRowId)).toBeVisible()
+
+    const paneAfterJumps = await readActivePaneState(page)
+    expect(paneAfterJumps).not.toBeNull()
+    expect(paneAfterJumps?.after).toBeGreaterThan(paneAfterJumps?.before ?? 0)
+
+    await activateBottomNavTab(page, /^recipes$/i)
+    await page.waitForTimeout(250)
+
+    await activateBottomNavTab(page, /^shopping$/i)
+    await expect(rowById(page, pantryRowId)).toBeVisible()
+
+    const paneAfterReturn = await readActivePaneState(page)
+    expect(paneAfterReturn).not.toBeNull()
+    expect(paneAfterReturn?.after).toBeGreaterThan(paneAfterReturn?.before ?? 0)
+  })
+
   test('releases Shopping action-menu locks before switching to Planner on mobile @extended', async ({ page }) => {
     const seed = `${Date.now()}-menu-lock`
     const rowId = `row-mobile-menu-lock-${seed}`

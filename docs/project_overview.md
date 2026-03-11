@@ -72,8 +72,10 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Presentation-only shopping sections live in `web/src/components/shopping/shopping-list-components.tsx`.
 - Shopping mutations and cache flows live in `web/src/hooks/shopping/`.
 - Shopping aggregation/normalization/category logic lives in `web/src/lib/shopping-list.ts`, `web/src/lib/shopping-list-normalization.ts`, `web/src/lib/shopping-list-merging.ts`, and `web/src/lib/shopping-categories.ts`.
+- Pane-relative in-tab scrolling helpers live in `web/src/lib/pane-scroll.ts`.
 - Stable shopping row identity helpers live in `web/src/lib/shopping-row-identity.ts`.
 - Shopping row-targeted server mutations now align on persisted `ShoppingItem.rowId` across UI state, cache mutations, and RPC boundaries.
+- Shopping section jumps must scroll the active kept-mounted tab pane directly rather than relying on `scrollIntoView()`.
 
 ### Pantry
 
@@ -114,4 +116,4 @@ The recent architecture cleanup wave is complete for now.
 - Update the relevant domain doc in `docs/` when a domain workflow changes materially.
 - Record durable architecture decisions in [`decisions.md`](decisions.md).
 
-Last updated: 2026-03-10
+Last updated: 2026-03-11

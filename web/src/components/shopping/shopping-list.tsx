@@ -59,6 +59,7 @@ import { ShoppingCart } from "lucide-react"
 import { navigateToHomeTab } from "@/lib/home-navigation"
 import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
+import { scrollNodeIntoPane } from "@/lib/pane-scroll"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import { useRecipe, useRecipes, useCategories } from "@/hooks/use-recipes"
@@ -101,6 +102,11 @@ type ManualEditDraft = {
   amount: string
   unit: string
 }
+
+const SHOPPING_CATEGORY_JUMP_OFFSET = {
+  desktop: 0,
+  mobile: 96,
+} as const
 
 function isManualOnlyItem(item: ShoppingItem) {
   const sources = item.sources || []
@@ -1247,12 +1253,15 @@ export function ShoppingListView() {
     })
 
     window.requestAnimationFrame(() => {
-      categorySectionRefs.current[categoryKey]?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
+      const categorySection = categorySectionRefs.current[categoryKey]
+      if (!categorySection) return
+
+      scrollNodeIntoPane(categorySection, {
+        offset: isDesktop ? SHOPPING_CATEGORY_JUMP_OFFSET.desktop : SHOPPING_CATEGORY_JUMP_OFFSET.mobile,
+        behavior: isDesktop ? "smooth" : "auto",
       })
     })
-  }, [])
+  }, [isDesktop])
 
   const handleDragStart = (event: DragStartEvent) => {
     if (!isManageMode) return
@@ -1383,7 +1392,6 @@ export function ShoppingListView() {
               categorySectionRefs.current[categoryData.key] = node
             }}
             data-testid={`shopping-category-${categoryData.key}`}
-            style={{ scrollMarginTop: isDesktop ? "112px" : "140px" }}
           >
             <ShoppingCategorySection
               categoryData={categoryData}

@@ -278,6 +278,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
               ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
+          data-home-tab-panel="recipes"
           aria-hidden={activeTab !== "recipes"}
         >
           <RecipeList />
@@ -288,6 +289,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
               ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
+          data-home-tab-panel="planner"
           aria-hidden={activeTab !== "planner"}
         >
           {visited.has("planner") && <MealPlanner />}
@@ -298,6 +300,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
               ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
+          data-home-tab-panel="pantry"
           aria-hidden={activeTab !== "pantry"}
         >
           {visited.has("pantry") && <PantryList />}
@@ -308,6 +311,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
               ? "flex-1 min-h-0 flex flex-col overflow-y-auto pb-[var(--bottom-nav-safe-height)] md:pb-0 scrollbar-thin opacity-100 transition-opacity duration-150 ease-out"
               : "pointer-events-none invisible absolute inset-0 opacity-0 transition-opacity duration-150 ease-out"
           }
+          data-home-tab-panel="shopping"
           aria-hidden={activeTab !== "shopping"}
         >
           {visited.has("shopping") && <ShoppingListView />}

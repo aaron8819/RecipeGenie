@@ -27,6 +27,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/lib/shopping-list-normalization.ts` | Unit and ingredient-name normalization. |
 | `web/src/lib/shopping-list-merging.ts` | Merge-compatible-unit logic. |
 | `web/src/lib/shopping-categories.ts` | Category lookup and excluded-keyword matching. |
+| `web/src/lib/pane-scroll.ts` | Pane-relative scrolling helper for kept-mounted home-tab panes. |
 
 ## Boundaries
 
@@ -51,6 +52,15 @@ The aggregation pipeline normalizes ingredient names and units, merges compatibl
 
 Per-item pending state matters. Do not disable all shopping actions behind a single mutation-level `isPending` flag when only one item is changing.
 
+### In-pane jump navigation
+
+Shopping runs inside the kept-mounted home tab shell, where the active tab pane is the real `overflow-y-auto` scroller and `body` is locked to the viewport.
+
+- Do not use `scrollIntoView()` for Shopping section jumps or other home-tab in-pane navigation.
+- Use `scrollNodeIntoPane()` from `web/src/lib/pane-scroll.ts` so the active pane is scrolled explicitly.
+- Mobile jump navigation should avoid smooth scrolling when sticky in-pane UI is present.
+- If the Shopping sticky mobile header changes height, re-check the jump offset constants in `shopping-list.tsx`.
+
 ### Pantry bridge
 
 Pantry integration is not a presentational concern. Cross-list mutation logic belongs in hooks, especially flows that move items between `items` and `already_have`.
@@ -69,4 +79,4 @@ npm run test -- --run
 npx playwright test shopping-list.spec.ts --project=chromium
 ```
 
-Last updated: 2026-03-07
+Last updated: 2026-03-11

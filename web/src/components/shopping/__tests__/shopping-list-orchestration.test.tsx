@@ -124,9 +124,16 @@ function makeConfig(overrides: Partial<UserConfig> = {}): UserConfig {
 
 function renderShoppingList() {
   return render(
-    <UndoToastProvider>
-      <ShoppingListView />
-    </UndoToastProvider>
+    <div
+      data-home-tab-panel="shopping"
+      data-testid="shopping-test-pane"
+      aria-hidden="false"
+      style={{ overflowY: "auto", maxHeight: "600px" }}
+    >
+      <UndoToastProvider>
+        <ShoppingListView />
+      </UndoToastProvider>
+    </div>
   )
 }
 
@@ -790,12 +797,8 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByRole("button", { name: "Show 2 done" })).toBeInTheDocument()
   })
 
-  it("uses progress jump chips to reopen a collapsed active category and scroll it into view", () => {
-    const scrollIntoView = vi.fn()
-    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView,
-    })
+  it("uses progress jump chips to reopen a collapsed active category and scroll the active pane", () => {
+    setMobileViewport()
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
       callback(0)
       return 0
@@ -810,13 +813,64 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
+    const pane = screen.getByTestId("shopping-test-pane")
+    const scrollTo = vi.fn(({ top }: ScrollToOptions) => {
+      Object.defineProperty(pane, "scrollTop", {
+        configurable: true,
+        writable: true,
+        value: top ?? 0,
+      })
+    })
+
+    Object.defineProperty(pane, "clientHeight", {
+      configurable: true,
+      value: 600,
+    })
+    Object.defineProperty(pane, "scrollHeight", {
+      configurable: true,
+      value: 1600,
+    })
+    Object.defineProperty(pane, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value: 80,
+    })
+    Object.defineProperty(pane, "scrollTo", {
+      configurable: true,
+      value: scrollTo,
+    })
+    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 20,
+      width: 390,
+      height: 600,
+      top: 20,
+      right: 390,
+      bottom: 620,
+      left: 0,
+      toJSON: () => ({}),
+    })
+
+    const pantrySection = screen.getByTestId("shopping-category-pantry")
+    vi.spyOn(pantrySection, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 620,
+      width: 390,
+      height: 180,
+      top: 620,
+      right: 390,
+      bottom: 800,
+      left: 0,
+      toJSON: () => ({}),
+    })
+
     fireEvent.click(screen.getAllByRole("button", { name: "Collapse category" })[1])
     expect(screen.queryByText("rice")).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
 
     expect(screen.getByText("rice")).toBeInTheDocument()
-    expect(scrollIntoView).toHaveBeenCalled()
+    expect(scrollTo).toHaveBeenCalledWith({ top: 584, behavior: "auto" })
   })
 
   it("applies bulk check-off optimistically and keeps the checked state stable after settlement", async () => {
