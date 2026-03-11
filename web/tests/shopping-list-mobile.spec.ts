@@ -11,7 +11,93 @@ function rowById(page: Page, rowId: string) {
 }
 
 async function openShoppingFromBottomNav(page: Page) {
-  await page.locator('nav').last().getByRole('button', { name: /^shopping$/i }).click()
+  await page
+    .getByRole('navigation', { name: /bottom navigation/i })
+    .getByRole('button', { name: /^shopping$/i })
+    .evaluate((button: HTMLButtonElement) => button.click())
+}
+
+async function activateBottomNavTab(page: Page, tabName: RegExp) {
+  await page
+    .getByRole('navigation', { name: /bottom navigation/i })
+    .getByRole('button', { name: tabName })
+    .evaluate((button: HTMLButtonElement) => button.click())
+}
+
+async function dismissNextDevTools(page: Page) {
+  const closeButton = page.getByRole('button', { name: /close next\.js dev tools/i })
+  if (await closeButton.isVisible().catch(() => false)) {
+    await closeButton.click({ force: true })
+  }
+}
+
+async function ensureShoppingView(page: Page) {
+  const heading = page.getByRole('heading', { name: /shopping list/i })
+  await page.getByRole('navigation', { name: /bottom navigation/i }).waitFor()
+  await dismissNextDevTools(page)
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (await heading.isVisible().catch(() => false)) {
+      return
+    }
+
+    await activateBottomNavTab(page, /^shopping$/i)
+
+    await page.waitForTimeout(250)
+  }
+
+  await expect(heading).toBeVisible()
+}
+
+async function readShellLockState(page: Page) {
+  return page.evaluate(() => ({
+    bodyPointerEvents: document.body.style.pointerEvents,
+    bodyScrollLocked: document.body.hasAttribute('data-scroll-locked'),
+    bodyOverflow: document.body.style.overflow,
+    documentOverflow: document.documentElement.style.overflow,
+    visibleMenuCount: document.querySelectorAll('[role="menu"]').length,
+  }))
+}
+
+async function readActivePaneState(page: Page) {
+  return page.evaluate(() => {
+    const activePane = Array.from(document.querySelectorAll('main .container > div[aria-hidden="false"]'))
+      .find((element) => getComputedStyle(element).overflowY === 'auto') as HTMLDivElement | undefined
+
+    if (!activePane) {
+      return null
+    }
+
+    const before = activePane.scrollTop
+    activePane.scrollTop = before + 120
+
+    return {
+      before,
+      after: activePane.scrollTop,
+      clientHeight: activePane.clientHeight,
+      scrollHeight: activePane.scrollHeight,
+      overflowY: getComputedStyle(activePane).overflowY,
+    }
+  })
+}
+
+async function persistHomeTab(page: Page, tab: 'planner' | 'recipes' | 'shopping' | 'pantry') {
+  await page.context().addCookies([
+    {
+      name: 'recipe-genie-active-tab',
+      value: tab,
+      url: page.url(),
+    },
+  ])
+
+  await page.addInitScript((nextTab) => {
+    window.localStorage.setItem('recipe-genie-active-tab', nextTab)
+  }, tab)
+
+  await page.evaluate((nextTab) => {
+    window.localStorage.setItem('recipe-genie-active-tab', nextTab)
+    document.cookie = `recipe-genie-active-tab=${encodeURIComponent(nextTab)}; Path=/; Max-Age=31536000; SameSite=Lax`
+  }, tab)
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -222,5 +308,67 @@ test.describe('Shopping List Mobile @extended', () => {
 
     await expect(rowById(page, pantryRowId)).toBeVisible()
     await expect(rowById(page, produceRowId)).toBeVisible()
+  })
+
+  test('releases Shopping action-menu locks before switching to Planner on mobile @extended', async ({ page }) => {
+    const seed = `${Date.now()}-menu-lock`
+    const rowId = `row-mobile-menu-lock-${seed}`
+    const itemName = `mobile menu lock item ${seed}`
+
+    cleanupState = await seedShoppingState({
+      items: [
+        buildShoppingItem({
+          rowId,
+          item: itemName,
+          amount: 1,
+          unit: 'bottle',
+          categoryKey: 'pantry',
+          categoryOrder: 6,
+        }),
+      ],
+    })
+    await persistHomeTab(page, 'shopping')
+    await page.goto('/')
+    await ensureShoppingView(page)
+
+    const row = rowById(page, rowId)
+    await expect(row).toBeVisible()
+
+    await row.getByRole('button', { name: /item actions/i }).click()
+    await expect(page.getByRole('menuitem', { name: /remove from list/i })).toBeVisible()
+    await page.getByRole('menuitem', { name: /remove from list/i }).click()
+
+    await expect(row).toHaveCount(0)
+
+    await expect
+      .poll(async () => readShellLockState(page))
+      .toMatchObject({
+        bodyPointerEvents: '',
+        bodyScrollLocked: false,
+        visibleMenuCount: 0,
+      })
+
+    await dismissNextDevTools(page)
+    await activateBottomNavTab(page, /^planner$/i)
+    await expect(page.getByRole('button', { name: /today/i })).toBeVisible()
+
+    await expect
+      .poll(async () => readShellLockState(page))
+      .toMatchObject({
+        bodyPointerEvents: '',
+        bodyScrollLocked: false,
+        visibleMenuCount: 0,
+      })
+
+    const paneState = await readActivePaneState(page)
+    expect(paneState).not.toBeNull()
+    expect(paneState?.overflowY).toBe('auto')
+    expect(paneState?.scrollHeight).toBeGreaterThanOrEqual(paneState?.clientHeight ?? 0)
+
+    if (paneState && paneState.scrollHeight > paneState.clientHeight) {
+      expect(paneState.after).toBeGreaterThan(paneState.before)
+    } else {
+      await expect(page.getByRole('button', { name: /^shopping$/i })).toBeVisible()
+    }
   })
 })
