@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn, toFraction } from "@/lib/utils"
+import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import type { ShoppingItem } from "@/types/database"
 
 const RECIPE_COLORS = [
@@ -73,7 +74,7 @@ const DISPLAY_UNIT_PLURALS: Record<string, string> = {
 }
 
 function formatDisplayUnit(amount: number, unit: string): string {
-  const trimmedUnit = unit.trim()
+  const trimmedUnit = getIngredientDisplayUnit(unit)
   if (!trimmedUnit) return ""
 
   const sizedPackageMatch = trimmedUnit.match(/^([a-z]+)\s+\((.+)\)$/)

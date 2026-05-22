@@ -28,6 +28,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, toFraction } from "@/lib/utils"
 import { parseIngredientLine } from "@/lib/recipe-parser"
+import {
+  WHOLE_COUNT_UNIT,
+  WHOLE_COUNT_UNIT_LABEL,
+  getIngredientDisplayUnit,
+} from "@/lib/ingredient-units"
 import type { Ingredient } from "@/types/database"
 import {
   validateIngredient,
@@ -37,11 +42,16 @@ import {
 // ─── constants / helpers ─────────────────────────────────────────────────────
 
 const COMMON_UNITS = [
+  WHOLE_COUNT_UNIT,
   "tsp", "tbsp", "cup", "oz", "fl oz", "lb",
   "g", "kg", "ml", "l",
   "pt", "qt", "gal",
   "can", "clove", "head", "piece", "slice", "pinch", "dash", "pkg",
 ]
+
+function getUnitOptionLabel(unit: string): string {
+  return unit === WHOLE_COUNT_UNIT ? WHOLE_COUNT_UNIT_LABEL : unit
+}
 
 function parseAmountStr(str: string): number | null {
   const trimmed = str.trim()
@@ -72,9 +82,11 @@ function SortableIngredientRow({
   onRemoveIngredient,
   onIngredientChange,
   ingredients,
+  onKeyboardMoveIngredient,
   isEditing,
   editModeLayout,
   editModeTwoColLayout,
+  editDocumentLayout,
   addRecipeModalLayout,
   isWideViewport,
   onBulkPasteIngredients,
@@ -85,10 +97,12 @@ function SortableIngredientRow({
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
   onBulkPasteIngredients: (index: number, text: string) => void
+  onKeyboardMoveIngredient: (fromIndex: number, toIndex: number) => void
   ingredients: Ingredient[]
   isEditing: boolean
   editModeLayout?: boolean
   editModeTwoColLayout?: boolean
+  editDocumentLayout?: boolean
   addRecipeModalLayout?: boolean
   isWideViewport?: boolean
   duplicateWarnings?: string[]
@@ -97,6 +111,7 @@ function SortableIngredientRow({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -165,13 +180,35 @@ function SortableIngredientRow({
     onIngredientChange(index, "modifier", parsed.modifier || null)
   }
 
+  const handleDragHandleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    listeners?.onKeyDown?.(event)
+
+    if (event.defaultPrevented) return
+
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return
+    }
+
+    const nextIndex = event.key === "ArrowUp" ? index - 1 : index + 1
+
+    if (nextIndex < 0 || nextIndex >= ingredients.length) {
+      return
+    }
+
+    event.preventDefault()
+    onKeyboardMoveIngredient(index, nextIndex)
+  }
+
   const compactInput = editModeTwoColLayout
   const addRecipeInput = addRecipeModalLayout
+  const documentInput = editDocumentLayout
   const dragHandle = isEditing || addRecipeModalLayout ? (
     <button
       type="button"
+      ref={setActivatorNodeRef}
       className={cn(
         "touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground flex-shrink-0",
+        editDocumentLayout ? "flex h-10 w-9 items-center justify-center rounded-lg hover:bg-muted" :
         editModeLayout ? "flex items-center justify-center w-full h-9" :
         editModeTwoColLayout ? "flex items-center justify-center" :
         addRecipeModalLayout ? "flex items-center justify-center text-lg" :
@@ -181,6 +218,7 @@ function SortableIngredientRow({
       aria-label={`Reorder ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
       {...attributes}
       {...listeners}
+      onKeyDown={handleDragHandleKeyDown}
     >
       <GripVertical className="h-4 w-4" />
     </button>
@@ -190,6 +228,7 @@ function SortableIngredientRow({
     <Input
       className={cn(
         editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 text-center rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-16 text-center text-sm py-2 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 rounded-lg text-center bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-20",
+        documentInput && "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-center text-sm dark:border-zinc-800",
         issues.includes('unit-without-amount') && "border-amber-400 dark:border-amber-500"
       )}
       type="text"
@@ -205,7 +244,7 @@ function SortableIngredientRow({
     />
   )
   const unitInputClass = cn(
-    editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none" : "w-24 border-input",
+    editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : documentInput ? "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-sm dark:border-zinc-800" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none" : "w-24 border-input",
     issues.includes('amount-without-unit') && "border-amber-400 dark:border-amber-500"
   )
   const unitInput = showCustomUnit ? (
@@ -231,7 +270,7 @@ function SortableIngredientRow({
     >
       <option value="">—</option>
       {COMMON_UNITS.map((u) => (
-        <option key={u} value={u}>{u}</option>
+        <option key={u} value={u}>{getUnitOptionLabel(u)}</option>
       ))}
       <option value="__custom__">Other…</option>
     </select>
@@ -240,6 +279,7 @@ function SortableIngredientRow({
     <Input
       className={cn(
         editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "flex-1 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "flex-1",
+        documentInput && "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-sm dark:border-zinc-800",
         issues.includes('missing-item') && "border-amber-400 dark:border-amber-500"
       )}
       placeholder="Ingredient"
@@ -256,7 +296,7 @@ function SortableIngredientRow({
   )
   const modifierInput = (
     <Input
-      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-24 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800 flex-shrink-0" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "w-32"}
+      className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : documentInput ? "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-sm dark:border-zinc-800" : compactInput ? "w-24 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800 flex-shrink-0" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "w-32"}
       placeholder="prep (e.g. diced)"
       value={ingredient.modifier || ""}
       onChange={(e) => onIngredientChange(index, "modifier", e.target.value || null)}
@@ -268,7 +308,7 @@ function SortableIngredientRow({
       size="icon"
       onClick={() => onRemoveIngredient(index)}
       disabled={ingredients.length === 1}
-      className={editModeLayout ? "text-muted-foreground hover:text-destructive flex items-center justify-center h-9 w-9 rounded-lg" : editModeTwoColLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0" : addRecipeModalLayout ? cn("text-muted-foreground hover:text-destructive transition-opacity flex-shrink-0 text-lg p-0", isWideViewport ? "opacity-0 group-hover:opacity-100" : "opacity-100") : ""}
+      className={editDocumentLayout ? "h-10 w-10 flex-shrink-0 text-muted-foreground hover:text-destructive" : editModeLayout ? "text-muted-foreground hover:text-destructive flex items-center justify-center h-9 w-9 rounded-lg" : editModeTwoColLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0" : addRecipeModalLayout ? cn("text-muted-foreground hover:text-destructive transition-opacity flex-shrink-0 text-lg p-0", isWideViewport ? "opacity-0 group-hover:opacity-100" : "opacity-100") : ""}
       aria-label={`Delete ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
     >
       <Trash2 className="h-4 w-4" />
@@ -325,6 +365,62 @@ function SortableIngredientRow({
           <p className="px-2 pt-1 text-[11px] text-amber-700 dark:text-amber-400">
             {rowWarnings.join(" • ")}
           </p>
+        ) : null}
+      </div>
+    )
+  }
+
+  if (editDocumentLayout) {
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        data-has-issues={hasRowWarnings ? "true" : undefined}
+        className={cn(
+          "group rounded-xl border border-stone-200 bg-background p-3 dark:border-zinc-800",
+          isDragging && "z-50",
+          hasRowWarnings && "border-amber-300 bg-amber-50/60 ring-2 ring-amber-300/40 dark:border-amber-700 dark:bg-amber-950/20"
+        )}
+      >
+        {stackedGroupBadge}
+        <div className="grid gap-2 lg:grid-cols-[36px_minmax(18rem,2fr)_88px_128px_minmax(16rem,1.4fr)_40px] lg:items-start">
+          <div className="flex items-center justify-between gap-2 lg:block">
+            {dragHandle}
+            <div className="lg:hidden">{deleteButton}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
+              Ingredient
+            </div>
+            {itemInput}
+          </div>
+          <div className="grid grid-cols-2 gap-2 lg:contents">
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
+                Amount
+              </div>
+              {amountInput}
+            </div>
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
+                Unit
+              </div>
+              {unitInput}
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
+              Prep
+            </div>
+            {modifierInput}
+          </div>
+          <div className="hidden lg:block">{deleteButton}</div>
+        </div>
+        {rowWarnings.length > 0 ? (
+          <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-100/80 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            <span>{rowWarnings.join(" • ")}</span>
+          </div>
         ) : null}
       </div>
     )
@@ -409,12 +505,17 @@ function SortableIngredientRow({
 // ─── IngredientDragOverlay ────────────────────────────────────────────────────
 
 function IngredientDragOverlay({ ingredient }: { ingredient: Ingredient }) {
+  const displayUnit = getIngredientDisplayUnit(ingredient.unit)
+  const quantityText = ingredient.amount
+    ? `${ingredient.amount}${displayUnit ? ` ${displayUnit}` : ""}`
+    : ""
+
   return (
     <div className="flex gap-2 items-center bg-card border rounded-lg p-2 shadow-lg">
       <GripVertical className="h-4 w-4 text-muted-foreground" />
       <span className="flex-1 text-sm">
-        {ingredient.amount && ingredient.unit
-          ? `${ingredient.amount} ${ingredient.unit} ${ingredient.item}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`
+        {quantityText
+          ? `${quantityText} ${ingredient.item}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`
           : `${ingredient.item || "Ingredient"}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`}
       </span>
     </div>
@@ -427,6 +528,7 @@ export interface SortableIngredientListProps {
   ingredients: Ingredient[]
   /** true = edit-recipe layout; false = add-recipe modal layout */
   editModeTwoColLayout?: boolean
+  editDocumentLayout?: boolean
   addRecipeModalLayout?: boolean
   isWideViewport?: boolean
   onReorderIngredients: (event: DragEndEvent) => void
@@ -439,6 +541,7 @@ export interface SortableIngredientListProps {
 export function SortableIngredientList({
   ingredients,
   editModeTwoColLayout,
+  editDocumentLayout,
   addRecipeModalLayout,
   isWideViewport,
   onReorderIngredients,
@@ -464,6 +567,13 @@ export function SortableIngredientList({
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null)
     onReorderIngredients(event)
+  }
+
+  const handleKeyboardMoveIngredient = (fromIndex: number, toIndex: number) => {
+    onReorderIngredients({
+      active: { id: fromIndex.toString() },
+      over: { id: toIndex.toString() },
+    } as DragEndEvent)
   }
 
   const activeIngredient = activeId ? ingredients[parseInt(activeId)] : null
@@ -497,11 +607,38 @@ export function SortableIngredientList({
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
                 onBulkPasteIngredients={onBulkPasteIngredients}
+                onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}
                 ingredients={ingredients}
                 isEditing={true}
                 addRecipeModalLayout
                 isWideViewport={isWideViewport}
+              />
+            ))}
+          </div>
+        ) : editDocumentLayout ? (
+          <div className="space-y-3">
+            <div className="hidden grid-cols-[36px_minmax(18rem,2fr)_88px_128px_minmax(16rem,1.4fr)_40px] gap-2 px-3 text-[10px] font-bold uppercase text-muted-foreground lg:grid">
+              <span aria-hidden="true" />
+              <span>Ingredient</span>
+              <span>Amount</span>
+              <span>Unit</span>
+              <span>Prep</span>
+              <span aria-hidden="true" />
+            </div>
+            {ingredients.map((ingredient, index) => (
+              <SortableIngredientRow
+                key={index}
+                ingredient={ingredient}
+                index={index}
+                onRemoveIngredient={onRemoveIngredient}
+                onIngredientChange={onIngredientChange}
+                onBulkPasteIngredients={onBulkPasteIngredients}
+                onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
+                duplicateWarnings={duplicateWarningsByRow?.[index]}
+                ingredients={ingredients}
+                isEditing={true}
+                editDocumentLayout
               />
             ))}
           </div>
@@ -515,6 +652,7 @@ export function SortableIngredientList({
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
                 onBulkPasteIngredients={onBulkPasteIngredients}
+                onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}
                 ingredients={ingredients}
                 isEditing={true}

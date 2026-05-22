@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { getFlatRecipeInstructions } from '@/lib/recipe-structure';
 import { useWakeLock } from '@/hooks/use-wake-lock';
 import { cn, toFraction } from '@/lib/utils';
+import { getIngredientDisplayUnit } from '@/lib/ingredient-units';
 import type { Recipe } from '@/types/database';
 
 interface CookModeProps {
@@ -144,7 +145,13 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
         {showIngredients && (
           <div className="px-4 sm:px-6 pb-4 max-h-48 overflow-y-auto">
             <ul className="space-y-2">
-              {ingredients.map((ing, i) => (
+              {ingredients.map((ing, i) => {
+                const displayUnit = getIngredientDisplayUnit(ing.unit);
+                const quantityText = ing.amount != null
+                  ? `${toFraction(ing.amount)}${displayUnit ? ` ${displayUnit}` : ''}`
+                  : '';
+
+                return (
                 <li key={i}>
                   <button
                     type="button"
@@ -177,12 +184,7 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
                           'line-through'
                       )}
                     >
-                      {ing.amount != null && (
-                        <>
-                          {toFraction(ing.amount)}{' '}
-                          {ing.unit}{' '}
-                        </>
-                      )}
+                      {quantityText ? `${quantityText} ` : ''}
                       {ing.item}
                       {ing.alternatives && ing.alternatives.length > 0 && (
                         <span className="text-muted-foreground">
@@ -198,7 +200,8 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
                     </span>
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </div>
         )}

@@ -71,6 +71,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Text parsing is local and deterministic.
 - URL import remains server-side because it needs SSRF protection, rate limiting, and HTML/JSON-LD extraction.
 - Import apply/save/reopen parity now preserves structured recipe times and notes directly, and preserves grouped instructions through additive `instruction_groups`.
+- Edit mode has a paste-to-replace flow that reuses the text parser and applies parsed fields to the current recipe draft. It preserves the recipe id, category, tags, and image; replaces name/servings/times when parsed; replaces ingredients only when at least one ingredient is parsed; replaces instructions only when steps are parsed; and keeps existing notes unless parsed notes are present.
 
 ### Sharing
 

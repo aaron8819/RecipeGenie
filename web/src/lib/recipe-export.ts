@@ -1,5 +1,6 @@
 import type { Recipe, Ingredient } from '@/types/database';
 import { getFlatRecipeInstructions } from '@/lib/recipe-structure';
+import { getIngredientDisplayUnit } from '@/lib/ingredient-units';
 
 /**
  * Convert an ingredient to a display string.
@@ -10,10 +11,11 @@ function ingredientToString(ing: Ingredient): string {
 
   const parts: string[] = [];
   if (ing.amount != null) parts.push(String(ing.amount));
-  if (ing.unit) parts.push(ing.unit);
+  const displayUnit = getIngredientDisplayUnit(ing.unit);
+  if (displayUnit) parts.push(displayUnit);
   parts.push(ing.item);
-  if (ing.modifier) parts.push(`, ${ing.modifier}`);
-  return parts.join(' ');
+  const base = parts.join(' ');
+  return ing.modifier ? `${base}, ${ing.modifier}` : base;
 }
 
 /**

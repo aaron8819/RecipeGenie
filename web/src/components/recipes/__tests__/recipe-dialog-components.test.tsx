@@ -203,6 +203,31 @@ describe("RecipeImportSection", () => {
     expect(onBackToInput).toHaveBeenCalledTimes(1)
     expect(onApplyPreview).toHaveBeenCalledTimes(1)
   })
+
+  it("renders whole/count import preview amounts naturally", () => {
+    render(
+      <RecipeImportSection
+        importStep="preview"
+        importUrl=""
+        importText=""
+        parseError={null}
+        livePreview={null}
+        parsedPreview={parsedRecipe({
+          ingredients: [{ item: "onion", amount: 1, unit: "count" }],
+        })}
+        isImportingFromUrl={false}
+        onImportUrlChange={() => {}}
+        onImportTextChange={() => {}}
+        onImportUrl={() => {}}
+        onApplyLivePreview={() => {}}
+        onBackToInput={() => {}}
+        onApplyPreview={() => {}}
+      />
+    )
+
+    expect(screen.getByText("onion")).toBeInTheDocument()
+    expect(screen.queryByText("1 count")).not.toBeInTheDocument()
+  })
 })
 
 describe("RecipeDialogActions", () => {

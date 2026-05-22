@@ -1,6 +1,7 @@
 import { parseIngredientLine } from "@/lib/recipe-parser"
 import type { Ingredient } from "@/types/database"
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
+import { WHOLE_COUNT_UNIT } from "@/lib/ingredient-units"
 
 export type IngredientValidationIssue =
   | "missing-item"
@@ -46,7 +47,12 @@ export function validateIngredient(
     issues.push("unit-without-amount")
   }
 
-  if (ingredient.amount && ingredient.amount > 0 && !ingredient.unit?.trim()) {
+  if (
+    ingredient.amount &&
+    ingredient.amount > 0 &&
+    !ingredient.unit?.trim() &&
+    !ingredient.item?.trim()
+  ) {
     issues.push("amount-without-unit")
   }
 
@@ -71,21 +77,17 @@ export function autoFixIngredients(ingredients: Ingredient[]): {
   fixedCount: number
 } {
   const fixedIngredients = ingredients.map((ingredient) => {
-    const issues = validateIngredient(ingredient)
-
-    if (issues.length === 0) {
-      return ingredient
-    }
-
+    let fixedIngredient = ingredient
     if (
       ingredient.item &&
-      (issues.includes("amount-without-unit") ||
-        issues.includes("unit-without-amount"))
+      ingredient.amount === null &&
+      !ingredient.unit.trim() &&
+      !ingredient.modifier?.trim()
     ) {
       const parsed = parseIngredientLine(ingredient.item)
 
       if (parsed.item && parsed.item !== ingredient.item) {
-        return {
+        fixedIngredient = {
           ...ingredient,
           amount: parsed.amount !== null ? parsed.amount : ingredient.amount,
           unit: parsed.unit || ingredient.unit,
@@ -95,17 +97,26 @@ export function autoFixIngredients(ingredients: Ingredient[]): {
       }
     }
 
-    if (issues.includes("unit-without-amount") && !ingredient.amount) {
-      return { ...ingredient, amount: 1 }
+    if (
+      fixedIngredient.item?.trim() &&
+      fixedIngredient.amount &&
+      fixedIngredient.amount > 0 &&
+      !fixedIngredient.unit?.trim()
+    ) {
+      fixedIngredient = { ...fixedIngredient, unit: WHOLE_COUNT_UNIT }
     }
 
-    return ingredient
+    const issues = validateIngredient(fixedIngredient)
+
+    if (issues.includes("unit-without-amount") && !fixedIngredient.amount) {
+      return { ...fixedIngredient, amount: 1 }
+    }
+
+    return fixedIngredient
   })
 
   const fixedCount = fixedIngredients.filter((ingredient, index) => {
-    const before = validateIngredient(ingredients[index]).length
-    const after = validateIngredient(ingredient).length
-    return after < before
+    return JSON.stringify(ingredient) !== JSON.stringify(ingredients[index])
   }).length
 
   return {

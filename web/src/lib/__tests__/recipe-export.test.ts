@@ -98,14 +98,30 @@ describe('recipesToSchemaOrg', () => {
           {
             item: 'onion',
             amount: 1,
-            unit: '',
+            unit: 'count',
             modifier: 'diced',
           },
         ],
       }),
     ]);
     expect(result[0].recipeIngredient[0])
-      .toBe('1 onion , diced');
+      .toBe('1 onion, diced');
+  });
+
+  it('should suppress whole/count units while preserving measured units', () => {
+    const result = recipesToSchemaOrg([
+      makeRecipe({
+        ingredients: [
+          { item: 'onion', amount: 1, unit: 'count' },
+          { item: 'rice', amount: 1, unit: 'cup' },
+        ],
+      }),
+    ]);
+
+    expect(result[0].recipeIngredient).toEqual([
+      '1 onion',
+      '1 cup rice',
+    ]);
   });
 
   it('should include ISO-8601 duration fields when recipe times are present', () => {

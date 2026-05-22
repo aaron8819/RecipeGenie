@@ -60,11 +60,13 @@ const UNIT_CONVERSIONS: Record<string, { family: UnitFamily; toBase: number }> =
   // Count units
   "": { family: "count", toBase: 1 },
   "count": { family: "count", toBase: 1 },
+  "counts": { family: "count", toBase: 1 },
   "piece": { family: "count", toBase: 1 },
   "pieces": { family: "count", toBase: 1 },
   "pc": { family: "count", toBase: 1 },
   "pcs": { family: "count", toBase: 1 },
   "whole": { family: "count", toBase: 1 },
+  "whole/count": { family: "count", toBase: 1 },
   "clove": { family: "count", toBase: 1 },
   "cloves": { family: "count", toBase: 1 },
   "slice": { family: "count", toBase: 1 },
