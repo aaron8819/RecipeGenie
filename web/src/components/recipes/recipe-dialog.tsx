@@ -666,6 +666,7 @@ export function RecipeDialog({
                 onImportTextChange={(value) => {
                   setImportText(value)
                   setParseError(null)
+                  setLivePreview(null)
                   debouncedParse(value)
                 }}
                 onImportUrl={handleUrlImport}
@@ -889,6 +890,7 @@ export function RecipeDialog({
                   onImportTextChange={(value) => {
                     setImportText(value)
                     setParseError(null)
+                    setLivePreview(null)
                     debouncedParse(value)
                   }}
                   onImportUrl={handleUrlImport}

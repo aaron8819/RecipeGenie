@@ -72,6 +72,7 @@ function SortableIngredientRow({
   onRemoveIngredient,
   onIngredientChange,
   ingredients,
+  onKeyboardMoveIngredient,
   isEditing,
   editModeLayout,
   editModeTwoColLayout,
@@ -86,6 +87,7 @@ function SortableIngredientRow({
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
   onBulkPasteIngredients: (index: number, text: string) => void
+  onKeyboardMoveIngredient: (fromIndex: number, toIndex: number) => void
   ingredients: Ingredient[]
   isEditing: boolean
   editModeLayout?: boolean
@@ -99,6 +101,7 @@ function SortableIngredientRow({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -167,12 +170,32 @@ function SortableIngredientRow({
     onIngredientChange(index, "modifier", parsed.modifier || null)
   }
 
+  const handleDragHandleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    listeners?.onKeyDown?.(event)
+
+    if (event.defaultPrevented) return
+
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
+      return
+    }
+
+    const nextIndex = event.key === "ArrowUp" ? index - 1 : index + 1
+
+    if (nextIndex < 0 || nextIndex >= ingredients.length) {
+      return
+    }
+
+    event.preventDefault()
+    onKeyboardMoveIngredient(index, nextIndex)
+  }
+
   const compactInput = editModeTwoColLayout
   const addRecipeInput = addRecipeModalLayout
   const documentInput = editDocumentLayout
   const dragHandle = isEditing || addRecipeModalLayout ? (
     <button
       type="button"
+      ref={setActivatorNodeRef}
       className={cn(
         "touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground flex-shrink-0",
         editDocumentLayout ? "flex h-10 w-9 items-center justify-center rounded-lg hover:bg-muted" :
@@ -185,6 +208,7 @@ function SortableIngredientRow({
       aria-label={`Reorder ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
       {...attributes}
       {...listeners}
+      onKeyDown={handleDragHandleKeyDown}
     >
       <GripVertical className="h-4 w-4" />
     </button>
@@ -530,6 +554,13 @@ export function SortableIngredientList({
     onReorderIngredients(event)
   }
 
+  const handleKeyboardMoveIngredient = (fromIndex: number, toIndex: number) => {
+    onReorderIngredients({
+      active: { id: fromIndex.toString() },
+      over: { id: toIndex.toString() },
+    } as DragEndEvent)
+  }
+
   const activeIngredient = activeId ? ingredients[parseInt(activeId)] : null
   const ingredientIds = ingredients.map((_, i) => i.toString())
 
@@ -561,6 +592,7 @@ export function SortableIngredientList({
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
                 onBulkPasteIngredients={onBulkPasteIngredients}
+                onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}
                 ingredients={ingredients}
                 isEditing={true}
@@ -587,6 +619,7 @@ export function SortableIngredientList({
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
                 onBulkPasteIngredients={onBulkPasteIngredients}
+                onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}
                 ingredients={ingredients}
                 isEditing={true}
@@ -604,6 +637,7 @@ export function SortableIngredientList({
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
                 onBulkPasteIngredients={onBulkPasteIngredients}
+                onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}
                 ingredients={ingredients}
                 isEditing={true}

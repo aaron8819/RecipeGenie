@@ -69,4 +69,33 @@ describe("SortableIngredientList", () => {
 
     expect(screen.getByText("Possible duplicate of row 2")).toBeInTheDocument()
   })
+
+  it("moves a focused row with arrow keys on the reorder handle", () => {
+    const onReorderIngredients = vi.fn()
+
+    render(
+      <SortableIngredientList
+        ingredients={[
+          { item: "flour", amount: 1, unit: "cup" },
+          { item: "sugar", amount: 2, unit: "tbsp" },
+        ]}
+        editDocumentLayout
+        onReorderIngredients={onReorderIngredients}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={() => {}}
+        onIngredientChange={() => {}}
+      />
+    )
+
+    fireEvent.keyDown(screen.getByLabelText(/reorder ingredient 1/i), {
+      key: "ArrowDown",
+    })
+
+    expect(onReorderIngredients).toHaveBeenCalledWith(
+      expect.objectContaining({
+        active: expect.objectContaining({ id: "0" }),
+        over: expect.objectContaining({ id: "1" }),
+      })
+    )
+  })
 })
