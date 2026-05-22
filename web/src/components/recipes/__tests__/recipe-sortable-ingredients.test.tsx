@@ -29,6 +29,33 @@ describe("SortableIngredientList", () => {
     expect(onIngredientChange).toHaveBeenCalledWith(0, "modifier", "sifted")
   })
 
+  it("parses countable whole ingredient lines and exposes the whole/count option", () => {
+    const onIngredientChange = vi.fn()
+
+    render(
+      <SortableIngredientList
+        ingredients={[{ item: "", amount: null, unit: "" }]}
+        addRecipeModalLayout
+        isWideViewport
+        onReorderIngredients={() => {}}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={() => {}}
+        onIngredientChange={onIngredientChange}
+      />
+    )
+
+    expect(screen.getByRole("option", { name: "whole/count" })).toBeInTheDocument()
+
+    const input = screen.getByPlaceholderText("Ingredient")
+    fireEvent.change(input, { target: { value: "1 onion, sliced" } })
+    fireEvent.blur(input, { target: { value: "1 onion, sliced" } })
+
+    expect(onIngredientChange).toHaveBeenCalledWith(0, "amount", 1)
+    expect(onIngredientChange).toHaveBeenCalledWith(0, "unit", "count")
+    expect(onIngredientChange).toHaveBeenCalledWith(0, "item", "onion")
+    expect(onIngredientChange).toHaveBeenCalledWith(0, "modifier", "sliced")
+  })
+
   it("routes multi-line paste through the bulk paste handler", () => {
     const onBulkPasteIngredients = vi.fn()
 

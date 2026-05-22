@@ -186,6 +186,32 @@ describe("RecipeDetailDialog cache consistency", () => {
     expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
   })
 
+  it("renders whole/count ingredients without showing the internal unit", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RecipeDetailDialog
+          open={true}
+          onOpenChange={() => {}}
+          recipeId="recipe-1"
+          recipe={makeRecipe({
+            ingredients: [
+              { item: "onion", amount: 1, unit: "count" },
+              { item: "rice", amount: 1, unit: "cup" },
+            ],
+          })}
+        />
+      </QueryClientProvider>
+    )
+
+    expect(screen.getByText("onion")).toBeInTheDocument()
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0)
+    expect(screen.getByText("1 cup")).toBeInTheDocument()
+    expect(screen.queryByText("1 count")).not.toBeInTheDocument()
+  })
   it("renders persisted times, notes, and grouped instructions without legacy note duplication", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },

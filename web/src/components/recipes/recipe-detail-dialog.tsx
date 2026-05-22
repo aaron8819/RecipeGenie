@@ -26,6 +26,7 @@ import { getTagClassName } from "@/lib/tag-colors"
 import { useRef, useState } from "react"
 import { formatRecipeTime, getRecipeInstructionGroups, getRecipeNotes } from "@/lib/recipe-structure"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
+import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import { CookMode } from "./cook-mode"
 
 interface RecipeDetailDialogProps {
@@ -434,8 +435,9 @@ export function RecipeDetailDialog({
                     ) : null}
                     <ul className="space-y-4">
                       {group.ingredients.map((ingredient, index) => {
+                        const displayUnit = getIngredientDisplayUnit(ingredient.unit)
                         const quantityText = ingredient.amount != null
-                          ? `${toFraction(ingredient.amount)}${ingredient.unit ? ` ${ingredient.unit}` : ""}`
+                          ? `${toFraction(ingredient.amount)}${displayUnit ? ` ${displayUnit}` : ""}`
                           : "—"
 
                         return (

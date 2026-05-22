@@ -40,6 +40,45 @@ describe('parseIngredientLine', () => {
     expect(result.modifier).toBe('diced');
   });
 
+  it('should infer whole/count units when an amount is followed by an item name', () => {
+    const cases = [
+      ['1 onion, sliced', { amount: 1, unit: 'count', item: 'onion', modifier: 'sliced' }],
+      ['1 red bell pepper, diced', { amount: 1, unit: 'count', item: 'red bell pepper', modifier: 'diced' }],
+      ['2 eggs', { amount: 2, unit: 'count', item: 'eggs' }],
+      ['1 lime, juiced', { amount: 1, unit: 'count', item: 'lime', modifier: 'juiced' }],
+      ['\u00bd avocado', { amount: 0.5, unit: 'count', item: 'avocado' }],
+      ['3 tortillas', { amount: 3, unit: 'count', item: 'tortillas' }],
+      ['1 chicken breast, thinly sliced', { amount: 1, unit: 'count', item: 'chicken breast', modifier: 'thinly sliced' }],
+    ] as const;
+
+    for (const [line, expected] of cases) {
+      expect(parseIngredientLine(line)).toMatchObject(expected);
+    }
+  });
+
+  it('should preserve measured-unit parsing while supporting count inference', () => {
+    expect(parseIngredientLine('1 cup rice')).toMatchObject({
+      amount: 1,
+      unit: 'cup',
+      item: 'rice',
+    });
+    expect(parseIngredientLine('2 tbsp soy sauce')).toMatchObject({
+      amount: 2,
+      unit: 'tbsp',
+      item: 'soy sauce',
+    });
+    expect(parseIngredientLine('1 lb chicken breast')).toMatchObject({
+      amount: 1,
+      unit: 'lb',
+      item: 'chicken breast',
+    });
+    expect(parseIngredientLine('\u00bd tsp salt')).toMatchObject({
+      amount: 0.5,
+      unit: 'tsp',
+      item: 'salt',
+    });
+  });
+
   it('should return empty item for section headers', () => {
     const result = parseIngredientLine('Ingredients');
     expect(result.item).toBe('');
@@ -74,6 +113,33 @@ Add sauce.`;
       .toBe('1 tbsp soy sauce');
     expect(result.ingredients[2].originalText)
       .toBe('3 cloves garlic, minced');
+  });
+
+  it('should parse pasted countable whole ingredients without validation gaps', () => {
+    const text = `Fajita Eggs
+
+Ingredients
+1 onion, sliced
+1 red bell pepper, diced
+2 eggs
+1 lime, juiced
+\u00bd avocado
+1 chicken breast, thinly sliced
+
+Instructions
+Cook everything.
+Serve.`;
+
+    const result = parseRecipeText(text);
+
+    expect(result.ingredients).toMatchObject([
+      { item: 'onion', amount: 1, unit: 'count', modifier: 'sliced' },
+      { item: 'red bell pepper', amount: 1, unit: 'count', modifier: 'diced' },
+      { item: 'eggs', amount: 2, unit: 'count' },
+      { item: 'lime', amount: 1, unit: 'count', modifier: 'juiced' },
+      { item: 'avocado', amount: 0.5, unit: 'count' },
+      { item: 'chicken breast', amount: 1, unit: 'count', modifier: 'thinly sliced' },
+    ]);
   });
 
   it('should preserve Unicode fractions in originalText', () => {

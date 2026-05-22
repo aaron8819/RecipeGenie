@@ -33,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { clampRecipeServings } from "./recipe-dialog.defaults"
 import type { Ingredient, RecipeInstructionGroup } from "@/types/database"
 import type { ParsedRecipe } from "@/lib/recipe-parser"
+import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import {
   createEmptyInstructionGroup,
   normalizeInstructionGroupsForEditor,
@@ -240,8 +241,10 @@ type RecipeImportSectionProps = {
 }
 
 function formatIngredientAmount(ingredient: Ingredient): string {
+  const displayUnit = getIngredientDisplayUnit(ingredient.unit)
+
   return ingredient.amount !== null
-    ? `${ingredient.amount} ${ingredient.unit || ""}`.trim()
+    ? `${ingredient.amount} ${displayUnit}`.trim()
     : "-"
 }
 

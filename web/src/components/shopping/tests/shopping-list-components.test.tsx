@@ -346,6 +346,8 @@ describe("ShoppingItemRow", () => {
 
 describe("shopping amount formatting", () => {
   it("pluralizes count and package units while preserving singular values", () => {
+    expect(formatAmountPart(1, "count")).toBe("1")
+    expect(formatAmountPart(2, "whole")).toBe("2")
     expect(formatAmountPart(1, "jar")).toBe("1 jar")
     expect(formatAmountPart(2, "jar")).toBe("2 jars")
     expect(formatAmountPart(3, "clove")).toBe("3 cloves")

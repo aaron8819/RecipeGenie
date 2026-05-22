@@ -120,6 +120,11 @@ describe('extractRecipeFromHtml', () => {
     expect(result.ingredients[0].amount).toBe(2);
     expect(result.ingredients[0].originalText)
       .toBe('2 cups all-purpose flour');
+    expect(result.ingredients[2]).toMatchObject({
+      item: 'eggs',
+      amount: 2,
+      unit: 'count',
+    });
     expect(result.instructions).toHaveLength(3);
     expect(result.instructions[0])
       .toBe('Mix dry ingredients.');
@@ -133,6 +138,11 @@ describe('extractRecipeFromHtml', () => {
     const result = extractRecipeFromHtml(GRAPH_JSONLD);
     expect(result.name).toBe('Graph Tacos');
     expect(result.ingredients).toHaveLength(2);
+    expect(result.ingredients[1]).toMatchObject({
+      item: 'tortillas',
+      amount: 8,
+      unit: 'count',
+    });
     expect(result.instructions).toHaveLength(2);
     expect(result.servings).toBe(4);
   });

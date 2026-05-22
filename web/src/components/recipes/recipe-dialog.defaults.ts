@@ -8,6 +8,10 @@ import {
   normalizeRecipeInstructionGroups,
   normalizeRecipeNotes,
 } from "@/lib/recipe-structure"
+import {
+  WHOLE_COUNT_UNIT,
+  normalizeWholeCountUnit,
+} from "@/lib/ingredient-units"
 
 export const DEFAULT_RECIPE_SERVINGS = 4
 
@@ -236,12 +240,17 @@ function normalizeIngredientWhitespace(value?: string | null): string {
 
 export function normalizeIngredientUnit(unit?: string | null): string {
   const normalized = normalizeIngredientWhitespace(unit).toLowerCase()
-  return UNIT_NORMALIZATION_MAP[normalized] || normalized
+  return normalizeWholeCountUnit(normalized) || UNIT_NORMALIZATION_MAP[normalized] || normalized
 }
 
 export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
   const item = normalizeIngredientWhitespace(ingredient.item)
-  const unit = normalizeIngredientUnit(ingredient.unit)
+  const normalizedUnit = normalizeIngredientUnit(ingredient.unit)
+  const unit =
+    normalizedUnit ||
+    (item && ingredient.amount !== null && ingredient.amount > 0
+      ? WHOLE_COUNT_UNIT
+      : "")
   const groupLabel = normalizeIngredientWhitespace(ingredient.groupLabel)
   const modifier = normalizeIngredientWhitespace(ingredient.modifier)
   const alternatives = ingredient.alternatives

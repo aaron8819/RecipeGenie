@@ -102,7 +102,9 @@ describe('normalizeUnit', () => {
       expect(normalizeUnit('pieces')).toBe('piece')
       expect(normalizeUnit('pc')).toBe('piece')
       expect(normalizeUnit('pcs')).toBe('piece')
-      expect(normalizeUnit('whole')).toBe('whole')
+      expect(normalizeUnit('whole')).toBe('count')
+      expect(normalizeUnit('whole/count')).toBe('count')
+      expect(normalizeUnit('whole item')).toBe('count')
       expect(normalizeUnit('count')).toBe('count')
     })
 

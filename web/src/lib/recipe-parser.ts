@@ -1,4 +1,8 @@
 import type { Ingredient } from "@/types/database"
+import {
+  WHOLE_COUNT_UNIT,
+  normalizeWholeCountUnit,
+} from "@/lib/ingredient-units"
 
 type SectionKind = "ingredients" | "instructions" | "notes"
 
@@ -803,6 +807,12 @@ const UNIT_ABBREVIATIONS = [
   "packages",
   "pkg",
   "pkgs",
+  "count",
+  "counts",
+  "whole",
+  "whole/count",
+  "whole item",
+  "whole items",
   "clove",
   "cloves",
   "head",
@@ -855,7 +865,7 @@ export function parseIngredientLine(line: string): Ingredient {
 
     const unitMatch = extractUnit(remaining)
     if (unitMatch) {
-      unit = unitMatch.unit
+      unit = normalizeWholeCountUnit(unitMatch.unit) || unitMatch.unit
       remaining = remaining.substring(unitMatch.endIndex).trim()
 
       if (hasRange && originalRangeText) {
@@ -863,6 +873,8 @@ export function parseIngredientLine(line: string): Ingredient {
       }
     } else if (hasRange && originalRangeText) {
       unit = originalRangeText
+    } else if (remaining) {
+      unit = WHOLE_COUNT_UNIT
     }
 
     const { item: baseItem, modifier } = extractModifier(remaining)

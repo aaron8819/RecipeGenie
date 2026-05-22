@@ -28,6 +28,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, toFraction } from "@/lib/utils"
 import { parseIngredientLine } from "@/lib/recipe-parser"
+import {
+  WHOLE_COUNT_UNIT,
+  WHOLE_COUNT_UNIT_LABEL,
+  getIngredientDisplayUnit,
+} from "@/lib/ingredient-units"
 import type { Ingredient } from "@/types/database"
 import {
   validateIngredient,
@@ -37,11 +42,16 @@ import {
 // ─── constants / helpers ─────────────────────────────────────────────────────
 
 const COMMON_UNITS = [
+  WHOLE_COUNT_UNIT,
   "tsp", "tbsp", "cup", "oz", "fl oz", "lb",
   "g", "kg", "ml", "l",
   "pt", "qt", "gal",
   "can", "clove", "head", "piece", "slice", "pinch", "dash", "pkg",
 ]
+
+function getUnitOptionLabel(unit: string): string {
+  return unit === WHOLE_COUNT_UNIT ? WHOLE_COUNT_UNIT_LABEL : unit
+}
 
 function parseAmountStr(str: string): number | null {
   const trimmed = str.trim()
@@ -260,7 +270,7 @@ function SortableIngredientRow({
     >
       <option value="">—</option>
       {COMMON_UNITS.map((u) => (
-        <option key={u} value={u}>{u}</option>
+        <option key={u} value={u}>{getUnitOptionLabel(u)}</option>
       ))}
       <option value="__custom__">Other…</option>
     </select>
@@ -495,12 +505,17 @@ function SortableIngredientRow({
 // ─── IngredientDragOverlay ────────────────────────────────────────────────────
 
 function IngredientDragOverlay({ ingredient }: { ingredient: Ingredient }) {
+  const displayUnit = getIngredientDisplayUnit(ingredient.unit)
+  const quantityText = ingredient.amount
+    ? `${ingredient.amount}${displayUnit ? ` ${displayUnit}` : ""}`
+    : ""
+
   return (
     <div className="flex gap-2 items-center bg-card border rounded-lg p-2 shadow-lg">
       <GripVertical className="h-4 w-4 text-muted-foreground" />
       <span className="flex-1 text-sm">
-        {ingredient.amount && ingredient.unit
-          ? `${ingredient.amount} ${ingredient.unit} ${ingredient.item}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`
+        {quantityText
+          ? `${quantityText} ${ingredient.item}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`
           : `${ingredient.item || "Ingredient"}${ingredient.modifier ? `, ${ingredient.modifier}` : ""}`}
       </span>
     </div>

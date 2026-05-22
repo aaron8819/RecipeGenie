@@ -39,8 +39,14 @@ describe("recipe dialog validation helpers", () => {
     expect(validateIngredient({ item: "Flour", amount: null, unit: "cups" })).toEqual([
       "unit-without-amount",
     ])
-    expect(validateIngredient({ item: "Bananas", amount: 3, unit: "" })).toEqual([
-      "amount-without-unit",
+    expect(validateIngredient({ item: "Bananas", amount: 3, unit: "" })).toEqual([])
+    expect(validateIngredient({ item: "eggs", amount: 2, unit: "count" })).toEqual([])
+    expect(validateIngredient({ item: "", amount: null, unit: "cup" })).toEqual([
+      "missing-item",
+      "unit-without-amount",
+    ])
+    expect(validateIngredient({ item: "", amount: null, unit: "", modifier: "diced" })).toEqual([
+      "missing-item",
     ])
   })
 
@@ -53,6 +59,38 @@ describe("recipe dialog validation helpers", () => {
     expect(result.fixedCount).toBe(1)
   })
 
+  it("auto-fixes countable whole ingredients to the count unit", () => {
+    const result = autoFixIngredients([
+      { item: "1 onion", amount: null, unit: "" },
+      { item: "red bell pepper", amount: 1, unit: "", modifier: "sliced" },
+      { item: "2 eggs", amount: null, unit: "" },
+    ])
+
+    expect(result.ingredients).toMatchObject([
+      { item: "onion", amount: 1, unit: "count" },
+      { item: "red bell pepper", amount: 1, unit: "count", modifier: "sliced" },
+      { item: "eggs", amount: 2, unit: "count" },
+    ])
+    expect(result.fixedCount).toBe(3)
+  })
+
+  it("accepts normal countable whole ingredient rows", () => {
+    const validIngredients = [
+      { item: "onion", amount: 1, unit: "" },
+      { item: "red bell pepper", amount: 1, unit: "" },
+      { item: "carrots", amount: 2, unit: "" },
+      { item: "lime", amount: 1, unit: "" },
+      { item: "avocado", amount: 0.5, unit: "" },
+      { item: "eggs", amount: 2, unit: "" },
+      { item: "chicken breast", amount: 1, unit: "" },
+      { item: "lime", amount: 1, unit: "count" },
+    ]
+
+    for (const ingredient of validIngredients) {
+      expect(validateIngredient(ingredient)).toEqual([])
+    }
+  })
+
   it("counts issue totals and blocking issues separately", () => {
     const ingredients = [
       { item: "", amount: null, unit: "" },
@@ -60,7 +98,7 @@ describe("recipe dialog validation helpers", () => {
       { item: "Bananas", amount: 3, unit: "" },
     ]
 
-    expect(countIngredientsWithIssues(ingredients)).toBe(2)
+    expect(countIngredientsWithIssues(ingredients)).toBe(1)
     expect(countBlockingIngredientIssues(ingredients)).toBe(1)
   })
 
@@ -184,6 +222,18 @@ describe("recipe dialog defaults helpers", () => {
       alternatives: ["sour cream", "greek yogurt"],
       originalText: "2 Tablespoons green onions, finely chopped",
     })
+
+    expect(
+      normalizeRecipeIngredient({
+        item: " lime ",
+        amount: 1,
+        unit: " whole/count ",
+      })
+    ).toEqual({
+      item: "lime",
+      amount: 1,
+      unit: "count",
+    })
   })
 
   it("builds new form defaults and submission payloads", () => {
@@ -210,6 +260,7 @@ describe("recipe dialog defaults helpers", () => {
         tags: ["easy"],
         ingredients: [
           { item: " water ", amount: 1, unit: " Cups ", modifier: "  chilled " },
+          { item: " onion ", amount: 1, unit: "" },
           { item: "", amount: null, unit: "" },
         ],
         instructionGroups: [{ steps: [" Boil ", "", " Serve "] }],
@@ -222,7 +273,10 @@ describe("recipe dialog defaults helpers", () => {
       cook_time_minutes: null,
       total_time_minutes: null,
       tags: ["easy"],
-      ingredients: [{ item: "water", amount: 1, unit: "cup", modifier: "chilled" }],
+      ingredients: [
+        { item: "water", amount: 1, unit: "cup", modifier: "chilled" },
+        { item: "onion", amount: 1, unit: "count" },
+      ],
       instructions: ["Boil", "Serve"],
       instruction_groups: [{ steps: ["Boil", "Serve"] }],
       notes: [],
