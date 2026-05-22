@@ -117,16 +117,31 @@ test.describe('Recipes', () => {
     await expect(page.getByText(updatedName, { exact: true })).toBeVisible()
   })
 
-  test('marks a created recipe as made, preserves freshness info after reload, and adds its ingredients to shopping @extended', async ({ page, navigateToTab }) => {
+  test('shows recipe detail actions and adds its ingredients to shopping @extended', async ({ page, navigateToTab }) => {
     const seed = `${Date.now()}-actions`
     const recipe = buildRecipe(seed)
 
     await createRecipe(page, recipe)
 
-    await page.getByRole('button', { name: /^mark made$/i }).click()
-    await expect(page.getByText(new RegExp(`"${escapeRegex(recipe.name)}" marked as made`, 'i'))).toBeVisible()
-    await expect(page.getByText(/made 1 time/i).first()).toBeVisible()
-
+    const detailDialog = page.getByRole('dialog').last()
+    await expect(
+      detailDialog.getByRole('button', { name: /start cooking/i })
+    ).toBeVisible()
+    await expect(
+      detailDialog.getByRole('button', { name: /add to shopping list/i })
+    ).toBeVisible()
+    await expect(
+      detailDialog.getByRole('button', { name: /add to plan/i })
+    ).toBeVisible()
+    await expect(
+      detailDialog.getByRole('button', { name: /^share$/i })
+    ).toBeVisible()
+    await expect(
+      detailDialog.getByRole('button', { name: /edit recipe/i })
+    ).toBeVisible()
+    await expect(
+      detailDialog.getByRole('button', { name: /^mark made$/i })
+    ).toHaveCount(0)
     await page.getByRole('button', { name: /add to shopping/i }).click()
 
     await closeDialog(page)
@@ -134,7 +149,6 @@ test.describe('Recipes', () => {
     await navigateToTab('recipes')
     await searchRecipes(page, recipe.name)
     await expect(page.getByText(recipe.name, { exact: true })).toBeVisible()
-    await expect(page.getByText(/made 1 time/i).first()).toBeVisible()
 
     await navigateToTab('shopping')
     await expect(page.getByText(recipe.ingredients[0].item, { exact: true })).toBeVisible()
