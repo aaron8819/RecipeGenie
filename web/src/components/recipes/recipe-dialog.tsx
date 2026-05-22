@@ -44,7 +44,6 @@ import {
   RecipeImportSection,
   RecipeMetadataSection,
   RecipeNotesSection,
-  RecipeTagsSection,
 } from "./recipe-dialog-components"
 import {
   applyParsedRecipeToFormValues,
@@ -105,6 +104,9 @@ export function RecipeDialog({
   const undoToast = useUndoToast()
 
   const [mode, setMode] = useState<"manual" | "import">("manual")
+  const [editTab, setEditTab] = useState<
+    "details" | "ingredients" | "instructions" | "replace"
+  >("details")
   const [isWideViewport, setIsWideViewport] = useState<boolean>(() => {
     if (typeof window === "undefined") return false
     return window.matchMedia("(min-width: 640px)").matches
@@ -164,6 +166,7 @@ export function RecipeDialog({
     setImageFile(null)
     setImagePreview(null)
     setMode("manual")
+    setEditTab("details")
     setImportText("")
     setImportUrl("")
     setParseError(null)
@@ -376,8 +379,15 @@ export function RecipeDialog({
 
     // Switch to manual mode to allow editing
     setMode("manual")
+    setEditTab("ingredients")
     setImportStep('input')
     setParsedPreview(null)
+  }
+
+  const handleApplyReplacementPreview = () => {
+    if (!livePreview) return
+    applyPreviewToCurrentForm(livePreview)
+    setEditTab("ingredients")
   }
 
   const handleBackToInput = () => {
@@ -714,46 +724,181 @@ export function RecipeDialog({
         )}
 
         {isEditing && (
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4 sm:p-6 lg:p-8 scrollbar-recipe-dialog">
-          <RecipeFormContent
-            name={name}
-            setName={setName}
-            category={category}
-            setCategory={setCategory}
-            servings={servings}
-            setServings={setServings}
-            prepTimeMinutes={prepTimeMinutes}
-            setPrepTimeMinutes={setPrepTimeMinutes}
-            cookTimeMinutes={cookTimeMinutes}
-            setCookTimeMinutes={setCookTimeMinutes}
-            totalTimeMinutes={totalTimeMinutes}
-            setTotalTimeMinutes={setTotalTimeMinutes}
-            tags={tags}
-            setTags={setTags}
-            allTags={allTags}
-            tagCounts={tagCounts}
-            ingredients={ingredients}
-            instructionGroups={instructionGroups}
-            setInstructionGroups={setInstructionGroups}
-            notes={notes}
-            setNotes={setNotes}
-            categories={categories}
-            onAddIngredient={handleAddIngredient}
-            onRemoveIngredient={handleRemoveIngredient}
-            onIngredientChange={handleIngredientChange}
-            isEditing={true}
-            onReorderIngredients={handleReorderIngredients}
-            onBulkPasteIngredients={handleBulkPasteIngredients}
-            handleAutoFix={handleAutoFix}
-            onRemoveExactDuplicates={handleRemoveExactDuplicates}
-            isWideViewport={isWideViewport}
-            imagePreview={imagePreview}
-            imageUrl={imageUrl}
-            onImageSelect={handleImageSelect}
-            onRemoveImage={handleRemoveImage}
-            fileInputRef={fileInputRef}
-          />
-        </div>
+          <Tabs
+            value={editTab}
+            onValueChange={(value) => setEditTab(value as typeof editTab)}
+            className="flex flex-1 min-h-0 flex-col"
+          >
+            <div className="border-b border-stone-200 bg-card px-4 py-3 dark:border-zinc-800 sm:px-8">
+              <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:inline-grid sm:w-auto sm:grid-cols-4">
+                <TabsTrigger value="details" className="rounded-lg text-xs font-semibold">
+                  Details
+                </TabsTrigger>
+                <TabsTrigger value="ingredients" className="rounded-lg text-xs font-semibold">
+                  Ingredients
+                </TabsTrigger>
+                <TabsTrigger value="instructions" className="rounded-lg text-xs font-semibold">
+                  Instructions
+                </TabsTrigger>
+                <TabsTrigger value="replace" className="rounded-lg text-xs font-semibold">
+                  Replace
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4 sm:p-6 lg:p-8 scrollbar-recipe-dialog">
+              <TabsContent value="details" className="mt-0 data-[state=inactive]:hidden">
+                <RecipeFormContent
+                  editSection="details"
+                  name={name}
+                  setName={setName}
+                  category={category}
+                  setCategory={setCategory}
+                  servings={servings}
+                  setServings={setServings}
+                  prepTimeMinutes={prepTimeMinutes}
+                  setPrepTimeMinutes={setPrepTimeMinutes}
+                  cookTimeMinutes={cookTimeMinutes}
+                  setCookTimeMinutes={setCookTimeMinutes}
+                  totalTimeMinutes={totalTimeMinutes}
+                  setTotalTimeMinutes={setTotalTimeMinutes}
+                  tags={tags}
+                  setTags={setTags}
+                  allTags={allTags}
+                  tagCounts={tagCounts}
+                  ingredients={ingredients}
+                  instructionGroups={instructionGroups}
+                  setInstructionGroups={setInstructionGroups}
+                  notes={notes}
+                  setNotes={setNotes}
+                  categories={categories}
+                  onAddIngredient={handleAddIngredient}
+                  onRemoveIngredient={handleRemoveIngredient}
+                  onIngredientChange={handleIngredientChange}
+                  isEditing={true}
+                  onReorderIngredients={handleReorderIngredients}
+                  onBulkPasteIngredients={handleBulkPasteIngredients}
+                  handleAutoFix={handleAutoFix}
+                  onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                  isWideViewport={isWideViewport}
+                  imagePreview={imagePreview}
+                  imageUrl={imageUrl}
+                  onImageSelect={handleImageSelect}
+                  onRemoveImage={handleRemoveImage}
+                  fileInputRef={fileInputRef}
+                />
+              </TabsContent>
+              <TabsContent value="ingredients" className="mt-0 data-[state=inactive]:hidden">
+                <RecipeFormContent
+                  editSection="ingredients"
+                  name={name}
+                  setName={setName}
+                  category={category}
+                  setCategory={setCategory}
+                  servings={servings}
+                  setServings={setServings}
+                  prepTimeMinutes={prepTimeMinutes}
+                  setPrepTimeMinutes={setPrepTimeMinutes}
+                  cookTimeMinutes={cookTimeMinutes}
+                  setCookTimeMinutes={setCookTimeMinutes}
+                  totalTimeMinutes={totalTimeMinutes}
+                  setTotalTimeMinutes={setTotalTimeMinutes}
+                  tags={tags}
+                  setTags={setTags}
+                  allTags={allTags}
+                  tagCounts={tagCounts}
+                  ingredients={ingredients}
+                  instructionGroups={instructionGroups}
+                  setInstructionGroups={setInstructionGroups}
+                  notes={notes}
+                  setNotes={setNotes}
+                  categories={categories}
+                  onAddIngredient={handleAddIngredient}
+                  onRemoveIngredient={handleRemoveIngredient}
+                  onIngredientChange={handleIngredientChange}
+                  isEditing={true}
+                  onReorderIngredients={handleReorderIngredients}
+                  onBulkPasteIngredients={handleBulkPasteIngredients}
+                  handleAutoFix={handleAutoFix}
+                  onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                  isWideViewport={isWideViewport}
+                  imagePreview={imagePreview}
+                  imageUrl={imageUrl}
+                  onImageSelect={handleImageSelect}
+                  onRemoveImage={handleRemoveImage}
+                  fileInputRef={fileInputRef}
+                />
+              </TabsContent>
+              <TabsContent value="instructions" className="mt-0 data-[state=inactive]:hidden">
+                <RecipeFormContent
+                  editSection="instructions"
+                  name={name}
+                  setName={setName}
+                  category={category}
+                  setCategory={setCategory}
+                  servings={servings}
+                  setServings={setServings}
+                  prepTimeMinutes={prepTimeMinutes}
+                  setPrepTimeMinutes={setPrepTimeMinutes}
+                  cookTimeMinutes={cookTimeMinutes}
+                  setCookTimeMinutes={setCookTimeMinutes}
+                  totalTimeMinutes={totalTimeMinutes}
+                  setTotalTimeMinutes={setTotalTimeMinutes}
+                  tags={tags}
+                  setTags={setTags}
+                  allTags={allTags}
+                  tagCounts={tagCounts}
+                  ingredients={ingredients}
+                  instructionGroups={instructionGroups}
+                  setInstructionGroups={setInstructionGroups}
+                  notes={notes}
+                  setNotes={setNotes}
+                  categories={categories}
+                  onAddIngredient={handleAddIngredient}
+                  onRemoveIngredient={handleRemoveIngredient}
+                  onIngredientChange={handleIngredientChange}
+                  isEditing={true}
+                  onReorderIngredients={handleReorderIngredients}
+                  onBulkPasteIngredients={handleBulkPasteIngredients}
+                  handleAutoFix={handleAutoFix}
+                  onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                  isWideViewport={isWideViewport}
+                  imagePreview={imagePreview}
+                  imageUrl={imageUrl}
+                  onImageSelect={handleImageSelect}
+                  onRemoveImage={handleRemoveImage}
+                  fileInputRef={fileInputRef}
+                />
+              </TabsContent>
+              <TabsContent value="replace" className="mt-0 data-[state=inactive]:hidden">
+                <RecipeImportSection
+                  variant="replace"
+                  showUrlImport={false}
+                  currentRecipeName={name}
+                  requireInstructions={false}
+                  importStep="input"
+                  importUrl={importUrl}
+                  importText={importText}
+                  parseError={parseError}
+                  livePreview={livePreview}
+                  parsedPreview={null}
+                  isImportingFromUrl={false}
+                  onImportUrlChange={(value) => {
+                    setImportUrl(value)
+                    setParseError(null)
+                  }}
+                  onImportTextChange={(value) => {
+                    setImportText(value)
+                    setParseError(null)
+                    debouncedParse(value)
+                  }}
+                  onImportUrl={handleUrlImport}
+                  onApplyLivePreview={handleApplyReplacementPreview}
+                  onBackToInput={handleBackToInput}
+                  onApplyPreview={handleApplyPreview}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
         )}
 
         <DialogFooter
@@ -820,6 +965,7 @@ interface RecipeFormContentProps {
   handleAutoFix: () => void
   onRemoveExactDuplicates: () => void
   isWideViewport: boolean
+  editSection?: "details" | "ingredients" | "instructions"
 }
 
 // SortableIngredientRow and IngredientDragOverlay have been moved to
@@ -870,6 +1016,7 @@ function RecipeFormContent({
   fileInputRef,
   handleAutoFix,
   onRemoveExactDuplicates,
+  editSection,
 }: RecipeFormContentPropsWithImage) {
   const ingredientIssueCount = countIngredientsWithIssues(ingredients)
   const duplicateAnalysis = analyzeIngredientDuplicates(ingredients)
@@ -881,46 +1028,58 @@ function RecipeFormContent({
     (total, group) => total + group.rowIndexes.length - 1,
     0
   )
-  const isMobileEdit = isEditing && !isWideViewport
+  const activeEditSection = editSection ?? "details"
 
-  // Edit Recipe: 2-col layout per reference/recipemodal_editmode_redesign
-  if (isEditing && !isMobileEdit) {
-    return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10">
-        {/* Left: Image, Name, Category, Servings, Tags */}
-        <div className="space-y-6 sm:space-y-8">
-          <RecipeImageField
-            variant="edit"
-            imagePreview={imagePreview}
-            imageUrl={imageUrl}
-            onImageSelect={onImageSelect}
-            onRemoveImage={onRemoveImage}
-            fileInputRef={fileInputRef}
-          />
-          <RecipeMetadataSection
-            variant="edit"
-            name={name}
-            onNameChange={setName}
-            category={category}
-            onCategoryChange={setCategory}
-            servings={servings}
-            onServingsChange={setServings}
-            prepTimeMinutes={prepTimeMinutes}
-            onPrepTimeMinutesChange={setPrepTimeMinutes}
-            cookTimeMinutes={cookTimeMinutes}
-            onCookTimeMinutesChange={setCookTimeMinutes}
-            totalTimeMinutes={totalTimeMinutes}
-            onTotalTimeMinutesChange={setTotalTimeMinutes}
-            tags={tags}
-            onTagsChange={setTags}
-            allTags={allTags}
-            tagCounts={tagCounts}
-            categories={categories}
-          />
+  if (isEditing) {
+    if (activeEditSection === "details") {
+      return (
+        <div className="grid gap-6 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
+          <div className="space-y-6">
+            <RecipeImageField
+              variant="edit"
+              imagePreview={imagePreview}
+              imageUrl={imageUrl}
+              onImageSelect={onImageSelect}
+              onRemoveImage={onRemoveImage}
+              fileInputRef={fileInputRef}
+            />
+          </div>
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-stone-200 bg-background p-4 dark:border-zinc-800 sm:p-6">
+              <RecipeMetadataSection
+                variant="edit"
+                name={name}
+                onNameChange={setName}
+                category={category}
+                onCategoryChange={setCategory}
+                servings={servings}
+                onServingsChange={setServings}
+                prepTimeMinutes={prepTimeMinutes}
+                onPrepTimeMinutesChange={setPrepTimeMinutes}
+                cookTimeMinutes={cookTimeMinutes}
+                onCookTimeMinutesChange={setCookTimeMinutes}
+                totalTimeMinutes={totalTimeMinutes}
+                onTotalTimeMinutesChange={setTotalTimeMinutes}
+                tags={tags}
+                onTagsChange={setTags}
+                allTags={allTags}
+                tagCounts={tagCounts}
+                categories={categories}
+              />
+            </div>
+            <RecipeNotesSection
+              variant="edit"
+              notes={notes}
+              onNotesChange={setNotes}
+            />
+          </div>
         </div>
+      )
+    }
 
-        {/* Right: Ingredients, Instructions - recipemodal_editmode_redesign */}
-        <div className="space-y-6 sm:space-y-8 flex flex-col min-h-0">
+    if (activeEditSection === "ingredients") {
+      return (
+        <div className="mx-auto max-w-5xl">
           <RecipeIngredientsSection
             variant="edit"
             ingredientIssueCount={ingredientIssueCount}
@@ -932,7 +1091,7 @@ function RecipeFormContent({
           >
             <SortableIngredientList
               ingredients={ingredients}
-              editModeTwoColLayout
+              editDocumentLayout
               onReorderIngredients={onReorderIngredients}
               onBulkPasteIngredients={onBulkPasteIngredients}
               duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
@@ -940,103 +1099,21 @@ function RecipeFormContent({
               onIngredientChange={onIngredientChange}
             />
           </RecipeIngredientsSection>
-
-          <RecipeInstructionsSection
-            variant="edit"
-            instructionGroups={instructionGroups}
-            onInstructionGroupsChange={setInstructionGroups}
-          />
-          <RecipeNotesSection
-            variant="edit"
-            notes={notes}
-            onNotesChange={setNotes}
-          />
         </div>
-      </div>
-    )
-  }
+      )
+    }
 
-  if (isMobileEdit) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-stone-200 bg-background/95 p-4 dark:border-zinc-800 dark:bg-zinc-950/70">
-          <RecipeMetadataSection
-            variant="edit"
-            name={name}
-            onNameChange={setName}
-            category={category}
-            onCategoryChange={setCategory}
-            servings={servings}
-            onServingsChange={setServings}
-            prepTimeMinutes={prepTimeMinutes}
-            onPrepTimeMinutesChange={setPrepTimeMinutes}
-            cookTimeMinutes={cookTimeMinutes}
-            onCookTimeMinutesChange={setCookTimeMinutes}
-            totalTimeMinutes={totalTimeMinutes}
-            onTotalTimeMinutesChange={setTotalTimeMinutes}
-            tags={tags}
-            onTagsChange={setTags}
-            allTags={allTags}
-            tagCounts={tagCounts}
-            categories={categories}
-            showTags={false}
-          />
-        </div>
-
-        <div className="rounded-2xl border border-stone-200 bg-background/95 p-4 dark:border-zinc-800 dark:bg-zinc-950/70">
-          <RecipeIngredientsSection
-            variant="edit"
-            ingredientIssueCount={ingredientIssueCount}
-            exactDuplicateCount={exactDuplicateCount}
-            nearDuplicateCount={nearDuplicateCount}
-            onAutoFix={handleAutoFix}
-            onRemoveExactDuplicates={onRemoveExactDuplicates}
-            onAddIngredient={onAddIngredient}
-          >
-            <SortableIngredientList
-              ingredients={ingredients}
-              editModeTwoColLayout
-              onReorderIngredients={onReorderIngredients}
-              onBulkPasteIngredients={onBulkPasteIngredients}
-              duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
-              onRemoveIngredient={onRemoveIngredient}
-              onIngredientChange={onIngredientChange}
-            />
-          </RecipeIngredientsSection>
-        </div>
-
-        <div className="rounded-2xl border border-stone-200 bg-background/95 p-4 dark:border-zinc-800 dark:bg-zinc-950/70">
-          <RecipeInstructionsSection
-            variant="edit"
-            instructionGroups={instructionGroups}
-            onInstructionGroupsChange={setInstructionGroups}
-          />
-        </div>
-
-        <RecipeTagsSection
+      <div className="mx-auto max-w-4xl space-y-6">
+        <RecipeInstructionsSection
           variant="edit"
-          tags={tags}
-          onTagsChange={setTags}
-          allTags={allTags}
-          tagCounts={tagCounts}
-          mobileCollapsible
+          instructionGroups={instructionGroups}
+          onInstructionGroupsChange={setInstructionGroups}
         />
-
         <RecipeNotesSection
           variant="edit"
           notes={notes}
           onNotesChange={setNotes}
-          mobileCollapsible
-        />
-
-        <RecipeImageField
-          variant="edit"
-          imagePreview={imagePreview}
-          imageUrl={imageUrl}
-          onImageSelect={onImageSelect}
-          onRemoveImage={onRemoveImage}
-          fileInputRef={fileInputRef}
-          mobileCollapsible
         />
       </div>
     )

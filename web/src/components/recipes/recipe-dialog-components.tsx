@@ -227,6 +227,10 @@ type RecipeImportSectionProps = {
   livePreview: ParsedRecipe | null
   parsedPreview: ParsedRecipe | null
   isImportingFromUrl: boolean
+  variant?: "create" | "replace"
+  showUrlImport?: boolean
+  currentRecipeName?: string
+  requireInstructions?: boolean
   onImportUrlChange: (value: string) => void
   onImportTextChange: (value: string) => void
   onImportUrl: () => void
@@ -291,6 +295,10 @@ export function RecipeImportSection({
   livePreview,
   parsedPreview,
   isImportingFromUrl,
+  variant = "create",
+  showUrlImport = true,
+  currentRecipeName,
+  requireInstructions = true,
   onImportUrlChange,
   onImportTextChange,
   onImportUrl,
@@ -303,6 +311,21 @@ export function RecipeImportSection({
   const instructionGroups = previewRecipe ? getInstructionGroups(previewRecipe) : []
   const instructionStepCount = countInstructionSteps(instructionGroups)
   const notes = previewRecipe?.notes || []
+  const isReplacement = variant === "replace"
+  const liveIngredientCount = livePreview?.ingredients.length ?? 0
+  const liveInstructionCount = livePreview ? instructionStepCount : 0
+  const liveWarnings = livePreview?.warnings ?? []
+  const hasBlockingLivePreviewWarnings = !!livePreview && (
+    liveIngredientCount === 0 ||
+    liveWarnings.some((warning) => warning.includes("No ingredients")) ||
+    (requireInstructions && (
+      liveInstructionCount === 0 ||
+      liveWarnings.some((warning) => warning.includes("No instructions"))
+    ))
+  )
+  const applyLivePreviewLabel = isReplacement
+    ? "Apply to Current Recipe"
+    : "Apply to Form"
 
   if (importStep === "preview") {
     return (
@@ -449,68 +472,84 @@ export function RecipeImportSection({
 
         <Button onClick={onApplyPreview} className="w-full">
           <Check className="mr-2 h-4 w-4" />
-          Apply & Edit Recipe
+          {isReplacement ? "Apply to Current Recipe" : "Apply & Edit Recipe"}
         </Button>
       </div>
     )
   }
 
-  const hasBlockingLivePreviewWarnings = !!livePreview?.warnings.some(
-    (warning) =>
-      warning.includes("No ingredients") || warning.includes("No instructions")
-  )
-
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="import-url">Import from URL</Label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Link className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="import-url"
-                value={importUrl}
-                onChange={(e) => onImportUrlChange(e.target.value)}
-                placeholder="https://www.example.com/recipe..."
-                className="pl-9 font-mono text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    onImportUrl()
-                  }
-                }}
-              />
+        {isReplacement ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+            <div className="mb-1 flex items-center gap-2 font-semibold">
+              <AlertTriangle className="h-4 w-4" />
+              Replace current recipe draft
             </div>
-            <Button
-              onClick={onImportUrl}
-              disabled={isImportingFromUrl}
-              className="shrink-0"
-            >
-              {isImportingFromUrl ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Importing...
-                </>
-              ) : (
-                "Import"
-              )}
-            </Button>
+            <p>
+              Pasted text will replace parsed fields for
+              {currentRecipeName ? ` "${currentRecipeName}"` : " this recipe"}.
+              Existing tags, category, notes, and image stay unless the pasted
+              recipe includes supported replacement data.
+            </p>
           </div>
-        </div>
+        ) : null}
 
-        <div className="relative flex items-center gap-4 py-1">
-          <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
-          <span className="text-xs font-medium text-muted-foreground">
-            or paste text
-          </span>
-          <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
-        </div>
+        {showUrlImport ? (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="import-url">Import from URL</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Link className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="import-url"
+                    value={importUrl}
+                    onChange={(e) => onImportUrlChange(e.target.value)}
+                    placeholder="https://www.example.com/recipe..."
+                    className="pl-9 font-mono text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        onImportUrl()
+                      }
+                    }}
+                  />
+                </div>
+                <Button
+                  onClick={onImportUrl}
+                  disabled={isImportingFromUrl}
+                  className="shrink-0"
+                >
+                  {isImportingFromUrl ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    "Import"
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="relative flex items-center gap-4 py-1">
+              <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+              <span className="text-xs font-medium text-muted-foreground">
+                or paste text
+              </span>
+              <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+            </div>
+          </>
+        ) : null}
 
         <div className="space-y-2">
-          <Label htmlFor="import-text">Paste Recipe Text</Label>
+          <Label htmlFor={isReplacement ? "replace-text" : "import-text"}>
+            {isReplacement ? "Paste Updated Recipe Text" : "Paste Recipe Text"}
+          </Label>
           <Textarea
-            id="import-text"
+            id={isReplacement ? "replace-text" : "import-text"}
             value={importText}
             onChange={(e) => onImportTextChange(e.target.value)}
             placeholder={`Example:
@@ -535,7 +574,7 @@ Instructions:
 7. Drop rounded tablespoons onto baking sheet
 8. Bake for 9-11 minutes`}
             rows={20}
-            className="resize-none font-mono text-sm"
+            className="min-h-[520px] resize-y font-mono text-sm"
           />
           {parseError ? (
             <p
@@ -640,6 +679,13 @@ Instructions:
               </div>
             ) : null}
 
+            {isReplacement && livePreview && liveInstructionCount === 0 ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                No instructions were parsed. You can still apply the ingredient
+                replacement, but the current instructions will be preserved.
+              </div>
+            ) : null}
+
             {livePreview.ingredients.length > 0 ? (
               <div>
                 <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -719,8 +765,13 @@ Instructions:
               disabled={!livePreview || hasBlockingLivePreviewWarnings}
             >
               <Check className="mr-2 h-4 w-4" />
-              Apply to Form
+              {applyLivePreviewLabel}
             </Button>
+            {isReplacement ? (
+              <p className="text-center text-xs text-muted-foreground">
+                Review the draft, then use Save Changes to overwrite this recipe.
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="flex h-full min-h-[500px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-muted-foreground/20 bg-muted/10 p-12 text-center">

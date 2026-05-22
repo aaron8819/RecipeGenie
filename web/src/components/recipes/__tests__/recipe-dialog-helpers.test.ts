@@ -396,6 +396,53 @@ describe("recipe dialog defaults helpers", () => {
     expect(hydrated.instructionGroups[1]?.steps[0]).toBe("Lower heat to medium.")
   })
 
+  it("applies pasted replacement text without changing preserved recipe identity fields", () => {
+    const current = {
+      name: "Original Mac",
+      category: "dinner",
+      servings: 4,
+      prepTimeMinutes: null,
+      cookTimeMinutes: null,
+      totalTimeMinutes: null,
+      tags: ["family"],
+      ingredients: [{ item: "old noodles", amount: 1, unit: "cup" }],
+      instructionGroups: [{ steps: ["Old step"] }],
+      notes: "Keep this note",
+      imageUrl: "https://example.com/mac.jpg",
+    }
+
+    const parsed = parseRecipeImportPreview(`
+Better Mac
+Serves 6
+Prep time: 10 minutes
+
+Ingredients:
+2 cups chicken broth
+10 oz elbow noodles
+
+Instructions:
+1. Boil broth.
+2. Stir in noodles.
+`)
+
+    expect(parsed).not.toBeNull()
+
+    const applied = applyParsedRecipeToFormValues(current, parsed!)
+
+    expect(applied.name).toBe("Better Mac")
+    expect(applied.category).toBe("dinner")
+    expect(applied.tags).toEqual(["family"])
+    expect(applied.imageUrl).toBe("https://example.com/mac.jpg")
+    expect(applied.servings).toBe(6)
+    expect(applied.prepTimeMinutes).toBe(10)
+    expect(applied.ingredients).toHaveLength(2)
+    expect(applied.instructionGroups[0]?.steps).toEqual([
+      "Boil broth.",
+      "Stir in noodles.",
+    ])
+    expect(applied.notes).toBe("Keep this note")
+  })
+
   it("separates legacy note label lines from instructions when hydrating older recipes", () => {
     const hydrated = buildEditingRecipeDialogFormValues({
       id: "legacy-1",

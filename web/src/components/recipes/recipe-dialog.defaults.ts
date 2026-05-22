@@ -120,7 +120,7 @@ export function applyParsedRecipeToFormValues(
     totalTimeMinutes: parsedRecipe.metadata?.totalTimeMinutes ?? values.totalTimeMinutes,
     ingredients:
       parsedRecipe.ingredients.length > 0
-        ? parsedRecipe.ingredients
+        ? normalizeRecipeIngredientsForEditing(parsedRecipe.ingredients)
         : values.ingredients,
     instructionGroups:
       (parsedRecipe.instructionGroups && parsedRecipe.instructionGroups.length > 0) ||
