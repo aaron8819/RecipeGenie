@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   normalizeUnit,
   normalizeItemName,
+  normalizeShoppingPurchase,
+  createShoppingPurchaseKey,
   createItemKey,
 } from '../shopping-list-normalization'
 
@@ -246,5 +248,65 @@ describe('createItemKey', () => {
     expect(createItemKey('', '')).toBe('|')
     expect(createItemKey('Salt', '')).toBe('salt|')
     expect(createItemKey('', 'cup')).toBe('|cup')
+  })
+})
+
+describe('normalizeShoppingPurchase', () => {
+  it('maps explicit citrus juice wording to whole fruit purchases', () => {
+    expect(normalizeShoppingPurchase({ item: 'juice of 2 limes', amount: null, unit: '' })).toMatchObject({
+      purchaseName: 'lime',
+      purchaseUnit: 'count',
+      purchaseQuantity: 2,
+      prepIntent: 'juiced',
+      confidence: 'high',
+    })
+  })
+
+  it('maps whole produce prep forms to the purchase item while preserving original form', () => {
+    expect(normalizeShoppingPurchase({ item: '1 lime, juiced', amount: null, unit: '' })).toMatchObject({
+      purchaseName: 'lime',
+      purchaseUnit: 'count',
+      purchaseQuantity: 1,
+      originalName: '1 lime, juiced',
+      prepIntent: 'juiced',
+    })
+
+    expect(normalizeShoppingPurchase({ item: 'diced onion', amount: null, unit: '' })).toMatchObject({
+      purchaseName: 'onion',
+      purchaseUnit: 'count',
+      purchaseQuantity: 1,
+      originalName: 'diced onion',
+      prepIntent: 'diced',
+    })
+  })
+
+  it('keeps measured citrus juice as its own item', () => {
+    expect(normalizeShoppingPurchase({ item: 'lemon juice', amount: 4, unit: 'tbsp' })).toMatchObject({
+      purchaseName: 'lemon juice',
+      purchaseUnit: 'tbsp',
+      purchaseQuantity: 4,
+    })
+  })
+
+  it('keeps measured produce forms in their measured units', () => {
+    expect(normalizeShoppingPurchase({ item: 'onion', amount: 1, unit: 'cup' })).toMatchObject({
+      purchaseName: 'onion',
+      purchaseUnit: 'cup',
+      purchaseQuantity: 1,
+    })
+  })
+
+  it('does not default generic item-only ingredients to one', () => {
+    expect(normalizeShoppingPurchase({ item: 'cilantro', amount: null, unit: '' })).toMatchObject({
+      purchaseName: 'cilantro',
+      purchaseUnit: '',
+      purchaseQuantity: null,
+    })
+  })
+
+  it('does not collapse unsafe produce names into broader items', () => {
+    expect(createShoppingPurchaseKey('green onion')).toBe('green onion')
+    expect(createShoppingPurchaseKey('red onion')).toBe('red onion')
+    expect(createShoppingPurchaseKey('tomato paste')).toBe('tomato paste')
   })
 })

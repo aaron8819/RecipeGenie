@@ -243,6 +243,129 @@ describe('generateShoppingList', () => {
       expect(result.items[0].unit).toBe('clove')
       expect(result.items[0].additionalAmounts).toEqual([{ amount: 1, unit: '' }])
     })
+
+    it('should consolidate compatible lime recipe forms into one purchase item with provenance', () => {
+      const recipe1 = createMockRecipe({
+        id: 'recipe-1',
+        name: 'Pollo Asado Tacos',
+        ingredients: [
+          { item: 'juice of 2 limes', amount: null, unit: '' },
+          { item: 'lime wedges', amount: null, unit: '' },
+        ],
+      })
+      const recipe2 = createMockRecipe({
+        id: 'recipe-2',
+        name: 'Shredded Chipotle Beef',
+        ingredients: [{ item: 'lime', amount: null, unit: '' }],
+      })
+
+      const result = generateShoppingList([recipe1, recipe2], [], [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]).toMatchObject({
+        item: 'lime',
+        amount: 4,
+        unit: 'count',
+      })
+      expect(result.items[0].sources?.map((source) => source.originalItem)).toEqual([
+        'juice of 2 limes',
+        'lime wedges',
+        'lime',
+      ])
+    })
+
+    it('should consolidate compatible onion prep forms into one purchase item with provenance', () => {
+      const recipe1 = createMockRecipe({
+        id: 'recipe-1',
+        name: 'Pollo Asado Tacos',
+        ingredients: [{ item: 'diced onion', amount: null, unit: '' }],
+      })
+      const recipe2 = createMockRecipe({
+        id: 'recipe-2',
+        name: 'Turkey Bolognese',
+        ingredients: [{ item: 'onion', amount: 1, unit: '' }],
+      })
+
+      const result = generateShoppingList([recipe1, recipe2], [], [])
+
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]).toMatchObject({
+        item: 'onion',
+        amount: 2,
+        unit: 'count',
+      })
+      expect(result.items[0].sources?.map((source) => source.originalItem)).toEqual([
+        'diced onion',
+        'onion',
+      ])
+    })
+
+    it('should not merge unsafe produce-adjacent ingredients', () => {
+      const recipe = createMockRecipe({
+        ingredients: [
+          { item: 'lemon juice', amount: 4, unit: 'tbsp' },
+          { item: 'lime', amount: null, unit: '' },
+          { item: 'green onion', amount: 1, unit: '' },
+          { item: 'onion', amount: 1, unit: '' },
+          { item: 'tomato paste', amount: 2, unit: 'tbsp' },
+          { item: 'tomato', amount: 1, unit: '' },
+          { item: 'red onion', amount: 1, unit: '' },
+          { item: 'yellow onion', amount: 1, unit: '' },
+        ],
+      })
+
+      const result = generateShoppingList([recipe], [], [])
+      const itemNames = result.items.map((item) => item.item)
+
+      expect(itemNames).toContain('lemon juice')
+      expect(itemNames).toContain('lime')
+      expect(itemNames).toContain('green onion')
+      expect(itemNames).toContain('onion')
+      expect(itemNames).toContain('tomato paste')
+      expect(itemNames).toContain('tomato')
+      expect(itemNames).toContain('red onion')
+      expect(result.items.find((item) => item.item === 'onion')?.amount).toBe(2)
+    })
+
+    it('should handle the requested lime and onion consolidation scenario conservatively', () => {
+      const recipe = createMockRecipe({
+        id: 'recipe-1',
+        name: 'Pollo Asado Tacos',
+        ingredients: [
+          { item: 'juice of 2 limes', amount: null, unit: '' },
+          { item: 'lime', amount: null, unit: '' },
+          { item: 'lime wedges', amount: null, unit: '' },
+          { item: 'diced onion', amount: null, unit: '' },
+          { item: '1 onion', amount: null, unit: '' },
+          { item: '4 tbsp lemon juice', amount: null, unit: '' },
+          { item: 'green onion', amount: null, unit: '' },
+          { item: 'tomato paste', amount: null, unit: '' },
+        ],
+      })
+
+      const result = generateShoppingList([recipe], [], [])
+      const lime = result.items.find((item) => item.item === 'lime')
+      const onion = result.items.find((item) => item.item === 'onion')
+
+      expect(lime).toMatchObject({ amount: 4, unit: 'count' })
+      expect(lime?.sources?.map((source) => source.originalItem)).toEqual([
+        'juice of 2 limes',
+        'lime',
+        'lime wedges',
+      ])
+      expect(onion).toMatchObject({ amount: 2, unit: 'count' })
+      expect(onion?.sources?.map((source) => source.originalItem)).toEqual([
+        'diced onion',
+        '1 onion',
+      ])
+      expect(result.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ item: '4 tbsp lemon juice', amount: null, unit: '' }),
+          expect.objectContaining({ item: 'green onion', amount: null, unit: '' }),
+          expect.objectContaining({ item: 'tomato paste', amount: null, unit: '' }),
+        ])
+      )
+    })
   })
 
   describe('pantry filtering', () => {
@@ -506,6 +629,17 @@ describe('generateShoppingList', () => {
 
       const tofu = result.items.find(i => i.item === 'tofu')
       expect(tofu?.categoryKey).toBe('protein')
+    })
+
+    it('should categorize guacamole as fresh produce by default', () => {
+      const recipe = createMockRecipe({
+        ingredients: [{ item: 'Guacamole', amount: 1, unit: 'cup' }],
+      })
+
+      const result = generateShoppingList([recipe], [], [])
+
+      const guacamole = result.items.find(i => i.item === 'guacamole')
+      expect(guacamole?.categoryKey).toBe('produce')
     })
   })
 

@@ -176,6 +176,22 @@ describe('mergeShoppingItems', () => {
       expect(result[0].amount).toBe(3)
     })
 
+    it('should normalize raw whole-produce forms when merging by purchase identity', () => {
+      const existing: ShoppingItem[] = [
+        createMockItem({ item: 'lime wedges', amount: null, unit: '' }),
+      ]
+      const newItems: ShoppingItem[] = [
+        createMockItem({ item: 'juice of 2 limes', amount: null, unit: '' }),
+      ]
+
+      const result = mergeShoppingItems(existing, newItems)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].item).toBe('lime')
+      expect(result[0].amount).toBe(3)
+      expect(result[0].unit).toBe('count')
+    })
+
     it('should merge olive oil variants under a cleaner display name', () => {
       const existing: ShoppingItem[] = [
         createMockItem({ item: 'extra virgin olive oil', amount: 2, unit: 'tbsp', categoryKey: 'pantry', categoryOrder: 6 }),

@@ -6,7 +6,11 @@
 
 import type { Recipe, ShoppingItem, PantryItem } from "@/types/database"
 import { categorizeIngredient, getExcludedKeyword } from "./shopping-categories"
-import { normalizeItemName, normalizeUnit } from "./shopping-list-normalization"
+import {
+  normalizeItemName,
+  normalizeShoppingPurchase,
+  normalizeUnit,
+} from "./shopping-list-normalization"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 
 export interface ShoppingListResult {
@@ -39,6 +43,25 @@ function mergeIntoAdditionalAmounts(
   return next
 }
 
+function createSourceKey(source: NonNullable<ShoppingItem["sources"]>[number]): string {
+  return [
+    source.recipeId || source.recipeName,
+    normalizeItemName(source.originalItem || ""),
+    normalizeUnit(source.originalUnit || ""),
+    source.prepIntent || "",
+  ].join("|")
+}
+
+function addSource(
+  sources: NonNullable<ShoppingItem["sources"]>,
+  source: NonNullable<ShoppingItem["sources"]>[number]
+) {
+  const sourceKey = createSourceKey(source)
+  if (!sources.some((candidate) => createSourceKey(candidate) === sourceKey)) {
+    sources.push(source)
+  }
+}
+
 /**
  * Generate a shopping list from selected recipes with optional scaling.
  *
@@ -69,7 +92,7 @@ export function generateShoppingList(
       amount: number
       unit: string
       shoppingCategory?: string
-      sources: { recipeId: string; recipeName: string }[]
+      sources: NonNullable<ShoppingItem["sources"]>
       additionalAmounts?: { amount: number; unit: string }[]
       alternatives?: string[]
     }
@@ -81,11 +104,23 @@ export function generateShoppingList(
     totalBaseServings += recipe.servings || 4
 
     for (const ingredient of recipe.ingredients || []) {
-      // Normalize item name and unit
-      const itemName = normalizeItemName(ingredient.item)
-      const amount = (ingredient.amount || 0) * scale
-      const unit = normalizeUnit(ingredient.unit || "")
+      const purchase = normalizeShoppingPurchase({
+        item: ingredient.item,
+        amount: ingredient.amount,
+        unit: ingredient.unit || "",
+      })
+      const itemName = purchase.purchaseName
+      const amount = (purchase.purchaseQuantity || 0) * scale
+      const unit = normalizeUnit(purchase.purchaseUnit || "")
       const shoppingCategory = ingredient.shoppingCategory
+      const source = {
+        recipeId: recipe.id,
+        recipeName: recipe.name,
+        originalItem: purchase.originalName,
+        originalAmount: purchase.originalQuantity,
+        originalUnit: purchase.originalUnit,
+        prepIntent: purchase.prepIntent,
+      }
 
       // Build display name with alternatives if present (normalized to lowercase)
       const displayItem = ingredient.alternatives?.length
@@ -115,11 +150,7 @@ export function generateShoppingList(
           )
         }
         
-        // Add source (deduplicate by recipeId)
-        const hasSource = existing.sources.some(s => s.recipeId === recipe.id)
-        if (!hasSource) {
-          existing.sources.push({ recipeId: recipe.id, recipeName: recipe.name })
-        }
+        addSource(existing.sources, source)
         
         // Keep the first shopping category override encountered
         if (shoppingCategory && !existing.shoppingCategory) {
@@ -131,7 +162,7 @@ export function generateShoppingList(
           amount,
           unit,
           shoppingCategory,
-          sources: [{ recipeId: recipe.id, recipeName: recipe.name }],
+          sources: [source],
           alternatives: ingredient.alternatives?.map(a => normalizeItemName(a)),
         })
       }

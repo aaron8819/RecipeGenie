@@ -136,6 +136,43 @@ function dedupeSources(item: ShoppingItem) {
   })
 }
 
+function pluralizePurchaseName(itemName: string): string {
+  if (itemName.endsWith("y")) return `${itemName.slice(0, -1)}ies`
+  if (itemName.endsWith("s")) return itemName
+  return `${itemName}s`
+}
+
+function getDisplayItemName(item: ShoppingItem): string {
+  return item.amount && Math.abs(item.amount) !== 1 && getIngredientDisplayUnit(item.unit) === ""
+    ? pluralizePurchaseName(item.item)
+    : item.item
+}
+
+function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]>[number]): string | null {
+  if (!source.originalItem) return null
+
+  const amount = source.originalAmount ? toFraction(source.originalAmount) : ""
+  const unit = getIngredientDisplayUnit(source.originalUnit || "")
+  const prefix = amount ? `${amount}${unit ? ` ${unit}` : ""} ` : ""
+  return `${prefix}${source.originalItem}`.trim()
+}
+
+function buildSourceDetailLabel(item: ShoppingItem): string | null {
+  if (!item.sources?.length) return null
+
+  const uniqueDetails = item.sources
+    .map(formatSourceIngredientLabel)
+    .filter((label): label is string => Boolean(label))
+    .filter((label, index, labels) => labels.indexOf(label) === index)
+  const details = uniqueDetails.filter(
+    (label) => label.toLowerCase() !== item.item.toLowerCase()
+  )
+
+  if (details.length === 0) return null
+
+  return `Needs: ${details.join("; ")}`
+}
+
 function buildSourceSummary(sources: ReturnType<typeof dedupeSources>): string | null {
   const nonManualSources = sources.filter((source) => source.recipeName !== "Manual")
 
@@ -274,10 +311,12 @@ export function ShoppingItemRow({
   const uniqueSources = dedupeSources(item)
   const nonManualSources = uniqueSources.filter((source) => source.recipeName !== "Manual")
   const sourceSummary = buildSourceSummary(uniqueSources)
+  const sourceDetailLabel = buildSourceDetailLabel(item)
   const singleRecipeSource = nonManualSources.length === 1 ? nonManualSources[0] : null
+  const displayItemName = getDisplayItemName(item)
   const secondaryMetaLabel = additionalAmountLabels.length > 0
     ? `Also: ${additionalAmountLabels.join(", ")}`
-    : null
+    : sourceDetailLabel
 
   return (
     <div
@@ -354,7 +393,7 @@ export function ShoppingItemRow({
                 isChecked && "text-gray-500 line-through"
               )}
             >
-              {item.item}
+              {displayItemName}
             </span>
             {sourceDisplay === "tags"
               ? uniqueSources.map((source, index) => (

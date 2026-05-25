@@ -4,7 +4,12 @@
  */
 
 import type { ShoppingItem } from "@/types/database"
-import { normalizeItemName, normalizeUnit } from "./shopping-list-normalization"
+import {
+  createShoppingPurchaseKey,
+  normalizeItemName,
+  normalizeShoppingPurchase,
+  normalizeUnit,
+} from "./shopping-list-normalization"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { ensureCategoryInfo } from "./shopping-list"
 import { categorizeIngredient } from "./shopping-categories"
@@ -14,6 +19,8 @@ export interface MergeOptions {
   preserveCustomOrder?: boolean
   userCategoryOverrides?: Record<string, string> | null
 }
+
+type ShoppingItemSource = NonNullable<ShoppingItem["sources"]>[number]
 
 function mergeIntoAdditionalAmounts(
   existing: { amount: number; unit: string }[] | undefined,
@@ -66,7 +73,7 @@ export function mergeShoppingItems(
   // Create a map of existing items by normalized item name
   const existingMap = new Map<string, ShoppingItem>()
   for (const item of existing) {
-    const key = normalizeItemName(item.item)
+    const key = createShoppingPurchaseKey(item.item, item.amount, item.unit)
     const existingItem = existingMap.get(key)
     
     if (existingItem) {
@@ -80,7 +87,7 @@ export function mergeShoppingItems(
 
   // Merge new items into existing
   for (const newItem of newItems) {
-    const key = normalizeItemName(newItem.item)
+    const key = createShoppingPurchaseKey(newItem.item, newItem.amount, newItem.unit)
     const existingItem = existingMap.get(key)
 
     if (existingItem) {
@@ -98,7 +105,11 @@ export function mergeShoppingItems(
       // Normalize unit
       const normalizedItem: ShoppingItem = {
         ...itemWithCategory,
-        item: normalizeItemName(itemWithCategory.item),
+        item: normalizeShoppingPurchase({
+          item: itemWithCategory.item,
+          amount: itemWithCategory.amount,
+          unit: itemWithCategory.unit,
+        }).purchaseName,
         unit: normalizeUnit(itemWithCategory.unit),
       }
       existingMap.set(key, normalizedItem)
@@ -120,6 +131,15 @@ export function mergeShoppingItems(
   return mergedItems
 }
 
+function createSourceKey(source: ShoppingItemSource): string {
+  return [
+    source.recipeId || source.recipeName,
+    normalizeItemName(source.originalItem || ""),
+    normalizeUnit(source.originalUnit || ""),
+    source.prepIntent || "",
+  ].join("|")
+}
+
 /**
  * Merge two shopping items into one
  */
@@ -130,35 +150,40 @@ function mergeTwoItems(
   preserveUserOverrides = false
 ): ShoppingItem {
   // Normalize both items
+  const purchase1 = normalizeShoppingPurchase({
+    item: item1.item,
+    amount: item1.amount,
+    unit: item1.unit,
+  })
+  const purchase2 = normalizeShoppingPurchase({
+    item: item2.item,
+    amount: item2.amount,
+    unit: item2.unit,
+  })
   const normalized1: ShoppingItem = {
     ...item1,
-    item: normalizeItemName(item1.item),
-    unit: normalizeUnit(item1.unit),
+    item: purchase1.purchaseName,
+    amount: purchase1.purchaseQuantity,
+    unit: normalizeUnit(purchase1.purchaseUnit || ""),
   }
   const normalized2: ShoppingItem = {
     ...item2,
-    item: normalizeItemName(item2.item),
-    unit: normalizeUnit(item2.unit),
+    item: purchase2.purchaseName,
+    amount: purchase2.purchaseQuantity,
+    unit: normalizeUnit(purchase2.purchaseUnit || ""),
   }
 
   // Merge sources (deduplicate by recipeId or recipeName)
-  const sourceMap = new Map<string, { recipeId: string; recipeName: string }>()
+  const sourceMap = new Map<string, ShoppingItemSource>()
   
   for (const source of normalized1.sources || []) {
-    const key = (source as any).recipeId || source.recipeName
-    sourceMap.set(key, {
-      recipeId: (source as any).recipeId || "",
-      recipeName: source.recipeName,
-    })
+    sourceMap.set(createSourceKey(source), source)
   }
   
   for (const source of normalized2.sources || []) {
-    const key = (source as any).recipeId || source.recipeName
+    const key = createSourceKey(source)
     if (!sourceMap.has(key)) {
-      sourceMap.set(key, {
-        recipeId: (source as any).recipeId || "",
-        recipeName: source.recipeName,
-      })
+      sourceMap.set(key, source)
     }
   }
 
