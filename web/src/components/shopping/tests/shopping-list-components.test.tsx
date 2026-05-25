@@ -296,6 +296,37 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByText("From Roast Chicken")).toBeInTheDocument()
   })
 
+  it("shows prep-specific source details without repeating exact bare item forms", () => {
+    render(
+      <ShoppingItemRow
+        item={item({
+          item: "lime",
+          amount: 4,
+          unit: "count",
+          sources: [
+            { recipeName: "Pollo Asado Tacos", originalItem: "juice of 2 limes" },
+            { recipeName: "Shredded Chipotle Beef", originalItem: "lime" },
+            { recipeName: "Pollo Asado Tacos", originalItem: "lime wedges" },
+          ],
+        })}
+        isDesktop={false}
+        sourceDisplay="summary"
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.getByText("4")).toBeInTheDocument()
+    expect(screen.getByText("limes")).toBeInTheDocument()
+    expect(screen.getByText("Needs: juice of 2 limes; lime wedges")).toBeInTheDocument()
+    expect(screen.getByText("From Pollo Asado Tacos and Shredded Chipotle Beef")).toBeInTheDocument()
+  })
+
   it("pluralizes preserved package units for display", () => {
     render(
       <ShoppingItemRow

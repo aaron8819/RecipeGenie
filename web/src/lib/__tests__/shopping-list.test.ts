@@ -326,6 +326,46 @@ describe('generateShoppingList', () => {
       expect(itemNames).toContain('red onion')
       expect(result.items.find((item) => item.item === 'onion')?.amount).toBe(2)
     })
+
+    it('should handle the requested lime and onion consolidation scenario conservatively', () => {
+      const recipe = createMockRecipe({
+        id: 'recipe-1',
+        name: 'Pollo Asado Tacos',
+        ingredients: [
+          { item: 'juice of 2 limes', amount: null, unit: '' },
+          { item: 'lime', amount: null, unit: '' },
+          { item: 'lime wedges', amount: null, unit: '' },
+          { item: 'diced onion', amount: null, unit: '' },
+          { item: '1 onion', amount: null, unit: '' },
+          { item: '4 tbsp lemon juice', amount: null, unit: '' },
+          { item: 'green onion', amount: null, unit: '' },
+          { item: 'tomato paste', amount: null, unit: '' },
+        ],
+      })
+
+      const result = generateShoppingList([recipe], [], [])
+      const lime = result.items.find((item) => item.item === 'lime')
+      const onion = result.items.find((item) => item.item === 'onion')
+
+      expect(lime).toMatchObject({ amount: 4, unit: 'count' })
+      expect(lime?.sources?.map((source) => source.originalItem)).toEqual([
+        'juice of 2 limes',
+        'lime',
+        'lime wedges',
+      ])
+      expect(onion).toMatchObject({ amount: 2, unit: 'count' })
+      expect(onion?.sources?.map((source) => source.originalItem)).toEqual([
+        'diced onion',
+        '1 onion',
+      ])
+      expect(result.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ item: '4 tbsp lemon juice', amount: null, unit: '' }),
+          expect.objectContaining({ item: 'green onion', amount: null, unit: '' }),
+          expect.objectContaining({ item: 'tomato paste', amount: null, unit: '' }),
+        ])
+      )
+    })
   })
 
   describe('pantry filtering', () => {

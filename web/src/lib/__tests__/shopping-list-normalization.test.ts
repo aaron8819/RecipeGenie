@@ -296,6 +296,14 @@ describe('normalizeShoppingPurchase', () => {
     })
   })
 
+  it('does not default generic item-only ingredients to one', () => {
+    expect(normalizeShoppingPurchase({ item: 'cilantro', amount: null, unit: '' })).toMatchObject({
+      purchaseName: 'cilantro',
+      purchaseUnit: '',
+      purchaseQuantity: null,
+    })
+  })
+
   it('does not collapse unsafe produce names into broader items', () => {
     expect(createShoppingPurchaseKey('green onion')).toBe('green onion')
     expect(createShoppingPurchaseKey('red onion')).toBe('red onion')

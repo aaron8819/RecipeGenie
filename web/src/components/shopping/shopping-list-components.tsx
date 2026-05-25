@@ -160,13 +160,15 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
 function buildSourceDetailLabel(item: ShoppingItem): string | null {
   if (!item.sources?.length) return null
 
-  const details = item.sources
+  const uniqueDetails = item.sources
     .map(formatSourceIngredientLabel)
     .filter((label): label is string => Boolean(label))
     .filter((label, index, labels) => labels.indexOf(label) === index)
+  const details = uniqueDetails.filter(
+    (label) => label.toLowerCase() !== item.item.toLowerCase()
+  )
 
   if (details.length === 0) return null
-  if (details.length === 1 && details[0].toLowerCase() === item.item.toLowerCase()) return null
 
   return `Needs: ${details.join("; ")}`
 }

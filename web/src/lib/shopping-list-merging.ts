@@ -150,15 +150,27 @@ function mergeTwoItems(
   preserveUserOverrides = false
 ): ShoppingItem {
   // Normalize both items
+  const purchase1 = normalizeShoppingPurchase({
+    item: item1.item,
+    amount: item1.amount,
+    unit: item1.unit,
+  })
+  const purchase2 = normalizeShoppingPurchase({
+    item: item2.item,
+    amount: item2.amount,
+    unit: item2.unit,
+  })
   const normalized1: ShoppingItem = {
     ...item1,
-    item: normalizeItemName(item1.item),
-    unit: normalizeUnit(item1.unit),
+    item: purchase1.purchaseName,
+    amount: purchase1.purchaseQuantity,
+    unit: normalizeUnit(purchase1.purchaseUnit || ""),
   }
   const normalized2: ShoppingItem = {
     ...item2,
-    item: normalizeItemName(item2.item),
-    unit: normalizeUnit(item2.unit),
+    item: purchase2.purchaseName,
+    amount: purchase2.purchaseQuantity,
+    unit: normalizeUnit(purchase2.purchaseUnit || ""),
   }
 
   // Merge sources (deduplicate by recipeId or recipeName)
