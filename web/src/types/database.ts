@@ -37,7 +37,14 @@ export interface ShoppingItem {
   unit: string
   categoryKey: string
   categoryOrder: number
-  sources?: { recipeId?: string; recipeName: string }[]
+  sources?: {
+    recipeId?: string
+    recipeName: string
+    originalItem?: string
+    originalAmount?: number | null
+    originalUnit?: string | null
+    prepIntent?: string
+  }[]
   shoppingCategory?: string
   additionalAmounts?: { amount: number; unit: string }[]
   checked?: boolean

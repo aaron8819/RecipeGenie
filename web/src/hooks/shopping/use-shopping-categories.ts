@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingItem, UserConfig } from "@/types/database"
 import { requireShoppingRowId } from "@/lib/shopping-row-identity"
 import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
+import { createShoppingPurchaseKey } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import { DEFAULT_RECIPE_CATEGORIES, DEFAULT_RECIPE_SELECTION, DEFAULT_USER_CONFIG } from "@/lib/user-config"
@@ -22,7 +23,7 @@ export function useSaveCategoryOverride() {
 
   return useMutation({
     mutationFn: async ({ itemName, categoryKey }: { itemName: string; categoryKey: string }) => {
-      const normalizedItem = itemName.toLowerCase().trim()
+      const normalizedItem = createShoppingPurchaseKey(itemName)
 
       const supabase = getSupabase()
       const { data, error: fetchError } = await supabase

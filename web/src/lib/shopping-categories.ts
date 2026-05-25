@@ -29,7 +29,7 @@ export const SHOPPING_CATEGORIES: Record<string, ShoppingCategory> = {
       "mushroom", "mushrooms", "portobello", "shiitake", "cremini",
       "potato", "potatoes", "sweet potato", "sweet potatoes", "yam", "yams",
       "corn", "peas", "green beans", "snap peas", "snow peas",
-      "avocado", "avocados",
+      "avocado", "avocados", "guacamole",
       // Fruits
       "apple", "apples", "banana", "bananas", "orange", "oranges",
       "lemon", "lemons", "lime", "limes", "grapefruit",
