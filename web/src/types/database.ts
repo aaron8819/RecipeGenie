@@ -51,6 +51,8 @@ export interface ShoppingItem {
   excludedBy?: string
 }
 
+export type ShoppingItemOrderPreferences = Record<string, string[]>
+
 export interface RecipeShareSnapshot {
   name: string
   category: string
@@ -119,11 +121,12 @@ export type PantryItem = Database["public"]["Tables"]["pantry_items"]["Row"]
 type UserConfigBase = Database["public"]["Tables"]["user_config"]["Row"]
 export type UserConfig = Omit<
   UserConfigBase,
-  "default_selection" | "category_overrides" | "custom_categories"
+  "default_selection" | "category_overrides" | "custom_categories" | "shopping_item_order"
 > & {
   default_selection: Record<string, number>
   category_overrides: Record<string, string>
   custom_categories: CustomShoppingCategory[]
+  shopping_item_order: ShoppingItemOrderPreferences
 }
 
 export type RecipeHistory = Database["public"]["Tables"]["recipe_history"]["Row"]

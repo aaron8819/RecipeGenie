@@ -8,10 +8,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/database"
 import { ensureShoppingItemsHaveRowIds, ensureShoppingListRowIds } from "@/lib/shopping-row-identity"
 import { generateShoppingList } from "@/lib/shopping-list"
+import { normalizeShoppingItemOrderPreferences } from "@/lib/shopping-item-order"
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import { SHOPPING_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import { fetchShoppingGenerationConfig } from "./user-config-read"
 
 /**
  * Hook to fetch the shopping list
@@ -100,10 +102,10 @@ export function useGenerateShoppingList() {
       const supabase = getSupabase()
 
       // Fetch current list, recipes, pantry, and config in parallel
-      const [recipesRes, pantryRes, configRes, currentListRes] = await Promise.all([
+      const [recipesRes, pantryRes, config, currentListRes] = await Promise.all([
         supabase.from("recipes").select("*").in("id", recipeIds),
         supabase.from("pantry_items").select("*"),
-        supabase.from("user_config").select("excluded_keywords, category_overrides").single(),
+        fetchShoppingGenerationConfig(),
         supabase.from("shopping_list").select("items, already_have").maybeSingle(),
       ])
 
@@ -112,15 +114,15 @@ export function useGenerateShoppingList() {
 
       const recipes = recipesRes.data as Recipe[]
       const pantryItems = pantryRes.data as PantryItem[]
-      const typedConfig = configRes.data as { excluded_keywords?: string[]; category_overrides?: Record<string, string> } | null
       const currentList = currentListRes.data as { items?: ShoppingItem[]; already_have?: ShoppingItem[] } | null
 
       const result = generateShoppingList(
         recipes,
         pantryItems,
-        typedConfig?.excluded_keywords || [],
+        config.excluded_keywords || [],
         scale,
-        typedConfig?.category_overrides || null
+        config.category_overrides || null,
+        normalizeShoppingItemOrderPreferences(config.shopping_item_order)
       )
 
       // Preserve checked states without moving items into pantry

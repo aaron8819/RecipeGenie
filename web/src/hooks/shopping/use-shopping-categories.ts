@@ -64,6 +64,7 @@ export function useSaveCategoryOverride() {
             excluded_keywords: unknown[]
             history_exclusion_days: number | null
             week_start_day: number | null
+            shopping_item_order: Record<string, string[]>
           }) => Promise<{ error: { message: string } | null }>
         }
         const { error: saveError } = await userConfigInsert
@@ -75,6 +76,7 @@ export function useSaveCategoryOverride() {
             excluded_keywords: [...(DEFAULT_USER_CONFIG.excluded_keywords ?? [])],
             history_exclusion_days: DEFAULT_USER_CONFIG.history_exclusion_days,
             week_start_day: DEFAULT_USER_CONFIG.week_start_day,
+            shopping_item_order: {},
           })
         if (saveError) throw saveError
       }

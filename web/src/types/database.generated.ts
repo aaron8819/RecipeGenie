@@ -239,6 +239,7 @@ export type Database = {
           history_exclusion_days: number | null
           onboarding_completed_at: string | null
           preferred_days: number[] | null
+          shopping_item_order: Json | null
           user_id: string
           week_start_day: number | null
         }
@@ -255,6 +256,7 @@ export type Database = {
           history_exclusion_days?: number | null
           onboarding_completed_at?: string | null
           preferred_days?: number[] | null
+          shopping_item_order?: Json | null
           user_id: string
           week_start_day?: number | null
         }
@@ -271,6 +273,7 @@ export type Database = {
           history_exclusion_days?: number | null
           onboarding_completed_at?: string | null
           preferred_days?: number[] | null
+          shopping_item_order?: Json | null
           user_id?: string
           week_start_day?: number | null
         }

@@ -9,10 +9,12 @@ import type { ShoppingList, ShoppingItem, Recipe, PantryItem } from "@/types/dat
 import { ensureShoppingItemsHaveRowIds } from "@/lib/shopping-row-identity"
 import { generateShoppingList } from "@/lib/shopping-list"
 import { mergeShoppingItems, removeRecipeByNameFromItems } from "@/lib/shopping-list-merging"
+import { normalizeShoppingItemOrderPreferences } from "@/lib/shopping-item-order"
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import { SHOPPING_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import { fetchShoppingGenerationConfig } from "./user-config-read"
 
 /**
  * Hook to remove all items associated with a specific recipe
@@ -101,10 +103,10 @@ export function useAddToShoppingList() {
       let listExists = false
 
       const supabase = getSupabase()
-      const [recipesRes, pantryRes, configRes, listRes] = await Promise.all([
+      const [recipesRes, pantryRes, config, listRes] = await Promise.all([
         supabase.from("recipes").select("*").in("id", recipeIds),
         supabase.from("pantry_items").select("*"),
-        supabase.from("user_config").select("excluded_keywords, category_overrides").single(),
+        fetchShoppingGenerationConfig(),
         supabase.from("shopping_list").select("*").maybeSingle(),
       ])
 
@@ -113,9 +115,9 @@ export function useAddToShoppingList() {
 
       recipes = recipesRes.data as Recipe[]
       pantryItems = pantryRes.data as PantryItem[]
-      const typedConfig = configRes.data as { excluded_keywords?: string[]; category_overrides?: Record<string, string> } | null
-      excludedKeywords = typedConfig?.excluded_keywords || []
-      categoryOverrides = typedConfig?.category_overrides || {}
+      excludedKeywords = config.excluded_keywords || []
+      categoryOverrides = config.category_overrides || {}
+      const shoppingItemOrder = normalizeShoppingItemOrderPreferences(config.shopping_item_order)
       currentList = (listRes.data as ShoppingList | null) || ({
         user_id: user?.id || "",
         items: [],
@@ -129,7 +131,7 @@ export function useAddToShoppingList() {
       } as ShoppingList)
       listExists = !!listRes.data
 
-      const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale, categoryOverrides)
+      const result = generateShoppingList(recipes, pantryItems, excludedKeywords, scale, categoryOverrides, shoppingItemOrder)
 
       // Merge items using unified merging function
       const existingCount = currentList.items.length
@@ -140,6 +142,7 @@ export function useAddToShoppingList() {
           preserveUserOverrides: true,
           preserveCustomOrder: currentList.custom_order || false,
           userCategoryOverrides: categoryOverrides,
+          shoppingItemOrder,
         }
       )
 
@@ -206,6 +209,7 @@ export function useAddToShoppingList() {
           preserveUserOverrides: true,
           preserveCustomOrder: false, // already_have doesn't need custom order
           userCategoryOverrides: categoryOverrides,
+          shoppingItemOrder,
         }
       )
 
@@ -224,6 +228,7 @@ export function useAddToShoppingList() {
           preserveUserOverrides: true,
           preserveCustomOrder: false, // excluded doesn't need custom order
           userCategoryOverrides: categoryOverrides,
+          shoppingItemOrder,
         }
       )
 

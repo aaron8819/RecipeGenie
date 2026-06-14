@@ -19,6 +19,7 @@ export const DEFAULT_USER_CONFIG: UserConfig = {
   onboarding_completed_at: null,
   category_overrides: {},
   custom_categories: [],
+  shopping_item_order: {},
   category_order: null,
   excluded_days: [],
   preferred_days: null,
@@ -36,5 +37,8 @@ export function resolveUserConfig(
     }
     throw error
   }
-  return data as UserConfig
+  return {
+    ...data,
+    shopping_item_order: data?.shopping_item_order ?? {},
+  } as UserConfig
 }

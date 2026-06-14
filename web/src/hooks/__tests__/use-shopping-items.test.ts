@@ -9,6 +9,7 @@ import {
   useRemoveShoppingItem,
   useAddShoppingItem,
   useBulkCheckOff,
+  useReorderShoppingList,
 } from "@/hooks/shopping"
 
 vi.mock("@/lib/auth-context", () => ({
@@ -19,9 +20,11 @@ const mockSupabase = {
   from: vi.fn().mockReturnThis(),
   select: vi.fn().mockReturnThis(),
   update: vi.fn().mockReturnThis(),
+  upsert: vi.fn(),
   insert: vi.fn().mockReturnThis(),
   delete: vi.fn().mockReturnThis(),
   single: vi.fn(),
+  maybeSingle: vi.fn(),
   eq: vi.fn(),
 }
 
@@ -73,9 +76,11 @@ beforeEach(() => {
   mockSupabase.from.mockReturnThis()
   mockSupabase.select.mockReturnThis()
   mockSupabase.update.mockReturnThis()
+  mockSupabase.upsert.mockResolvedValue({ data: null, error: null })
   mockSupabase.insert.mockReturnThis()
   mockSupabase.delete.mockReturnThis()
   mockSupabase.single.mockResolvedValue({ data: null, error: null })
+  mockSupabase.maybeSingle.mockResolvedValue({ data: null, error: null })
   mockSupabase.eq.mockResolvedValue({ data: null, error: null })
 })
 
@@ -239,5 +244,43 @@ describe("useAddShoppingItem", () => {
     const eggs = cached?.items.find((item) => item.item === "eggs")
     expect(cached?.items).toHaveLength(2)
     expect(eggs?.rowId).toBeTruthy()
+  })
+})
+
+describe("useReorderShoppingList", () => {
+  it("persists the current list order and learns category item order preferences", async () => {
+    const { wrapper } = createWrapper()
+    const avocado = makeItem("avocado", { rowId: "row-avocado", unit: "" })
+    const garlic = makeItem("garlic", { rowId: "row-garlic", unit: "" })
+    const arugula = makeItem("arugula", { rowId: "row-arugula", unit: "cup" })
+
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { shopping_item_order: { produce: ["lime", "garlic"] } },
+      error: null,
+    })
+
+    const { result } = renderHook(() => useReorderShoppingList(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync([avocado, garlic, arugula])
+    })
+
+    expect(mockSupabase.update).toHaveBeenCalledWith({
+      items: expect.arrayContaining([
+        expect.objectContaining({ rowId: "row-avocado" }),
+        expect.objectContaining({ rowId: "row-garlic" }),
+        expect.objectContaining({ rowId: "row-arugula" }),
+      ]),
+      custom_order: true,
+    })
+    expect(mockSupabase.upsert).toHaveBeenCalledWith(
+      {
+        user_id: "test-user-id",
+        shopping_item_order: {
+          produce: ["lime", "avocado", "garlic", "arugula"],
+        },
+      },
+      { onConflict: "user_id" }
+    )
   })
 })

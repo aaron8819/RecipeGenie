@@ -42,6 +42,7 @@ The Recipe Genie database is designed for multi-user support with complete data 
 
 - `supabase/migrations/001_baseline.sql`
 - `supabase/migrations/002_recipe_structure_parity.sql`
+- `supabase/migrations/003_shopping_item_order_preferences.sql`
 
 ### Recent Drift Root Cause
 
@@ -156,6 +157,7 @@ Stores user-specific configuration and preferences.
 | `category_overrides` | JSONB | DEFAULT '{}' | User-defined category overrides for shopping list items (maps item names to category keys) |
 | `custom_categories` | JSONB | DEFAULT '[]' | User-defined shopping categories: `[{ "id": "uuid", "name": "Category Name", "order": number }]` |
 | `category_order` | JSONB | DEFAULT NULL | Custom order for all categories (array of category keys), null uses default order |
+| `shopping_item_order` | JSONB | DEFAULT '{}' | User-learned item order within shopping categories (maps category keys to ordered normalized item names) |
 | `excluded_days` | INTEGER[] | DEFAULT '{}' | Day indices (0-6) to exclude from meal placement. 0=Sunday, 1=Monday, etc. |
 | `preferred_days` | INTEGER[] | DEFAULT NULL | Preferred day indices (0-6) for meal placement, or null for no preference |
 | `auto_assign_days` | BOOLEAN | DEFAULT TRUE | Whether to automatically assign days to recipes when generating a meal plan |
@@ -190,6 +192,13 @@ Legacy default `steak` values are normalized to `beef` by migration `026_normali
 **Example category_order JSONB:**
 ```json
 ["produce", "dairy", "protein", "custom_550e8400-e29b-41d4-a716-446655440000", "pantry", "frozen"]
+```
+
+**Example shopping_item_order JSONB:**
+```json
+{
+  "produce": ["blueberries", "guacamole", "pico de gallo", "basil", "mushrooms", "lemon", "lime", "avocado", "tomato", "pepper", "onion", "garlic", "potato", "cilantro", "parsley", "cucumber", "banana"]
+}
 ```
 
 ### recipe_history
@@ -570,6 +579,7 @@ The repository now uses a baseline-first bootstrap strategy:
 
 1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap through the pantry row-id baseline cut on 2026-03-09.
 2. **002_recipe_structure_parity.sql** - Added first-class recipe time fields, first-class recipe notes, additive grouped-instruction persistence, and share-acceptance parity for those fields.
+3. **003_shopping_item_order_preferences.sql** - Added `shopping_item_order` to `user_config` for learned within-category shopping item order preferences.
 
 Legacy notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.

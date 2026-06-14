@@ -72,6 +72,7 @@ describe("useUpdateExcludedKeywords", () => {
       category_overrides: {},
       custom_categories: [],
       category_order: null,
+      shopping_item_order: {},
       excluded_days: [],
       preferred_days: null,
       auto_assign_days: true,

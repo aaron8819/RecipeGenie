@@ -293,6 +293,24 @@ describe('mergeShoppingItems', () => {
       expect(result[1].categoryKey).toBe('dairy') // Order 5
     })
 
+    it('should apply learned in-category order when not preserving custom order', () => {
+      const existing: ShoppingItem[] = [
+        createMockItem({ item: 'garlic', amount: 1, unit: '', categoryKey: 'produce', categoryOrder: 1 }),
+      ]
+      const newItems: ShoppingItem[] = [
+        createMockItem({ item: 'avocado', amount: 1, unit: '', categoryKey: 'produce', categoryOrder: 1 }),
+        createMockItem({ item: 'arugula', amount: 1, unit: 'cup', categoryKey: 'produce', categoryOrder: 1 }),
+      ]
+
+      const result = mergeShoppingItems(existing, newItems, {
+        shoppingItemOrder: {
+          produce: ['avocado', 'garlic'],
+        },
+      })
+
+      expect(result.map((item) => item.item)).toEqual(['avocado', 'garlic', 'arugula'])
+    })
+
     it('should preserve order when preserveCustomOrder is true', () => {
       const existing: ShoppingItem[] = [
         createMockItem({ item: 'milk', categoryKey: 'dairy', categoryOrder: 5 }),

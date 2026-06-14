@@ -5,12 +5,13 @@
  */
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import type { ShoppingList, ShoppingItem, PantryItem } from "@/types/database"
+import type { ShoppingList, ShoppingItem, PantryItem, UserConfig } from "@/types/database"
 import {
   ensureShoppingItemsHaveRowIds,
   findShoppingItemIndexByRowId,
   requireShoppingRowId,
 } from "@/lib/shopping-row-identity"
+import { sortShoppingItemsByPreferences } from "@/lib/shopping-item-order"
 import { normalizePantryItemName } from "@/lib/pantry"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
@@ -22,10 +23,12 @@ import {
   rollbackQueryData,
   rollbackQueryDataMany,
   setOptimisticQueryData,
+  CONFIG_KEY,
   SHOPPING_KEY,
   PANTRY_KEY,
   SHOPPING_LIST_WRITE_SCOPE_ID,
 } from "./shared"
+import { fetchShoppingItemOrderConfig } from "./user-config-read"
 
 /**
  * Hook to move an item from "already have" back to the shopping list
@@ -40,14 +43,18 @@ export function useMoveToShoppingList() {
       const rowId = requireShoppingRowId(item, "pantry restore shopping item")
 
       const supabase = getSupabase()
-      const { data: currentList, error: fetchError } = await supabase
+      const listRequest = supabase
         .from("shopping_list")
         .select("items, already_have, custom_order")
         .single()
+      const [listRes, configRes] = await Promise.all([
+        listRequest,
+        fetchShoppingItemOrderConfig(),
+      ])
 
-      if (fetchError) throw fetchError
+      if (listRes.error) throw listRes.error
 
-      const typedList = currentList as { items?: ShoppingItem[]; already_have?: ShoppingItem[]; custom_order?: boolean } | null
+      const typedList = listRes.data as { items?: ShoppingItem[]; already_have?: ShoppingItem[]; custom_order?: boolean } | null
       const currentItems = ensureShoppingItemsHaveRowIds(typedList?.items || []).items
       const alreadyHave = ensureShoppingItemsHaveRowIds(typedList?.already_have || []).items
       const restoredItem = alreadyHave.find((candidate) => candidate.rowId === rowId)
@@ -57,7 +64,7 @@ export function useMoveToShoppingList() {
       if (!currentItems.some((candidate) => candidate.rowId === rowId)) {
         updatedItems = [...currentItems, restoredItem]
         if (!typedList?.custom_order) {
-          updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+          updatedItems = sortShoppingItemsByPreferences(updatedItems, configRes.shopping_item_order)
         }
       }
 
@@ -93,7 +100,8 @@ export function useMoveToShoppingList() {
           if (!updatedItems.some((candidate) => candidate.rowId === rowId)) {
             updatedItems = [...updatedItems, restoredItem]
             if (!old.custom_order) {
-              updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+              const config = queryClient.getQueryData<UserConfig>([...CONFIG_KEY])
+              updatedItems = sortShoppingItemsByPreferences(updatedItems, config?.shopping_item_order)
             }
           }
 
@@ -129,14 +137,18 @@ export function useMoveExcludedToShoppingList() {
       const rowId = requireShoppingRowId(item, "excluded restore shopping item")
 
       const supabase = getSupabase()
-      const { data: currentList, error: fetchError } = await supabase
+      const listRequest = supabase
         .from("shopping_list")
         .select("items, excluded, custom_order")
         .single()
+      const [listRes, configRes] = await Promise.all([
+        listRequest,
+        fetchShoppingItemOrderConfig(),
+      ])
 
-      if (fetchError) throw fetchError
+      if (listRes.error) throw listRes.error
 
-      const typedList = currentList as { items?: ShoppingItem[]; excluded?: ShoppingItem[]; custom_order?: boolean } | null
+      const typedList = listRes.data as { items?: ShoppingItem[]; excluded?: ShoppingItem[]; custom_order?: boolean } | null
       const currentItems = ensureShoppingItemsHaveRowIds(typedList?.items || []).items
       const excluded = ensureShoppingItemsHaveRowIds(typedList?.excluded || []).items
       const restoredItem = excluded.find((candidate) => candidate.rowId === rowId)
@@ -146,7 +158,7 @@ export function useMoveExcludedToShoppingList() {
       if (!currentItems.some((candidate) => candidate.rowId === rowId)) {
         updatedItems = [...currentItems, restoredItem]
         if (!typedList?.custom_order) {
-          updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+          updatedItems = sortShoppingItemsByPreferences(updatedItems, configRes.shopping_item_order)
         }
       }
 
@@ -182,7 +194,8 @@ export function useMoveExcludedToShoppingList() {
           if (!updatedItems.some((candidate) => candidate.rowId === rowId)) {
             updatedItems = [...updatedItems, restoredItem]
             if (!old.custom_order) {
-              updatedItems.sort((a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item))
+              const config = queryClient.getQueryData<UserConfig>([...CONFIG_KEY])
+              updatedItems = sortShoppingItemsByPreferences(updatedItems, config?.shopping_item_order)
             }
           }
 

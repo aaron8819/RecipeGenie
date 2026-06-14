@@ -708,6 +708,30 @@ describe('generateShoppingList', () => {
         expect(names).toEqual([...names].sort())
       }
     })
+
+    it('should sort generated items by learned in-category shopping preference before alphabetical fallback', () => {
+      const recipe = createMockRecipe({
+        ingredients: [
+          { item: 'Garlic', amount: 1, unit: '' },
+          { item: 'Arugula', amount: 1, unit: 'cup' },
+          { item: 'Avocado', amount: 1, unit: '' },
+          { item: 'Lime', amount: 1, unit: '' },
+          { item: 'Cilantro', amount: 1, unit: 'cup' },
+        ],
+      })
+
+      const result = generateShoppingList([recipe], [], [], 1.0, null, {
+        produce: ['lime', 'avocado', 'garlic'],
+      })
+
+      expect(result.items.map((item) => item.item)).toEqual([
+        'lime',
+        'avocado',
+        'garlic',
+        'arugula',
+        'cilantro',
+      ])
+    })
   })
 
   describe('edge cases', () => {
@@ -795,6 +819,20 @@ describe('sortShoppingList', () => {
   it('should handle empty array', () => {
     const result = sortShoppingList([])
     expect(result).toEqual([])
+  })
+
+  it('should apply learned in-category shopping preference when sorting', () => {
+    const items: ShoppingItem[] = [
+      { item: 'garlic', amount: 1, unit: '', categoryKey: 'produce', categoryOrder: 1, sources: [] },
+      { item: 'avocado', amount: 1, unit: '', categoryKey: 'produce', categoryOrder: 1, sources: [] },
+      { item: 'arugula', amount: 1, unit: '', categoryKey: 'produce', categoryOrder: 1, sources: [] },
+    ]
+
+    const result = sortShoppingList(items, {
+      produce: ['avocado', 'garlic'],
+    })
+
+    expect(result.map((item) => item.item)).toEqual(['avocado', 'garlic', 'arugula'])
   })
 })
 

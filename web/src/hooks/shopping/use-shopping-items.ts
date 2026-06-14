@@ -12,6 +12,11 @@ import {
   requireShoppingRowId,
 } from "@/lib/shopping-row-identity"
 import { ensureCategoryInfo } from "@/lib/shopping-list"
+import {
+  learnShoppingItemOrderPreferences,
+  normalizeShoppingItemOrderPreferences,
+  sortShoppingItemsByPreferences,
+} from "@/lib/shopping-item-order"
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
@@ -21,19 +26,18 @@ import {
   reconcileQueryData,
   rollbackQueryData,
   setOptimisticQueryData,
+  CONFIG_KEY,
   SHOPPING_KEY,
   SHOPPING_LIST_WRITE_SCOPE_ID,
 } from "./shared"
+import {
+  fetchShoppingItemConfig,
+  fetchShoppingItemOrderConfig,
+  saveShoppingItemOrderPreference,
+} from "./user-config-read"
 
-async function fetchCategoryOverrides() {
-  return (
-    (
-      await getSupabase()
-        .from("user_config")
-        .select("category_overrides")
-        .single()
-    ).data as { category_overrides?: Record<string, string> } | null
-  )?.category_overrides || {}
+async function fetchShoppingConfig() {
+  return fetchShoppingItemConfig()
 }
 
 function createManualShoppingItem(
@@ -67,11 +71,13 @@ function createManualShoppingItem(
 
 function sortItemsIfNeeded(
   items: ShoppingItem[],
-  customOrder: boolean | null | undefined
+  customOrder: boolean | null | undefined,
+  shoppingItemOrder?: unknown
 ) {
   if (customOrder) return items
-  return [...items].sort(
-    (a, b) => a.categoryOrder - b.categoryOrder || a.item.localeCompare(b.item)
+  return sortShoppingItemsByPreferences(
+    items,
+    normalizeShoppingItemOrderPreferences(shoppingItemOrder)
   )
 }
 
@@ -86,7 +92,8 @@ export function useAddShoppingItem() {
   return useMutation({
     scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
     mutationFn: async ({ itemName, amount, unit }: { itemName: string; amount?: number; unit?: string }) => {
-      const categoryOverrides = await fetchCategoryOverrides()
+      const config = await fetchShoppingConfig()
+      const categoryOverrides = config.category_overrides || {}
       const newItem = createManualShoppingItem(itemName, categoryOverrides, {
         amount: amount || null,
         unit,
@@ -109,7 +116,11 @@ export function useAddShoppingItem() {
       }
 
       const typedList = currentList as { items?: ShoppingItem[]; custom_order?: boolean } | null
-      const updatedItems = sortItemsIfNeeded([...currentItems, newItem], typedList?.custom_order)
+      const updatedItems = sortItemsIfNeeded(
+        [...currentItems, newItem],
+        typedList?.custom_order,
+        config.shopping_item_order
+      )
 
       const { error: saveError } = await supabase
         .from("shopping_list")
@@ -124,7 +135,8 @@ export function useAddShoppingItem() {
       const { previousData: previousList } =
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
-      const categoryOverrides = await fetchCategoryOverrides()
+      const config = await fetchShoppingConfig()
+      const categoryOverrides = config.category_overrides || {}
       const optimisticItem = createManualShoppingItem(itemName, categoryOverrides, {
         amount: amount || null,
         unit,
@@ -151,7 +163,11 @@ export function useAddShoppingItem() {
           if (old.items.some((i) => normalizeItemName(i.item) === normalizedName)) {
             return old
           }
-          const updatedItems = sortItemsIfNeeded([...old.items, optimisticItem], old.custom_order)
+          const updatedItems = sortItemsIfNeeded(
+            [...old.items, optimisticItem],
+            old.custom_order,
+            config.shopping_item_order
+          )
           return { ...old, items: updatedItems }
         }
       )
@@ -181,7 +197,8 @@ export function useUpdateShoppingItem() {
       updates: { itemName: string; amount?: number | null; unit?: string }
     }) => {
       const rowId = requireShoppingRowId(item, "update shopping item")
-      const categoryOverrides = await fetchCategoryOverrides()
+      const config = await fetchShoppingConfig()
+      const categoryOverrides = config.category_overrides || {}
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
         .from("shopping_list")
@@ -214,7 +231,8 @@ export function useUpdateShoppingItem() {
 
       const updatedItems = sortItemsIfNeeded(
         currentItems.map((candidate) => (candidate.rowId === rowId ? updatedItem : candidate)),
-        typedList?.custom_order
+        typedList?.custom_order,
+        config.shopping_item_order
       )
 
       const { error: saveError } = await supabase
@@ -232,7 +250,8 @@ export function useUpdateShoppingItem() {
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
 
       const rowId = requireShoppingRowId(item, "optimistic update shopping item")
-      const categoryOverrides = await fetchCategoryOverrides()
+      const config = await fetchShoppingConfig()
+      const categoryOverrides = config.category_overrides || {}
       const optimisticItem = createManualShoppingItem(updates.itemName, categoryOverrides, {
         amount: updates.amount || null,
         unit: updates.unit,
@@ -260,7 +279,8 @@ export function useUpdateShoppingItem() {
             old.items.map((candidate) =>
               candidate.rowId === rowId ? optimisticItem : candidate
             ),
-            old.custom_order
+            old.custom_order,
+            config.shopping_item_order
           ),
         }
       })
@@ -511,6 +531,12 @@ export function useReorderShoppingList() {
     mutationFn: async (newItems: ShoppingItem[]) => {
       const supabase = getSupabase()
       const ensuredItems = ensureShoppingItemsHaveRowIds(newItems).items
+      const config = await fetchShoppingItemOrderConfig()
+      const updatedShoppingItemOrder = learnShoppingItemOrderPreferences(
+        config.shopping_item_order,
+        ensuredItems
+      )
+
       const { error: saveError } = await supabase
         .from("shopping_list")
         // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
@@ -518,9 +544,12 @@ export function useReorderShoppingList() {
         .eq("user_id", user!.id)
 
       if (saveError) throw saveError
+
+      await saveShoppingItemOrderPreference(user!.id, updatedShoppingItemOrder)
       return ensuredItems
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CONFIG_KEY })
       return invalidateQuery(queryClient, SHOPPING_KEY)
     },
   })

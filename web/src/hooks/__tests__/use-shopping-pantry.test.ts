@@ -24,6 +24,7 @@ const mockSupabase = {
   insert: vi.fn().mockReturnThis(),
   delete: vi.fn().mockReturnThis(),
   single: vi.fn(),
+  maybeSingle: vi.fn(),
   eq: vi.fn(),
 }
 
@@ -92,6 +93,7 @@ beforeEach(() => {
   // single() is terminal for reads and pantry inserts
   // eq() is terminal for updates (await mockSupabase resolves to mockSupabase which has no .error)
   mockSupabase.single.mockResolvedValue({ data: null, error: null })
+  mockSupabase.maybeSingle.mockResolvedValue({ data: null, error: null })
   mockSupabase.eq.mockResolvedValue({ data: null, error: null })
 })
 

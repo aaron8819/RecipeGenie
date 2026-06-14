@@ -349,6 +349,7 @@ function userConfigFixture(overrides: Partial<UserConfig> = {}): UserConfig {
     auto_assign_days: false,
     category_overrides: {},
     custom_categories: [],
+    shopping_item_order: {},
     ...overrides,
   }
 }
