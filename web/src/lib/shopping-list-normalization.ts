@@ -113,6 +113,10 @@ const CITRUS_PURCHASE_NAMES: Record<string, string> = {
   lemon: "lemon",
   lemons: "lemon",
 }
+const CITRUS_YIELDS: Record<string, { juiceTbsp: number; zestTbsp: number }> = {
+  lemon: { juiceTbsp: 3, zestTbsp: 1 },
+  lime: { juiceTbsp: 2, zestTbsp: 2 / 3 },
+}
 const WHOLE_PRODUCE_PURCHASE_NAMES: Record<string, string> = {
   ...CITRUS_PURCHASE_NAMES,
   onion: "onion",
@@ -189,6 +193,60 @@ function normalizeWholeProduce(
   }
 }
 
+function tablespoonsFromVolume(amount: number, unit: string): number | null {
+  switch (normalizeUnit(unit)) {
+    case "tbsp":
+      return amount
+    case "tsp":
+      return amount / 3
+    case "cup":
+      return amount * 16
+    case "fl oz":
+      return amount * 2
+    case "ml":
+      return amount / 14.787
+    default:
+      return null
+  }
+}
+
+function citrusQuantityFromMeasuredVolume(
+  fruitName: string,
+  prepIntent: "juiced" | "zested",
+  amount: number | null | undefined,
+  unit: string | null | undefined
+): number | null {
+  if (!amount || !unit) return null
+
+  const tablespoons = tablespoonsFromVolume(amount, unit)
+  if (!tablespoons) return null
+
+  const yieldKey = prepIntent === "juiced" ? "juiceTbsp" : "zestTbsp"
+  return tablespoons / CITRUS_YIELDS[fruitName][yieldKey]
+}
+
+function normalizeMeasuredCitrus(
+  input: ShoppingPurchaseNormalizationInput,
+  fruitName: string,
+  prepIntent: "juiced" | "zested",
+  reason: string,
+  parsedAmount?: number | null,
+  parsedUnit?: string | null
+): ShoppingPurchaseNormalization | null {
+  const amount = parsedAmount ?? input.amount
+  const unit = parsedUnit ?? input.unit
+  const quantity = citrusQuantityFromMeasuredVolume(fruitName, prepIntent, amount, unit)
+
+  if (!quantity) return null
+
+  return normalizeWholeProduce(input, fruitName, {
+    quantity,
+    prepIntent,
+    confidence: "medium",
+    reason,
+  })
+}
+
 function normalizeToken(token: string): string {
   return SIMPLE_UNIT_MAP[token] ?? token
 }
@@ -259,8 +317,30 @@ export function normalizeShoppingPurchase(
   const normalizedUnit = normalizeUnit(input.unit || "")
   const base = createBasePurchaseNormalization(input)
 
-  if (normalizedUnit && normalizedUnit !== "count") {
-    return base
+  const measuredCitrusName = normalizedName.match(/^(?:fresh\s+)?(lemon|lime)\s+(juice|zest)$/)
+  if (measuredCitrusName) {
+    const measured = normalizeMeasuredCitrus(
+      input,
+      measuredCitrusName[1],
+      measuredCitrusName[2] === "juice" ? "juiced" : "zested",
+      "measured citrus component"
+    )
+    if (measured) return measured
+  }
+
+  const leadingMeasuredCitrus = normalizedName.match(
+    /^(\d+(?:\.\d+)?|\d+\/\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+([a-z ]+?)\s+(?:fresh\s+)?(lemon|lime)\s+(juice|zest)$/
+  )
+  if (leadingMeasuredCitrus) {
+    const measured = normalizeMeasuredCitrus(
+      input,
+      leadingMeasuredCitrus[3],
+      leadingMeasuredCitrus[4] === "juice" ? "juiced" : "zested",
+      "embedded measured citrus component",
+      parseQuantityToken(leadingMeasuredCitrus[1]),
+      leadingMeasuredCitrus[2]
+    )
+    if (measured) return measured
   }
 
   const juiceOfCitrus = normalizedName.match(
@@ -276,8 +356,25 @@ export function normalizeShoppingPurchase(
     })
   }
 
+  const zestOfCitrus = normalizedName.match(
+    /^zest (?:of|from) (?:(\d+(?:\.\d+)?|\d+\/\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?(?:one\s+)?(limes?|lemons?)$/
+  )
+  if (zestOfCitrus) {
+    const purchaseName = CITRUS_PURCHASE_NAMES[zestOfCitrus[2]]
+    const parsedQuantity = zestOfCitrus[1] ? parseQuantityToken(zestOfCitrus[1]) : null
+    return normalizeWholeProduce(input, purchaseName, {
+      quantity: parsedQuantity ?? input.amount ?? null,
+      prepIntent: "zested",
+      reason: "explicit citrus zest quantity",
+    })
+  }
+
+  if (normalizedUnit && normalizedUnit !== "count") {
+    return base
+  }
+
   const leadingWholeProduce = normalizedName.match(
-    /^(\d+(?:\.\d+)?|\d+\/\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(limes?|lemons?|onions?)(?:,?\s+(juiced|diced|chopped|minced|sliced|wedges|cut into wedges))?$/
+    /^(\d+(?:\.\d+)?|\d+\/\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(limes?|lemons?|onions?)(?:,?\s+(juiced|zested|diced|chopped|minced|sliced|wedges|cut into wedges))?$/
   )
   if (leadingWholeProduce) {
     const purchaseName = WHOLE_PRODUCE_PURCHASE_NAMES[leadingWholeProduce[2]]
@@ -289,7 +386,7 @@ export function normalizeShoppingPurchase(
   }
 
   const trailingPrepProduce = normalizedName.match(
-    /^(limes?|lemons?|onions?),?\s+(juiced|diced|chopped|minced|sliced|wedges|cut into wedges)$/
+    /^(limes?|lemons?|onions?),?\s+(juiced|zested|diced|chopped|minced|sliced|wedges|cut into wedges)$/
   )
   if (trailingPrepProduce) {
     const purchaseName = WHOLE_PRODUCE_PURCHASE_NAMES[trailingPrepProduce[1]]

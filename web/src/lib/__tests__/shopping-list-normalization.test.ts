@@ -280,11 +280,30 @@ describe('normalizeShoppingPurchase', () => {
     })
   })
 
-  it('keeps measured citrus juice as its own item', () => {
+  it('maps measured citrus juice to an estimated whole fruit purchase', () => {
     expect(normalizeShoppingPurchase({ item: 'lemon juice', amount: 4, unit: 'tbsp' })).toMatchObject({
-      purchaseName: 'lemon juice',
-      purchaseUnit: 'tbsp',
-      purchaseQuantity: 4,
+      purchaseName: 'lemon',
+      purchaseUnit: 'count',
+      purchaseQuantity: 4 / 3,
+      prepIntent: 'juiced',
+      confidence: 'medium',
+    })
+  })
+
+  it('maps explicit and measured citrus zest to whole fruit purchases', () => {
+    expect(normalizeShoppingPurchase({ item: 'zest of 0.5 lemon', amount: null, unit: '' })).toMatchObject({
+      purchaseName: 'lemon',
+      purchaseUnit: 'count',
+      purchaseQuantity: 0.5,
+      prepIntent: 'zested',
+    })
+
+    expect(normalizeShoppingPurchase({ item: 'lime zest', amount: 2, unit: 'tsp' })).toMatchObject({
+      purchaseName: 'lime',
+      purchaseUnit: 'count',
+      purchaseQuantity: 1,
+      prepIntent: 'zested',
+      confidence: 'medium',
     })
   })
 

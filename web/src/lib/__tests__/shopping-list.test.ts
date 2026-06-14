@@ -317,7 +317,7 @@ describe('generateShoppingList', () => {
       const result = generateShoppingList([recipe], [], [])
       const itemNames = result.items.map((item) => item.item)
 
-      expect(itemNames).toContain('lemon juice')
+      expect(itemNames).toContain('lemon')
       expect(itemNames).toContain('lime')
       expect(itemNames).toContain('green onion')
       expect(itemNames).toContain('onion')
@@ -325,6 +325,10 @@ describe('generateShoppingList', () => {
       expect(itemNames).toContain('tomato')
       expect(itemNames).toContain('red onion')
       expect(result.items.find((item) => item.item === 'onion')?.amount).toBe(2)
+      expect(result.items.find((item) => item.item === 'lemon')).toMatchObject({
+        amount: 1.25,
+        unit: 'count',
+      })
     })
 
     it('should handle the requested lime and onion consolidation scenario conservatively', () => {
@@ -360,11 +364,47 @@ describe('generateShoppingList', () => {
       ])
       expect(result.items).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ item: '4 tbsp lemon juice', amount: null, unit: '' }),
+          expect.objectContaining({ item: 'lemon', amount: 1.25, unit: 'count' }),
           expect.objectContaining({ item: 'green onion', amount: null, unit: '' }),
           expect.objectContaining({ item: 'tomato paste', amount: null, unit: '' }),
         ])
       )
+    })
+
+    it('should combine weekly lemon juice and zest needs into one purchase count', () => {
+      const recipe1 = createMockRecipe({
+        id: 'recipe-1',
+        name: 'Chimichurri Steak Bowls',
+        ingredients: [
+          { item: 'juice of 0.5 lemon', amount: null, unit: '' },
+          { item: 'zest of 0.5 lemon', amount: null, unit: '' },
+        ],
+      })
+      const recipe2 = createMockRecipe({
+        id: 'recipe-2',
+        name: 'CAVA Bowls with Honey Harissa Chicken',
+        ingredients: [
+          { item: 'lemon juice', amount: 1, unit: 'tbsp' },
+          { item: 'zest of 1 lemon', amount: null, unit: '' },
+        ],
+      })
+
+      const result = generateShoppingList([recipe1, recipe2], [], [])
+      const lemon = result.items.find((item) => item.item === 'lemon')
+
+      expect(result.items.map((item) => item.item)).not.toEqual(
+        expect.arrayContaining(['lemon juice', 'zest of 0.5 lemon', 'zest of 1 lemon'])
+      )
+      expect(lemon).toMatchObject({
+        amount: 1.5,
+        unit: 'count',
+      })
+      expect(lemon?.sources?.map((source) => source.originalItem)).toEqual([
+        'juice of 0.5 lemon',
+        'zest of 0.5 lemon',
+        'lemon juice',
+        'zest of 1 lemon',
+      ])
     })
   })
 

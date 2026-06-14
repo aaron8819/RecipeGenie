@@ -62,6 +62,40 @@ function addSource(
   }
 }
 
+type CitrusPrepNeeds = {
+  juiced: number
+  zested: number
+}
+
+function isOverlappingCitrusPrep(
+  itemName: string,
+  unit: string,
+  prepIntent?: string
+): prepIntent is "juiced" | "zested" {
+  return (
+    (itemName === "lemon" || itemName === "lime") &&
+    unit === "count" &&
+    (prepIntent === "juiced" || prepIntent === "zested")
+  )
+}
+
+function getCitrusAmountToMerge(
+  prepByRecipe: Map<string, CitrusPrepNeeds>,
+  recipeKey: string,
+  prepIntent: "juiced" | "zested",
+  amount: number
+): number {
+  const previous = prepByRecipe.get(recipeKey) || { juiced: 0, zested: 0 }
+  const previousApplied = Math.max(previous.juiced, previous.zested)
+  const next = {
+    ...previous,
+    [prepIntent]: previous[prepIntent] + amount,
+  }
+  prepByRecipe.set(recipeKey, next)
+
+  return Math.max(next.juiced, next.zested) - previousApplied
+}
+
 /**
  * Generate a shopping list from selected recipes with optional scaling.
  *
@@ -95,6 +129,7 @@ export function generateShoppingList(
       sources: NonNullable<ShoppingItem["sources"]>
       additionalAmounts?: { amount: number; unit: string }[]
       alternatives?: string[]
+      citrusPrepByRecipe?: Map<string, CitrusPrepNeeds>
     }
   >()
 
@@ -113,6 +148,7 @@ export function generateShoppingList(
       const amount = (purchase.purchaseQuantity || 0) * scale
       const unit = normalizeUnit(purchase.purchaseUnit || "")
       const shoppingCategory = ingredient.shoppingCategory
+      const recipeKey = recipe.id || recipe.name
       const source = {
         recipeId: recipe.id,
         recipeName: recipe.name,
@@ -132,9 +168,20 @@ export function generateShoppingList(
 
       if (ingredientMap.has(key)) {
         const existing = ingredientMap.get(key)!
+        let amountToMerge = amount
+
+        if (isOverlappingCitrusPrep(itemName, unit, purchase.prepIntent)) {
+          existing.citrusPrepByRecipe ||= new Map<string, CitrusPrepNeeds>()
+          amountToMerge = getCitrusAmountToMerge(
+            existing.citrusPrepByRecipe,
+            recipeKey,
+            purchase.prepIntent,
+            amount
+          )
+        }
         
         // Try to merge amounts
-        const mergeResult = mergeAmounts(existing.amount, existing.unit, amount, unit)
+        const mergeResult = mergeAmounts(existing.amount, existing.unit, amountToMerge, unit)
         
         if (mergeResult) {
           // Units are compatible, merge amounts
@@ -145,7 +192,7 @@ export function generateShoppingList(
           // Units are incompatible, use additionalAmounts
           existing.additionalAmounts = mergeIntoAdditionalAmounts(
             existing.additionalAmounts,
-            amount,
+            amountToMerge,
             unit
           )
         }
@@ -157,6 +204,18 @@ export function generateShoppingList(
           existing.shoppingCategory = shoppingCategory
         }
       } else {
+        const citrusPrepByRecipe = isOverlappingCitrusPrep(itemName, unit, purchase.prepIntent)
+          ? new Map<string, CitrusPrepNeeds>([
+              [
+                recipeKey,
+                {
+                  juiced: purchase.prepIntent === "juiced" ? amount : 0,
+                  zested: purchase.prepIntent === "zested" ? amount : 0,
+                },
+              ],
+            ])
+          : undefined
+
         ingredientMap.set(key, {
           item: displayItem,
           amount,
@@ -164,6 +223,7 @@ export function generateShoppingList(
           shoppingCategory,
           sources: [source],
           alternatives: ingredient.alternatives?.map(a => normalizeItemName(a)),
+          citrusPrepByRecipe,
         })
       }
     }
