@@ -12,7 +12,7 @@ export function Providers({
   initialSession,
 }: {
   children: React.ReactNode
-  initialSession: Session | null
+  initialSession?: Session | null
 }) {
   const [queryClient] = useState(
     () =>

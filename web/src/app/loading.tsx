@@ -1,5 +1,5 @@
 // Streamed loading shell shown by Next.js while the root layout's async work
-// (session fetch, headers) is in-flight. Matches the app chrome so there is no
+// (headers/nonce setup) is in-flight. Matches the app chrome so there is no
 // colour flash or layout shift when the real content arrives.
 export default function Loading() {
   return (

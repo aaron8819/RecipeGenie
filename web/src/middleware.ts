@@ -1,69 +1,17 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   // Generate nonce once and attach to request so layout headers() receives it
   // (Next.js applies nonce to inline scripts from the request, not the response)
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
 
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request: {
       headers: requestHeaders,
     },
   })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: requestHeaders,
-            },
-          })
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          })
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: "",
-            ...options,
-          })
-          response = NextResponse.next({
-            request: {
-              headers: requestHeaders,
-            },
-          })
-          response.cookies.set({
-            name,
-            value: "",
-            ...options,
-          })
-        },
-      },
-    }
-  )
-
-  // Refresh session cookie if expired. getSession() reads from the cookie with
-  // no network round-trip; use getUser() only in API routes / server actions
-  // where an authoritative server-side identity check is required.
-  await supabase.auth.getSession()
 
   // Add security headers (nonce already on request for layout; set on response for CSP)
   const headers = new Headers(response.headers);
@@ -100,11 +48,11 @@ export async function middleware(request: NextRequest) {
     headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
 
-  return new NextResponse(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
+  headers.forEach((value, key) => {
+    response.headers.set(key, value);
   });
+
+  return response;
 }
 
 export const config = {

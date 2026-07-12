@@ -3,7 +3,6 @@ import { Outfit, Playfair_Display } from "next/font/google"
 import { headers } from "next/headers"
 import "./globals.css"
 import { Providers } from "@/components/providers"
-import { createClient } from "@/lib/supabase/server"
 import { cn } from "@/lib/utils"
 
 const outfit = Outfit({
@@ -45,26 +44,11 @@ export default async function RootLayout({
   // Next.js reads the 'x-nonce' header from middleware and applies it to inline scripts.
   await headers()
 
-  // Read the cookie session for fast bootstrap, then verify the user server-side.
-  // Supabase warns against trusting session.user from getSession() in server code.
-  const supabase = await createClient()
-  const { data: { session: initialSession } } = await supabase.auth.getSession()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  const verifiedInitialSession =
-    initialSession && user
-      ? {
-          ...initialSession,
-          user,
-        }
-      : null
-
   return (
     <html lang="en" className={cn(outfit.variable, playfair.variable)}>
       <body className={cn(outfit.className, "min-h-0 flex flex-col overflow-hidden")}>
         <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-          <Providers initialSession={verifiedInitialSession}>{children}</Providers>
+          <Providers>{children}</Providers>
         </div>
       </body>
     </html>

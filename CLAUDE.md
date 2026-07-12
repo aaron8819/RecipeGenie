@@ -75,8 +75,8 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 
 Patterns established during the 2026-02-27 performance audit. Treat these as hard rules — they exist because the naive alternative had measurable cost.
 
-- **Middleware auth**: Use `getSession()` in `middleware.ts` — zero Supabase RTT. Reserve `getUser()` for API routes that require verified server-side identity.
-- **Initial auth hydration**: Pass `initialSession` from the server layout to `AuthProvider` via `Providers`. Never block the first render on a client-side `getSession()` call — `loading` must initialize as `false` when a session is pre-hydrated.
+- **Middleware auth**: Do not call Supabase auth from `middleware.ts`. Middleware must stay network-free so expired sessions or a cold Supabase project cannot block the app shell and trigger host-level 504s.
+- **Initial auth hydration**: The root layout must not block first render on Supabase auth verification. Let `AuthProvider` initialize auth client-side when no `initialSession` is provided; keep authoritative `getUser()` checks in API routes and server actions that need them.
 - **Error toasts**: Every `catch` block in a mutation or async handler must show a user-visible toast. Silent failures are bugs.
 - **Tag mutations**: Use `supabase.rpc()` for `rename_tag`, `delete_tag`, `merge_tags`. Never loop per-recipe — N+1 updates are banned for bulk tag operations.
 - **Read-then-write banned**: Use `.upsert()` with explicit `onConflict` instead of fetch → conditional insert/update. Keys: `'user_id'` for `shopping_list`, `'user_id,week_date'` for `weekly_plans` (unique index, not constraint — must be explicit).
