@@ -31,16 +31,22 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1)
 }
 
-const rows = stdout
-  .split(/\r?\n/)
-  .map((line) => line.match(/^\s*([^\s|]+)?\s*\|\s*([^\s|]+)?\s*\|\s*([^\s|]+)?\s*$/))
-  .filter(Boolean)
-  .map((match) => ({
-    local: match[1] ?? "",
-    remote: match[2] ?? "",
-    time: match[3] ?? "",
-  }))
-  .filter((row) => row.local !== "Local" && row.local !== "-------")
+let rows = []
+try {
+  const parsed = JSON.parse(stdout)
+  rows = Array.isArray(parsed?.migrations) ? parsed.migrations : []
+} catch {
+  rows = stdout
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*([^\s|]+)?\s*\|\s*([^\s|]+)?\s*\|\s*([^\s|]+)?\s*$/))
+    .filter(Boolean)
+    .map((match) => ({
+      local: (match[1] ?? "").replaceAll("`", ""),
+      remote: (match[2] ?? "").replaceAll("`", ""),
+      time: (match[3] ?? "").replaceAll("`", ""),
+    }))
+    .filter((row) => row.local !== "Local" && row.local !== "-------")
+}
 
 if (rows.length === 0) {
   console.error("No migration rows were parsed from `supabase migration list`.")

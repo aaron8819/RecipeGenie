@@ -5,13 +5,15 @@ async function expectRecipesView(page: import('@playwright/test').Page) {
 }
 
 async function expectPlannerView(page: import('@playwright/test').Page) {
-  const desktopPlannerMarker = page.getByText(/quick meal mix/i)
+  const desktopPlannerMarker = page.getByText('Quick Meal Mix', { exact: true }).filter({ visible: true })
   if (await desktopPlannerMarker.isVisible().catch(() => false)) {
     await expect(desktopPlannerMarker).toBeVisible()
     return
   }
 
-  await expect(page.getByRole('button', { name: /today/i })).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /^(today|generate plan)$/i }).filter({ visible: true })
+  ).toBeVisible()
 }
 
 async function expectShoppingView(page: import('@playwright/test').Page) {

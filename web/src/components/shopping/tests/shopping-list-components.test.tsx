@@ -1,5 +1,5 @@
 import React from "react"
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { ShoppingItem } from "@/types/database"
 import {
@@ -102,6 +102,7 @@ describe("ShoppingProgressSummary", () => {
 
     render(
       <ShoppingProgressSummary
+        isDesktop
         remainingCount={5}
         completedCount={3}
         totalCount={8}
@@ -116,13 +117,15 @@ describe("ShoppingProgressSummary", () => {
       />
     )
 
-    expect(screen.getByText("Progress")).toBeInTheDocument()
-    expect(screen.getByText("38% done")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Hide 3 done" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Jump to Fresh Produce" })).toBeInTheDocument()
+    const desktopSummary = within(screen.getByTestId("shopping-progress-desktop"))
+    const desktopJumps = within(screen.getByTestId("shopping-progress-desktop-jumps"))
+    expect(desktopSummary.getByText("Progress")).toBeInTheDocument()
+    expect(desktopSummary.getByText("38% done")).toBeInTheDocument()
+    expect(desktopSummary.getByRole("button", { name: "Hide 3 done" })).toBeInTheDocument()
+    expect(desktopJumps.getByRole("button", { name: "Jump to Fresh Produce" })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide 3 done" }))
-    fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
+    fireEvent.click(desktopSummary.getByRole("button", { name: "Hide 3 done" }))
+    fireEvent.click(desktopJumps.getByRole("button", { name: "Jump to Pantry" }))
 
     expect(onToggleCompleted).toHaveBeenCalledTimes(1)
     expect(onJumpToCategory).toHaveBeenCalledWith("pantry")

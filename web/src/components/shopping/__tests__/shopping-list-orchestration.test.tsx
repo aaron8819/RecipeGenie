@@ -868,7 +868,8 @@ describe("ShoppingListView orchestration", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Collapse category" })[1])
     expect(screen.queryByText("rice")).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Jump to shopping section" }))
+    fireEvent.click(screen.getByRole("menuitem", { name: /Pantry/i }))
 
     expect(screen.getByText("rice")).toBeInTheDocument()
     expect(scrollTo).toHaveBeenCalledWith({ top: 584, behavior: "auto" })

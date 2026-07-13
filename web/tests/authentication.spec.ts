@@ -38,8 +38,9 @@ test.describe('Authentication', () => {
   })
 
   test.describe('Authenticated session', () => {
-    test('boots directly into the authenticated Recipe Genie shell @extended', async ({ page }) => {
-      await page.goto('/')
+    test('boots directly into the authenticated Recipe Genie shell @extended', async ({ page, setupAuth }) => {
+      await setupAuth()
+      await page.reload()
 
       await assertRecipeGenieAppShell(page)
       await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible()

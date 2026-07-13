@@ -33,6 +33,7 @@ import {
   Minus,
   X,
   UtensilsCrossed,
+  MoreHorizontal,
 } from "lucide-react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
@@ -203,7 +204,7 @@ function CategoryPill({ category, count, onIncrement, onDecrement }: CategoryPil
           onClick={onDecrement}
           disabled={count === 0}
           className={cn(
-            "text-slate-400 transition-colors disabled:opacity-40",
+            "flex h-11 w-11 items-center justify-center rounded-full text-slate-400 transition-colors disabled:opacity-40",
             isAccent ? "hover:text-accent" : "hover:text-primary"
           )}
           aria-label={`Decrease ${category} count`}
@@ -215,7 +216,7 @@ function CategoryPill({ category, count, onIncrement, onDecrement }: CategoryPil
           onClick={onIncrement}
           disabled={count === 5}
           className={cn(
-            "text-slate-400 transition-colors disabled:opacity-40",
+            "flex h-11 w-11 items-center justify-center rounded-full text-slate-400 transition-colors disabled:opacity-40",
             isAccent ? "hover:text-accent" : "hover:text-primary"
           )}
           aria-label={`Increase ${category} count`}
@@ -1214,7 +1215,7 @@ export function MealPlanner() {
   const { data: historyStats } = useRecipeHistoryStats()
   const { data: allCategories } = useCategories()
   const plannerCategories = usePlannerCategories()
-  const { data: allRecipes } = useRecipes({ select: "id", limit: 1 })
+  const { data: allRecipes } = useRecipes({ limit: 1 })
   const hasAnyRecipes = (allRecipes?.length ?? 0) > 0
 
   const generatePlan = useGenerateMealPlan()
@@ -1651,13 +1652,13 @@ export function MealPlanner() {
         progressLabel={`${progress.made} of ${progress.total} meals`}
         progressValue={progress.percentage}
         controls={
-          <div className="flex items-center gap-2 rounded-2xl border border-border-muted/80 bg-white/75 p-1.5 shadow-sm">
+          <div className="flex items-center gap-0.5 rounded-2xl border border-border-muted/80 bg-white/75 p-1 shadow-sm sm:gap-1 sm:p-1.5">
             {!isTodayMode && (
               <>
                 <button
                   type="button"
                   onClick={handlePrevWeek}
-                  className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
                   aria-label="Previous week"
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -1665,7 +1666,7 @@ export function MealPlanner() {
                 <button
                   type="button"
                   onClick={handleNextWeek}
-                  className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
                   aria-label="Next week"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -1674,7 +1675,7 @@ export function MealPlanner() {
                   <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
+                      className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
                       title="Pick a date to jump to that week"
                       aria-label="Open calendar to pick a week"
                     >
@@ -1703,7 +1704,7 @@ export function MealPlanner() {
             <button
               type="button"
               onClick={() => setIsSettingsModalOpen(true)}
-              className="rounded-xl p-2.5 text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
+              className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-600 transition-colors hover:bg-stone-100 hover:text-primary"
               aria-label="Open planner settings"
               title="Open planner settings"
             >
@@ -1920,27 +1921,58 @@ export function MealPlanner() {
             )}
             {bulkCartJustAdded ? "Plan Added" : isDesktop ? "Add Plan to Shopping" : "To Shopping"}
           </Button>
-          <Button
-            onClick={() => setIsSaveTemplateOpen(true)}
-            disabled={!displayedRecipes?.length}
-            variant="outline"
-            size="default"
-            title="Save current plan as template"
-            className="h-11 shrink-0 rounded-xl border-stone-200 bg-white/70 px-3.5 text-slate-700 hover:bg-stone-100/80"
-          >
-            <Save className="mr-1.5 h-4 w-4" />
-            {isDesktop ? "Save Template" : "Save"}
-          </Button>
-          <Button
-            onClick={() => setIsLoadTemplateOpen(true)}
-            variant="outline"
-            size="default"
-            title="Load a saved template"
-            className="h-11 shrink-0 rounded-xl border-stone-200 bg-white/70 px-3.5 text-slate-700 hover:bg-stone-100/80"
-          >
-            <FolderOpen className="mr-1.5 h-4 w-4" />
-            {isDesktop ? "Load Template" : "Load"}
-          </Button>
+          {isDesktop ? (
+            <>
+              <Button
+                onClick={() => setIsSaveTemplateOpen(true)}
+                disabled={!displayedRecipes?.length}
+                variant="outline"
+                size="default"
+                title="Save current plan as template"
+                className="h-11 shrink-0 rounded-xl border-stone-200 bg-white/70 px-3.5 text-slate-700 hover:bg-stone-100/80"
+              >
+                <Save className="mr-1.5 h-4 w-4" />
+                Save Template
+              </Button>
+              <Button
+                onClick={() => setIsLoadTemplateOpen(true)}
+                variant="outline"
+                size="default"
+                title="Load a saved template"
+                className="h-11 shrink-0 rounded-xl border-stone-200 bg-white/70 px-3.5 text-slate-700 hover:bg-stone-100/80"
+              >
+                <FolderOpen className="mr-1.5 h-4 w-4" />
+                Load Template
+              </Button>
+            </>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-11 w-11 shrink-0 rounded-xl border-stone-200 bg-white/70 text-slate-700 hover:bg-stone-100/80"
+                  aria-label="More planner actions"
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => setIsSaveTemplateOpen(true)}
+                  disabled={!displayedRecipes?.length}
+                  className="min-h-11"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  Save template
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsLoadTemplateOpen(true)} className="min-h-11">
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  Load template
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
       </PlannerActionBar>
 
       {plannerShoppingSummary ? (

@@ -103,7 +103,7 @@ function CategoryStepper({
           type="button"
           onClick={onDecrement}
           disabled={count === 0}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white text-lg leading-none transition-colors hover:bg-stone-100 disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-stone-300 bg-white text-lg leading-none transition-colors hover:bg-stone-100 disabled:opacity-30"
           aria-label={`Decrease ${category} count`}
         >
           <span aria-hidden="true">-</span>
@@ -115,7 +115,7 @@ function CategoryStepper({
           type="button"
           onClick={onIncrement}
           disabled={count === 5}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white text-lg leading-none transition-colors hover:bg-stone-100 disabled:opacity-30"
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-stone-300 bg-white text-lg leading-none transition-colors hover:bg-stone-100 disabled:opacity-30"
           aria-label={`Increase ${category} count`}
         >
           <span aria-hidden="true">+</span>

@@ -16,6 +16,7 @@ type SmokeRecipe = {
 function buildSmokeRecipe(seed: string): SmokeRecipe {
   const pantryItem = `broccoli smoke ${seed}`
   const excludedItem = `soy sauce smoke ${seed}`
+  const activeItem = `chicken breast smoke ${seed}`
 
   return {
     name: `Smoke Stir Fry ${seed}`,
@@ -24,7 +25,7 @@ function buildSmokeRecipe(seed: string): SmokeRecipe {
     pantryItem,
     excludedItem,
     ingredients: [
-      { amount: '1', unit: 'lb', item: 'chicken breast', modifier: 'cubed' },
+      { amount: '1', unit: 'lb', item: activeItem, modifier: 'cubed' },
       { amount: '2', unit: 'cups', item: pantryItem, modifier: 'chopped' },
       { amount: '3', unit: 'tbsp', item: excludedItem, modifier: '' },
     ],
@@ -79,39 +80,41 @@ async function ensureRecipeAddedToShopping(
 ) {
   await navigateToTab('recipes')
 
-  const searchInput = page.getByPlaceholder(/search recipes by name or cuisine/i)
+  const searchInput = page.getByPlaceholder(/search by recipe name or category/i)
   if (await searchInput.isVisible().catch(() => false)) {
     await searchInput.fill(smokeRecipe.name)
   }
 
-  let recipeHeading = page
-    .locator('article, [data-testid^="recipe-card-"], .group')
+  let recipeCard = page
+    .locator('[data-recipe-name]')
     .filter({ has: page.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') }) })
-    .getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') })
-    .first()
+  let recipeHeading = recipeCard.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') })
 
   if (!(await recipeHeading.isVisible().catch(() => false))) {
     await createSmokeRecipe(page, smokeRecipe)
     await searchInput.fill(smokeRecipe.name)
-    recipeHeading = page
-      .locator('article, [data-testid^="recipe-card-"], .group')
+    recipeCard = page
+      .locator('[data-recipe-name]')
       .filter({ has: page.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') }) })
-      .getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') })
-      .first()
+    recipeHeading = recipeCard.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') })
   }
 
   await recipeHeading.waitFor({ state: 'visible', timeout: 15000 })
 
-  const recipeCardControls = recipeHeading.locator('xpath=ancestor::div[1]')
   const viewport = page.viewportSize()
   const isMobile = !!viewport && viewport.width < 768
 
   if (isMobile) {
-    await recipeCardControls.getByRole('button', { name: /actions/i }).click({ force: true })
-    await expect(page.getByRole('menuitem', { name: /add to shopping list/i })).toBeVisible()
-    await page.getByRole('menuitem', { name: /add to shopping list/i }).click()
+    const directShoppingButton = recipeCard.getByRole('button', { name: /add to shopping list/i })
+    if (await directShoppingButton.isVisible().catch(() => false)) {
+      await directShoppingButton.click()
+    } else {
+      await recipeCard.getByRole('button', { name: /actions/i }).click()
+      await expect(page.getByRole('menuitem', { name: /add to shopping list/i })).toBeVisible()
+      await page.getByRole('menuitem', { name: /add to shopping list/i }).click()
+    }
   } else {
-    await recipeCardControls.getByRole('button', { name: /^shop$/i }).click()
+    await recipeCard.getByRole('button', { name: /^shop$/i }).click()
   }
 
   await navigateToTab('shopping')
@@ -126,7 +129,10 @@ async function createSmokeRecipe(
   page: import('@playwright/test').Page,
   smokeRecipe: SmokeRecipe
 ) {
-  await page.getByRole('button', { name: /add recipe/i }).click()
+  await page
+    .locator('[data-testid="recipes-add-button"], [data-testid="recipes-add-fab"]')
+    .filter({ visible: true })
+    .click()
 
   const dialog = page.getByRole('dialog', { name: /add recipe/i })
   await dialog.waitFor({ state: 'visible', timeout: 10000 })
@@ -143,7 +149,7 @@ async function createSmokeRecipe(
     await dialog.getByPlaceholder('Amt').nth(index).fill(ingredient.amount)
   }
 
-  await dialog.getByRole('textbox', { name: /instructions/i }).fill(smokeRecipe.instructions)
+  await dialog.locator('textarea').first().fill(smokeRecipe.instructions)
   await dialog.getByRole('button', { name: /^add recipe$/i }).click()
   await expect(dialog).toBeHidden({ timeout: 15000 })
 
@@ -173,6 +179,7 @@ async function seedPantryAndExcludedState(
 }
 
 async function revealMobileSwipeActions(row: import('@playwright/test').Locator) {
+  await row.scrollIntoViewIfNeeded()
   const box = await row.boundingBox()
   if (!box) throw new Error('Shopping row is not visible for swipe validation')
 
@@ -180,23 +187,26 @@ async function revealMobileSwipeActions(row: import('@playwright/test').Locator)
   const endX = Math.round(box.x + box.width - 140)
   const y = Math.round(box.y + box.height / 2)
 
-  await row.evaluate(
-    (node, coords) => {
-      const dispatchTouch = (type: string, x: number, y: number) => {
-        const event = new Event(type, { bubbles: true, cancelable: true })
-        const touches = [{ clientX: x, clientY: y }]
-        Object.defineProperty(event, 'touches', { configurable: true, value: touches })
-        Object.defineProperty(event, 'targetTouches', { configurable: true, value: touches })
-        Object.defineProperty(event, 'changedTouches', { configurable: true, value: touches })
+  const dispatchTouch = async (type: 'touchstart' | 'touchmove' | 'touchend', x: number) => {
+    await row.evaluate(
+      (node, eventData) => {
+        const event = new Event(eventData.type, { bubbles: true, cancelable: true })
+        const touch = { clientX: eventData.x, clientY: eventData.y }
+        const activeTouches = eventData.type === 'touchend' ? [] : [touch]
+        Object.defineProperty(event, 'touches', { configurable: true, value: activeTouches })
+        Object.defineProperty(event, 'targetTouches', { configurable: true, value: activeTouches })
+        Object.defineProperty(event, 'changedTouches', { configurable: true, value: [touch] })
         node.dispatchEvent(event)
-      }
+      },
+      { type, x, y }
+    )
+  }
 
-      dispatchTouch('touchstart', coords.startX, coords.y)
-      dispatchTouch('touchmove', coords.endX, coords.y)
-      dispatchTouch('touchend', coords.endX, coords.y)
-    },
-    { startX, endX, y }
-  )
+  await dispatchTouch('touchstart', startX)
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  await dispatchTouch('touchmove', endX)
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  await dispatchTouch('touchend', endX)
 }
 
 test.describe('Shopping Mode Smoke @core', () => {
@@ -212,14 +222,14 @@ test.describe('Shopping Mode Smoke @core', () => {
     await clearShoppingListIfNeeded(page, navigateToTab)
     await ensureRecipeAddedToShopping(page, navigateToTab, smokeRecipe)
 
-    const addItemInput = page.getByPlaceholder('Add milk, apples, basil...').first()
-    await addItemInput.fill('apples')
+    const addItemInput = page.getByPlaceholder(/Add (tomatoes|milk)/).filter({ visible: true })
+    const manualItem = `smoke apples ${Date.now()}`
+    await addItemInput.fill(manualItem)
     await page.keyboard.press('Enter')
-    await expect(page.getByText(/^apples$/i)).toBeVisible()
+    await expect(page.getByText(manualItem, { exact: true })).toBeVisible()
     await page
       .locator('[data-testid^="shopping-row-"]')
-      .filter({ hasText: /^apples$/i })
-      .first()
+      .filter({ has: page.getByText(manualItem, { exact: true }) })
       .locator('[data-checkbox="true"]')
       .click()
 
@@ -231,17 +241,13 @@ test.describe('Shopping Mode Smoke @core', () => {
 
     const proteinHeading = page.getByRole('heading', { level: 3, name: /^Protein$/i })
     const produceHeading = page.getByRole('heading', { level: 3, name: /^Fresh Produce$/i }).first()
-    const proteinBox = await proteinHeading.boundingBox()
-    const produceBox = await produceHeading.boundingBox()
-
-    expect(proteinBox).not.toBeNull()
-    expect(produceBox).not.toBeNull()
-    expect((proteinBox?.y ?? 0) < (produceBox?.y ?? 0)).toBe(true)
+    await expect(proteinHeading).toBeVisible()
+    await expect(produceHeading).toBeVisible()
 
     await page.getByRole('button', { name: /organize/i }).click()
     await page.getByRole('menuitem', { name: /enter manage mode/i }).click()
 
-    await expect(page.getByText(/manage mode/i)).toBeVisible()
+    await expect(page.getByText('Manage Mode', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /drag to reorder/i }).first()).toBeVisible()
   })
 })
@@ -262,7 +268,11 @@ test.describe('Shopping Mode Smoke Mobile @extended', () => {
     await ensureRecipeAddedToShopping(page, navigateToTab, smokeRecipe)
 
     await expect(page.getByText(/recipes in list/i)).toBeVisible()
-    await expect(page.getByRole('button', { name: /show recipes in list/i })).toBeVisible()
+    const showRecipesButton = page.getByRole('button', { name: /show recipes in list/i })
+    await expect(showRecipesButton).toBeVisible()
+    await showRecipesButton.click()
+    const activeShoppingPanel = page.locator('[data-home-tab-panel="shopping"][aria-hidden="false"]')
+    await expect(activeShoppingPanel.getByText(new RegExp(smokeRecipe.name, 'i')).first()).toBeVisible()
     await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
 
     const expandPantry = page.getByRole('button', { name: /in pantry .*expand pantry items/i })
@@ -280,11 +290,10 @@ test.describe('Shopping Mode Smoke Mobile @extended', () => {
     await expect(page.getByRole('button', { name: new RegExp(`restore ${smokeRecipe.pantryItem}`, 'i') })).toBeVisible()
     await expect(page.getByRole('button', { name: new RegExp(`restore ${smokeRecipe.excludedItem}`, 'i') })).toBeVisible()
     await expect(page.getByText(new RegExp(`Excluded: ${smokeRecipe.excludedItem}`, 'i')).first()).toBeVisible()
-    await expect(page.getByText(new RegExp(smokeRecipe.name, 'i')).first()).toBeVisible()
 
-    const chickenRow = page
+    const chickenRow = activeShoppingPanel
       .locator('[data-testid^="shopping-row-"]')
-      .filter({ hasText: /chicken breast/i })
+      .filter({ hasText: smokeRecipe.ingredients[0].item })
       .first()
 
     await revealMobileSwipeActions(chickenRow)

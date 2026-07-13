@@ -75,7 +75,6 @@ export async function saveShoppingItemOrderPreference(
 ): Promise<void> {
   const { error } = await getSupabase()
     .from("user_config")
-    // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
     .upsert(
       { user_id: userId, shopping_item_order: shoppingItemOrder },
       { onConflict: "user_id" }

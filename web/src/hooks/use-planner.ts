@@ -60,7 +60,6 @@ async function persistWeeklyPlanDirect(userId: string, write: DirectWeeklyPlanWr
 
   const { error } = await supabase
     .from("weekly_plans")
-    // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
     .upsert(payload, { onConflict: "user_id,week_date" })
 
   if (error) throw error
@@ -285,7 +284,6 @@ export function useRecipeHistoryStats() {
     queryKey: getRecipeHistoryStatsQueryKey(),
     queryFn: async () => {
       const supabase = getSupabase()
-      // @ts-expect-error - RPC not yet reflected in generated Supabase client types
       const { data, error } = await supabase.rpc("get_recipe_history_stats", {
         p_user_id: user!.id,
       })
@@ -425,7 +423,6 @@ export function useGenerateMealPlan() {
         // Update existing plan - preserve made_recipe_ids
         const { error: saveError } = await supabase
           .from("weekly_plans")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
           .update({
             recipe_ids: allRecipeIds,
             made_recipe_ids: madeRecipeIds,
@@ -438,7 +435,6 @@ export function useGenerateMealPlan() {
         if (saveError) throw saveError
       } else {
         // Insert new plan
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
         const { error: saveError } = await supabase.from("weekly_plans").insert({
           user_id: user!.id,
           week_date: weekDate,
@@ -740,7 +736,6 @@ export function useMarkRecipeAsMade() {
       const supabase = getSupabase()
       const { error: insertError } = await supabase
         .from("recipe_history")
-        // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
         .insert({ user_id: user!.id, recipe_id: recipeId, date_made: new Date().toISOString() })
 
       if (insertError) throw insertError

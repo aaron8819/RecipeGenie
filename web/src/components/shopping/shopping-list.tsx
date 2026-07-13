@@ -651,6 +651,7 @@ export function ShoppingListView() {
   const { showSwipeHint } = useSwipeHint()
   const isManageMode = shoppingMode === "manage"
   const categorySectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const mobileCategoryDefaultsAppliedRef = useRef(false)
 
   // Mobile UX improvements - collapsible sections and scroll-to-top FAB
   const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(true)
@@ -975,6 +976,25 @@ export function ShoppingListView() {
     const completedCategories = categoryViewModels.filter((category) => category.uncheckedCount === 0)
     return hideCompletedItems ? activeCategories : [...activeCategories, ...completedCategories]
   }, [categoryViewModels, hideCompletedItems, isManageMode])
+
+  useEffect(() => {
+    if (isDesktop || isManageMode || mobileCategoryDefaultsAppliedRef.current) return
+    const activeCategories = categoryViewModels.filter((category) => category.uncheckedCount > 0)
+    if (activeCategories.length <= 3) return
+
+    const categoriesToCollapse = activeCategories.slice(1).map((category) => category.key)
+    setCollapsedCategories((prev) => {
+      const next = new Set(prev)
+      categoriesToCollapse.forEach((key) => next.add(key))
+      return next
+    })
+    setManuallyCollapsedCategories((prev) => {
+      const next = new Set(prev)
+      categoriesToCollapse.forEach((key) => next.add(key))
+      return next
+    })
+    mobileCategoryDefaultsAppliedRef.current = true
+  }, [categoryViewModels, isDesktop, isManageMode])
 
   // Check if all items are checked
   const allItemsChecked = useMemo(() => {
@@ -1626,6 +1646,7 @@ export function ShoppingListView() {
             {/* Recipes in list — collapsed by default to keep active shopping rows near the top */}
             {!isManageMode && filteredItems.length > 0 ? (
               <ShoppingProgressSummary
+                isDesktop={isDesktop}
                 remainingCount={shoppingProgress.uncheckedCount}
                 completedCount={shoppingProgress.checkedCount}
                 totalCount={shoppingProgress.totalCount}
@@ -1639,7 +1660,7 @@ export function ShoppingListView() {
 
             {uniqueRecipes.length > 0 && (
               <Card className="overflow-hidden rounded-lg border border-stone-100 bg-stone-50/70 shadow-sm">
-                <CardContent className="px-3 py-2.5 md:px-4 md:py-3">
+                <CardContent className="px-3 py-2 md:px-4 md:py-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -1650,7 +1671,7 @@ export function ShoppingListView() {
                           {uniqueRecipes.length}
                         </span>
                       </div>
-                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                      <p className="mt-0.5 hidden truncate text-[11px] text-muted-foreground md:block">
                         {recipeSectionCollapsed
                           ? "Recipe context is tucked away while you shop, but each row still keeps its recipe source."
                           : "Recipe provenance stays secondary to the active list, and each row keeps its recipe source."}
@@ -1661,7 +1682,7 @@ export function ShoppingListView() {
                       variant="ghost"
                       size="sm"
                       onClick={toggleRecipeSection}
-                      className="h-8 shrink-0 px-2 text-xs text-stone-600 hover:bg-white hover:text-foreground"
+                      className="h-11 shrink-0 px-3 text-xs text-stone-600 hover:bg-white hover:text-foreground md:h-8 md:px-2"
                       aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
                     >
                       {recipeSectionCollapsed ? "Show" : "Hide"}

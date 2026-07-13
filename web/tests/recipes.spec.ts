@@ -64,12 +64,7 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
 }
 
 async function closeDialog(page: Page) {
-  const closeButton = page.getByRole('button', { name: /^close$/i }).first()
-  if (await closeButton.isVisible().catch(() => false)) {
-    await closeButton.click()
-  } else {
-    await page.keyboard.press('Escape')
-  }
+  await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog')).toHaveCount(0)
 }
 
@@ -106,6 +101,7 @@ test.describe('Recipes', () => {
     await expect(editDialog.locator('h1').filter({ hasText: /^edit recipe$/i })).toBeVisible()
     await editDialog.locator('#name-edit').fill(updatedName)
     await editDialog.getByRole('button', { name: /save changes/i }).click()
+    await expect(editDialog).toBeHidden({ timeout: 15000 })
     if (await page.getByRole('dialog').first().isVisible().catch(() => false)) {
       await closeDialog(page)
     }
@@ -142,7 +138,10 @@ test.describe('Recipes', () => {
     await expect(
       detailDialog.getByRole('button', { name: /^mark made$/i })
     ).toHaveCount(0)
-    await page.getByRole('button', { name: /add to shopping/i }).click()
+    const addToShoppingButton = detailDialog.getByRole('button', { name: /add to shopping list/i })
+    await addToShoppingButton.click()
+    await expect(addToShoppingButton).toBeDisabled()
+    await expect(addToShoppingButton).toBeEnabled({ timeout: 15000 })
 
     await closeDialog(page)
     await page.reload()
@@ -151,7 +150,28 @@ test.describe('Recipes', () => {
     await expect(page.getByText(recipe.name, { exact: true })).toBeVisible()
 
     await navigateToTab('shopping')
+    await page.getByRole('button', { name: /jump to protein/i }).click()
     await expect(page.getByText(recipe.ingredients[0].item, { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /jump to fresh produce/i }).click()
     await expect(page.getByText(recipe.ingredients[1].item, { exact: true })).toBeVisible()
+  })
+
+  test('imports pasted recipe text into an editable recipe and saves it @extended', async ({ page }) => {
+    const seed = `${Date.now()}-import`
+    const recipeName = `Imported E2E Recipe ${seed}`
+    const ingredient = `imported ingredient ${seed}`
+
+    await openAddRecipeDialog(page)
+    const dialog = page.getByRole('dialog').first()
+    await dialog.getByRole('tab', { name: /^import$/i }).click()
+    await dialog.getByLabel('Paste Recipe Text').fill(`${recipeName}\nServes 2\n\nIngredients:\n1 cup ${ingredient}\n\nInstructions:\n1. Cook until ready.`)
+
+    await expect(dialog.getByText(recipeName, { exact: true })).toBeVisible()
+    await dialog.getByRole('button', { name: /apply to form/i }).click()
+    await expect(dialog.locator('#name-add')).toHaveValue(recipeName)
+    await expect(dialog.locator('input[placeholder="Ingredient"]').first()).toHaveValue(ingredient)
+
+    await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+    await expect(page.getByRole('dialog').last().locator('h1').filter({ hasText: recipeName })).toBeVisible()
   })
 })

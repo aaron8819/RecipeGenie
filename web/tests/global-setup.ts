@@ -25,6 +25,21 @@ async function globalSetup(config: FullConfig) {
 
   const browser = await chromium.launch()
   const page = await browser.newPage()
+  const browserErrors: string[] = []
+  const failedResponses: string[] = []
+
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => browserErrors.push(error.message))
+  page.on('response', async (response) => {
+    if (response.status() < 400) return
+
+    const detail = response.url().includes('/auth/v1/')
+      ? await response.text().catch(() => '')
+      : ''
+    failedResponses.push(`${response.status()} ${response.url()} ${detail}`.trim())
+  })
 
   try {
     await page.goto(baseURL, { waitUntil: 'domcontentloaded', timeout: 60000 })
@@ -40,8 +55,10 @@ async function globalSetup(config: FullConfig) {
     console.log(`[playwright:global-setup] verified Recipe Genie at ${page.url()}`)
   } catch (error) {
     const pageTitle = await page.title().catch(() => '')
+    const visibleText = await page.locator('main').innerText().catch(() => '')
+    const authError = await page.locator('.text-destructive').first().innerText().catch(() => '')
     throw new Error(
-      `Playwright did not connect to Recipe Genie app shell. Expected ${baseURL}, received URL=${page.url()} title="${pageTitle}". ${String(error)}`
+      `Playwright did not connect to Recipe Genie app shell. Expected ${baseURL}, received URL=${page.url()} title="${pageTitle}" visibleText=${JSON.stringify(visibleText.slice(0, 500))} authError=${JSON.stringify(authError)} browserErrors=${JSON.stringify(browserErrors.slice(-5))} failedResponses=${JSON.stringify(failedResponses.slice(-5))}. ${String(error)}`
     )
   } finally {
     await browser.close()

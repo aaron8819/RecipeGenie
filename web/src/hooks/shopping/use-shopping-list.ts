@@ -38,7 +38,6 @@ export function useShoppingList() {
         if (ensured.changed) {
           const { error: saveError } = await supabase
             .from("shopping_list")
-            // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
             .update({
               items: ensured.shoppingList.items,
               already_have: ensured.shoppingList.already_have,
@@ -155,7 +154,6 @@ export function useGenerateShoppingList() {
         // Row exists, use update (RLS will filter by user_id, but PostgREST requires a WHERE clause)
         const { error } = await supabase
           .from("shopping_list")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
           .update(shoppingListData)
           .eq("user_id", user!.id)
         saveError = error
@@ -163,7 +161,6 @@ export function useGenerateShoppingList() {
         // Row doesn't exist, use insert
         const { error } = await supabase
           .from("shopping_list")
-          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
           .insert(shoppingListData)
         saveError = error
       }
@@ -191,7 +188,6 @@ export function useSaveShoppingList() {
       // shopping_list.user_id is the PRIMARY KEY — upsert resolves in 1 RTT
       const { error } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
         .upsert(
           { ...shoppingList, user_id: user!.id, generated_at: new Date().toISOString() },
           { onConflict: 'user_id' }
@@ -227,7 +223,6 @@ export function useClearShoppingList() {
       const supabase = getSupabase()
       const { error } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ ...emptyList, generated_at: new Date().toISOString() })
         .eq("user_id", user!.id)
 

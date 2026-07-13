@@ -55,7 +55,6 @@ export function useSavePlanTemplate() {
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from('plan_templates')
-        // @ts-expect-error - Supabase infers insert params as never
         .insert({
           user_id: user!.id,
           name,
@@ -95,7 +94,6 @@ export function useRenamePlanTemplate() {
       const supabase = getSupabase();
       const { error } = await supabase
         .from('plan_templates')
-        // @ts-expect-error - Supabase infers update params as never
         .update({ name })
         .eq('id', templateId);
 

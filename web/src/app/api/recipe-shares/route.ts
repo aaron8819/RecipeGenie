@@ -177,7 +177,6 @@ export async function POST(request: Request) {
 
   const { data: inserted, error: insertError } = await supabase
     .from('recipe_shares')
-    // @ts-expect-error - TypeScript can infer insert parameter type as 'never'
     .insert({
       sender_user_id: user.id,
       sender_email: normalizeEmail(user.email || ''),

@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
   public: {
     Tables: {
       pantry_items: {
@@ -72,13 +77,13 @@ export type Database = {
         }
         Insert: {
           date_made?: string
-          id?: never
+          id?: number
           recipe_id: string
           user_id: string
         }
         Update: {
           date_made?: string
-          id?: never
+          id?: number
           recipe_id?: string
           user_id?: string
         }
@@ -239,7 +244,7 @@ export type Database = {
           history_exclusion_days: number | null
           onboarding_completed_at: string | null
           preferred_days: number[] | null
-          shopping_item_order: Json | null
+          shopping_item_order: Json
           user_id: string
           week_start_day: number | null
         }
@@ -256,7 +261,7 @@ export type Database = {
           history_exclusion_days?: number | null
           onboarding_completed_at?: string | null
           preferred_days?: number[] | null
-          shopping_item_order?: Json | null
+          shopping_item_order?: Json
           user_id: string
           week_start_day?: number | null
         }
@@ -273,7 +278,7 @@ export type Database = {
           history_exclusion_days?: number | null
           onboarding_completed_at?: string | null
           preferred_days?: number[] | null
-          shopping_item_order?: Json | null
+          shopping_item_order?: Json
           user_id?: string
           week_start_day?: number | null
         }

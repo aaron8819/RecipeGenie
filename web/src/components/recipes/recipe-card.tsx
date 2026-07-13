@@ -70,6 +70,7 @@ function RecipeCard({
     const categoryColor = getTagColor(recipe.category, true)
     return (
       <div
+        data-recipe-name={recipe.name}
         role="button"
         tabIndex={0}
         onClick={() => onClick?.(recipe)}
@@ -91,7 +92,7 @@ function RecipeCard({
                 onToggleFavorite?.(recipe)
               }}
               className={cn(
-                "absolute top-2 left-2 p-1.5 bg-white/80 dark:bg-slate-800/80 backdrop-blur rounded-full z-10 transition-opacity",
+                "absolute left-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-full bg-white/80 backdrop-blur transition-opacity dark:bg-slate-800/80",
                 recipe.favorite
                   ? "opacity-100"
                   : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
@@ -183,8 +184,9 @@ function RecipeCard({
                     onMarkAsMade?.(recipe)
                   }}
                   disabled={isMarkingAsMade}
-                  className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-primary transition-all hover:bg-slate-50 dark:hover:bg-slate-700"
                   title="Mark as Made"
+                  aria-label="Mark as made"
                 >
                   {isMarkingAsMade ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -200,8 +202,9 @@ function RecipeCard({
                   onAddToShoppingList?.(recipe)
                 }}
                 disabled={isAddingToShoppingList}
-                className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-primary transition-all hover:bg-slate-50 dark:hover:bg-slate-700"
                 title="Add to Shopping List"
+                aria-label="Add to shopping list"
               >
                 {isAddingToShoppingList ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -216,8 +219,9 @@ function RecipeCard({
                   onAddToPlan?.(recipe)
                 }}
                 disabled={isAddingToPlan}
-                className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-primary transition-all hover:bg-slate-50 dark:hover:bg-slate-700"
                 title="Plan Meal"
+                aria-label="Add to planner"
               >
                 {isAddingToPlan ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -232,8 +236,9 @@ function RecipeCard({
                   onShare?.(recipe)
                 }}
                 disabled={isSharing}
-                className="p-1.5 text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-all"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-primary transition-all hover:bg-slate-50 dark:hover:bg-slate-700"
                 title="Share Recipe"
+                aria-label="Share recipe"
               >
                 {isSharing ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -333,8 +338,16 @@ function RecipeCard({
   // Grid view — Stitch recipes_redesign: rounded-3xl, h-60 image, heart overlay, pills, Made X times / Last: date
   return (
     <Card
+      data-recipe-name={recipe.name}
+      role="button"
+      tabIndex={0}
       className="group relative cursor-pointer overflow-hidden w-full rounded-3xl border border-stone-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm hover:shadow-xl transition-all duration-300 animate-fade-in"
       onClick={() => onClick?.(recipe)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.preventDefault()
+        onClick?.(recipe)
+      }}
     >
       {/* Image */}
       <div className="relative h-60 overflow-hidden bg-stone-100 dark:bg-zinc-800">
@@ -359,7 +372,9 @@ function RecipeCard({
             e.stopPropagation()
             onToggleFavorite?.(recipe)
           }}
-          className="absolute top-4 right-4 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm p-2 rounded-full shadow-md hover:text-red-500 transition-colors"
+          className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/90 shadow-md backdrop-blur-sm transition-colors hover:text-red-500 dark:bg-zinc-900/90 sm:right-4 sm:top-4"
+          aria-label={recipe.favorite ? `Remove ${recipe.name} from favorites` : `Add ${recipe.name} to favorites`}
+          aria-pressed={Boolean(recipe.favorite)}
         >
           <Heart
             className={cn(
@@ -429,7 +444,7 @@ function RecipeCard({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-9 w-9 rounded-xl"
+                  className="h-11 w-11 rounded-xl md:h-9 md:w-9"
                   onClick={(e) => e.stopPropagation()}
                   title="Actions"
                 >

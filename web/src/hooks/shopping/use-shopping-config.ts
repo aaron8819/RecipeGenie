@@ -50,7 +50,6 @@ export function useUpdateShoppingConfig() {
       if (existingConfig) {
         const { error } = await supabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
           // This is a known issue with Supabase type inference in certain contexts
           .update(updates)
           .eq("user_id", user!.id)
@@ -58,7 +57,6 @@ export function useUpdateShoppingConfig() {
       } else {
         const { error } = await supabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
           // This is a known issue with Supabase type inference in certain contexts
           .insert({
             user_id: user!.id,

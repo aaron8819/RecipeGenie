@@ -44,7 +44,6 @@ export function useUpdateUserConfig() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("user_config")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update(updates)
         .eq("user_id", user!.id)
         .select()
@@ -57,7 +56,6 @@ export function useUpdateUserConfig() {
       if (error.code === "PGRST116") {
         const { data: upsertData, error: upsertError } = await supabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
           .upsert({ user_id: user!.id, ...updates }, { onConflict: "user_id" })
           .select()
           .single()
@@ -112,7 +110,6 @@ export function useUpdateExcludedKeywords() {
 
       const { data, error } = await supabase
         .from("user_config")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ excluded_keywords: excludedKeywords })
         .eq("user_id", user!.id)
         .select()
@@ -125,7 +122,6 @@ export function useUpdateExcludedKeywords() {
       if (error.code === "PGRST116") {
         const { data: upsertData, error: upsertError } = await supabase
           .from("user_config")
-          // @ts-expect-error - TypeScript incorrectly infers upsert parameter type as 'never'
           .upsert(
             {
               ...DEFAULT_USER_CONFIG,

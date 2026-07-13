@@ -113,22 +113,22 @@ export function PlannerMobileHeader({
 }: PlannerMobileHeaderProps) {
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-border-muted bg-card-cream px-5 py-5 shadow-[0_10px_30px_rgba(72,92,55,0.08)]">
-        <div className="flex items-start justify-between gap-4">
+      <div className="rounded-2xl border border-border-muted bg-card-cream px-4 py-4 shadow-[0_10px_30px_rgba(72,92,55,0.08)] sm:px-5 sm:py-5">
+        <div className="flex items-start justify-between gap-2 sm:gap-4">
           <div className="space-y-1.5">
             <span className="block text-xs font-semibold uppercase tracking-[0.18em] text-primary/60">
               Planner Week
             </span>
-            <span className="block text-xl font-semibold text-primary">{weekLabel}</span>
+            <span className="block text-lg font-semibold leading-tight text-primary sm:text-xl">{weekLabel}</span>
           </div>
           {showControls ? <div className="shrink-0">{controls}</div> : null}
         </div>
-        <div className="mt-5 space-y-3">
+        <div className="mt-4 space-y-2 sm:mt-5 sm:space-y-3">
           <div className="flex items-end justify-between gap-3">
             <span className="text-sm font-medium text-primary/80">Weekly Progress</span>
             <span className="text-sm font-semibold text-primary">{progressLabel}</span>
           </div>
-          <div className="h-3 w-full overflow-hidden rounded-full border border-border-muted bg-white/80">
+          <div className="h-2.5 w-full overflow-hidden rounded-full border border-border-muted bg-white/80 sm:h-3">
             <div
               className="h-full bg-primary transition-all duration-300"
               style={{ width: `${progressValue}%` }}
@@ -158,7 +158,7 @@ export function PlannerMobileTabBar({ tabs }: PlannerMobileTabBarProps) {
           type="button"
           onClick={tab.onClick}
           className={cn(
-            "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all",
+            "min-h-11 flex-1 rounded-xl px-2 py-2.5 text-sm font-semibold transition-all sm:px-3",
             tab.isActive
               ? "bg-white text-primary shadow-sm"
               : "text-primary/60"
@@ -181,14 +181,10 @@ export function PlannerActionBar({ leading, children }: PlannerActionBarProps) {
     <div className="space-y-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         {leading}
-        <div className="relative lg:ml-auto">
-          <div className="scrollbar-thin flex items-center gap-2 overflow-x-auto rounded-2xl border border-stone-200/80 bg-stone-50/80 p-1.5 pr-6 shadow-sm lg:bg-transparent lg:p-0 lg:pr-0 lg:shadow-none">
+        <div className="lg:ml-auto">
+          <div className="flex items-center gap-2 rounded-2xl border border-stone-200/80 bg-stone-50/80 p-1.5 shadow-sm lg:bg-transparent lg:p-0 lg:shadow-none">
             {children}
           </div>
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-y-1 right-1 w-8 rounded-r-[calc(1rem-2px)] bg-gradient-to-l from-stone-50/95 via-stone-50/75 to-transparent lg:hidden"
-          />
         </div>
       </div>
     </div>

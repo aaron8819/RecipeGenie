@@ -20,7 +20,6 @@ function buildRecipesKey(options?: {
   search?: string | null
   favoritesOnly?: boolean
   tags?: string[]
-  select?: string
   limit?: number
 }) {
   const normalizedTags = options?.tags ? [...options.tags].sort() : []
@@ -31,7 +30,6 @@ function buildRecipesKey(options?: {
       search: options?.search ?? null,
       favoritesOnly: options?.favoritesOnly ?? false,
       tags: normalizedTags,
-      select: options?.select ?? "*",
       limit: options?.limit ?? null,
     },
   ]
@@ -97,7 +95,6 @@ export function useRecipes(options?: {
   search?: string | null
   favoritesOnly?: boolean
   tags?: string[]
-  select?: string
   limit?: number
 }) {
   const { user } = useAuthContext()
@@ -139,7 +136,7 @@ export function useRecipes(options?: {
       // Default path: no tag filter — standard Supabase query with server-side filters.
       let query = supabase
         .from("recipes")
-        .select(options?.select || "*")
+        .select("*")
         .order("name", { ascending: true })
 
       if (options?.category) {
@@ -160,7 +157,8 @@ export function useRecipes(options?: {
 
       const { data, error } = await query
       if (error) throw error
-      return (data as Recipe[]) || []
+      // JSON recipe fields are normalized by the write path and database schema.
+      return (data as unknown as Recipe[]) || []
     },
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,

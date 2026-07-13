@@ -52,7 +52,7 @@ test.describe('Accessibility @extended', () => {
     await setupAuth()
     await navigateToTab('recipes')
 
-    await page.getByRole('button', { name: /^add recipe$/i }).click()
+    await page.getByTestId('recipes-add-fab').click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -70,6 +70,6 @@ test.describe('Accessibility @extended', () => {
 
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
-    await expect(page.getByRole('button', { name: /^add recipe$/i })).toBeVisible()
+    await expect(page.getByTestId('recipes-add-fab')).toBeVisible()
   })
 })

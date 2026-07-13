@@ -33,7 +33,6 @@ export async function POST(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Share ID is required' }, { status: 400 });
   }
 
-  // @ts-expect-error - Supabase RPC arg inference can incorrectly require undefined.
   const { data, error } = await supabase.rpc('accept_recipe_share', {
     p_share_id: id,
   });

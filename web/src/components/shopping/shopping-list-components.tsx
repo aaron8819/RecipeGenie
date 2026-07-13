@@ -346,7 +346,7 @@ export function ShoppingItemRow({
           <button
             type="button"
             data-drag-handle="true"
-            className="flex min-h-[36px] min-w-[36px] touch-none items-center justify-center p-1 text-muted-foreground hover:text-foreground md:min-h-0 md:min-w-0"
+            className="flex min-h-11 min-w-11 touch-none items-center justify-center p-1 text-muted-foreground hover:text-foreground md:min-h-0 md:min-w-0"
             style={{ touchAction: "none" }}
             aria-label="Drag to reorder"
             {...dragHandleProps}
@@ -693,6 +693,7 @@ type ShoppingProgressCategory = {
 }
 
 export function ShoppingProgressSummary({
+  isDesktop,
   remainingCount,
   completedCount,
   totalCount,
@@ -702,6 +703,7 @@ export function ShoppingProgressSummary({
   activeCategories,
   onJumpToCategory,
 }: {
+  isDesktop: boolean
   remainingCount: number
   completedCount: number
   totalCount: number
@@ -722,7 +724,74 @@ export function ShoppingProgressSummary({
       data-testid="shopping-progress-summary"
     >
       <CardContent className="px-4 py-4 md:px-5">
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        {!isDesktop ? <div data-testid="shopping-progress-mobile">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
+                  Progress
+                </p>
+                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
+                  {completionPercent}% done
+                </span>
+              </div>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {remainingCount} left <span className="font-normal text-muted-foreground">· {completedCount} done · {activeCategoryCount} sections</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
+              style={{ width: `${completionPercent}%` }}
+            />
+          </div>
+
+          {(showCompletedToggle || showJumpChips) ? (
+            <div className="mt-3 flex items-center gap-2">
+              {showCompletedToggle ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onToggleCompleted}
+                  className="h-11 flex-1 rounded-xl border-stone-200 bg-white px-3 text-xs font-medium"
+                >
+                  {hideCompletedItems ? `Show ${completedCount} done` : `Hide ${completedCount} done`}
+                </Button>
+              ) : null}
+              {showJumpChips ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-11 flex-1 rounded-xl border-stone-200 bg-white px-3 text-xs font-medium"
+                      aria-label="Jump to shopping section"
+                    >
+                      Jump to section
+                      <ChevronDown className="ml-2 h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {activeCategories.map((category) => (
+                      <DropdownMenuItem
+                        key={category.key}
+                        onClick={() => onJumpToCategory(category.key)}
+                        className="min-h-11"
+                      >
+                        <span className="flex-1">{category.name}</span>
+                        <span className="ml-4 text-xs text-muted-foreground">{category.remainingCount}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </div>
+          ) : null}
+        </div> : null}
+
+        {isDesktop ? <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between" data-testid="shopping-progress-desktop">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
@@ -780,10 +849,10 @@ export function ShoppingProgressSummary({
               {hideCompletedItems ? `Show ${completedCount} done` : `Hide ${completedCount} done`}
             </Button>
           ) : null}
-        </div>
+        </div> : null}
 
-        {showJumpChips ? (
-          <div className="mt-4 border-t border-stone-100 pt-3">
+        {isDesktop && showJumpChips ? (
+          <div className="mt-4 border-t border-stone-100 pt-3" data-testid="shopping-progress-desktop-jumps">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
               Jump to active section
             </p>
@@ -914,7 +983,7 @@ export function ShoppingCategorySection({
           <button
             type="button"
             onClick={handleCollapseClick}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary md:h-9 md:w-9"
             aria-label={isCollapsed ? "Expand category" : "Collapse category"}
           >
             {isCollapsed ? (
@@ -997,7 +1066,7 @@ export function ShoppingStateSection({
         <button
           type="button"
           onClick={handleCollapseClick}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary"
+          className="flex h-11 w-11 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary md:h-9 md:w-9"
           aria-label={isCollapsed ? expandLabel : collapseLabel}
         >
           {isCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}

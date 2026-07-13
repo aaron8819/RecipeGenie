@@ -124,7 +124,6 @@ export function useAddShoppingItem() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ items: updatedItems })
         .eq("user_id", user!.id)
 
@@ -237,7 +236,6 @@ export function useUpdateShoppingItem() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ items: updatedItems })
         .eq("user_id", user!.id)
 
@@ -330,7 +328,6 @@ export function useRemoveShoppingItem() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: currentItems.filter((item) => item.rowId !== rowId),
         })
@@ -383,7 +380,6 @@ export function useCheckOffItem() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: updatedItems,
         })
@@ -477,7 +473,6 @@ export function useBulkCheckOff() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: updatedItems,
         })
@@ -539,7 +534,6 @@ export function useReorderShoppingList() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({ items: ensuredItems, custom_order: true })
         .eq("user_id", user!.id)
 

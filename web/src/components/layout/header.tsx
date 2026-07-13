@@ -4,6 +4,12 @@ import { LogOut, UtensilsCrossed, HelpCircle } from "lucide-react"
 import { OnboardingDialog } from "./onboarding-dialog"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { cn } from "@/lib/utils"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 const NAV_TABS = [
   { id: "planner", label: "Planner" },
@@ -62,7 +68,7 @@ export function Header({
               trigger={
                 <button
                   type="button"
-                  className="p-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-stone-100 transition-colors flex-shrink-0"
+                  className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-stone-100 hover:text-primary"
                   aria-label="Help"
                 >
                   <HelpCircle className="h-4 w-4" />
@@ -95,8 +101,8 @@ export function Header({
             </nav>
           )}
 
-          {/* Right: avatar, sign out — flush to right padding */}
-          <div className="flex items-center gap-4 flex-shrink-0">
+          {/* Right: compact account menu on mobile; full identity/actions on desktop */}
+          <div className="hidden items-center gap-4 flex-shrink-0 md:flex">
             <div
               className="h-8 w-8 rounded-full bg-accent flex items-center justify-center text-foreground font-bold text-xs flex-shrink-0"
               title={userEmail}
@@ -113,6 +119,24 @@ export function Header({
               <LogOut className="h-4 w-4" />
             </button>
           </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-xs font-bold text-foreground md:hidden"
+                aria-label="Open account menu"
+              >
+                {getInitials(userEmail)}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="md:hidden">
+              <DropdownMenuItem onClick={onSignOut} className="min-h-11">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
     </>

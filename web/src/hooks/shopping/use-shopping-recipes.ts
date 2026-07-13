@@ -67,7 +67,6 @@ export function useRemoveRecipeItems() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: filteredActiveItems,
           already_have: filteredAlreadyHave,
@@ -253,7 +252,6 @@ export function useAddToShoppingList() {
         // Row exists, use update (RLS will filter by user_id, but PostgREST requires a WHERE clause)
         const { error } = await supabase
           .from("shopping_list")
-          // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
           .update(saveData)
           .eq("user_id", user!.id)
         saveError = error
@@ -261,7 +259,6 @@ export function useAddToShoppingList() {
         // Row doesn't exist, use insert
         const { error } = await supabase
           .from("shopping_list")
-          // @ts-expect-error - TypeScript incorrectly infers insert parameter type as 'never'
           .insert(saveData)
         saveError = error
       }

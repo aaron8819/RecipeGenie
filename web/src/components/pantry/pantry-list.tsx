@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useCallback, useMemo, useRef } from "react"
-import { Plus, X, Package, Ban, Loader2 } from "lucide-react"
+import React, { useState, useCallback, useRef } from "react"
+import { Plus, X, Package, Ban, Loader2, Search } from "lucide-react"
 import type { PantryItem } from "@/types/database"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,8 @@ import {
 } from "@/hooks/use-pantry"
 import { usePantryExcludedKeywords } from "@/hooks/use-pantry-excluded-keywords"
 import { useUndoToast } from "@/hooks/use-undo-toast"
+import { cn } from "@/lib/utils"
+import { useIsDesktop } from "@/hooks/use-is-desktop"
 
 type InlineFeedback = {
   message: string
@@ -56,8 +58,14 @@ function summarizeOutcomes(
 }
 
 export function PantryList() {
+  const isDesktop = useIsDesktop()
+  const [activeSection, setActiveSection] = useState<"pantry" | "excluded">("pantry")
   const [newItem, setNewItem] = useState("")
   const [newKeyword, setNewKeyword] = useState("")
+  const [pantryQuery, setPantryQuery] = useState("")
+  const [keywordQuery, setKeywordQuery] = useState("")
+  const [showAllPantryItems, setShowAllPantryItems] = useState(false)
+  const [showAllKeywords, setShowAllKeywords] = useState(false)
   const [pantryFeedback, setPantryFeedback] = useState<InlineFeedback | null>(null)
   const [keywordFeedback, setKeywordFeedback] = useState<InlineFeedback | null>(null)
   const [removingPantryIds, setRemovingPantryIds] = useState<Set<string>>(new Set())
@@ -146,23 +154,27 @@ export function PantryList() {
   const showKeywordsLoading = keywordsLoading && displayedKeywords.length === 0
   const pantryCount = displayedPantryItems.length
   const keywordCount = displayedKeywords.length
-  const headerSummary = useMemo(() => {
-    if (pantryCount === 0 && keywordCount === 0) {
-      return "Track what is already at home and keep shopping exclusions easy to verify."
-    }
-
-    const parts: string[] = []
-    parts.push(`${pantryCount} pantry item${pantryCount === 1 ? "" : "s"}`)
-    parts.push(`${keywordCount} excluded keyword${keywordCount === 1 ? "" : "s"}`)
-    return parts.join(" | ")
-  }, [pantryCount, keywordCount])
-
+  const normalizedPantryQuery = pantryQuery.trim().toLowerCase()
+  const normalizedKeywordQuery = keywordQuery.trim().toLowerCase()
+  const filteredPantryItems = normalizedPantryQuery
+    ? displayedPantryItems.filter((item) => item.item.toLowerCase().includes(normalizedPantryQuery))
+    : displayedPantryItems
+  const filteredKeywords = normalizedKeywordQuery
+    ? displayedKeywords.filter((keyword) => keyword.toLowerCase().includes(normalizedKeywordQuery))
+    : displayedKeywords
+  const visiblePantryItems = isDesktop || normalizedPantryQuery || showAllPantryItems
+    ? filteredPantryItems
+    : filteredPantryItems.slice(0, 24)
+  const visibleKeywords = isDesktop || normalizedKeywordQuery || showAllKeywords
+    ? filteredKeywords
+    : filteredKeywords.slice(0, 24)
   const handleAddPantryItem = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newItem.trim()) return
 
     try {
       const result = await addPantryItems.mutateAsync(newItem)
+      setShowAllPantryItems(true)
       setNewItem(result.unresolvedInput)
       const message = summarizeOutcomes("Pantry items", result.outcomes)
       setPantryFeedback(message ? { message, tone: "neutral" } : null)
@@ -181,6 +193,7 @@ export function PantryList() {
 
     try {
       const result = await addKeywords.mutateAsync(newKeyword)
+      setShowAllKeywords(true)
       setNewKeyword(result.unresolvedInput)
       const message = summarizeOutcomes("Excluded keywords", result.outcomes)
       setKeywordFeedback(message ? { message, tone: "neutral" } : null)
@@ -203,7 +216,7 @@ export function PantryList() {
               Keep ingredients you already have and the exclusions that should stay out of shopping.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="hidden flex-wrap gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground md:flex">
             <span className="rounded-full bg-sage-100 px-3 py-1 text-sage-700">
               {pantryCount} pantry item{pantryCount === 1 ? "" : "s"}
             </span>
@@ -212,11 +225,34 @@ export function PantryList() {
             </span>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">{headerSummary}</p>
       </div>
+      <nav className="grid grid-cols-2 rounded-2xl border border-border-muted/80 bg-stone-50/70 p-1 md:hidden" aria-label="Pantry sections">
+        <button
+          type="button"
+          onClick={() => setActiveSection("pantry")}
+          aria-current={activeSection === "pantry" ? "page" : undefined}
+          className={cn(
+            "min-h-11 rounded-xl px-3 text-sm font-semibold transition-all",
+            activeSection === "pantry" ? "bg-white text-primary shadow-sm" : "text-primary/60"
+          )}
+        >
+          Pantry <span className="ml-1 text-xs">{pantryCount}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSection("excluded")}
+          aria-current={activeSection === "excluded" ? "page" : undefined}
+          className={cn(
+            "min-h-11 rounded-xl px-3 text-sm font-semibold transition-all",
+            activeSection === "excluded" ? "bg-white text-primary shadow-sm" : "text-primary/60"
+          )}
+        >
+          Excluded <span className="ml-1 text-xs">{keywordCount}</span>
+        </button>
+      </nav>
       <div className="grid gap-6 md:grid-cols-2">
       {/* Pantry Items */}
-        <Card>
+        <Card className={cn(activeSection !== "pantry" && "hidden md:block")}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
@@ -241,13 +277,26 @@ export function PantryList() {
               }}
               className="text-base sm:text-sm"
             />
-            <Button type="submit" size="icon" disabled={addPantryItems.isPending}>
+            <Button type="submit" size="icon" disabled={addPantryItems.isPending} className="h-11 w-11 shrink-0" aria-label="Submit pantry items">
               <Plus className="h-4 w-4" />
             </Button>
           </form>
           <p className="mb-4 text-xs text-muted-foreground">
             Add one or several ingredients separated by commas. Duplicates are skipped and anything that fails stays in the field for retry.
           </p>
+          {pantryCount > 10 ? (
+            <div className="relative mb-4">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                aria-label="Search pantry items"
+                placeholder="Search pantry items..."
+                value={pantryQuery}
+                onChange={(event) => setPantryQuery(event.target.value)}
+                className="pl-9 text-base md:text-sm"
+              />
+            </div>
+          ) : null}
           {pantryFeedback && (
             <p
               className={
@@ -273,6 +322,8 @@ export function PantryList() {
                 onClick: () => pantryInputRef.current?.focus(),
               }}
             />
+          ) : filteredPantryItems.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No pantry items match “{pantryQuery.trim()}”.</p>
           ) : (
             <div className="relative">
               {/* Subtle loading indicator for background refetch */}
@@ -284,7 +335,7 @@ export function PantryList() {
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                {displayedPantryItems.map((item) => (
+                {visiblePantryItems.map((item) => (
                   <div
                     key={item.id}
                     data-pantry-item={item.id}
@@ -296,7 +347,7 @@ export function PantryList() {
                       aria-label={`Remove ${item.item}`}
                       onClick={() => handleRemovePantryItem(item)}
                       disabled={removingPantryIds.has(item.id)}
-                      className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-full transition-colors hover:bg-black/5 hover:text-destructive active:bg-black/10 sm:min-h-[28px] sm:min-w-[28px]"
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded-full transition-colors hover:bg-black/5 hover:text-destructive active:bg-black/10 md:min-h-8 md:min-w-8"
                     >
                       {removingPantryIds.has(item.id) ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -307,13 +358,23 @@ export function PantryList() {
                   </div>
                 ))}
               </div>
+              {!isDesktop && !normalizedPantryQuery && filteredPantryItems.length > visiblePantryItems.length ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAllPantryItems(true)}
+                  className="mt-4 h-11 w-full"
+                >
+                  Show all {filteredPantryItems.length} pantry items
+                </Button>
+              ) : null}
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Excluded Keywords */}
-      <Card>
+      <Card className={cn(activeSection !== "excluded" && "hidden md:block")}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Ban className="h-5 w-5" />
@@ -338,13 +399,26 @@ export function PantryList() {
               }}
               className="text-base sm:text-sm"
             />
-            <Button type="submit" size="icon" disabled={addKeywords.isPending}>
+            <Button type="submit" size="icon" disabled={addKeywords.isPending} className="h-11 w-11 shrink-0" aria-label="Submit excluded keywords">
               <Plus className="h-4 w-4" />
             </Button>
           </form>
           <p className="mb-4 text-xs text-muted-foreground">
             Use exact keywords for ingredients that should stay out of shopping. Add several at once with commas.
           </p>
+          {keywordCount > 10 ? (
+            <div className="relative mb-4">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                aria-label="Search excluded keywords"
+                placeholder="Search excluded keywords..."
+                value={keywordQuery}
+                onChange={(event) => setKeywordQuery(event.target.value)}
+                className="pl-9 text-base md:text-sm"
+              />
+            </div>
+          ) : null}
           {keywordFeedback && (
             <p
               className={
@@ -370,6 +444,8 @@ export function PantryList() {
                 onClick: () => keywordInputRef.current?.focus(),
               }}
             />
+          ) : filteredKeywords.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No excluded keywords match “{keywordQuery.trim()}”.</p>
           ) : (
             <div className="relative">
               {/* Subtle loading indicator for background refetch */}
@@ -381,7 +457,7 @@ export function PantryList() {
                 </div>
               )}
               <div className="flex flex-wrap gap-2">
-                {displayedKeywords.map((keyword: string) => (
+                {visibleKeywords.map((keyword: string) => (
                   <div
                     key={keyword}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-terracotta-100 text-terracotta-700 rounded-full text-sm font-medium transition-colors duration-200 hover:bg-terracotta-200"
@@ -392,7 +468,7 @@ export function PantryList() {
                       aria-label={`Remove excluded keyword ${keyword}`}
                       onClick={() => handleRemoveKeyword(keyword)}
                       disabled={removingKeywordIds.has(keyword)}
-                      className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-full transition-colors hover:bg-black/5 hover:text-terracotta-900 active:bg-black/10 sm:min-h-[28px] sm:min-w-[28px]"
+                      className="flex min-h-11 min-w-11 items-center justify-center rounded-full transition-colors hover:bg-black/5 hover:text-terracotta-900 active:bg-black/10 md:min-h-8 md:min-w-8"
                     >
                       {removingKeywordIds.has(keyword) ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -403,6 +479,16 @@ export function PantryList() {
                   </div>
                 ))}
               </div>
+              {!isDesktop && !normalizedKeywordQuery && filteredKeywords.length > visibleKeywords.length ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAllKeywords(true)}
+                  className="mt-4 h-11 w-full"
+                >
+                  Show all {filteredKeywords.length} excluded keywords
+                </Button>
+              ) : null}
             </div>
           )}
         </CardContent>

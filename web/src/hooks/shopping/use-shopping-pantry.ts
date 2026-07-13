@@ -70,7 +70,6 @@ export function useMoveToShoppingList() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: updatedItems,
           already_have: alreadyHave.filter((candidate) => candidate.rowId !== rowId),
@@ -164,7 +163,6 @@ export function useMoveExcludedToShoppingList() {
 
       const { error: saveError } = await supabase
         .from("shopping_list")
-        // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
         .update({
           items: updatedItems,
           excluded: excluded.filter((candidate) => candidate.rowId !== rowId),

@@ -75,12 +75,11 @@ test.describe('Pantry Management', () => {
     await expect(page.getByText(firstItem, { exact: true })).toBeVisible()
     await expect(page.getByText(secondItem, { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: new RegExp(`remove ${firstItem}`, 'i') }).click()
-    await page.getByRole('button', { name: new RegExp(`remove ${secondItem}`, 'i') }).click()
-
     const alert = undoAlert(page)
+    await page.getByRole('button', { name: new RegExp(`remove ${firstItem}`, 'i') }).click()
     await expect(alert).toContainText(new RegExp(`${firstItem}.*removed from pantry`, 'i'))
 
+    await page.getByRole('button', { name: new RegExp(`remove ${secondItem}`, 'i') }).click()
     await page.getByRole('button', { name: /^dismiss$/i }).click()
     await expect(alert).toContainText(new RegExp(`${secondItem}.*removed from pantry`, 'i'))
   })

@@ -25,7 +25,7 @@ for (const root of roots) walk(root, files)
 let current = 0
 for (const file of files) {
   const text = fs.readFileSync(file, 'utf8')
-  const matches = text.match(/@ts-expect-error/g)
+  const matches = text.match(/\/\/\s*@ts-expect-error/g)
   current += matches ? matches.length : 0
 }
 

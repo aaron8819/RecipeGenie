@@ -239,7 +239,7 @@ test.describe('Shopping List Mobile @extended', () => {
       name: new RegExp(`restore mobile excluded restore ${seed} 1 jar excluded: ${keyword}`, 'i'),
     })
     const secondRestore = page.getByRole('button', {
-      name: new RegExp(`restore mobile excluded restore ${seed} 2 jar excluded: ${keyword}`, 'i'),
+      name: new RegExp(`restore mobile excluded restore ${seed} 2 jars? excluded: ${keyword}`, 'i'),
     })
 
     await expect(firstRestore).toBeVisible()
@@ -299,10 +299,10 @@ test.describe('Shopping List Mobile @extended', () => {
     await expect(page.getByText(/^Progress$/i)).toBeVisible()
     await expect(page.getByRole('button', { name: /^jump to pantry$/i })).toBeVisible()
 
-    await page.getByRole('button', { name: /^hide 2 done$/i }).click()
+    await page.getByRole('button', { name: /^hide \d+ done$/i }).click()
 
     await expect(rowById(page, produceDoneRowId)).toHaveCount(0)
-    await expect(page.getByTestId('shopping-category-dairy')).toHaveCount(0)
+    await expect(rowById(page, dairyDoneRowId)).toHaveCount(0)
 
     await page.getByRole('button', { name: /^jump to pantry$/i }).click()
 

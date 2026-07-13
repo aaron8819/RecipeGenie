@@ -79,7 +79,9 @@ test.describe('Shopping List', () => {
     await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
 
     await page.getByRole('button', { name: /organize/i }).click()
-    await page.getByRole('menuitem', { name: /enter manage mode/i }).click()
+    const enterManageMode = page.getByRole('menuitem', { name: /enter manage mode/i })
+    await expect(enterManageMode).toBeVisible()
+    await enterManageMode.click({ force: true })
 
     await expect(page.getByText('Manage Mode', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: /drag to reorder/i }).first()).toBeVisible()

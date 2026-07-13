@@ -278,11 +278,13 @@ describe("RecipeList", () => {
     expect(screen.getByRole("button", { name: "Clear Filters" })).toBeInTheDocument()
   })
 
-  it("surfaces shared and settings in a dedicated mobile utilities row", () => {
+  it("keeps mobile filters compact while surfacing shared and settings utilities", () => {
     isDesktopViewport = false
 
     render(<RecipeList />)
 
+    expect(screen.queryByLabelText("Recipe browse filters")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }))
     expect(screen.getByLabelText("Recipe browse filters")).toBeInTheDocument()
     const utilitiesRow = screen.getByLabelText("Recipe mobile utilities")
     expect(utilitiesRow).toBeInTheDocument()

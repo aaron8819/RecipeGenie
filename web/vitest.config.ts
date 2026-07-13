@@ -2,9 +2,15 @@ import { defineConfig } from 'vitest/config'
 import path from 'path'
 
 export default defineConfig({
+  oxc: {
+    jsx: {
+      runtime: 'automatic',
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom', // Changed from 'node' for React component testing
+    testTimeout: 15_000,
     setupFiles: ['./src/test/setup.ts'],
     include: ['**/*.test.ts', '**/*.test.tsx'],
     coverage: {

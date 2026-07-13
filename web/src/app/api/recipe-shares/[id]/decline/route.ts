@@ -61,7 +61,6 @@ export async function POST(_request: Request, context: RouteContext) {
 
   const { error: updateError } = await supabase
     .from('recipe_shares')
-    // @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'
     .update({
       status: 'declined',
       responded_at: new Date().toISOString(),

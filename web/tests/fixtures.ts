@@ -139,8 +139,9 @@ type WorkerFixtures = {
  * Extended test with custom fixtures
  */
 export const test = base.extend<RecipeGenieFixtures, WorkerFixtures>({
-  storageState: async ({ workerStorageState }, use) => {
-    await use(workerStorageState)
+  storageState: async ({}, use) => {
+    // Each test signs in independently so a sign-out cannot revoke sibling test sessions.
+    await use({ cookies: [], origins: [] })
   },
 
   workerStorageState: [async ({}, use, workerInfo) => {
@@ -241,7 +242,10 @@ export const test = base.extend<RecipeGenieFixtures, WorkerFixtures>({
           navButton = page.locator('nav').last().getByRole('button', { name: new RegExp(tabName, 'i') })
         }
 
-        await navButton.click()
+        // The Next.js development portal can overlap the bottom-left Planner target.
+        // Dispatch through the button itself so responsive navigation tests exercise
+        // the app handler instead of the development-only overlay geometry.
+        await navButton.evaluate((button: HTMLButtonElement) => button.click())
       } else {
         let navButton = page.locator('header.md\\:fixed').getByRole('button', { name: new RegExp(tabName, 'i') })
 

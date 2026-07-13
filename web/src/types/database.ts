@@ -8,13 +8,13 @@ import type {
 export type Database = GeneratedDatabase
 export type Json = GeneratedJson
 
-export interface CustomShoppingCategory {
+export type CustomShoppingCategory = {
   id: string
   name: string
   order: number
 }
 
-export interface Ingredient {
+export type Ingredient = {
   item: string
   amount: number | null
   unit: string
@@ -25,12 +25,12 @@ export interface Ingredient {
   originalText?: string
 }
 
-export interface RecipeInstructionGroup {
+export type RecipeInstructionGroup = {
   label?: string
   steps: string[]
 }
 
-export interface ShoppingItem {
+export type ShoppingItem = {
   rowId?: string
   item: string
   amount: number | null
@@ -53,7 +53,7 @@ export interface ShoppingItem {
 
 export type ShoppingItemOrderPreferences = Record<string, string[]>
 
-export interface RecipeShareSnapshot {
+export type RecipeShareSnapshot = {
   name: string
   category: string
   servings: number

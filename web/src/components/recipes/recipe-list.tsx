@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useMemo, useEffect, useCallback } from "react"
-import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Inbox } from "lucide-react"
+import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Inbox, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
@@ -133,11 +133,14 @@ function MobileRecipesHeader({
   onSharedOpen,
   onSettingsOpen,
 }: MobileRecipesHeaderProps) {
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const activeFilterCount = (category ? 1 : 0) + selectedTags.length + (favoritesOnly ? 1 : 0)
+
   const mobileFilterTriggerClassName =
-    "w-full justify-between rounded-xl border border-slate-200/70 bg-white/92 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-all hover:border-slate-300/80 hover:bg-white hover:text-slate-900 dark:border-slate-700/70 dark:bg-slate-800/92 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-50"
+    "min-h-11 w-full justify-between rounded-xl border border-slate-200/70 bg-white/92 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-all hover:border-slate-300/80 hover:bg-white hover:text-slate-900 dark:border-slate-700/70 dark:bg-slate-800/92 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-50"
 
   const utilityButtonClassName =
-    "h-9 rounded-full border border-slate-200/80 bg-white/72 px-3 text-xs font-medium text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-slate-300/80 hover:bg-white hover:text-slate-900 dark:border-slate-700/80 dark:bg-slate-800/65 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-50"
+    "h-11 rounded-xl border border-slate-200/80 bg-white/72 px-2.5 text-xs font-medium text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all hover:border-slate-300/80 hover:bg-white hover:text-slate-900 dark:border-slate-700/80 dark:bg-slate-800/65 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-50"
 
   return (
     <div className="md:hidden mb-5 space-y-3.5">
@@ -148,82 +151,111 @@ function MobileRecipesHeader({
           aria-label="Search recipes by name or category"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full h-auto rounded-2xl border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-sm shadow-sm transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800"
+          className="w-full h-auto rounded-2xl border border-slate-200 bg-white py-3.5 pl-10 pr-4 text-base shadow-sm transition-all placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary dark:border-slate-700 dark:bg-slate-800"
         />
       </div>
 
-      <section
-        className="rounded-2xl border border-slate-200/75 bg-slate-50/78 p-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.05)] dark:border-slate-700/80 dark:bg-slate-900/35"
-        aria-label="Recipe browse filters"
-      >
-        <div className="grid grid-cols-2 gap-3">
-          <Select value={category || "all"} onValueChange={(value) => onCategoryChange(value === "all" ? null : value)}>
-            <SelectTrigger
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          data-testid="recipes-filter-toggle"
+          type="button"
+          variant="ghost"
+          aria-expanded={filtersOpen}
+          aria-controls="mobile-recipe-filters"
+          onClick={() => setFiltersOpen((open) => !open)}
+          className={cn(
+            mobileFilterTriggerClassName,
+            activeFilterCount > 0 &&
+              "border-primary/25 bg-primary/10 text-primary hover:border-primary/35 hover:bg-primary/15 dark:border-primary/35 dark:bg-primary/15"
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0" />
+            <span>Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            )}
+          </span>
+          <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", filtersOpen && "rotate-180")} />
+        </Button>
+
+        <Select value={sortBy} onValueChange={(value) => onSortChange(value as SortOption)}>
+          <SelectTrigger className={mobileFilterTriggerClassName} aria-label="Sort recipes">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="timesMade">Most Made</SelectItem>
+            <SelectItem value="lastMade">Recently Made</SelectItem>
+            <SelectItem value="name">Name (A-Z)</SelectItem>
+            <SelectItem value="newest">Newest First</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {filtersOpen && (
+        <section
+          id="mobile-recipe-filters"
+          data-testid="recipes-filter-panel"
+          className="rounded-2xl border border-slate-200/75 bg-slate-50/78 p-2.5 shadow-[0_10px_24px_rgba(15,23,42,0.05)] dark:border-slate-700/80 dark:bg-slate-900/35"
+          aria-label="Recipe browse filters"
+        >
+          <div className="space-y-2.5">
+            <Select value={category || "all"} onValueChange={(value) => onCategoryChange(value === "all" ? null : value)}>
+              <SelectTrigger
+                className={cn(
+                  mobileFilterTriggerClassName,
+                  category &&
+                    "border-primary/20 bg-primary/10 text-primary hover:border-primary/30 hover:bg-primary/15 dark:border-primary/30 dark:bg-primary/15"
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Filter className="h-4 w-4 shrink-0" />
+                  <SelectValue placeholder="All categories" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categories?.map((cat: string) => (
+                  <SelectItem key={cat} value={cat} className="capitalize">
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {allTags.length > 0 && (
+              <MultiSelect
+                options={allTags}
+                value={selectedTags}
+                onChange={onSelectedTagsChange}
+                placeholder="Filter by tags"
+                className="w-full [&>button]:min-h-11 [&>button]:w-full [&>button]:justify-between [&>button]:rounded-xl [&>button]:border-slate-200/70 [&>button]:bg-white/92 [&>button]:px-4 [&>button]:py-2.5 [&>button]:text-sm [&>button]:font-medium [&>button]:text-slate-700 [&>button]:shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&>button]:transition-all [&>button]:hover:border-slate-300/80 [&>button]:hover:bg-white [&>button]:hover:text-slate-900 dark:[&>button]:border-slate-700/70 dark:[&>button]:bg-slate-800/92 dark:[&>button]:text-slate-200 dark:[&>button]:hover:border-slate-600 dark:[&>button]:hover:bg-slate-800 dark:[&>button]:hover:text-slate-50"
+                tagCounts={tagCounts}
+              />
+            )}
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onFavoritesToggle}
               className={cn(
-                mobileFilterTriggerClassName,
-                !category &&
-                  "border-primary/20 bg-primary/10 text-primary hover:border-primary/30 hover:bg-primary/15 dark:border-primary/30 dark:bg-primary/15"
+                "h-11 w-fit justify-start rounded-full border px-4 text-sm font-medium shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all",
+                favoritesOnly
+                  ? "border-red-200/80 bg-red-50/80 text-red-700 hover:border-red-300 hover:bg-red-50 dark:border-red-900/80 dark:bg-red-950/20 dark:text-red-300 dark:hover:border-red-800 dark:hover:bg-red-950/35"
+                  : "border-slate-200/65 bg-white/70 text-slate-600 hover:border-slate-300/75 hover:bg-white hover:text-slate-800 dark:border-slate-700/70 dark:bg-slate-800/65 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-100"
               )}
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <Filter className="h-4 w-4 shrink-0" />
-                <SelectValue placeholder="All categories" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {categories?.map((cat: string) => (
-                <SelectItem key={cat} value={cat} className="capitalize">
-                  {cat}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={sortBy} onValueChange={(value) => onSortChange(value as SortOption)}>
-            <SelectTrigger className={mobileFilterTriggerClassName}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="timesMade">Most Made</SelectItem>
-              <SelectItem value="lastMade">Recently Made</SelectItem>
-              <SelectItem value="name">Name (A-Z)</SelectItem>
-              <SelectItem value="newest">Newest First</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="mt-2.5 space-y-2.5">
-          {allTags.length > 0 && (
-            <MultiSelect
-              options={allTags}
-              value={selectedTags}
-              onChange={onSelectedTagsChange}
-              placeholder="Filter by tags"
-              className="w-full [&>button]:w-full [&>button]:justify-between [&>button]:rounded-xl [&>button]:border-slate-200/70 [&>button]:bg-white/92 [&>button]:px-4 [&>button]:py-2.5 [&>button]:text-sm [&>button]:font-medium [&>button]:text-slate-700 [&>button]:shadow-[0_1px_2px_rgba(15,23,42,0.05)] [&>button]:transition-all [&>button]:hover:border-slate-300/80 [&>button]:hover:bg-white [&>button]:hover:text-slate-900 dark:[&>button]:border-slate-700/70 dark:[&>button]:bg-slate-800/92 dark:[&>button]:text-slate-200 dark:[&>button]:hover:border-slate-600 dark:[&>button]:hover:bg-slate-800 dark:[&>button]:hover:text-slate-50"
-              tagCounts={tagCounts}
-            />
-          )}
-
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onFavoritesToggle}
-            className={cn(
-              "w-full justify-center rounded-xl border px-4 py-2.5 text-sm font-medium shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all",
-              favoritesOnly
-                ? "border-red-200/80 bg-red-50/80 text-red-700 hover:border-red-300 hover:bg-red-50 dark:border-red-900/80 dark:bg-red-950/20 dark:text-red-300 dark:hover:border-red-800 dark:hover:bg-red-950/35"
-                : "border-slate-200/65 bg-white/70 text-slate-600 hover:border-slate-300/75 hover:bg-white hover:text-slate-800 dark:border-slate-700/70 dark:bg-slate-800/65 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-            )}
-          >
-            <Heart className={cn("h-4 w-4 shrink-0", favoritesOnly && "fill-current")} />
-            Favorites
-          </Button>
-        </div>
-      </section>
+              <Heart className={cn("h-4 w-4 shrink-0", favoritesOnly && "fill-current")} />
+              Favorites
+            </Button>
+          </div>
+        </section>
+      )}
 
       <section
-        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/60 bg-white/45 px-2.5 py-2 dark:border-slate-700/70 dark:bg-slate-900/15"
+        className="flex items-center justify-between gap-2 rounded-2xl border border-slate-200/60 bg-white/45 px-2 py-2 dark:border-slate-700/70 dark:bg-slate-900/15"
         aria-label="Recipe mobile utilities"
       >
         <div className="flex rounded-xl bg-slate-100/80 p-1 dark:bg-slate-800/75">
@@ -231,7 +263,7 @@ function MobileRecipesHeader({
             type="button"
             onClick={() => onViewModeChange("grid")}
             className={cn(
-              "rounded-lg p-2 transition-all",
+              "flex h-11 w-11 items-center justify-center rounded-lg transition-all",
               viewMode === "grid"
                 ? "border border-slate-200/80 bg-white text-primary shadow-[0_1px_2px_rgba(15,23,42,0.05)] dark:border-slate-600 dark:bg-slate-700"
                 : "text-slate-500 opacity-70 hover:bg-slate-200/80 hover:text-slate-800 hover:opacity-100 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
@@ -244,7 +276,7 @@ function MobileRecipesHeader({
             type="button"
             onClick={() => onViewModeChange("list")}
             className={cn(
-              "rounded-lg p-2 transition-all",
+              "flex h-11 w-11 items-center justify-center rounded-lg transition-all",
               viewMode === "list"
                 ? "border border-slate-200/80 bg-white text-primary shadow-[0_1px_2px_rgba(15,23,42,0.05)] dark:border-slate-600 dark:bg-slate-700"
                 : "text-slate-500 opacity-70 hover:bg-slate-200/80 hover:text-slate-800 hover:opacity-100 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200"
@@ -255,7 +287,7 @@ function MobileRecipesHeader({
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onSharedOpen} className={cn(utilityButtonClassName, "shrink-0")}>
             <Inbox className="h-4 w-4 shrink-0" />
             Shared
@@ -645,6 +677,7 @@ export function RecipeList() {
             </Button>
 
             <Button
+              data-testid="recipes-add-button"
               onClick={() => setIsAddDialogOpen(true)}
               className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-full font-bold shadow-md shadow-primary/20 transition-all shrink-0 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 hover:brightness-105 active:scale-[0.98]"
             >
@@ -684,7 +717,7 @@ export function RecipeList() {
       )}
 
       {/* Recipe Grid/List */}
-      <div>
+      <div className="pb-20 md:pb-0">
       {showSkeleton ? (
         <div className={cn(
           viewMode === "grid"
@@ -795,9 +828,10 @@ export function RecipeList() {
       {/* FAB Add Recipe — mobile only */}
       {!isDesktop && (
         <button
+          data-testid="recipes-add-fab"
           type="button"
           onClick={() => setIsAddDialogOpen(true)}
-          className="fixed bottom-24 right-6 w-14 h-14 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-xl shadow-primary/40 hover:opacity-90 transition-opacity z-30"
+          className="fixed bottom-[calc(var(--bottom-nav-safe-height)+0.75rem)] right-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/40 transition-opacity hover:opacity-90 z-30"
           aria-label="Add Recipe"
         >
           <Plus className="h-6 w-6" />

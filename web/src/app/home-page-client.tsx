@@ -19,8 +19,14 @@ import {
 } from "./home-tab-state"
 
 const TabLoader = () => (
-  <div className="flex-1 flex items-center justify-center">
-    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+  <div className="flex-1 space-y-4 px-1 py-2" aria-label="Loading page">
+    <div className="h-11 w-40 animate-pulse rounded-xl bg-stone-100" />
+    <div className="h-24 animate-pulse rounded-2xl border border-stone-100 bg-stone-50" />
+    <div className="grid grid-cols-2 gap-3">
+      <div className="h-20 animate-pulse rounded-2xl bg-stone-100" />
+      <div className="h-20 animate-pulse rounded-2xl bg-stone-100" />
+    </div>
+    <div className="h-40 animate-pulse rounded-2xl border border-stone-100 bg-stone-50" />
   </div>
 )
 
