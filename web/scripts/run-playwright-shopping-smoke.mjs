@@ -1,20 +1,19 @@
 import { spawnSync } from 'node:child_process'
 
-const port = process.env.PLAYWRIGHT_SHOPPING_SMOKE_PORT || '3101'
+const port = '3107'
 const baseURL = `http://127.0.0.1:${port}`
 
 const result = spawnSync(
-  process.platform === 'win32' ? 'npx.cmd' : 'npx',
+  'npx',
   ['playwright', 'test', 'tests/shopping-mode-smoke.spec.ts', '--project=smoke'],
   {
     stdio: 'inherit',
-    shell: false,
+    shell: process.platform === 'win32',
     env: {
       ...process.env,
       CI: process.env.CI || '1',
-      PLAYWRIGHT_BASE_URL: baseURL,
-      PLAYWRIGHT_WEB_SERVER_COMMAND: `npm run dev -- --port ${port}`,
-      PLAYWRIGHT_REUSE_EXISTING_SERVER: '0',
+      RECIPE_GENIE_E2E_TARGET: 'local',
+      RECIPE_GENIE_E2E_BASE_URL: baseURL,
     },
   }
 )

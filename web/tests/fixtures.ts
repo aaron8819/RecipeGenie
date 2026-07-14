@@ -3,17 +3,19 @@ import { test as base, expect, type Page, type Locator } from '@playwright/test'
 import * as fs from 'fs'
 import * as path from 'path'
 import {
-  E2E_BASE_URL,
-  E2E_BOOTSTRAP_STORAGE_STATE_PATH,
+  E2E_AUTH_DIR,
+  E2E_CONFIG,
   TEST_USER,
   assertRecipeGenieAppShell,
+  assertStorageStateContainsNoCredentials,
+  createStorageStatePaths,
   dismissOnboardingModal,
   ensureDirectory,
-  getWorkerStorageStatePath,
   isRecipeGenieAppShellVisible,
-  logE2EContext,
+  removeRuntimeAuthFiles,
   signInToRecipeGenie,
   waitForRecipeGenieSurface,
+  writeStorageMetadata,
 } from './e2e-env'
 
 export { TEST_USER }
@@ -86,10 +88,6 @@ function hasSupabaseEnvVar(key: string): boolean {
 function assertE2EEnv() {
   const missing: string[] = []
 
-  if (!TEST_USER.email || !TEST_USER.password) {
-    missing.push('TEST_USER email/password')
-  }
-
   if (!hasSupabaseEnvVar('NEXT_PUBLIC_SUPABASE_URL')) {
     missing.push('NEXT_PUBLIC_SUPABASE_URL')
   }
@@ -103,20 +101,12 @@ function assertE2EEnv() {
   }
 }
 
-async function isAuthFormReady(page: import('@playwright/test').Page): Promise<boolean> {
-  const emailVisible = await page.locator('#email').isVisible().catch(() => false)
-  const passwordVisible = await page.locator('#password').isVisible().catch(() => false)
-  return emailVisible && passwordVisible
-}
-
 /**
  * Custom test fixture with helper methods
  */
 export interface RecipeGenieFixtures {
   /** Set up authenticated session - navigates to app (already logged in via worker auth state) */
   setupAuth: () => Promise<void>
-  /** Sign in with test credentials */
-  signIn: (email?: string, password?: string) => Promise<void>
   /** Sign out of the current session */
   signOut: () => Promise<void>
   /** Navigate to a specific tab */
@@ -131,49 +121,39 @@ export interface RecipeGenieFixtures {
   isMobileViewport: () => Promise<boolean>
 }
 
-type WorkerFixtures = {
-  workerStorageState: string
-}
-
 /**
  * Extended test with custom fixtures
  */
-export const test = base.extend<RecipeGenieFixtures, WorkerFixtures>({
-  storageState: async ({}, use) => {
-    // Each test signs in independently so a sign-out cannot revoke sibling test sessions.
-    await use({ cookies: [], origins: [] })
-  },
-
-  workerStorageState: [async ({}, use, workerInfo) => {
+export const test = base.extend<RecipeGenieFixtures>({
+  storageState: async ({ browser }, use, testInfo) => {
     assertE2EEnv()
-
-    const storageStatePath = getWorkerStorageStatePath(workerInfo.parallelIndex)
-
-    ensureDirectory(path.dirname(storageStatePath))
-    logE2EContext('worker-auth', {
-      baseURL: process.env.PLAYWRIGHT_BASE_URL || E2E_BASE_URL,
-      workerIndex: workerInfo.parallelIndex,
-      storageStatePath,
-    })
+    ensureDirectory(E2E_AUTH_DIR)
+    const { statePath, metadataPath } = createStorageStatePaths(testInfo.testId)
+    const authContext = await browser.newContext({ baseURL: E2E_CONFIG.baseURL })
+    const authPage = await authContext.newPage()
 
     try {
-      if (!fs.existsSync(E2E_BOOTSTRAP_STORAGE_STATE_PATH)) {
-        throw new Error(`Bootstrap storage state was not created at ${E2E_BOOTSTRAP_STORAGE_STATE_PATH}`)
-      }
-
-      fs.copyFileSync(E2E_BOOTSTRAP_STORAGE_STATE_PATH, storageStatePath)
-      await use(storageStatePath)
-    } catch (error) {
-      throw new Error(
-        `Failed to establish worker-scoped storage state for Recipe Genie. worker=${workerInfo.parallelIndex} storageState=${storageStatePath}. ${String(error)}`
-      )
+      await signInToRecipeGenie(authPage)
+      await dismissOnboardingModal(authPage)
+      await authContext.storageState({ path: statePath })
+      assertStorageStateContainsNoCredentials(statePath, E2E_CONFIG)
+      writeStorageMetadata(metadataPath, E2E_CONFIG)
+      await authContext.close()
+    } catch {
+      await authContext.close().catch(() => undefined)
+      removeRuntimeAuthFiles(statePath, metadataPath)
+      throw new Error('Failed to establish isolated runtime authentication state for Recipe Genie')
     }
-  }, { scope: 'worker' }],
+
+    try {
+      await use(statePath)
+    } finally {
+      removeRuntimeAuthFiles(statePath, metadataPath)
+    }
+  },
 
   setupAuth: async ({ page }, use) => {
     const setup = async () => {
-      assertE2EEnv()
-
       await page.goto('/')
       const initialState = await waitForRecipeGenieSurface(page, 45000)
 
@@ -183,31 +163,10 @@ export const test = base.extend<RecipeGenieFixtures, WorkerFixtures>({
         return
       }
 
-      if (initialState === 'auth') {
-        await signInToRecipeGenie(page, TEST_USER)
-        await assertRecipeGenieAppShell(page, 45000)
-        await dismissOnboardingModal(page)
-        return
-      }
+      if (initialState === 'auth') throw new Error('Runtime authentication state was not accepted')
     }
 
     await use(setup)
-  },
-
-  signIn: async ({ page }, use) => {
-    const signIn = async (email = TEST_USER.email, password = TEST_USER.password) => {
-      assertE2EEnv()
-      await page.goto('/')
-
-      if (!(await isAuthFormReady(page))) {
-        await page.goto('/', { waitUntil: 'domcontentloaded' })
-      }
-
-      await signInToRecipeGenie(page, { email, password })
-      await assertRecipeGenieAppShell(page, 45000)
-    }
-
-    await use(signIn)
   },
 
   signOut: async ({ page }, use) => {
