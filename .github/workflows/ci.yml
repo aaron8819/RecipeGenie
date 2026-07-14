@@ -122,6 +122,9 @@ jobs:
             docker exec "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "$ASSERT_SQL"
           fi
 
+      - name: Run Database Security Contracts
+        run: supabase test db --local supabase/tests
+
       - name: Check Deterministic Schema-Type Drift
         working-directory: web
         run: npm run db:types:check

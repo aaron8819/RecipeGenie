@@ -35,5 +35,6 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1)
 }
 
-fs.writeFileSync(targetPath, result.stdout.replace(/\r\n/g, '\n'), 'utf8')
+const generatedTypes = `${result.stdout.replace(/\r\n/g, '\n').trimEnd()}\n`
+fs.writeFileSync(targetPath, generatedTypes, 'utf8')
 console.log(`Generated Supabase types at ${targetPath}.`)

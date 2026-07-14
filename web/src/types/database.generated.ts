@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.1"
-  }
   public: {
     Tables: {
       pantry_items: {
@@ -77,13 +72,13 @@ export type Database = {
         }
         Insert: {
           date_made?: string
-          id?: number
+          id?: never
           recipe_id: string
           user_id: string
         }
         Update: {
           date_made?: string
-          id?: number
+          id?: never
           recipe_id?: string
           user_id?: string
         }
@@ -320,12 +315,9 @@ export type Database = {
     }
     Functions: {
       accept_recipe_share: { Args: { p_share_id: string }; Returns: string }
-      delete_tag: {
-        Args: { p_tag: string; p_user_id: string }
-        Returns: undefined
-      }
+      delete_tag: { Args: { p_tag: string }; Returns: undefined }
       filter_recipes_by_tags: {
-        Args: { p_tags: string[]; p_user_id: string }
+        Args: { p_tags: string[] }
         Returns: {
           category: string
           cook_time_minutes: number | null
@@ -353,19 +345,15 @@ export type Database = {
         }
       }
       get_recipe_history_stats: {
-        Args: { p_user_id: string }
+        Args: never
         Returns: {
           last_made: string
           recipe_id: string
           times_made: number
         }[]
       }
-      insert_default_recipes_for_user: {
-        Args: { p_user_id: string }
-        Returns: undefined
-      }
       merge_tags: {
-        Args: { p_source_tag: string; p_target_tag: string; p_user_id: string }
+        Args: { p_source_tag: string; p_target_tag: string }
         Returns: undefined
       }
       move_shopping_item_to_pantry: {
@@ -378,7 +366,7 @@ export type Database = {
         }[]
       }
       rename_tag: {
-        Args: { p_new_tag: string; p_old_tag: string; p_user_id: string }
+        Args: { p_new_tag: string; p_old_tag: string }
         Returns: undefined
       }
       toggle_shopping_item_checked: {

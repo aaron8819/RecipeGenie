@@ -284,9 +284,7 @@ export function useRecipeHistoryStats() {
     queryKey: getRecipeHistoryStatsQueryKey(),
     queryFn: async () => {
       const supabase = getSupabase()
-      const { data, error } = await supabase.rpc("get_recipe_history_stats", {
-        p_user_id: user!.id,
-      })
+      const { data, error } = await supabase.rpc("get_recipe_history_stats")
 
       if (error) throw error
       return (data as RecipeHistoryStatsRow[]) || []

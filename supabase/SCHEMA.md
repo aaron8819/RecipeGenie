@@ -408,38 +408,18 @@ Automatically updates the `updated_at` timestamp when a row is modified.
 
 **Usage:** Used by trigger on `recipes` table.
 
-### insert_default_recipes_for_user(p_user_id UUID)
-
-Inserts default recipes for a new user when they sign up. Creates 9 default recipes:
-1. 4-Ingredient Mac & Cheese (vegetarian)
-2. Beef and Broccoli (beef, favorite)
-3. Lamb Meatball Gyros (lamb)
-4. Mediterranean Meatballs (turkey, favorite)
-5. Mexican Street Tacos (chicken, favorite)
-6. Teriyaki Chicken and Broccoli Rice Bowls (chicken, favorite)
-7. Thai Basil Fried Rice (chicken, favorite)
-8. Turkey Burger (turkey)
-
-Also creates default `user_config` and empty `shopping_list` for the user.
-
-**Parameters:**
-- `p_user_id` (UUID) - The user ID to create recipes for
-
-**Returns:** `void`
-
-**Language:** `plpgsql SECURITY DEFINER`
-
-**Security:** Runs with elevated privileges to insert data for any user.
-
 ### handle_new_user()
 
-Trigger function that calls `insert_default_recipes_for_user()` when a new user is created in `auth.users`. Includes error handling to ensure user creation succeeds even if default recipe insertion fails.
+Trusted `auth.users` insert trigger that creates the new account's `user_config`,
+empty `shopping_list`, and three starter recipes. The target identity comes only
+from `NEW.id`; there is no caller-selectable default-seeding RPC.
 
 **Returns:** `TRIGGER`
 
 **Language:** `plpgsql SECURITY DEFINER`
 
-**Security:** Runs with elevated privileges with explicit `SET search_path = public`.
+**Security:** Runs with elevated privileges, an empty `search_path`, a guard that
+requires the `auth.users` insert trigger context, and no Data API execution grants.
 
 **Error Handling:** Wraps recipe insertion in a BEGIN/EXCEPTION block to log errors as warnings without failing the user creation transaction.
 
@@ -469,16 +449,27 @@ alongside the legacy flat `instructions` payload.
 
 **Language:** `plpgsql SECURITY DEFINER`
 
-### get_recipe_history_stats(p_user_id UUID)
+**Security:** Uses `auth.uid()` as the recipient identity, has an empty
+`search_path`, and is executable only by `authenticated`.
+
+### get_recipe_history_stats()
 
 Returns per-recipe aggregate history for UI surfaces that only need counts and the most recent cook date.
 
-**Parameters:**
-- `p_user_id` (UUID) - The user whose history should be aggregated
-
 **Returns:** `TABLE(recipe_id TEXT, times_made INTEGER, last_made TIMESTAMPTZ)`
 
-**Language:** `sql STABLE SECURITY DEFINER`
+**Language:** `plpgsql STABLE SECURITY INVOKER`
+
+**Security:** Derives the owner from `auth.uid()`, rejects unauthenticated
+execution, and remains subject to table RLS.
+
+### Tag RPCs
+
+`filter_recipes_by_tags(p_tags TEXT[])`, `rename_tag(p_old_tag TEXT, p_new_tag
+TEXT)`, `merge_tags(p_source_tag TEXT, p_target_tag TEXT)`, and
+`delete_tag(p_tag TEXT)` derive identity from `auth.uid()`. They are
+`SECURITY INVOKER` functions with empty `search_path`, table RLS enabled, and
+execution granted only to `authenticated`.
 
 ### toggle_shopping_item_checked(p_row_id TEXT)
 
@@ -580,6 +571,8 @@ The repository now uses a baseline-first bootstrap strategy:
 1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap through the pantry row-id baseline cut on 2026-03-09.
 2. **002_recipe_structure_parity.sql** - Added first-class recipe time fields, first-class recipe notes, additive grouped-instruction persistence, and share-acceptance parity for those fields.
 3. **003_shopping_item_order_preferences.sql** - Added `shopping_item_order` to `user_config` for learned within-category shopping item order preferences.
+4. **004_reconcile_production_schema_to_main.sql** - Guardedly reconciled the abandoned recipe-audit branch and restored canonical user-key constraints.
+5. **005_secure_privileged_rpcs.sql** - Removed caller-selected user identities, dropped unsafe overloads, moved user RPCs to RLS-backed invoker execution, and hardened the remaining definer functions and grants.
 
 Legacy notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.

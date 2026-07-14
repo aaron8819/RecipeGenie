@@ -108,14 +108,7 @@ export function useRecipes(options?: {
       // Supabase .contains() is AND-only; the RPC uses && (array overlap) for OR.
       if (options?.tags && options.tags.length > 0) {
         if (!user) return []
-        const filterTagsRpcClient = supabase as unknown as {
-          rpc: (
-            fn: "filter_recipes_by_tags",
-            args: { p_user_id: string; p_tags: string[] }
-          ) => Promise<{ data: Recipe[] | null; error: { message: string } | null }>
-        }
-        const { data, error } = await filterTagsRpcClient.rpc('filter_recipes_by_tags', {
-          p_user_id: user.id,
+        const { data, error } = await supabase.rpc('filter_recipes_by_tags', {
           p_tags: options.tags,
         })
         if (error) throw error
@@ -657,19 +650,11 @@ export function useBulkUpdateRecipeCategories() {
  */
 export function useRenameTag() {
   const queryClient = useQueryClient()
-  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ oldTag, newTag }: { oldTag: string; newTag: string }) => {
       const supabase = getSupabase()
-      const renameTagRpcClient = supabase as unknown as {
-        rpc: (
-          fn: "rename_tag",
-          args: { p_user_id: string; p_old_tag: string; p_new_tag: string }
-        ) => Promise<{ error: { message: string } | null }>
-      }
-      const { error } = await renameTagRpcClient.rpc("rename_tag", {
-        p_user_id: user!.id,
+      const { error } = await supabase.rpc("rename_tag", {
         p_old_tag: oldTag,
         p_new_tag: newTag,
       })
@@ -689,22 +674,14 @@ export function useRenameTag() {
  */
 export function useMergeTags() {
   const queryClient = useQueryClient()
-  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async ({ sourceTags, targetTag }: { sourceTags: string[]; targetTag: string }) => {
       const supabase = getSupabase()
-      const mergeTagsRpcClient = supabase as unknown as {
-        rpc: (
-          fn: "merge_tags",
-          args: { p_user_id: string; p_source_tag: string; p_target_tag: string }
-        ) => Promise<{ error: { message: string } | null }>
-      }
       // One RPC call per source tag (O(S) requests instead of O(S*N))
       const results = await Promise.all(
         sourceTags.map((sourceTag) =>
-          mergeTagsRpcClient.rpc("merge_tags", {
-            p_user_id: user!.id,
+          supabase.rpc("merge_tags", {
             p_source_tag: sourceTag,
             p_target_tag: targetTag,
           })
@@ -727,19 +704,11 @@ export function useMergeTags() {
  */
 export function useDeleteTag() {
   const queryClient = useQueryClient()
-  const { user } = useAuthContext()
 
   return useMutation({
     mutationFn: async (tag: string) => {
       const supabase = getSupabase()
-      const deleteTagRpcClient = supabase as unknown as {
-        rpc: (
-          fn: "delete_tag",
-          args: { p_user_id: string; p_tag: string }
-        ) => Promise<{ error: { message: string } | null }>
-      }
-      const { error } = await deleteTagRpcClient.rpc("delete_tag", {
-        p_user_id: user!.id,
+      const { error } = await supabase.rpc("delete_tag", {
         p_tag: tag,
       })
       if (error) throw error
