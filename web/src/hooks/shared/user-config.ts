@@ -6,9 +6,8 @@ import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import { DEFAULT_USER_CONFIG, resolveUserConfig } from "@/lib/user-config"
 import { normalizePantryItemName } from "@/lib/pantry"
+import { configurationKeys, principalId } from "@/lib/query-keys"
 
-export const CONFIG_KEY = ["user_config"]
-const CATEGORY_QUERY_KEY = [...CONFIG_KEY, "categories"]
 const DEFAULT_CATEGORY_ORDER = ["chicken", "beef", "lamb", "turkey", "vegetarian"]
 export const USER_CONFIG_WRITE_SCOPE_ID = "user-config-write"
 
@@ -24,20 +23,24 @@ function sortDefaultCategories(categories: string[]): string[] {
 }
 
 export function useUserConfig(options?: { enabled?: boolean }) {
+  const { user, loading } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+
   return useQuery({
-    queryKey: [...CONFIG_KEY],
+    queryKey: configurationKeys.detail(ownerUserId),
     queryFn: async () => {
       const supabase = getSupabase()
       const { data, error } = await supabase.from("user_config").select("*").single()
       return resolveUserConfig(data as UserConfig | null, error)
     },
-    enabled: options?.enabled ?? true,
+    enabled: !loading && !!user && (options?.enabled ?? true),
   })
 }
 
 export function useUpdateUserConfig() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async (updates: Partial<UserConfig>) => {
@@ -67,7 +70,7 @@ export function useUpdateUserConfig() {
       throw error
     },
     onSuccess: (data) => {
-      queryClient.setQueryData([...CONFIG_KEY], data)
+      queryClient.setQueryData(configurationKeys.detail(ownerUserId), data)
     },
   })
 }
@@ -101,9 +104,10 @@ function buildOptimisticUserConfig(
 export function useUpdateExcludedKeywords() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
-    scope: { id: USER_CONFIG_WRITE_SCOPE_ID },
+    scope: { id: `${USER_CONFIG_WRITE_SCOPE_ID}:${ownerUserId}` },
     mutationFn: async (keywords: string[]) => {
       const excludedKeywords = normalizeExcludedKeywords(keywords)
       const supabase = getSupabase()
@@ -142,36 +146,39 @@ export function useUpdateExcludedKeywords() {
     onMutate: async (keywords) => {
       const excludedKeywords = normalizeExcludedKeywords(keywords)
 
-      await queryClient.cancelQueries({ queryKey: [...CONFIG_KEY] })
-      const previousConfig = queryClient.getQueryData<UserConfig>([...CONFIG_KEY])
+      await queryClient.cancelQueries({ queryKey: configurationKeys.detail(ownerUserId) })
+      const previousConfig = queryClient.getQueryData<UserConfig>(configurationKeys.detail(ownerUserId))
 
       queryClient.setQueryData<UserConfig>(
-        [...CONFIG_KEY],
+        configurationKeys.detail(ownerUserId),
         buildOptimisticUserConfig(previousConfig, user!.id, excludedKeywords)
       )
 
-      return { previousConfig }
+      return { ownerUserId, previousConfig }
     },
     onError: (_error, _keywords, context) => {
       if (context?.previousConfig) {
-        queryClient.setQueryData([...CONFIG_KEY], context.previousConfig)
+        queryClient.setQueryData(configurationKeys.detail(ownerUserId), context.previousConfig)
         return
       }
 
-      queryClient.removeQueries({ queryKey: [...CONFIG_KEY], exact: true })
+      queryClient.removeQueries({ queryKey: configurationKeys.detail(ownerUserId), exact: true })
     },
     onSuccess: (data) => {
-      queryClient.setQueryData([...CONFIG_KEY], data)
+      queryClient.setQueryData(configurationKeys.detail(ownerUserId), data)
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: [...CONFIG_KEY] })
+      queryClient.invalidateQueries({ queryKey: configurationKeys.detail(ownerUserId) })
     },
   })
 }
 
 export function useCategories() {
+  const { user, loading } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+
   return useQuery({
-    queryKey: CATEGORY_QUERY_KEY,
+    queryKey: configurationKeys.categories(ownerUserId),
     queryFn: async () => {
       const supabase = getSupabase()
       const { data, error } = await supabase.from("user_config").select("categories").single()
@@ -188,5 +195,6 @@ export function useCategories() {
         : sortDefaultCategories(["chicken", "beef", "lamb", "turkey", "vegetarian"])
     },
     staleTime: Infinity,
+    enabled: !loading && !!user,
   })
 }

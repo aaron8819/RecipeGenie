@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 import { useCreateRecipe } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
+import { recipeKeys } from "@/lib/query-keys"
 
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: () => ({ user: { id: "user-1" } }),
@@ -58,8 +59,17 @@ describe("useCreateRecipe identity reconciliation", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     })
-    const recipesKey = ["recipes", "list"]
+    const filters = {
+      category: null,
+      search: null,
+      favoritesOnly: false,
+      tags: [] as string[],
+      limit: null,
+    }
+    const recipesKey = recipeKeys.list("user-1", filters)
+    const userBRecipesKey = recipeKeys.list("user-2", filters)
     queryClient.setQueryData(recipesKey, [])
+    queryClient.setQueryData(userBRecipesKey, [{ ...makeRecipe("b-recipe", "B Recipe"), user_id: "user-2" }])
 
     const pendingInsert = deferred<{ data: Recipe | null; error: { message: string } | null }>()
     insertSingleMock.mockReturnValueOnce(pendingInsert.promise)
@@ -107,6 +117,9 @@ describe("useCreateRecipe identity reconciliation", () => {
         id: "moms-best-pasta",
         name: "Mom's Best Pasta!",
       }),
+    ])
+    expect(queryClient.getQueryData<Recipe[]>(userBRecipesKey)).toEqual([
+      expect.objectContaining({ id: "b-recipe", user_id: "user-2" }),
     ])
     expect(insertMock).toHaveBeenCalledWith(
       expect.objectContaining({

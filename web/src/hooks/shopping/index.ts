@@ -51,4 +51,4 @@ export {
 export { useShoppingPendingActions } from "./use-shopping-pending-actions"
 
 // Re-export shared constants for advanced usage
-export { SHOPPING_KEY, PANTRY_KEY, CONFIG_KEY } from "./shared"
+export { shoppingKeys, pantryKeys, configurationKeys } from "@/lib/query-keys"

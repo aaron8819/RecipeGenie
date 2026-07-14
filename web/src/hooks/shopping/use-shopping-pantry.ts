@@ -15,6 +15,7 @@ import { sortShoppingItemsByPreferences } from "@/lib/shopping-item-order"
 import { normalizePantryItemName } from "@/lib/pantry"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
+import { configurationKeys, pantryKeys, principalId, shoppingKeys } from "@/lib/query-keys"
 import {
   cancelQueriesAndSnapshot,
   cancelQueriesAndSnapshotMany,
@@ -23,9 +24,6 @@ import {
   rollbackQueryData,
   rollbackQueryDataMany,
   setOptimisticQueryData,
-  CONFIG_KEY,
-  SHOPPING_KEY,
-  PANTRY_KEY,
   SHOPPING_LIST_WRITE_SCOPE_ID,
 } from "./shared"
 import { fetchShoppingItemOrderConfig } from "./user-config-read"
@@ -36,9 +34,12 @@ import { fetchShoppingItemOrderConfig } from "./user-config-read"
 export function useMoveToShoppingList() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const shoppingKey = shoppingKeys.detail(ownerUserId)
+  const configKey = configurationKeys.detail(ownerUserId)
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${ownerUserId}` },
     mutationFn: async (item: ShoppingItem) => {
       const rowId = requireShoppingRowId(item, "pantry restore shopping item")
 
@@ -81,13 +82,13 @@ export function useMoveToShoppingList() {
     },
     onMutate: async (item) => {
       const { previousData: previousList } =
-        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, shoppingKey)
 
       const rowId = requireShoppingRowId(item, "optimistic pantry restore shopping item")
 
       setOptimisticQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) return old
 
@@ -99,7 +100,7 @@ export function useMoveToShoppingList() {
           if (!updatedItems.some((candidate) => candidate.rowId === rowId)) {
             updatedItems = [...updatedItems, restoredItem]
             if (!old.custom_order) {
-              const config = queryClient.getQueryData<UserConfig>([...CONFIG_KEY])
+              const config = queryClient.getQueryData<UserConfig>(configKey)
               updatedItems = sortShoppingItemsByPreferences(updatedItems, config?.shopping_item_order)
             }
           }
@@ -112,13 +113,13 @@ export function useMoveToShoppingList() {
         }
       )
 
-      return { previousList }
+      return { ownerUserId, previousList }
     },
     onError: (err, item, context) => {
-      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
+      rollbackQueryData(queryClient, shoppingKey, context?.previousList)
     },
     onSuccess: () => {
-      return invalidateQuery(queryClient, SHOPPING_KEY)
+      return invalidateQuery(queryClient, shoppingKey)
     },
   })
 }
@@ -129,9 +130,12 @@ export function useMoveToShoppingList() {
 export function useMoveExcludedToShoppingList() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const shoppingKey = shoppingKeys.detail(ownerUserId)
+  const configKey = configurationKeys.detail(ownerUserId)
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${ownerUserId}` },
     mutationFn: async (item: ShoppingItem) => {
       const rowId = requireShoppingRowId(item, "excluded restore shopping item")
 
@@ -174,13 +178,13 @@ export function useMoveExcludedToShoppingList() {
     },
     onMutate: async (item) => {
       const { previousData: previousList } =
-        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, shoppingKey)
 
       const rowId = requireShoppingRowId(item, "optimistic excluded restore shopping item")
 
       setOptimisticQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) return old
 
@@ -192,7 +196,7 @@ export function useMoveExcludedToShoppingList() {
           if (!updatedItems.some((candidate) => candidate.rowId === rowId)) {
             updatedItems = [...updatedItems, restoredItem]
             if (!old.custom_order) {
-              const config = queryClient.getQueryData<UserConfig>([...CONFIG_KEY])
+              const config = queryClient.getQueryData<UserConfig>(configKey)
               updatedItems = sortShoppingItemsByPreferences(updatedItems, config?.shopping_item_order)
             }
           }
@@ -205,13 +209,13 @@ export function useMoveExcludedToShoppingList() {
         }
       )
 
-      return { previousList }
+      return { ownerUserId, previousList }
     },
     onError: (err, item, context) => {
-      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
+      rollbackQueryData(queryClient, shoppingKey, context?.previousList)
     },
     onSuccess: () => {
-      return invalidateQuery(queryClient, SHOPPING_KEY)
+      return invalidateQuery(queryClient, shoppingKey)
     },
   })
 }
@@ -223,9 +227,12 @@ export function useMoveExcludedToShoppingList() {
 export function useAddToPantryAndRemove() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const shoppingKey = shoppingKeys.detail(ownerUserId)
+  const pantryKey = pantryKeys.list(ownerUserId)
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${ownerUserId}` },
     mutationFn: async (item: ShoppingItem) => {
       const rowId = requireShoppingRowId(item, "pantry move shopping item")
       const normalizedItem = normalizePantryItemName(item.item)
@@ -286,8 +293,8 @@ export function useAddToPantryAndRemove() {
         previousList: ShoppingList
         previousPantry: PantryItem[]
       }>(queryClient, {
-        previousList: SHOPPING_KEY,
-        previousPantry: PANTRY_KEY,
+        previousList: shoppingKey,
+        previousPantry: pantryKey,
       })
 
       const rowId = requireShoppingRowId(item, "optimistic pantry move shopping item")
@@ -299,7 +306,7 @@ export function useAddToPantryAndRemove() {
 
       setOptimisticQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) return old
           const alreadyHave = old.already_have || []
@@ -324,7 +331,7 @@ export function useAddToPantryAndRemove() {
       }
       setOptimisticQueryData<PantryItem[]>(
         queryClient,
-        PANTRY_KEY,
+        pantryKey,
         (old) => {
           if (!old) return [optimisticItem]
           if (old.some((p) => p.item === normalizedItem)) return old
@@ -332,14 +339,14 @@ export function useAddToPantryAndRemove() {
         }
       )
 
-      return { previousList, previousPantry }
+      return { ownerUserId, previousList, previousPantry }
     },
     onError: (err, item, context) => {
       rollbackQueryDataMany(
         queryClient,
         {
-          previousList: SHOPPING_KEY,
-          previousPantry: PANTRY_KEY,
+          previousList: shoppingKey,
+          previousPantry: pantryKey,
         },
         {
           previousList: context?.previousList,
@@ -350,7 +357,7 @@ export function useAddToPantryAndRemove() {
     onSuccess: (result) => {
       reconcileQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) return old
 
@@ -382,7 +389,7 @@ export function useAddToPantryAndRemove() {
         const pantryItem = result.pantryItem
         reconcileQueryData<PantryItem[]>(
           queryClient,
-          PANTRY_KEY,
+          pantryKey,
           (old) => {
             const pantryRow: PantryItem = {
               id: pantryItem.id,

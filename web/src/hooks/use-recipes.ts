@@ -7,15 +7,15 @@ import { useAuthContext } from "@/lib/auth-context"
 import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
+import { configurationKeys, principalId, recipeKeys } from "@/lib/query-keys"
 import {
   normalizeRecipeInstructionGroups,
   normalizeRecipeNotes,
 } from "@/lib/recipe-structure"
 
-const RECIPES_KEY = ["recipes"]
 export { useCategories } from "@/hooks/shared/user-config"
 
-function buildRecipesKey(options?: {
+function buildRecipesKey(userId: string, options?: {
   category?: string | null
   search?: string | null
   favoritesOnly?: boolean
@@ -23,16 +23,13 @@ function buildRecipesKey(options?: {
   limit?: number
 }) {
   const normalizedTags = options?.tags ? [...options.tags].sort() : []
-  return [
-    ...RECIPES_KEY,
-    {
+  return recipeKeys.list(userId, {
       category: options?.category ?? null,
       search: options?.search ?? null,
       favoritesOnly: options?.favoritesOnly ?? false,
       tags: normalizedTags,
       limit: options?.limit ?? null,
-    },
-  ]
+  })
 }
 
 export function normalizeRecipeUpdates(updates: RecipeUpdate): RecipeUpdate {
@@ -68,10 +65,11 @@ function updateRecipeQuery(
 
 function findRecipeInCache(
   queryClient: ReturnType<typeof useQueryClient>,
+  userId: string,
   id: string
 ): Recipe | undefined {
   const queries = queryClient.getQueriesData<Recipe[] | Recipe | null>({
-    queryKey: RECIPES_KEY,
+    queryKey: recipeKeys.all(userId),
   })
 
   for (const [, data] of queries) {
@@ -97,10 +95,11 @@ export function useRecipes(options?: {
   tags?: string[]
   limit?: number
 }) {
-  const { user } = useAuthContext()
+  const { user, loading } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useQuery({
-    queryKey: buildRecipesKey(options),
+    queryKey: buildRecipesKey(ownerUserId, options),
     queryFn: async () => {
       const supabase = getSupabase()
 
@@ -156,6 +155,7 @@ export function useRecipes(options?: {
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000, // Consider data fresh for 30 seconds
+    enabled: !loading && !!user,
   })
 }
 
@@ -164,10 +164,11 @@ export function useRecipes(options?: {
  */
 export function useRecipe(id: string | null) {
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
   const queryClient = useQueryClient()
 
   return useQuery({
-    queryKey: [...RECIPES_KEY, id],
+    queryKey: recipeKeys.detail(ownerUserId, id),
     queryFn: async () => {
       if (!id || !user) return null
 
@@ -182,7 +183,7 @@ export function useRecipe(id: string | null) {
       if (error) throw error
       return data as Recipe
     },
-    initialData: id ? findRecipeInCache(queryClient, id) : undefined,
+    initialData: id ? findRecipeInCache(queryClient, ownerUserId, id) : undefined,
     enabled: !!id && !!user,
     staleTime: 30 * 1000,
   })
@@ -195,6 +196,8 @@ export function useRecipe(id: string | null) {
 export function useCreateRecipe() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const recipesKey = recipeKeys.all(ownerUserId)
 
   return useMutation({
     mutationFn: async (recipe: Omit<RecipeInsert, "id" | "user_id">) => {
@@ -220,10 +223,10 @@ export function useCreateRecipe() {
     // Optimistic update
     onMutate: async (recipe) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+      await queryClient.cancelQueries({ queryKey: recipesKey })
 
       // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: recipesKey })
 
       // Create optimistic recipe
       const id = sanitizeRecipeNameForStorage(recipe.name)
@@ -252,7 +255,7 @@ export function useCreateRecipe() {
 
       // Optimistically add to all recipe queries
       queryClient.setQueriesData<Recipe[] | Recipe | null>(
-        { queryKey: RECIPES_KEY },
+        { queryKey: recipesKey },
         (old) => {
           if (Array.isArray(old)) {
             return [...old, optimisticRecipe].sort((a, b) => {
@@ -266,7 +269,7 @@ export function useCreateRecipe() {
         }
       )
 
-      return { previousQueries }
+      return { ownerUserId, previousQueries }
     },
     onError: (err, variables, context) => {
       // Rollback on error
@@ -279,7 +282,7 @@ export function useCreateRecipe() {
     onSuccess: (newRecipe) => {
       // Update with server response (replace optimistic with real data)
       queryClient.setQueriesData<Recipe[] | Recipe | null>(
-        { queryKey: RECIPES_KEY },
+        { queryKey: recipesKey },
         (old) => {
           if (Array.isArray(old)) {
             // Replace optimistic recipe with server response
@@ -298,12 +301,11 @@ export function useCreateRecipe() {
         }
       )
       // Invalidate tags queries to refresh tag lists
-      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
   })
 }
@@ -315,6 +317,8 @@ export function useCreateRecipe() {
 export function useUpdateRecipe() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const recipesKey = recipeKeys.all(ownerUserId)
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: RecipeUpdate }) => {
@@ -345,16 +349,16 @@ export function useUpdateRecipe() {
     // Optimistic update
     onMutate: async ({ id, updates }) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+      await queryClient.cancelQueries({ queryKey: recipesKey })
 
       // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: recipesKey })
 
       const normalizedUpdates = normalizeRecipeUpdates(updates)
 
       // Optimistically update all recipe queries
       queryClient.setQueriesData<Recipe[] | Recipe | null>(
-        { queryKey: RECIPES_KEY },
+        { queryKey: recipesKey },
         (old) => updateRecipeQuery(
           old as Recipe[] | Recipe | null | undefined,
           (r) => r.id === id 
@@ -363,7 +367,7 @@ export function useUpdateRecipe() {
         )
       )
 
-      return { previousQueries }
+      return { ownerUserId, previousQueries }
     },
     onError: (err, variables, context) => {
       // Rollback on error
@@ -376,19 +380,18 @@ export function useUpdateRecipe() {
     onSuccess: (updated) => {
       // Update with server response
       queryClient.setQueriesData<Recipe[] | Recipe | null>(
-        { queryKey: RECIPES_KEY },
+        { queryKey: recipesKey },
         (old) => updateRecipeQuery(
           old as Recipe[] | Recipe | null | undefined,
           (r) => r.id === updated.id ? updated : r
         )
       )
       // Invalidate tags queries to refresh tag lists
-      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
   })
 }
@@ -400,6 +403,8 @@ export function useUpdateRecipe() {
 export function useDeleteRecipe() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const recipesKey = recipeKeys.all(ownerUserId)
 
   return useMutation({
     mutationFn: async (id: string) => {
@@ -411,14 +416,14 @@ export function useDeleteRecipe() {
     // Optimistic update
     onMutate: async (id) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+      await queryClient.cancelQueries({ queryKey: recipesKey })
 
       // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: recipesKey })
 
       // Optimistically remove from all recipe queries
       queryClient.setQueriesData<Recipe[] | Recipe | null>(
-        { queryKey: RECIPES_KEY },
+        { queryKey: recipesKey },
         (old) => {
           if (Array.isArray(old)) {
             return old.filter((r) => r.id !== id)
@@ -431,7 +436,7 @@ export function useDeleteRecipe() {
         }
       )
 
-      return { previousQueries }
+      return { ownerUserId, previousQueries }
     },
     onError: (err, id, context) => {
       // Rollback on error
@@ -443,12 +448,11 @@ export function useDeleteRecipe() {
     },
     onSuccess: (deletedId) => {
       // Invalidate tags queries to refresh tag lists
-      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
   })
 }
@@ -460,6 +464,8 @@ export function useDeleteRecipe() {
 export function useToggleFavorite() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const recipesKey = recipeKeys.all(ownerUserId)
 
   return useMutation({
     mutationFn: async ({ id, favorite }: { id: string; favorite: boolean }) => {
@@ -488,21 +494,21 @@ export function useToggleFavorite() {
     // Optimistic update
     onMutate: async ({ id, favorite }) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: RECIPES_KEY })
+      await queryClient.cancelQueries({ queryKey: recipesKey })
 
       // Snapshot previous values for rollback
-      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: RECIPES_KEY })
+      const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: recipesKey })
 
       // Optimistically update all recipe queries
       queryClient.setQueriesData<Recipe[] | Recipe | null>(
-        { queryKey: RECIPES_KEY },
+        { queryKey: recipesKey },
         (old) => updateRecipeQuery(
           old as Recipe[] | Recipe | null | undefined,
           (r) => r.id === id ? { ...r, favorite: !favorite } : r
         )
       )
 
-      return { previousQueries }
+      return { ownerUserId, previousQueries }
     },
     onError: (err, variables, context) => {
       // Rollback on error
@@ -515,7 +521,7 @@ export function useToggleFavorite() {
     onSuccess: (updated) => {
       // Update with server response
       queryClient.setQueriesData<Recipe[] | Recipe | null>(
-        { queryKey: RECIPES_KEY },
+        { queryKey: recipesKey },
         (old) => updateRecipeQuery(
           old as Recipe[] | Recipe | null | undefined,
           (r) => r.id === updated.id ? updated : r
@@ -524,7 +530,7 @@ export function useToggleFavorite() {
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
   })
 }
@@ -580,6 +586,8 @@ export function useCategoryHasRecipes(categoryName: string | null) {
  */
 export function useUpdateCategories() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
   const updateConfig = useUpdateUserConfig()
 
   return useMutation({
@@ -597,9 +605,9 @@ export function useUpdateCategories() {
     },
     onSuccess: () => {
       // Invalidate categories query
-      queryClient.invalidateQueries({ queryKey: ["user_config", "categories"] })
+      queryClient.invalidateQueries({ queryKey: configurationKeys.categories(ownerUserId) })
       // Also invalidate config query
-      queryClient.invalidateQueries({ queryKey: ["user_config"] })
+      queryClient.invalidateQueries({ queryKey: configurationKeys.all(ownerUserId) })
     },
   })
 }
@@ -610,6 +618,7 @@ export function useUpdateCategories() {
 export function useBulkUpdateRecipeCategories() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({
@@ -640,7 +649,7 @@ export function useBulkUpdateRecipeCategories() {
     },
     onSuccess: () => {
       // Invalidate all recipe queries
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: recipeKeys.all(ownerUserId) })
     },
   })
 }
@@ -650,6 +659,8 @@ export function useBulkUpdateRecipeCategories() {
  */
 export function useRenameTag() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const recipesKey = recipeKeys.all(principalId(user?.id))
 
   return useMutation({
     mutationFn: async ({ oldTag, newTag }: { oldTag: string; newTag: string }) => {
@@ -662,9 +673,7 @@ export function useRenameTag() {
     },
     onSuccess: () => {
       // Invalidate all recipe queries and tag queries
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
   })
 }
@@ -674,6 +683,8 @@ export function useRenameTag() {
  */
 export function useMergeTags() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const recipesKey = recipeKeys.all(principalId(user?.id))
 
   return useMutation({
     mutationFn: async ({ sourceTags, targetTag }: { sourceTags: string[]; targetTag: string }) => {
@@ -692,9 +703,7 @@ export function useMergeTags() {
     },
     onSuccess: () => {
       // Invalidate all recipe queries and tag queries
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
   })
 }
@@ -704,6 +713,8 @@ export function useMergeTags() {
  */
 export function useDeleteTag() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const recipesKey = recipeKeys.all(principalId(user?.id))
 
   return useMutation({
     mutationFn: async (tag: string) => {
@@ -715,9 +726,7 @@ export function useDeleteTag() {
     },
     onSuccess: () => {
       // Invalidate all recipe queries and tag queries
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "all-tags"] })
-      queryClient.invalidateQueries({ queryKey: ["recipes", "tags-with-counts"] })
+      queryClient.invalidateQueries({ queryKey: recipesKey })
     },
   })
 }

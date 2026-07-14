@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { renderHook, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { UserConfig } from "@/types/database"
-import { CONFIG_KEY, useUpdateExcludedKeywords } from "@/hooks/shared/user-config"
+import { useUpdateExcludedKeywords } from "@/hooks/shared/user-config"
+import { configurationKeys } from "@/lib/query-keys"
+
+const CONFIG_KEY = configurationKeys.detail("user-1")
 
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: vi.fn(() => ({ user: { id: "user-1" } })),

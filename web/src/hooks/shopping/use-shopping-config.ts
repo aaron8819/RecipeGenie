@@ -8,14 +8,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { UserConfig } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { CONFIG_KEY } from "./shared"
+import { configurationKeys, principalId } from "@/lib/query-keys"
 
 /**
  * Hook to fetch user config for shopping settings
  */
 export function useShoppingConfig() {
+  const { user, loading } = useAuthContext()
   return useQuery({
-    queryKey: [...CONFIG_KEY],
+    queryKey: configurationKeys.detail(principalId(user?.id)),
     queryFn: async () => {
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -26,6 +27,7 @@ export function useShoppingConfig() {
       if (error) throw error
       return data as UserConfig | null
     },
+    enabled: !loading && !!user,
   })
 }
 
@@ -68,7 +70,7 @@ export function useUpdateShoppingConfig() {
       return updates
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CONFIG_KEY })
+      queryClient.invalidateQueries({ queryKey: configurationKeys.detail(principalId(user?.id)) })
     },
   })
 }

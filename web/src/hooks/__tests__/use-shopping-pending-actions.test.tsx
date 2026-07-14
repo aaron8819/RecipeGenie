@@ -3,8 +3,15 @@ import { act, renderHook } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ShoppingItem, ShoppingList } from "@/types/database"
-import { SHOPPING_KEY } from "@/hooks/shopping/shared"
+import { shoppingKeys } from "@/lib/query-keys"
 import { useShoppingPendingActions } from "@/hooks/shopping/use-shopping-pending-actions"
+import { setActivePrincipalId } from "@/lib/principal-session"
+
+const SHOPPING_KEY = shoppingKeys.detail("test-user-id")
+
+vi.mock("@/lib/auth-context", () => ({
+  useAuthContext: () => ({ user: { id: "test-user-id" } }),
+}))
 
 type ToastOptions = {
   message: string
@@ -80,6 +87,7 @@ function flushPromises() {
 }
 
 beforeEach(() => {
+  setActivePrincipalId("test-user-id")
   vi.useFakeTimers()
   shownToasts.length = 0
   dismissToast.mockReset()
@@ -357,6 +365,30 @@ describe("useShoppingPendingActions", () => {
     await flushPromises()
 
     expect(removeItemCommit).toHaveBeenCalledTimes(1)
+    expect(dismissToast).toHaveBeenCalledTimes(1)
+  })
+
+  it("discards pending actions when unmounted by a principal transition", async () => {
+    const { wrapper } = createWrapper()
+    const removeItemCommit = vi.fn(async () => undefined)
+    const { result, unmount } = renderHook(
+      () => useShoppingPendingActions({
+        removeItemCommit: { mutateAsync: removeItemCommit },
+        removeRecipeCommit: { mutateAsync: vi.fn(async () => undefined) },
+        clearListCommit: { mutateAsync: vi.fn(async () => undefined) },
+      }),
+      { wrapper }
+    )
+
+    act(() => {
+      result.current.enqueueRemoveItem(makeItem("garlic", { rowId: "row-garlic" }))
+      setActivePrincipalId("user-b")
+    })
+    unmount()
+    vi.advanceTimersByTime(5000)
+    await flushPromises()
+
+    expect(removeItemCommit).not.toHaveBeenCalled()
     expect(dismissToast).toHaveBeenCalledTimes(1)
   })
 })

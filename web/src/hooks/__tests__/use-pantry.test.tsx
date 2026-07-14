@@ -4,11 +4,13 @@ import { renderHook, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PantryItem } from "@/types/database"
 import {
-  PANTRY_KEY,
   useAddPantryItems,
   useRemovePantryItem,
   useRestorePantryItem,
 } from "@/hooks/use-pantry"
+import { pantryKeys } from "@/lib/query-keys"
+
+const PANTRY_KEY = pantryKeys.list("user-1")
 
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: vi.fn(() => ({ user: { id: "user-1" } })),

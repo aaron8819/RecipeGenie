@@ -12,7 +12,8 @@ import { normalizeShoppingItemOrderPreferences } from "@/lib/shopping-item-order
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import { principalId, shoppingKeys } from "@/lib/query-keys"
+import { SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 import { fetchShoppingGenerationConfig } from "./user-config-read"
 
 /**
@@ -22,7 +23,7 @@ export function useShoppingList() {
   const { user } = useAuthContext()
 
   return useQuery({
-    queryKey: [...SHOPPING_KEY],
+    queryKey: shoppingKeys.detail(principalId(user?.id)),
     queryFn: async () => {
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -96,7 +97,7 @@ export function useGenerateShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
       const supabase = getSupabase()
 
@@ -169,7 +170,7 @@ export function useGenerateShoppingList() {
       return shoppingListData as ShoppingList
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      queryClient.invalidateQueries({ queryKey: shoppingKeys.detail(principalId(user?.id)) })
     },
   })
 }
@@ -182,7 +183,7 @@ export function useSaveShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (shoppingList: Partial<ShoppingList>) => {
       const supabase = getSupabase()
       // shopping_list.user_id is the PRIMARY KEY — upsert resolves in 1 RTT
@@ -196,7 +197,7 @@ export function useSaveShoppingList() {
       return shoppingList
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      queryClient.invalidateQueries({ queryKey: shoppingKeys.detail(principalId(user?.id)) })
     },
   })
 }
@@ -208,7 +209,7 @@ export function useClearShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async () => {
       const emptyList = {
         items: [],

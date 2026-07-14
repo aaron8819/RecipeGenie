@@ -9,6 +9,9 @@ import {
   getRecipeHistoryStatsQueryKey,
   useMarkRecipeMade,
 } from "@/hooks/use-planner"
+import { plannerKeys } from "@/lib/query-keys"
+
+const USER_ID = "test-user-id"
 
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: vi.fn(() => ({ user: { id: "test-user-id" } })),
@@ -61,13 +64,13 @@ beforeEach(() => {
 
 describe("history query keys", () => {
   it("keeps full, recent, and stats history caches distinct", () => {
-    expect(getRecipeHistoryQueryKey()).toEqual(["recipe_history"])
-    expect(getRecipeHistoryStatsQueryKey()).toEqual(["recipe_history", "stats"])
-    expect(getRecentRecipeHistoryQueryKey(7)).toEqual(["recipe_history", "recent", 7])
+    expect(getRecipeHistoryQueryKey(USER_ID)).toContain(USER_ID)
+    expect(getRecipeHistoryStatsQueryKey(USER_ID)).toContain(USER_ID)
+    expect(getRecentRecipeHistoryQueryKey(USER_ID, 7)).toContain(USER_ID)
   })
 
   it("varies recent-history cache keys by exclusion window", () => {
-    expect(getRecentRecipeHistoryQueryKey(7)).not.toEqual(getRecentRecipeHistoryQueryKey(14))
+    expect(getRecentRecipeHistoryQueryKey(USER_ID, 7)).not.toEqual(getRecentRecipeHistoryQueryKey(USER_ID, 14))
   })
 })
 
@@ -76,7 +79,7 @@ describe("useMarkRecipeMade", () => {
     const { wrapper, queryClient } = createWrapper()
     const weekDate = "2026-03-02"
 
-    queryClient.setQueryData(["weekly_plans", weekDate], makeWeeklyPlan({ week_date: weekDate, made_recipe_ids: [] }))
+    queryClient.setQueryData(plannerKeys.week(USER_ID, weekDate), makeWeeklyPlan({ week_date: weekDate, made_recipe_ids: [] }))
 
     mockSupabase.rpc
       .mockResolvedValueOnce({
@@ -106,14 +109,14 @@ describe("useMarkRecipeMade", () => {
       await result.current.mutateAsync({ recipeId: "recipe-1", weekDate, isMadeForWeek: false, dateMade: "2026-03-05T00:00:00.000Z" })
     })
 
-    let cached = queryClient.getQueryData<WeeklyPlan>(["weekly_plans", weekDate])
+    let cached = queryClient.getQueryData<WeeklyPlan>(plannerKeys.week(USER_ID, weekDate))
     expect(cached?.made_recipe_ids).toEqual(["recipe-1"])
 
     await act(async () => {
       await result.current.mutateAsync({ recipeId: "recipe-1", weekDate, isMadeForWeek: true })
     })
 
-    cached = queryClient.getQueryData<WeeklyPlan>(["weekly_plans", weekDate])
+    cached = queryClient.getQueryData<WeeklyPlan>(plannerKeys.week(USER_ID, weekDate))
     expect(cached?.made_recipe_ids).toEqual([])
 
     expect(mockSupabase.rpc).toHaveBeenNthCalledWith(1, "toggle_weekly_recipe_made", {
@@ -134,7 +137,7 @@ describe("useMarkRecipeMade", () => {
     const { wrapper, queryClient } = createWrapper()
     const weekDate = "2026-03-02"
 
-    queryClient.setQueryData(["weekly_plans", weekDate], makeWeeklyPlan({ week_date: weekDate, made_recipe_ids: [] }))
+    queryClient.setQueryData(plannerKeys.week(USER_ID, weekDate), makeWeeklyPlan({ week_date: weekDate, made_recipe_ids: [] }))
 
     mockSupabase.rpc
       .mockResolvedValueOnce({
@@ -167,7 +170,7 @@ describe("useMarkRecipeMade", () => {
       ])
     })
 
-    const cached = queryClient.getQueryData<WeeklyPlan>(["weekly_plans", weekDate])
+    const cached = queryClient.getQueryData<WeeklyPlan>(plannerKeys.week(USER_ID, weekDate))
     expect(cached?.made_recipe_ids).toEqual([])
   })
 })

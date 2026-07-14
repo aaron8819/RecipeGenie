@@ -20,14 +20,13 @@ import {
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
+import { configurationKeys, principalId, shoppingKeys } from "@/lib/query-keys"
 import {
   cancelQueriesAndSnapshot,
   invalidateQuery,
   reconcileQueryData,
   rollbackQueryData,
   setOptimisticQueryData,
-  CONFIG_KEY,
-  SHOPPING_KEY,
   SHOPPING_LIST_WRITE_SCOPE_ID,
 } from "./shared"
 import {
@@ -88,9 +87,10 @@ function sortItemsIfNeeded(
 export function useAddShoppingItem() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const shoppingKey = shoppingKeys.detail(principalId(user?.id))
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async ({ itemName, amount, unit }: { itemName: string; amount?: number; unit?: string }) => {
       const config = await fetchShoppingConfig()
       const categoryOverrides = config.category_overrides || {}
@@ -132,7 +132,7 @@ export function useAddShoppingItem() {
     },
     onMutate: async ({ itemName, amount, unit }) => {
       const { previousData: previousList } =
-        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, shoppingKey)
 
       const config = await fetchShoppingConfig()
       const categoryOverrides = config.category_overrides || {}
@@ -143,7 +143,7 @@ export function useAddShoppingItem() {
 
       setOptimisticQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) {
             return {
@@ -171,13 +171,13 @@ export function useAddShoppingItem() {
         }
       )
 
-      return { previousList }
+      return { ownerUserId: principalId(user?.id), previousList }
     },
     onError: (err, variables, context) => {
-      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
+      rollbackQueryData(queryClient, shoppingKey, context?.previousList)
     },
     onSuccess: () => {
-      return invalidateQuery(queryClient, SHOPPING_KEY)
+      return invalidateQuery(queryClient, shoppingKey)
     },
   })
 }
@@ -185,9 +185,10 @@ export function useAddShoppingItem() {
 export function useUpdateShoppingItem() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const shoppingKey = shoppingKeys.detail(principalId(user?.id))
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async ({
       item,
       updates,
@@ -245,7 +246,7 @@ export function useUpdateShoppingItem() {
     },
     onMutate: async ({ item, updates }) => {
       const { previousData: previousList } =
-        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, shoppingKey)
 
       const rowId = requireShoppingRowId(item, "optimistic update shopping item")
       const config = await fetchShoppingConfig()
@@ -260,7 +261,7 @@ export function useUpdateShoppingItem() {
       })
       const normalizedName = normalizeItemName(updates.itemName)
 
-      setOptimisticQueryData<ShoppingList>(queryClient, SHOPPING_KEY, (old) => {
+      setOptimisticQueryData<ShoppingList>(queryClient, shoppingKey, (old) => {
         if (!old) return old
         if (
           old.items.some(
@@ -283,13 +284,13 @@ export function useUpdateShoppingItem() {
         }
       })
 
-      return { previousList }
+      return { ownerUserId: principalId(user?.id), previousList }
     },
     onError: (_err, _variables, context) => {
-      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
+      rollbackQueryData(queryClient, shoppingKey, context?.previousList)
     },
     onSuccess: (result) => {
-      reconcileQueryData<ShoppingList>(queryClient, SHOPPING_KEY, (old) => {
+      reconcileQueryData<ShoppingList>(queryClient, shoppingKey, (old) => {
         if (!old) return old
         return {
           ...old,
@@ -312,7 +313,7 @@ export function useRemoveShoppingItem() {
   const { user } = useAuthContext()
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (rowId: string) => {
       const supabase = getSupabase()
       const { data: currentList, error: fetchError } = await supabase
@@ -350,9 +351,10 @@ export function useRemoveShoppingItem() {
 export function useCheckOffItem() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const shoppingKey = shoppingKeys.detail(principalId(user?.id))
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (item: ShoppingItem) => {
       const rowId = requireShoppingRowId(item, "checked shopping item")
       const supabase = getSupabase()
@@ -395,13 +397,13 @@ export function useCheckOffItem() {
     },
     onMutate: async (item) => {
       const { previousData: previousList } =
-        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, shoppingKey)
 
       const rowId = requireShoppingRowId(item, "optimistic checked shopping item")
 
       setOptimisticQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) return old
           return {
@@ -415,15 +417,15 @@ export function useCheckOffItem() {
         }
       )
 
-      return { previousList }
+      return { ownerUserId: principalId(user?.id), previousList }
     },
     onError: (err, item, context) => {
-      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
+      rollbackQueryData(queryClient, shoppingKey, context?.previousList)
     },
     onSuccess: (result) => {
       reconcileQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) return old
           return {
@@ -447,9 +449,10 @@ export function useCheckOffItem() {
 export function useBulkCheckOff() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const shoppingKey = shoppingKeys.detail(principalId(user?.id))
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (itemsToCheck: ShoppingItem[]) => {
       const rowIds = new Set(itemsToCheck.map((item) => requireShoppingRowId(item, "bulk checked shopping item")))
 
@@ -483,13 +486,13 @@ export function useBulkCheckOff() {
     },
     onMutate: async (itemsToCheck) => {
       const { previousData: previousList } =
-        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, SHOPPING_KEY)
+        await cancelQueriesAndSnapshot<ShoppingList>(queryClient, shoppingKey)
 
       const rowIds = new Set(itemsToCheck.map((item) => requireShoppingRowId(item, "optimistic bulk checked shopping item")))
 
       setOptimisticQueryData<ShoppingList>(
         queryClient,
-        SHOPPING_KEY,
+        shoppingKey,
         (old) => {
           if (!old) return old
           return {
@@ -503,13 +506,13 @@ export function useBulkCheckOff() {
         }
       )
 
-      return { previousList }
+      return { ownerUserId: principalId(user?.id), previousList }
     },
     onError: (err, itemsToCheck, context) => {
-      rollbackQueryData(queryClient, SHOPPING_KEY, context?.previousList)
+      rollbackQueryData(queryClient, shoppingKey, context?.previousList)
     },
     onSuccess: () => {
-      return invalidateQuery(queryClient, SHOPPING_KEY)
+      return invalidateQuery(queryClient, shoppingKey)
     },
   })
 }
@@ -520,9 +523,11 @@ export function useBulkCheckOff() {
 export function useReorderShoppingList() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const shoppingKey = shoppingKeys.detail(ownerUserId)
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${ownerUserId}` },
     mutationFn: async (newItems: ShoppingItem[]) => {
       const supabase = getSupabase()
       const ensuredItems = ensureShoppingItemsHaveRowIds(newItems).items
@@ -543,8 +548,8 @@ export function useReorderShoppingList() {
       return ensuredItems
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CONFIG_KEY })
-      return invalidateQuery(queryClient, SHOPPING_KEY)
+      queryClient.invalidateQueries({ queryKey: configurationKeys.detail(ownerUserId) })
+      return invalidateQuery(queryClient, shoppingKey)
     },
   })
 }
