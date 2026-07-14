@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures'
-import { assertRecipeGenieAppShell, signInToRecipeGenie } from './e2e-env'
+import { assertRecipeGenieAppShell } from './e2e-env'
 
 test.describe('Authentication', () => {
   test.describe('Unauthenticated entry', () => {
@@ -27,17 +27,16 @@ test.describe('Authentication', () => {
       await expect(page.getByRole('button', { name: /sign out/i })).toHaveCount(0)
     })
 
-    test('signs in successfully with valid credentials @extended', async ({ page }) => {
-      await page.goto('/')
-      await signInToRecipeGenie(page)
+  })
 
+  test.describe('Authenticated session', () => {
+    test('accepts isolated runtime authentication state @extended', async ({ page, setupAuth }) => {
+      await setupAuth()
       await assertRecipeGenieAppShell(page)
       await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible()
       await expect(page.getByLabel('Email')).toHaveCount(0)
     })
-  })
 
-  test.describe('Authenticated session', () => {
     test('boots directly into the authenticated Recipe Genie shell @extended', async ({ page, setupAuth }) => {
       await setupAuth()
       await page.reload()

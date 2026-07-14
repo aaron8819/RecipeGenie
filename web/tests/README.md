@@ -20,15 +20,7 @@ Comprehensive Playwright test suite for Recipe Genie, covering authentication, n
 
 ## Authentication Setup
 
-Tests run with an authenticated user by default. The global setup (`global-setup.ts`) logs in once and saves the session state to `playwright/.auth/user.json`. All tests then reuse this session.
-
-**Test user credentials are configured in:**
-- `tests/fixtures.ts` - `TEST_USER` constant
-- `tests/global-setup.ts` - Used for initial authentication
-
-**To change test user:**
-1. Update `TEST_USER` in `fixtures.ts`
-2. Update credentials in `global-setup.ts`
+Tests run with an authenticated user by default. Credentials come only from the ignored `.env.e2e.local` file or an approved CI secret store. The fixture signs in through an artifact-free context, creates per-test runtime state under ignored `.playwright/auth/`, and deletes it after use. See [E2E_CREDENTIALS.md](./E2E_CREDENTIALS.md) for the complete target and credential contract.
 
 **For tests that need unauthenticated state** (e.g., testing login form):
 ```typescript
@@ -126,8 +118,7 @@ npm run test:e2e:codegen
 
 The `fixtures.ts` file provides reusable helpers:
 
-- `setupAuth()` - Navigate to app with authenticated session (uses global setup)
-- `signIn(email?, password?)` - Sign in with credentials
+- `setupAuth()` - Navigate to the app with isolated per-test authentication state
 - `signOut()` - Sign out of current session
 - `navigateToTab(tab)` - Navigate to planner/recipes/shopping/pantry
 - `addRecipe(recipe)` - Add a recipe via UI
@@ -137,10 +128,10 @@ The `fixtures.ts` file provides reusable helpers:
 
 ### Authenticated Testing
 
-Most tests use `setupAuth()` which reuses the authenticated session from global setup:
+Most tests use `setupAuth()` after the fixture creates a fresh authenticated session:
 ```typescript
 test('my authenticated test', async ({ page, setupAuth }) => {
-  await setupAuth()  // Already logged in
+  await setupAuth()
   // ... test authenticated features
 })
 ```
@@ -179,16 +170,7 @@ The Playwright config is CI-ready:
 - Generates HTML report
 - Retries failed tests on CI
 
-### GitHub Actions Example
-```yaml
-- name: Run E2E Tests
-  run: npm run test:e2e:smoke
-
-- name: Run full E2E matrix
-  run: npm run test:e2e:full
-  env:
-    CI: true
-```
+E2E is not enabled in GitHub Actions. Do not add it until an approved account, deterministic target, and the documented secret variables are configured. Production must never be the default target.
 
 ## Best Practices
 

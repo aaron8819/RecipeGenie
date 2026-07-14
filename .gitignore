@@ -17,6 +17,7 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+**/.env.e2e.local
 
 # Debug logs
 npm-debug.log*
@@ -57,6 +58,8 @@ next-env.d.ts
 coverage/
 web/.playwright/
 **/.playwright/auth/*.json
+.playwright/auth/
+**/.playwright/auth/
 playwright-report/
 web/playwright-report/
 playwright/.auth/
@@ -66,6 +69,7 @@ web/test-results/
 blob-report/
 *.trace
 *.webm
+*.har
 
 # Project-specific
 images/

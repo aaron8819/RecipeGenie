@@ -1,5 +1,5 @@
 import { test, expect, VIEWPORTS } from './fixtures'
-import { assertRecipeGenieAppShell, signInToRecipeGenie } from './e2e-env'
+import { assertRecipeGenieAppShell } from './e2e-env'
 
 async function expectRecipesView(page: import('@playwright/test').Page) {
   await expect(page.getByRole('textbox', { name: /search recipes by name or category/i })).toBeVisible()
@@ -53,12 +53,8 @@ test.describe('Smoke Baseline', () => {
   })
 
   test.describe('Authenticated shell', () => {
-    test.use({ storageState: { cookies: [], origins: [] } })
-
-    test('signs in and reaches the Recipe Genie shell deterministically @core @smoke', async ({ page }) => {
-      await page.goto('/')
-      await signInToRecipeGenie(page)
-
+    test('loads isolated auth state and reaches the Recipe Genie shell deterministically @core @smoke', async ({ page, setupAuth }) => {
+      await setupAuth()
       await assertRecipeGenieAppShell(page)
       await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible()
       await expectRecipesView(page)
