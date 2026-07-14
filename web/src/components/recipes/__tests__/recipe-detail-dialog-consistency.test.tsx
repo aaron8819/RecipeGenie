@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 import { RecipeDetailDialog } from "../recipe-detail-dialog"
 import type { Recipe } from "@/types/database"
+import { recipeKeys } from "@/lib/query-keys"
 
 globalThis.React = React
 
@@ -101,7 +102,7 @@ describe("RecipeDetailDialog cache consistency", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     })
-    queryClient.setQueryData(["recipes", "recipe-1"], makeRecipe({ favorite: false }))
+    queryClient.setQueryData(recipeKeys.detail("user-1", "recipe-1"), makeRecipe({ favorite: false }))
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -116,7 +117,7 @@ describe("RecipeDetailDialog cache consistency", () => {
 
     expect(screen.getByLabelText("Add to favorites")).toBeInTheDocument()
 
-    queryClient.setQueryData(["recipes", "recipe-1"], makeRecipe({ favorite: true }))
+    queryClient.setQueryData(recipeKeys.detail("user-1", "recipe-1"), makeRecipe({ favorite: true }))
 
     await waitFor(() => {
       expect(screen.getByLabelText("Remove from favorites")).toBeInTheDocument()

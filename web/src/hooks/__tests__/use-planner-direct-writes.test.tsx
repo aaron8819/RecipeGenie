@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WeeklyPlan } from "@/types/database"
+import { plannerKeys } from "@/lib/query-keys"
 import {
   useRemoveRecipeFromPlan,
   useSaveDayAssignments,
@@ -185,7 +186,7 @@ describe("direct weekly_plans write contract", () => {
   it("useRemoveRecipeFromPlan removes recipe, made state, and assignment while preserving scale", async () => {
     dbState.weeklyPlan = makeWeeklyPlan()
     const { wrapper, queryClient } = createWrapper()
-    queryClient.setQueryData(["weekly_plans", "2026-03-02"], makeWeeklyPlan())
+    queryClient.setQueryData(plannerKeys.week("test-user-id", "2026-03-02"), makeWeeklyPlan())
 
     const { result } = renderHook(() => useRemoveRecipeFromPlan(), { wrapper })
 

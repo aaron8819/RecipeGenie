@@ -3,18 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RecipeShare } from '@/types/database';
 import { useAuthContext } from '@/lib/auth-context';
-
-function sharesKey(userId: string | undefined) {
-  return ['recipe_shares', userId] as const;
-}
-
-function inboxKey(userId: string | undefined) {
-  return [...sharesKey(userId), 'inbox'] as const;
-}
-
-function sentKey(userId: string | undefined) {
-  return [...sharesKey(userId), 'sent'] as const;
-}
+import { principalId, recipeKeys, shareKeys } from '@/lib/query-keys';
 
 async function readErrorMessage(response: Response): Promise<string> {
   try {
@@ -32,7 +21,7 @@ export function useIncomingRecipeShares() {
   const { user } = useAuthContext();
 
   return useQuery({
-    queryKey: inboxKey(user?.id),
+    queryKey: shareKeys.inbox(principalId(user?.id)),
     queryFn: async () => {
       const response = await fetch('/api/recipe-shares/inbox');
       if (!response.ok) {
@@ -49,7 +38,7 @@ export function useSentRecipeShares() {
   const { user } = useAuthContext();
 
   return useQuery({
-    queryKey: sentKey(user?.id),
+    queryKey: shareKeys.sent(principalId(user?.id)),
     queryFn: async () => {
       const response = await fetch('/api/recipe-shares/sent');
       if (!response.ok) {
@@ -65,6 +54,7 @@ export function useSentRecipeShares() {
 export function useCreateRecipeShare() {
   const queryClient = useQueryClient();
   const { user } = useAuthContext();
+  const ownerUserId = principalId(user?.id);
 
   return useMutation({
     mutationFn: async (input: {
@@ -91,7 +81,7 @@ export function useCreateRecipeShare() {
       };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: sentKey(user?.id) });
+      queryClient.invalidateQueries({ queryKey: shareKeys.sent(ownerUserId) });
     },
   });
 }
@@ -99,6 +89,7 @@ export function useCreateRecipeShare() {
 export function useAcceptRecipeShare() {
   const queryClient = useQueryClient();
   const { user } = useAuthContext();
+  const ownerUserId = principalId(user?.id);
 
   return useMutation({
     mutationFn: async (shareId: string) => {
@@ -113,9 +104,9 @@ export function useAcceptRecipeShare() {
       return (await response.json()) as { acceptedRecipeId: string };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: inboxKey(user?.id) });
-      queryClient.invalidateQueries({ queryKey: sentKey(user?.id) });
-      queryClient.invalidateQueries({ queryKey: ['recipes'] });
+      queryClient.invalidateQueries({ queryKey: shareKeys.inbox(ownerUserId) });
+      queryClient.invalidateQueries({ queryKey: shareKeys.sent(ownerUserId) });
+      queryClient.invalidateQueries({ queryKey: recipeKeys.all(ownerUserId) });
     },
   });
 }
@@ -123,6 +114,7 @@ export function useAcceptRecipeShare() {
 export function useDeclineRecipeShare() {
   const queryClient = useQueryClient();
   const { user } = useAuthContext();
+  const ownerUserId = principalId(user?.id);
 
   return useMutation({
     mutationFn: async (shareId: string) => {
@@ -137,14 +129,14 @@ export function useDeclineRecipeShare() {
       return (await response.json()) as { status: string; id: string };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: inboxKey(user?.id) });
-      queryClient.invalidateQueries({ queryKey: sentKey(user?.id) });
+      queryClient.invalidateQueries({ queryKey: shareKeys.inbox(ownerUserId) });
+      queryClient.invalidateQueries({ queryKey: shareKeys.sent(ownerUserId) });
     },
   });
 }
 
 export const RECIPE_SHARES_KEY = {
-  sharesKey,
-  inboxKey,
-  sentKey,
+  sharesKey: shareKeys.all,
+  inboxKey: shareKeys.inbox,
+  sentKey: shareKeys.sent,
 };

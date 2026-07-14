@@ -5,8 +5,8 @@ import type { PantryItem } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { normalizePantryItemName, parsePantryCandidates, getPantryFailureInput } from "@/lib/pantry"
 import { getSupabase } from "@/lib/supabase/client"
+import { pantryKeys, principalId } from "@/lib/query-keys"
 
-export const PANTRY_KEY = ["pantry"]
 export const PANTRY_WRITE_SCOPE_ID = "pantry-write"
 type SupabaseWriteError = { code?: string; message: string } | null
 
@@ -69,10 +69,11 @@ async function insertPantryItem(
  * Hook to fetch all pantry items
  */
 export function usePantryItems() {
-  const { user } = useAuthContext()
+  const { user, loading } = useAuthContext()
+  const pantryKey = pantryKeys.list(principalId(user?.id))
 
   return useQuery({
-    queryKey: [...PANTRY_KEY],
+    queryKey: pantryKey,
     queryFn: async () => {
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -85,7 +86,7 @@ export function usePantryItems() {
     },
     placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000,
-    enabled: !!user,
+    enabled: !loading && !!user,
   })
 }
 
@@ -96,13 +97,14 @@ export function usePantryItems() {
 export function useAddPantryItems() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const pantryKey = pantryKeys.list(principalId(user?.id))
 
   return useMutation({
-    scope: { id: PANTRY_WRITE_SCOPE_ID },
+    scope: { id: `${PANTRY_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (rawInput: string): Promise<PantryAddResult> => {
       const candidates = parsePantryCandidates(rawInput)
       const knownItems = new Set(
-        (queryClient.getQueryData<PantryItem[]>(PANTRY_KEY) || []).map((item) => item.item)
+        (queryClient.getQueryData<PantryItem[]>(pantryKey) || []).map((item) => item.item)
       )
       const outcomes: PantryAddOutcome[] = []
       const insertedItems: PantryItem[] = []
@@ -150,7 +152,7 @@ export function useAddPantryItems() {
 
       if (insertedItems.length > 0) {
         queryClient.setQueryData<PantryItem[]>(
-          PANTRY_KEY,
+          pantryKey,
           (old) => sortPantryItems([...(old || []), ...insertedItems.filter((item) =>
             !(old || []).some((existing) => existing.id === item.id)
           )])
@@ -163,7 +165,7 @@ export function useAddPantryItems() {
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
+      queryClient.invalidateQueries({ queryKey: pantryKey })
     },
   })
 }
@@ -175,9 +177,10 @@ export function useAddPantryItems() {
 export function useRestorePantryItem() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const pantryKey = pantryKeys.list(principalId(user?.id))
 
   return useMutation({
-    scope: { id: PANTRY_WRITE_SCOPE_ID },
+    scope: { id: `${PANTRY_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (item: PantryItem) => {
       try {
         return await insertPantryItem(user!.id, item.item, item.id)
@@ -197,11 +200,11 @@ export function useRestorePantryItem() {
       }
     },
     onMutate: async (item) => {
-      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
-      const previousPantry = queryClient.getQueryData<PantryItem[]>(PANTRY_KEY)
+      await queryClient.cancelQueries({ queryKey: pantryKey })
+      const previousPantry = queryClient.getQueryData<PantryItem[]>(pantryKey)
 
       queryClient.setQueryData<PantryItem[]>(
-        PANTRY_KEY,
+        pantryKey,
         (old) => {
           if (!old) return [item]
           if (old.some((existing) => existing.id === item.id || existing.item === item.item)) {
@@ -211,16 +214,16 @@ export function useRestorePantryItem() {
         }
       )
 
-      return { previousPantry }
+      return { ownerUserId: principalId(user?.id), previousPantry }
     },
     onError: (_error, _item, context) => {
       if (context?.previousPantry) {
-        queryClient.setQueryData(PANTRY_KEY, context.previousPantry)
+        queryClient.setQueryData(pantryKey, context.previousPantry)
       }
     },
     onSuccess: (restoredItem) => {
       queryClient.setQueryData<PantryItem[]>(
-        PANTRY_KEY,
+        pantryKey,
         (old) => {
           const next = (old || []).filter((candidate) => candidate.id !== restoredItem.id && candidate.item !== restoredItem.item)
           return sortPantryItems([...next, restoredItem])
@@ -228,7 +231,7 @@ export function useRestorePantryItem() {
       )
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
+      queryClient.invalidateQueries({ queryKey: pantryKey })
     },
   })
 }
@@ -239,9 +242,10 @@ export function useRestorePantryItem() {
 export function useRemovePantryItem() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const pantryKey = pantryKeys.list(principalId(user?.id))
 
   return useMutation({
-    scope: { id: PANTRY_WRITE_SCOPE_ID },
+    scope: { id: `${PANTRY_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (item: PantryItem) => {
       const supabase = getSupabase()
       const { error } = await supabase
@@ -254,23 +258,23 @@ export function useRemovePantryItem() {
       return item
     },
     onMutate: async (item) => {
-      await queryClient.cancelQueries({ queryKey: PANTRY_KEY })
-      const previousPantry = queryClient.getQueryData<PantryItem[]>(PANTRY_KEY)
+      await queryClient.cancelQueries({ queryKey: pantryKey })
+      const previousPantry = queryClient.getQueryData<PantryItem[]>(pantryKey)
 
       queryClient.setQueryData<PantryItem[]>(
-        PANTRY_KEY,
+        pantryKey,
         (old) => old?.filter((candidate) => candidate.id !== item.id)
       )
 
-      return { previousPantry }
+      return { ownerUserId: principalId(user?.id), previousPantry }
     },
     onError: (_error, _item, context) => {
       if (context?.previousPantry) {
-        queryClient.setQueryData(PANTRY_KEY, context.previousPantry)
+        queryClient.setQueryData(pantryKey, context.previousPantry)
       }
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: PANTRY_KEY })
+      queryClient.invalidateQueries({ queryKey: pantryKey })
     },
   })
 }

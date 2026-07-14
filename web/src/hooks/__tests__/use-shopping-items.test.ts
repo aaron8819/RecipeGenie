@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { ShoppingList, ShoppingItem } from "@/types/database"
-import { SHOPPING_KEY } from "@/hooks/shopping/shared"
+import { shoppingKeys } from "@/lib/query-keys"
 import {
   useCheckOffItem,
   useRemoveShoppingItem,
@@ -15,6 +15,8 @@ import {
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: vi.fn(() => ({ user: { id: "test-user-id" } })),
 }))
+
+const SHOPPING_KEY = shoppingKeys.detail("test-user-id")
 
 const mockSupabase = {
   from: vi.fn().mockReturnThis(),

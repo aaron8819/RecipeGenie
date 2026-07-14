@@ -1,9 +1,12 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useRef } from "react"
+import { createContext, Fragment, useContext, useEffect, useState, useCallback, ReactNode, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import type { User, Session } from "@supabase/supabase-js"
 import { getSupabase } from "@/lib/supabase/client"
+import { removeForeignPrincipalQueries, removePrincipalQueries } from "@/lib/principal-cache"
+import { isPrincipalQueryKey, UNRESOLVED_PRINCIPAL } from "@/lib/query-keys"
+import { setActivePrincipalId } from "@/lib/principal-session"
 
 interface AuthContextType {
   user: User | null
@@ -18,12 +21,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export function shouldClearQueriesOnAuthEvent(
+export function hasPrincipalChanged(
   previousSession: Session | null,
-  nextSession: Session | null,
-  event: string
+  nextSession: Session | null
 ): boolean {
-  return !!previousSession && !nextSession && event !== 'SIGNED_OUT'
+  return !!previousSession?.user.id && previousSession.user.id !== nextSession?.user.id
 }
 
 // initialSession: pass the server-read session to skip the client-side getSession()
@@ -46,6 +48,41 @@ export function AuthProvider({
   const sessionRef = useRef<Session | null>(initialSession ?? null)
   // Capture prop at mount so the effect dep array stays stable (no object-identity churn).
   const initialSessionRef = useRef(initialSession)
+  const activeUserIdRef = useRef<string | null>(initialSession?.user.id ?? null)
+  setActivePrincipalId(activeUserIdRef.current)
+
+  const applySession = useCallback((nextSession: Session | null) => {
+    const previousSession = sessionRef.current
+    const previousUserId = previousSession?.user.id ?? null
+    const nextUserId = nextSession?.user.id ?? null
+
+    activeUserIdRef.current = nextUserId
+    setActivePrincipalId(nextUserId)
+    sessionRef.current = nextSession
+    setSession(nextSession)
+    setUser(nextSession?.user ?? null)
+    setLoading(false)
+
+    if (previousUserId && hasPrincipalChanged(previousSession, nextSession)) {
+      void removePrincipalQueries(queryClient, previousUserId).then(() => {
+        removeForeignPrincipalQueries(queryClient, nextUserId)
+      })
+    } else if (!previousUserId && nextUserId) {
+      removeForeignPrincipalQueries(queryClient, nextUserId)
+    }
+  }, [queryClient])
+
+  useEffect(() => queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "added" && event.type !== "updated") return
+
+    const { queryKey } = event.query
+    if (!isPrincipalQueryKey(queryKey)) return
+
+    const ownerUserId = queryKey[1]
+    if (ownerUserId === UNRESOLVED_PRINCIPAL || ownerUserId === activeUserIdRef.current) return
+
+    queryClient.removeQueries({ queryKey, exact: true })
+  }), [queryClient])
 
   useEffect(() => {
     const supabase = getSupabase()
@@ -55,10 +92,7 @@ export function AuthProvider({
     if (initialSessionRef.current === undefined) {
       supabase.auth.getSession()
         .then(({ data: { session } }) => {
-          sessionRef.current = session
-          setSession(session)
-          setUser(session?.user ?? null)
-          setLoading(false)
+          applySession(session)
         })
         .catch((error) => {
           console.error("Failed to fetch session:", error)
@@ -70,28 +104,12 @@ export function AuthProvider({
     // Listen for auth changes (sign in, sign out, token refresh)
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      const previousSession = sessionRef.current
-
-      setSession(session)
-      setUser(session?.user ?? null)
-
-      // Handle token refresh failure (session expired and couldn't be refreshed)
-      // This happens when TOKEN_REFRESHED fires but session is null, or when
-      // the session simply disappears without a SIGNED_OUT event
-      if (shouldClearQueriesOnAuthEvent(previousSession, session, event)) {
-        console.warn('Session expired or token refresh failed')
-        // The middleware will redirect to login on next navigation
-        // Clear any stale queries to prevent showing outdated data
-        queryClient.clear()
-      }
-
-      sessionRef.current = session
-      setLoading(false)
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session)
     })
 
     return () => subscription.unsubscribe()
-  }, [queryClient])
+  }, [applySession])
 
   const signIn = useCallback(async (email: string, password: string) => {
     const supabase = getSupabase()
@@ -157,7 +175,13 @@ export function AuthProvider({
     signOut,
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={value}>
+      <Fragment key={user?.id ?? "unauthenticated"}>
+        {children}
+      </Fragment>
+    </AuthContext.Provider>
+  )
 }
 
 export function useAuthContext() {

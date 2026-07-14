@@ -10,6 +10,8 @@ import {
   useUnmarkRecipeAsMade,
 } from "@/hooks/use-planner"
 
+const USER_ID = "user-1"
+
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: () => ({ user: { id: "user-1" } }),
 }))
@@ -64,7 +66,7 @@ describe("recipe history stats cache freshness", () => {
     const pendingInsert = deferred<{ error: null }>()
     insertMock.mockReturnValueOnce(pendingInsert.promise)
 
-    queryClient.setQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey(), [
+    queryClient.setQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey(USER_ID), [
       { recipe_id: "recipe-1", times_made: 1, last_made: "2026-03-01T00:00:00.000Z" },
     ])
 
@@ -78,7 +80,7 @@ describe("recipe history stats cache freshness", () => {
     })
 
     await waitFor(() => {
-      expect(queryClient.getQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey())).toEqual([
+      expect(queryClient.getQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey(USER_ID))).toEqual([
         expect.objectContaining({
           recipe_id: "recipe-1",
           times_made: 2,
@@ -112,8 +114,8 @@ describe("recipe history stats cache freshness", () => {
       },
     ]
 
-    queryClient.setQueryData(getRecipeHistoryQueryKey(), history)
-    queryClient.setQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey(), [
+    queryClient.setQueryData(getRecipeHistoryQueryKey(USER_ID), history)
+    queryClient.setQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey(USER_ID), [
       { recipe_id: "recipe-1", times_made: 2, last_made: "2026-03-05T00:00:00.000Z" },
     ])
 
@@ -131,7 +133,7 @@ describe("recipe history stats cache freshness", () => {
       await result.current.mutateAsync("recipe-1")
     })
 
-    expect(queryClient.getQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey())).toEqual([
+    expect(queryClient.getQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey(USER_ID))).toEqual([
       {
         recipe_id: "recipe-1",
         times_made: 1,

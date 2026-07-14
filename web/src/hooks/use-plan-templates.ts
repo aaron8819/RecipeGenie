@@ -8,8 +8,7 @@ import {
 import { useAuthContext } from '@/lib/auth-context';
 import { getSupabase } from '@/lib/supabase/client';
 import type { PlanTemplate } from '@/types/database';
-
-const TEMPLATES_KEY = ['plan-templates'];
+import { principalId, templateKeys } from '@/lib/query-keys';
 
 /**
  * Fetch all plan templates for the current user.
@@ -18,7 +17,7 @@ export function usePlanTemplates() {
   const { user } = useAuthContext();
 
   return useQuery({
-    queryKey: [...TEMPLATES_KEY, user?.id],
+    queryKey: templateKeys.list(principalId(user?.id)),
     queryFn: async () => {
       const supabase = getSupabase();
       const { data, error } = await supabase
@@ -39,6 +38,7 @@ export function usePlanTemplates() {
 export function useSavePlanTemplate() {
   const queryClient = useQueryClient();
   const { user } = useAuthContext();
+  const ownerUserId = principalId(user?.id);
 
   return useMutation({
     mutationFn: async ({
@@ -71,7 +71,7 @@ export function useSavePlanTemplate() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: TEMPLATES_KEY,
+        queryKey: templateKeys.all(ownerUserId),
       });
     },
   });
@@ -82,6 +82,8 @@ export function useSavePlanTemplate() {
  */
 export function useRenamePlanTemplate() {
   const queryClient = useQueryClient();
+  const { user } = useAuthContext();
+  const ownerUserId = principalId(user?.id);
 
   return useMutation({
     mutationFn: async ({
@@ -101,7 +103,7 @@ export function useRenamePlanTemplate() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: TEMPLATES_KEY,
+        queryKey: templateKeys.all(ownerUserId),
       });
     },
   });
@@ -112,6 +114,8 @@ export function useRenamePlanTemplate() {
  */
 export function useDeletePlanTemplate() {
   const queryClient = useQueryClient();
+  const { user } = useAuthContext();
+  const ownerUserId = principalId(user?.id);
 
   return useMutation({
     mutationFn: async (templateId: string) => {
@@ -125,7 +129,7 @@ export function useDeletePlanTemplate() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: TEMPLATES_KEY,
+        queryKey: templateKeys.all(ownerUserId),
       });
     },
   });

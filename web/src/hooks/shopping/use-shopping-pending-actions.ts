@@ -6,7 +6,9 @@ import { useUndoToast } from "@/components/ui/undo-toast"
 import { requireShoppingRowId } from "@/lib/shopping-row-identity"
 import { removeRecipeByNameFromItems } from "@/lib/shopping-list-merging"
 import type { ShoppingItem, ShoppingList } from "@/types/database"
-import { SHOPPING_KEY } from "./shared"
+import { useAuthContext } from "@/lib/auth-context"
+import { principalId, shoppingKeys } from "@/lib/query-keys"
+import { getActivePrincipalId } from "@/lib/principal-session"
 
 const DEFAULT_UNDO_DURATION_MS = 5000
 
@@ -96,6 +98,8 @@ export function useShoppingPendingActions(params: {
   clearListCommit: { mutateAsync: () => Promise<unknown> }
 }) {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
   const { show: showUndoToast, dismiss: dismissUndoToast } = useUndoToast()
   const [queue, setQueue] = useState<PendingAction[]>([])
   const queueRef = useRef<PendingAction[]>([])
@@ -131,7 +135,7 @@ export function useShoppingPendingActions(params: {
       if (resolution === "commit") {
         try {
           await action.commit()
-          await queryClient.invalidateQueries({ queryKey: [...SHOPPING_KEY] })
+          await queryClient.invalidateQueries({ queryKey: shoppingKeys.detail(ownerUserId) })
         } catch {
           showUndoToast({
             message: "Failed to update shopping list",
@@ -145,7 +149,7 @@ export function useShoppingPendingActions(params: {
     } finally {
       resolvingIdsRef.current.delete(actionId)
     }
-  }, [queryClient, showUndoToast, syncQueue])
+  }, [ownerUserId, queryClient, showUndoToast, syncQueue])
 
   const commitAllPending = useCallback(() => {
     const pendingIds = queueRef.current.map((action) => action.id)
@@ -212,14 +216,16 @@ export function useShoppingPendingActions(params: {
         clearTimeout(timerRef.current)
       }
 
-      if (queueRef.current.length > 0) {
+      if (queueRef.current.length > 0 && getActivePrincipalId() === ownerUserId) {
         commitAllPending()
-        if (activeToastIdRef.current) {
-          dismissUndoToast()
-        }
+      }
+
+      queueRef.current = []
+      if (activeToastIdRef.current) {
+        dismissUndoToast()
       }
     }
-  }, [commitAllPending, dismissUndoToast])
+  }, [commitAllPending, dismissUndoToast, ownerUserId])
 
   const enqueueRemoveItem = useCallback((item: ShoppingItem) => {
     const rowId = requireShoppingRowId(item, "pending remove shopping item")

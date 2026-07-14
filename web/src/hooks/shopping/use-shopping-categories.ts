@@ -11,8 +11,9 @@ import { SHOPPING_CATEGORIES } from "@/lib/shopping-categories"
 import { createShoppingPurchaseKey } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
+import { configurationKeys, principalId, shoppingKeys } from "@/lib/query-keys"
 import { DEFAULT_RECIPE_CATEGORIES, DEFAULT_RECIPE_SELECTION, DEFAULT_USER_CONFIG } from "@/lib/user-config"
-import { SHOPPING_KEY, CONFIG_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import { SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 /**
  * Hook to save a category override for an item
@@ -83,7 +84,7 @@ export function useSaveCategoryOverride() {
       return { itemName: normalizedItem, categoryKey }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: CONFIG_KEY })
+      queryClient.invalidateQueries({ queryKey: configurationKeys.detail(principalId(user?.id)) })
     },
   })
 }
@@ -96,7 +97,7 @@ export function useUpdateItemCategory() {
   const { user } = useAuthContext()
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async ({ item, newCategoryKey, items }: {
       item: ShoppingItem; newCategoryKey: string; items: ShoppingItem[]
     }) => {
@@ -123,7 +124,7 @@ export function useUpdateItemCategory() {
       return updatedItems
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      queryClient.invalidateQueries({ queryKey: shoppingKeys.detail(principalId(user?.id)) })
     },
   })
 }

@@ -12,6 +12,7 @@ import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
 import { HOME_TAB_NAVIGATE_EVENT, persistHomeTab } from "@/lib/home-navigation"
 import { getSupabase } from "@/lib/supabase/client"
+import { configurationKeys, historyKeys, pantryKeys, shoppingKeys } from "@/lib/query-keys"
 import {
   HOME_DEFAULT_TAB,
   isValidHomeTab,
@@ -81,7 +82,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
 
       if (!visitedRef.current.has("planner")) {
         void queryClient.prefetchQuery({
-          queryKey: ["user_config"],
+          queryKey: configurationKeys.detail(userId),
           queryFn: async () => {
             const { data, error } = await supabase
               .from("user_config")
@@ -104,7 +105,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
           cutoff.setDate(cutoff.getDate() - daysBack)
 
           await queryClient.prefetchQuery({
-            queryKey: ["recipe_history", "recent", daysBack],
+            queryKey: historyKeys.recent(userId, daysBack),
             queryFn: async () => {
               const { data, error } = await supabase
                 .from("recipe_history")
@@ -123,7 +124,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
 
       if (!visitedRef.current.has("pantry")) {
         void queryClient.prefetchQuery({
-          queryKey: ["pantry"],
+          queryKey: pantryKeys.list(userId),
           queryFn: async () => {
             const { data, error } = await supabase
               .from("pantry_items")
@@ -138,7 +139,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
 
       if (!visitedRef.current.has("shopping")) {
         void queryClient.prefetchQuery({
-          queryKey: ["shopping_list"],
+          queryKey: shoppingKeys.detail(userId),
           queryFn: async () => {
             const { data, error } = await supabase
               .from("shopping_list")

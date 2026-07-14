@@ -7,12 +7,7 @@ import { generateMealPlan, getSwapRecipe, autoAssignDays } from "@/lib/meal-plan
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import { useCategories, useUpdateUserConfig, useUserConfig } from "@/hooks/shared/user-config"
-
-const WEEKLY_PLANS_KEY = ["weekly_plans"]
-const HISTORY_KEY = ["recipe_history"]
-const RECENT_HISTORY_KEY = [...HISTORY_KEY, "recent"]
-const HISTORY_STATS_KEY = [...HISTORY_KEY, "stats"]
-const RECIPES_KEY = ["recipes"]
+import { historyKeys, plannerKeys, principalId, recipeKeys } from "@/lib/query-keys"
 
 type DirectWeeklyPlanWrite = {
   weekDate: string
@@ -67,16 +62,16 @@ async function persistWeeklyPlanDirect(userId: string, write: DirectWeeklyPlanWr
   return existingPlan
 }
 
-export function getRecipeHistoryQueryKey() {
-  return [...HISTORY_KEY]
+export function getRecipeHistoryQueryKey(userId: string) {
+  return historyKeys.list(userId)
 }
 
-export function getRecentRecipeHistoryQueryKey(daysBack: number) {
-  return [...RECENT_HISTORY_KEY, daysBack]
+export function getRecentRecipeHistoryQueryKey(userId: string, daysBack: number) {
+  return historyKeys.recent(userId, daysBack)
 }
 
-export function getRecipeHistoryStatsQueryKey() {
-  return [...HISTORY_STATS_KEY]
+export function getRecipeHistoryStatsQueryKey(userId: string) {
+  return historyKeys.stats(userId)
 }
 
 function buildHistoryStats(history: RecipeHistory[]): RecipeHistoryStatsRow[] {
@@ -164,9 +159,10 @@ function applyUnmarkedHistoryStats(
  */
 export function useWeeklyPlan(weekDate: string) {
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useQuery({
-    queryKey: [...WEEKLY_PLANS_KEY, weekDate],
+    queryKey: plannerKeys.week(ownerUserId, weekDate),
     queryFn: async () => {
       const emptyPlan: WeeklyPlan = {
         user_id: user?.id || "",
@@ -198,9 +194,10 @@ export function useWeeklyPlan(weekDate: string) {
  */
 export function useWeeklyPlanRecipes(recipeIds: string[]) {
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useQuery({
-    queryKey: [...RECIPES_KEY, "weekly", recipeIds],
+    queryKey: recipeKeys.weekly(ownerUserId, recipeIds),
     queryFn: async () => {
       if (recipeIds.length === 0) return []
 
@@ -227,9 +224,10 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
  */
 export function useRecipeHistory() {
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useQuery({
-    queryKey: getRecipeHistoryQueryKey(),
+    queryKey: getRecipeHistoryQueryKey(ownerUserId),
     queryFn: async () => {
       const supabase = getSupabase()
       const { data, error } = await supabase
@@ -250,11 +248,12 @@ export function useRecipeHistory() {
  */
 export function useRecentRecipeHistory() {
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
   const { data: config } = useUserConfig()
   const daysBack = config?.history_exclusion_days ?? 14
 
   return useQuery({
-    queryKey: getRecentRecipeHistoryQueryKey(daysBack),
+    queryKey: getRecentRecipeHistoryQueryKey(ownerUserId, daysBack),
     queryFn: async () => {
       const supabase = getSupabase()
       const cutoff = new Date()
@@ -279,9 +278,10 @@ export function useRecentRecipeHistory() {
  */
 export function useRecipeHistoryStats() {
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useQuery({
-    queryKey: getRecipeHistoryStatsQueryKey(),
+    queryKey: getRecipeHistoryStatsQueryKey(ownerUserId),
     queryFn: async () => {
       const supabase = getSupabase()
       const { data, error } = await supabase.rpc("get_recipe_history_stats")
@@ -322,6 +322,7 @@ export function usePlannerCategories() {
 export function useGenerateMealPlan() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({ weekDate, selection }: { weekDate: string; selection: Record<string, number> }) => {
@@ -447,7 +448,7 @@ export function useGenerateMealPlan() {
       return { ...result, weekDate }
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.week(ownerUserId, variables.weekDate) })
     },
   })
 }
@@ -480,6 +481,7 @@ export function useFetchRecipeIds() {
 export function useSwapRecipe() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({ weekDate, oldRecipeId, category, excludeIds }: {
@@ -524,7 +526,7 @@ export function useSwapRecipe() {
     },
 
     onSuccess: (result, variables) => {
-      const oldPlan = queryClient.getQueryData<WeeklyPlan>([...WEEKLY_PLANS_KEY, variables.weekDate])
+      const oldPlan = queryClient.getQueryData<WeeklyPlan>(plannerKeys.week(ownerUserId, variables.weekDate))
       if (!oldPlan) return
       const oldRecipeIds = oldPlan.recipe_ids
       const newRecipeIds = oldRecipeIds.map((id) =>
@@ -537,7 +539,7 @@ export function useSwapRecipe() {
         dayIndex !== undefined ? { ...rest, [result.newRecipe.id]: dayIndex } : rest
 
       // Update weekly plan cache so recipe_ids and day_assignments are new
-      queryClient.setQueryData<WeeklyPlan>([...WEEKLY_PLANS_KEY, variables.weekDate], {
+      queryClient.setQueryData<WeeklyPlan>(plannerKeys.week(ownerUserId, variables.weekDate), {
         ...oldPlan,
         recipe_ids: newRecipeIds,
         day_assignments: Object.keys(newDayAssignments).length > 0 ? newDayAssignments : null,
@@ -545,15 +547,15 @@ export function useSwapRecipe() {
 
       // Optimistically set recipes cache for the NEW recipe_ids so useWeeklyPlanRecipes
       // has data immediately and the calendar does not unmount (enables flip animation)
-      const previousRecipes = queryClient.getQueryData<Recipe[]>([...RECIPES_KEY, "weekly", oldRecipeIds])
+      const previousRecipes = queryClient.getQueryData<Recipe[]>(recipeKeys.weekly(ownerUserId, oldRecipeIds))
       const newRecipes = previousRecipes
         ? previousRecipes.map((r) => (r.id === variables.oldRecipeId ? result.newRecipe : r))
         : [result.newRecipe]
-      queryClient.setQueryData<Recipe[]>([...RECIPES_KEY, "weekly", newRecipeIds], newRecipes)
+      queryClient.setQueryData<Recipe[]>(recipeKeys.weekly(ownerUserId, newRecipeIds), newRecipes)
 
       // Then invalidate to ensure full consistency
-      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.week(ownerUserId, variables.weekDate) })
+      queryClient.invalidateQueries({ queryKey: recipeKeys.all(ownerUserId) })
     },
   })
 }
@@ -564,6 +566,7 @@ export function useSwapRecipe() {
 export function useSaveWeeklyPlan() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({
@@ -588,7 +591,7 @@ export function useSaveWeeklyPlan() {
       return { weekDate, recipeIds }
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.week(ownerUserId, variables.weekDate) })
     },
   })
 }
@@ -601,6 +604,7 @@ export function useSaveWeeklyPlan() {
 export function useAddRecipeToPlan() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({ weekDate, recipeId, dayOfWeek }: { weekDate: string; recipeId: string; dayOfWeek?: number }) => {
@@ -627,7 +631,7 @@ export function useAddRecipeToPlan() {
       return { weekDate, recipeId }
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.week(ownerUserId, variables.weekDate) })
     },
   })
 }
@@ -639,6 +643,7 @@ export function useAddRecipeToPlan() {
 export function useRemoveRecipeFromPlan() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({ weekDate, recipeId }: { weekDate: string; recipeId: string }) => {
@@ -671,17 +676,17 @@ export function useRemoveRecipeFromPlan() {
 
       // Cancel outgoing refetches
       await queryClient.cancelQueries({
-        queryKey: [...WEEKLY_PLANS_KEY, weekDate],
+        queryKey: plannerKeys.week(ownerUserId, weekDate),
       })
 
       // Snapshot previous value for rollback
       const previousPlan = queryClient.getQueryData<WeeklyPlan>(
-        [...WEEKLY_PLANS_KEY, weekDate]
+        plannerKeys.week(ownerUserId, weekDate)
       )
 
       // Optimistically update cache
       queryClient.setQueryData<WeeklyPlan>(
-        [...WEEKLY_PLANS_KEY, weekDate],
+        plannerKeys.week(ownerUserId, weekDate),
         (old) => {
           if (!old) return old
           return {
@@ -700,14 +705,14 @@ export function useRemoveRecipeFromPlan() {
         }
       )
 
-      return { previousPlan }
+      return { ownerUserId, previousPlan }
     },
 
     onError: (err, variables, context) => {
       // Rollback on error
       if (context?.previousPlan) {
         queryClient.setQueryData(
-          [...WEEKLY_PLANS_KEY, variables.weekDate],
+          plannerKeys.week(ownerUserId, variables.weekDate),
           context.previousPlan
         )
       }
@@ -715,8 +720,8 @@ export function useRemoveRecipeFromPlan() {
 
     onSettled: (_, __, variables) => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
-      queryClient.invalidateQueries({ queryKey: RECIPES_KEY })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.week(ownerUserId, variables.weekDate) })
+      queryClient.invalidateQueries({ queryKey: recipeKeys.all(ownerUserId) })
     },
   })
 }
@@ -728,6 +733,9 @@ export function useRemoveRecipeFromPlan() {
 export function useMarkRecipeAsMade() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const historyKey = historyKeys.list(ownerUserId)
+  const historyStatsKey = historyKeys.stats(ownerUserId)
 
   return useMutation({
     mutationFn: async (recipeId: string) => {
@@ -742,16 +750,16 @@ export function useMarkRecipeAsMade() {
     // Optimistic update
     onMutate: async (recipeId) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: HISTORY_KEY })
+      await queryClient.cancelQueries({ queryKey: historyKey })
 
       // Snapshot previous value for rollback
-      const previousHistory = queryClient.getQueryData<RecipeHistory[]>([...HISTORY_KEY])
-      const previousStats = queryClient.getQueryData<RecipeHistoryStatsRow[]>([...HISTORY_STATS_KEY])
+      const previousHistory = queryClient.getQueryData<RecipeHistory[]>(historyKey)
+      const previousStats = queryClient.getQueryData<RecipeHistoryStatsRow[]>(historyStatsKey)
       const dateMade = new Date().toISOString()
 
       // Optimistically update cache
       queryClient.setQueryData<RecipeHistory[]>(
-        [...HISTORY_KEY],
+        historyKey,
         (old) => {
           const existing = old || []
           return [
@@ -762,25 +770,25 @@ export function useMarkRecipeAsMade() {
       )
 
       queryClient.setQueryData<RecipeHistoryStatsRow[]>(
-        [...HISTORY_STATS_KEY],
+        historyStatsKey,
         applyMarkedHistoryStats(previousStats, recipeId, dateMade)
       )
 
-      return { previousHistory, previousStats }
+      return { ownerUserId, previousHistory, previousStats }
     },
     onError: (err, recipeId, context) => {
       // Rollback on error
       if (context?.previousHistory !== undefined) {
-        queryClient.setQueryData([...HISTORY_KEY], context.previousHistory)
+        queryClient.setQueryData(historyKey, context.previousHistory)
       }
       if (context?.previousStats !== undefined) {
-        queryClient.setQueryData([...HISTORY_STATS_KEY], context.previousStats)
+        queryClient.setQueryData(historyStatsKey, context.previousStats)
       }
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
-      queryClient.invalidateQueries({ queryKey: HISTORY_STATS_KEY })
+      queryClient.invalidateQueries({ queryKey: historyKey })
+      queryClient.invalidateQueries({ queryKey: historyStatsKey })
     },
   })
 }
@@ -792,6 +800,9 @@ export function useMarkRecipeAsMade() {
 export function useUnmarkRecipeAsMade() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+  const historyKey = historyKeys.list(ownerUserId)
+  const historyStatsKey = historyKeys.stats(ownerUserId)
 
   return useMutation({
     mutationFn: async (recipeId: string) => {
@@ -826,16 +837,16 @@ export function useUnmarkRecipeAsMade() {
     // Optimistic update
     onMutate: async (recipeId) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: HISTORY_KEY })
+      await queryClient.cancelQueries({ queryKey: historyKey })
 
       // Snapshot previous value for rollback
-      const previousHistory = queryClient.getQueryData<RecipeHistory[]>([...HISTORY_KEY])
-      const previousStats = queryClient.getQueryData<RecipeHistoryStatsRow[]>([...HISTORY_STATS_KEY])
+      const previousHistory = queryClient.getQueryData<RecipeHistory[]>(historyKey)
+      const previousStats = queryClient.getQueryData<RecipeHistoryStatsRow[]>(historyStatsKey)
 
       // Optimistically update cache - remove most recent entry for this recipe
       let nextHistory: RecipeHistory[] | undefined
       queryClient.setQueryData<RecipeHistory[]>(
-        [...HISTORY_KEY],
+        historyKey,
         (old) => {
           const existing = old || []
           // Find and remove the most recent entry for this recipe
@@ -851,25 +862,25 @@ export function useUnmarkRecipeAsMade() {
       )
 
       queryClient.setQueryData<RecipeHistoryStatsRow[] | undefined>(
-        [...HISTORY_STATS_KEY],
+        historyStatsKey,
         applyUnmarkedHistoryStats(previousStats, nextHistory, recipeId)
       )
 
-      return { previousHistory, previousStats }
+      return { ownerUserId, previousHistory, previousStats }
     },
     onError: (err, recipeId, context) => {
       // Rollback on error
       if (context?.previousHistory !== undefined) {
-        queryClient.setQueryData([...HISTORY_KEY], context.previousHistory)
+        queryClient.setQueryData(historyKey, context.previousHistory)
       }
       if (context?.previousStats !== undefined) {
-        queryClient.setQueryData([...HISTORY_STATS_KEY], context.previousStats)
+        queryClient.setQueryData(historyStatsKey, context.previousStats)
       }
     },
     onSettled: () => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
-      queryClient.invalidateQueries({ queryKey: HISTORY_STATS_KEY })
+      queryClient.invalidateQueries({ queryKey: historyKey })
+      queryClient.invalidateQueries({ queryKey: historyStatsKey })
     },
   })
 }
@@ -880,6 +891,8 @@ export function useUnmarkRecipeAsMade() {
  */
 export function useMarkRecipeMade() {
   const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({ recipeId, weekDate, isMadeForWeek, dateMade }: {
@@ -933,17 +946,17 @@ export function useMarkRecipeMade() {
 
       // Cancel outgoing refetches
       await queryClient.cancelQueries({
-        queryKey: [...WEEKLY_PLANS_KEY, weekDate],
+        queryKey: plannerKeys.week(ownerUserId, weekDate),
       })
 
       // Snapshot previous value for rollback
       const previousPlan = queryClient.getQueryData<WeeklyPlan>(
-        [...WEEKLY_PLANS_KEY, weekDate]
+        plannerKeys.week(ownerUserId, weekDate)
       )
 
       // Optimistically update cache
       queryClient.setQueryData<WeeklyPlan>(
-        [...WEEKLY_PLANS_KEY, weekDate],
+        plannerKeys.week(ownerUserId, weekDate),
         (old) => {
           if (!old) return old
           const newMadeIds = isMadeForWeek
@@ -953,22 +966,22 @@ export function useMarkRecipeMade() {
         }
       )
 
-      return { previousPlan }
+      return { ownerUserId, previousPlan }
     },
 
     onError: (err, variables, context) => {
       // Rollback on error
       if (context?.previousPlan) {
         queryClient.setQueryData(
-          [...WEEKLY_PLANS_KEY, variables.weekDate],
+          plannerKeys.week(ownerUserId, variables.weekDate),
           context.previousPlan
         )
       }
     },
 
     onSettled: (_, __, variables) => {
-      queryClient.invalidateQueries({ queryKey: HISTORY_KEY })
-      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
+      queryClient.invalidateQueries({ queryKey: historyKeys.all(ownerUserId) })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.week(ownerUserId, variables.weekDate) })
     },
   })
 }
@@ -980,6 +993,7 @@ export function useMarkRecipeMade() {
 export function useSaveDayAssignments() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
 
   return useMutation({
     mutationFn: async ({ weekDate, dayAssignments }: { weekDate: string; dayAssignments: Record<string, number> }) => {
@@ -997,17 +1011,17 @@ export function useSaveDayAssignments() {
 
       // Cancel outgoing refetches
       await queryClient.cancelQueries({
-        queryKey: [...WEEKLY_PLANS_KEY, weekDate],
+        queryKey: plannerKeys.week(ownerUserId, weekDate),
       })
 
       // Snapshot previous value for rollback
       const previousPlan = queryClient.getQueryData<WeeklyPlan>(
-        [...WEEKLY_PLANS_KEY, weekDate]
+        plannerKeys.week(ownerUserId, weekDate)
       )
 
       // Optimistically update cache
       queryClient.setQueryData<WeeklyPlan>(
-        [...WEEKLY_PLANS_KEY, weekDate],
+        plannerKeys.week(ownerUserId, weekDate),
         (old) => {
           if (!old) {
             // Create a new plan if none exists
@@ -1025,14 +1039,14 @@ export function useSaveDayAssignments() {
         }
       )
 
-      return { previousPlan }
+      return { ownerUserId, previousPlan }
     },
 
     onError: (err, variables, context) => {
       // Rollback on error
       if (context?.previousPlan) {
         queryClient.setQueryData(
-          [...WEEKLY_PLANS_KEY, variables.weekDate],
+          plannerKeys.week(ownerUserId, variables.weekDate),
           context.previousPlan
         )
       }
@@ -1040,7 +1054,7 @@ export function useSaveDayAssignments() {
 
     onSettled: (_, __, variables) => {
       // Always refetch to ensure consistency
-      queryClient.invalidateQueries({ queryKey: [...WEEKLY_PLANS_KEY, variables.weekDate] })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.week(ownerUserId, variables.weekDate) })
     },
   })
 }

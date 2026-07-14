@@ -13,7 +13,8 @@ import { normalizeShoppingItemOrderPreferences } from "@/lib/shopping-item-order
 import { normalizeItemName } from "@/lib/shopping-list-normalization"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
-import { SHOPPING_KEY, SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import { principalId, shoppingKeys } from "@/lib/query-keys"
+import { SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 import { fetchShoppingGenerationConfig } from "./user-config-read"
 
 /**
@@ -24,7 +25,7 @@ export function useRemoveRecipeItems() {
   const { user } = useAuthContext()
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (recipeName: string) => {
       // Use the unified remove function
       const filterItems = (items: ShoppingItem[]) => removeRecipeByNameFromItems(items, recipeName)
@@ -92,7 +93,7 @@ export function useAddToShoppingList() {
   const { user } = useAuthContext()
 
   return useMutation({
-    scope: { id: SHOPPING_LIST_WRITE_SCOPE_ID },
+    scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async ({ recipeIds, scale = 1.0 }: { recipeIds: string[]; scale?: number }) => {
       let recipes: Recipe[]
       let pantryItems: PantryItem[]
@@ -267,7 +268,7 @@ export function useAddToShoppingList() {
       return { added: addedCount, merged: mergedCount, shoppingList: shoppingListData as ShoppingList }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: SHOPPING_KEY })
+      queryClient.invalidateQueries({ queryKey: shoppingKeys.detail(principalId(user?.id)) })
     },
   })
 }
