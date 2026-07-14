@@ -33,8 +33,8 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 ### Prerequisites
 
-- Node.js 18 or higher
-- npm (comes with Node.js)
+- Node.js 22.23.1 (run `nvm use` from `web/`)
+- npm 10.9.8 (included with the declared Node.js release)
 - A Supabase account (free tier available at [supabase.com](https://supabase.com))
 
 ### 1. Create Supabase Project
@@ -80,7 +80,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here  # For migration only
 ### 3. Install Dependencies
 
 ```bash
-npm install
+npm ci
 ```
 
 ### 4. Migrate Existing Data (Optional)
