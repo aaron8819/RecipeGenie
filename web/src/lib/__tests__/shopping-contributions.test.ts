@@ -256,6 +256,75 @@ describe("authoritative recipe shopping contributions", () => {
     expect(result.overrides.milk.quantity?.amount).toBe(3)
   })
 
+  it("preserves a normal pantry move when the recipe contribution is replaced", () => {
+    const previous = contribution("a", 1)
+    const initial = project(list(), [], [previous])
+    const pantryItem = initial.shoppingList.items[0]
+    const afterPantryMove = list({
+      ...initial.shoppingList,
+      items: [],
+      already_have: [pantryItem],
+    })
+    const replacement = contribution("a", 2, { servings: 8, scale: 2 })
+
+    const result = project(afterPantryMove, [previous], [replacement])
+
+    expect(result.shoppingList.items).toEqual([])
+    expect(result.shoppingList.already_have[0]).toMatchObject({
+      rowId: pantryItem.rowId,
+      amount: 2,
+    })
+    expect(result.overrides.milk.bucket).toBe("already_have")
+  })
+
+  it("preserves generated exclusion and a later explicit restore across replacements", () => {
+    const previous = contribution("a", 1)
+    previous.items[0].bucket = "excluded"
+    previous.items[0].excludedBy = "milk"
+    const initial = project(list(), [], [previous])
+    const excludedItem = initial.shoppingList.excluded[0]
+    const replacement = contribution("a", 2, { servings: 8, scale: 2 })
+    replacement.items[0].bucket = "excluded"
+    replacement.items[0].excludedBy = "milk"
+
+    const stillExcluded = project(
+      list({ ...initial.shoppingList }),
+      [previous],
+      [replacement]
+    )
+    expect(stillExcluded.shoppingList.excluded[0].amount).toBe(2)
+
+    const restoredList = list({
+      ...stillExcluded.shoppingList,
+      items: [stillExcluded.shoppingList.excluded[0]],
+      excluded: [],
+    })
+    const afterRestore = project(restoredList, [replacement], [replacement], {
+      existingOverrides: stillExcluded.overrides,
+    })
+
+    expect(afterRestore.shoppingList.excluded).toEqual([])
+    expect(afterRestore.shoppingList.items).toHaveLength(1)
+    expect(afterRestore.overrides.milk.bucket).toBe("items")
+  })
+
+  it("discards an invalid duplicate projection staging in favor of the active row", () => {
+    const recipe = contribution("a", 1)
+    const initial = project(list(), [], [recipe])
+    const derivedItem = initial.shoppingList.items[0]
+    const invalidProjection = list({
+      ...initial.shoppingList,
+      items: [derivedItem],
+      already_have: [derivedItem],
+    })
+
+    const result = project(invalidProjection, [recipe], [recipe])
+
+    expect(result.shoppingList.items).toHaveLength(1)
+    expect(result.shoppingList.already_have).toEqual([])
+    expect(result.overrides.milk.bucket).toBe("items")
+  })
+
   it("keeps an explicit deletion suppressed while undo can restore the prior row", () => {
     const recipeA = contribution("a", 1)
     const initial = project(list(), [], [recipeA])

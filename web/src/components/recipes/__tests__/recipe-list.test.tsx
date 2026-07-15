@@ -188,7 +188,15 @@ vi.mock("../recipe-dialog", () => ({
 }))
 
 vi.mock("../recipe-detail-dialog", () => ({
-  RecipeDetailDialog: () => null,
+  RecipeDetailDialog: ({
+    onDelete,
+  }: {
+    onDelete?: (recipe: Recipe) => Promise<boolean> | boolean | void
+  }) => (
+    <button type="button" onClick={() => void onDelete?.(baseRecipes[0])}>
+      Confirm detail delete
+    </button>
+  ),
 }))
 
 vi.mock("../add-to-plan-dialog", () => ({
@@ -342,5 +350,18 @@ describe("RecipeList", () => {
     expect(undoToastShow).toHaveBeenCalledWith({
       message: '"Chicken Soup" deleted',
     })
+  })
+
+  it("does not ask for a second confirmation after the detail dialog confirms deletion", async () => {
+    deleteRecipeMutateAsync.mockResolvedValueOnce("recipe-1")
+
+    render(<RecipeList />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm detail delete" }))
+
+    await waitFor(() => {
+      expect(deleteRecipeMutateAsync).toHaveBeenCalledWith("recipe-1")
+    })
+    expect(window.confirm).not.toHaveBeenCalled()
   })
 })
