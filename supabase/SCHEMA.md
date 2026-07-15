@@ -254,6 +254,9 @@ Stores the user's shopping list state.
 | `scale` | NUMERIC | DEFAULT 1.0 | Scaling factor applied to the list |
 | `total_servings` | INTEGER | DEFAULT 0 | Total number of servings across all recipes |
 | `custom_order` | BOOLEAN | DEFAULT FALSE | Whether the list has been manually reordered (disables auto-sorting) |
+| `contribution_revision` | BIGINT | NOT NULL, DEFAULT 0 | Compare-and-swap revision for recipe contribution projection writes |
+| `contribution_overrides` | JSONB | NOT NULL, DEFAULT '{}' | Manual quantity, presentation, ordering, and lifecycle overrides |
+| `legacy_items_preserved` | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether ambiguous pre-contribution JSON is conservatively retained |
 | `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when list was generated |
 
 **Shopping item JSONB structure:**
@@ -275,6 +278,27 @@ Stores the user's shopping list state.
 `rowId` is the stable identity contract for shopping rows across `items`,
 `already_have`, and `excluded`. Client mutations, drag-and-drop ids, and
 server RPCs must target rows by `rowId`, not by item name.
+Every `shopping_list` update advances `contribution_revision` unless the
+authoritative command already supplied the next revision. This makes
+concurrent manual edits visible to the command's compare-and-swap retry.
+
+### shopping_recipe_contributions
+
+Stores the authoritative frozen quantitative snapshot for each active recipe
+contribution. The primary key `(user_id, recipe_id)` makes same-recipe adds
+replaceable and idempotent. `shopping_list` is the compatibility projection.
+
+| Column | Type | Constraints | Description |
+|--------|------|-------------|-------------|
+| `user_id` | UUID | PRIMARY KEY, FOREIGN KEY â†’ `auth.users(id)` | Contribution owner |
+| `recipe_id` | TEXT | PRIMARY KEY, FOREIGN KEY â†’ `recipes(id)` | Stable recipe contribution identity |
+| `servings` | INTEGER | NOT NULL, > 0 | Frozen effective servings |
+| `scale` | NUMERIC | NOT NULL, > 0 | Frozen scale used during generation |
+| `normalization_version` | INTEGER | NOT NULL, > 0 | Generation/normalization contract version |
+| `snapshot` | JSONB | NOT NULL object | Frozen generated contribution items and recipe display snapshot |
+| `idempotency_key` | TEXT | NOT NULL | Last command identity that wrote the row |
+| `created_at` | TIMESTAMPTZ | NOT NULL | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NOT NULL | Last replacement timestamp |
 
 ### recipe_shares
 
@@ -483,6 +507,20 @@ Atomically toggles the `checked` flag for a shopping row identified by
 **Returns:** `TABLE(row_id TEXT, checked BOOLEAN, updated_at TIMESTAMPTZ)`
 
 **Language:** `plpgsql`
+
+### Recipe shopping contribution RPCs
+
+`get_recipe_shopping_contribution_state()` returns the authenticated user's
+shopping projection and contribution rows from one consistent database
+snapshot. `apply_recipe_shopping_contribution_command(...)` locks that user's
+shopping row, checks `contribution_revision`, validates recipe ownership,
+deduplicates retries by idempotency key, replaces/removes contribution rows,
+and commits the new compatibility projection in the same transaction.
+
+The apply function is `SECURITY DEFINER` because authenticated clients have
+read-only access to contribution rows. It derives identity only from
+`auth.uid()`, uses an empty `search_path`, accepts no caller-selected user ID,
+and is executable only by `authenticated`.
 
 ### move_shopping_item_to_pantry(p_row_id TEXT, p_pantry_qty NUMERIC, p_pantry_unit TEXT)
 

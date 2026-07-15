@@ -734,8 +734,8 @@ export function ShoppingListView() {
   }, [pendingActions])
 
   // Handle recipe items removal with undo
-  const handleRemoveRecipeItems = useCallback((recipeName: string) => {
-    pendingActions.enqueueRemoveRecipe(recipeName)
+  const handleRemoveRecipeItems = useCallback((recipeId: string | undefined, recipeName: string) => {
+    pendingActions.enqueueRemoveRecipe({ recipeId, recipeName })
   }, [pendingActions])
 
   // Handle clear list with undo
@@ -1054,6 +1054,21 @@ export function ShoppingListView() {
   const uniqueRecipes = useMemo(() => {
     return deriveUniqueRecipeNames(projectedShoppingList.items || [])
   }, [projectedShoppingList.items])
+
+  const recipeIdsByName = useMemo(() => {
+    const ids = new Map<string, string>()
+    for (const item of projectedShoppingList.items || []) {
+      for (const source of item.sources || []) {
+        if (source.recipeId && source.recipeName !== "Manual") {
+          ids.set(source.recipeName, source.recipeId)
+        }
+      }
+    }
+    for (const recipe of allRecipes || []) {
+      if (!ids.has(recipe.name)) ids.set(recipe.name, recipe.id)
+    }
+    return ids
+  }, [allRecipes, projectedShoppingList.items])
 
   // Create a color mapping that assigns a unique color per recipe when possible.
   // Prefer hash-based index for stability; on collision use next available index.
@@ -1690,16 +1705,19 @@ export function ShoppingListView() {
                   </div>
                   {!recipeSectionCollapsed ? (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {uniqueRecipes.map((recipeName) => (
-                        <RecipeTag
-                          key={recipeName}
-                          recipeName={recipeName}
-                          onRemove={() => handleRemoveRecipeItems(recipeName)}
-                          onViewRecipe={() => handleRecipeTagClick(undefined, recipeName)}
-                          isRemoving={false}
-                          colorIndex={recipeColorMap.get(recipeName)}
-                        />
-                      ))}
+                      {uniqueRecipes.map((recipeName) => {
+                        const recipeId = recipeIdsByName.get(recipeName)
+                        return (
+                          <RecipeTag
+                            key={recipeName}
+                            recipeName={recipeName}
+                            onRemove={() => handleRemoveRecipeItems(recipeId, recipeName)}
+                            onViewRecipe={() => handleRecipeTagClick(recipeId, recipeName)}
+                            isRemoving={false}
+                            colorIndex={recipeColorMap.get(recipeName)}
+                          />
+                        )
+                      })}
                     </div>
                   ) : null}
                 </CardContent>

@@ -6,8 +6,15 @@ import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
+import { getActivePrincipalId } from "@/lib/principal-session"
+import { runRecipeContributionCommand } from "@/lib/shopping-contribution-client"
 import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
-import { configurationKeys, principalId, recipeKeys } from "@/lib/query-keys"
+import {
+  configurationKeys,
+  principalId,
+  recipeKeys,
+  shoppingKeys,
+} from "@/lib/query-keys"
 import {
   normalizeRecipeInstructionGroups,
   normalizeRecipeNotes,
@@ -408,6 +415,17 @@ export function useDeleteRecipe() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      const contributionResult = await runRecipeContributionCommand("DELETE", {
+        recipeIds: [id],
+        idempotencyKey: crypto.randomUUID(),
+      })
+      if (getActivePrincipalId() === ownerUserId) {
+        queryClient.setQueryData(
+          shoppingKeys.detail(ownerUserId),
+          contributionResult.shopping_list
+        )
+      }
+
       const supabase = getSupabase()
       const { error } = await supabase.from("recipes").delete().eq("id", id).eq("user_id", user!.id)
       if (error) throw error

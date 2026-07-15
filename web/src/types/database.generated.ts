@@ -189,13 +189,40 @@ export type Database = {
         }
         Relationships: []
       }
+      shopping_contribution_commands: {
+        Row: {
+          command_fingerprint: string
+          command_type: string
+          created_at: string
+          idempotency_key: string
+          user_id: string
+        }
+        Insert: {
+          command_fingerprint: string
+          command_type: string
+          created_at?: string
+          idempotency_key: string
+          user_id: string
+        }
+        Update: {
+          command_fingerprint?: string
+          command_type?: string
+          created_at?: string
+          idempotency_key?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       shopping_list: {
         Row: {
           already_have: Json | null
+          contribution_overrides: Json
+          contribution_revision: number
           custom_order: boolean | null
           excluded: Json | null
           generated_at: string | null
           items: Json | null
+          legacy_items_preserved: boolean
           scale: number | null
           source_recipes: string[] | null
           total_servings: number | null
@@ -203,10 +230,13 @@ export type Database = {
         }
         Insert: {
           already_have?: Json | null
+          contribution_overrides?: Json
+          contribution_revision?: number
           custom_order?: boolean | null
           excluded?: Json | null
           generated_at?: string | null
           items?: Json | null
+          legacy_items_preserved?: boolean
           scale?: number | null
           source_recipes?: string[] | null
           total_servings?: number | null
@@ -214,16 +244,63 @@ export type Database = {
         }
         Update: {
           already_have?: Json | null
+          contribution_overrides?: Json
+          contribution_revision?: number
           custom_order?: boolean | null
           excluded?: Json | null
           generated_at?: string | null
           items?: Json | null
+          legacy_items_preserved?: boolean
           scale?: number | null
           source_recipes?: string[] | null
           total_servings?: number | null
           user_id?: string
         }
         Relationships: []
+      }
+      shopping_recipe_contributions: {
+        Row: {
+          created_at: string
+          idempotency_key: string
+          normalization_version: number
+          recipe_id: string
+          scale: number
+          servings: number
+          snapshot: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          idempotency_key: string
+          normalization_version: number
+          recipe_id: string
+          scale: number
+          servings: number
+          snapshot: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          idempotency_key?: string
+          normalization_version?: number
+          recipe_id?: string
+          scale?: number
+          servings?: number
+          snapshot?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopping_recipe_contributions_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_config: {
         Row: {
@@ -315,6 +392,18 @@ export type Database = {
     }
     Functions: {
       accept_recipe_share: { Args: { p_share_id: string }; Returns: string }
+      apply_recipe_shopping_contribution_command: {
+        Args: {
+          p_command_type: string
+          p_contribution_overrides: Json
+          p_contributions: Json
+          p_expected_revision: number
+          p_idempotency_key: string
+          p_projection: Json
+          p_remove_recipe_ids: string[]
+        }
+        Returns: Json
+      }
       delete_tag: { Args: { p_tag: string }; Returns: undefined }
       filter_recipes_by_tags: {
         Args: { p_tags: string[] }
@@ -352,6 +441,7 @@ export type Database = {
           times_made: number
         }[]
       }
+      get_recipe_shopping_contribution_state: { Args: never; Returns: Json }
       merge_tags: {
         Args: { p_source_tag: string; p_target_tag: string }
         Returns: undefined

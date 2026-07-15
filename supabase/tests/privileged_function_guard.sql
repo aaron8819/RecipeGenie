@@ -21,7 +21,7 @@ select extensions.is(
     where namespace.nspname = 'public'
       and procedure.prosecdef
   ),
-  E'public.accept_recipe_share(p_share_id uuid)\npublic.handle_new_user()',
+  E'public.accept_recipe_share(p_share_id uuid)\npublic.apply_recipe_shopping_contribution_command(p_expected_revision bigint, p_contributions jsonb, p_remove_recipe_ids text[], p_projection jsonb, p_contribution_overrides jsonb, p_idempotency_key text, p_command_type text)\npublic.handle_new_user()',
   'only reviewed SECURITY DEFINER functions exist'
 );
 

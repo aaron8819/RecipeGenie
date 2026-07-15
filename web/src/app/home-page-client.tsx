@@ -143,7 +143,7 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
           queryFn: async () => {
             const { data, error } = await supabase
               .from("shopping_list")
-              .select("already_have,custom_order,excluded,generated_at,items,scale,source_recipes,total_servings,user_id")
+              .select("already_have,contribution_overrides,contribution_revision,custom_order,excluded,generated_at,items,legacy_items_preserved,scale,source_recipes,total_servings,user_id")
               .maybeSingle()
             if (error) throw error
             return data

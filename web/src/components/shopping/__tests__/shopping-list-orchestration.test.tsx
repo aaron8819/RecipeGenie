@@ -11,7 +11,9 @@ type ResolveFn = () => void
 
 const shoppingListeners = new Set<() => void>()
 const removeItemMutate = vi.fn<(rowId: string) => void>()
-const removeRecipeItemsMutate = vi.fn<(recipeName: string) => void>()
+const removeRecipeItemsMutate = vi.fn<
+  (recipe: { recipeId?: string; recipeName: string }) => void
+>()
 const clearListMutate = vi.fn<() => void>()
 const moveToListMutate = vi.fn<
   (item: ShoppingItem, options?: { onSuccess?: () => void; onError?: () => void }) => void
@@ -280,7 +282,9 @@ vi.mock("@/hooks/use-shopping", () => ({
   }),
   useRemoveRecipeItems: () => ({
     mutate: removeRecipeItemsMutate,
-    mutateAsync: vi.fn(async (recipeName: string) => removeRecipeItemsMutate(recipeName)),
+    mutateAsync: vi.fn(async (recipe: { recipeId?: string; recipeName: string }) =>
+      removeRecipeItemsMutate(recipe)
+    ),
     isPending: false,
   }),
   useClearShoppingList: () => ({
@@ -348,7 +352,9 @@ vi.mock("@/hooks/use-shopping", () => ({
     clearListCommit,
   }: {
     removeItemCommit: { mutateAsync: (rowId: string) => Promise<unknown> }
-    removeRecipeCommit: { mutateAsync: (recipeName: string) => Promise<unknown> }
+    removeRecipeCommit: {
+      mutateAsync: (recipe: { recipeId?: string; recipeName: string }) => Promise<unknown>
+    }
     clearListCommit: { mutateAsync: () => Promise<unknown> }
   }) => {
     const undoToast = useUndoToast()
@@ -461,29 +467,14 @@ vi.mock("@/hooks/use-shopping", () => ({
           },
         ])
       },
-      enqueueRemoveRecipe: (recipeName: string) => {
-        const previousList = cloneList(currentShoppingList)
-        updateShoppingList((prev) => ({
-          ...prev,
-          items: prev.items.filter(
-            (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
-          ),
-          already_have: prev.already_have.filter(
-            (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
-          ),
-          excluded: prev.excluded.filter(
-            (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
-          ),
-        }))
+      enqueueRemoveRecipe: (recipe: { recipeId?: string; recipeName: string }) => {
         setQueue((current) => [
           ...current,
           {
             id: `remove-recipe-${nextIdRef.current++}`,
-            message: `Items from "${recipeName}" removed`,
-            commit: () => removeRecipeCommit.mutateAsync(recipeName),
-            rollback: () => {
-              setShoppingList(previousList)
-            },
+            message: `Items from "${recipe.recipeName}" removed`,
+            commit: () => removeRecipeCommit.mutateAsync(recipe),
+            rollback: () => undefined,
           },
         ])
       },
@@ -554,7 +545,8 @@ vi.mock("@/hooks/use-shopping", () => ({
     }))
   })
 
-  removeRecipeItemsMutate.mockImplementation((recipeName: string) => {
+  removeRecipeItemsMutate.mockImplementation((recipe) => {
+    const recipeName = recipe.recipeName
     updateShoppingList((prev) => ({
       ...prev,
       items: prev.items.filter(
@@ -1026,7 +1018,7 @@ describe("ShoppingListView orchestration", () => {
       fireEvent.click(screen.getAllByRole("button", { name: 'Remove all items from Stew' })[0])
     })
 
-    expect(screen.queryByText("garlic")).not.toBeInTheDocument()
+    expect(screen.getByText("garlic")).toBeInTheDocument()
     expect(screen.getByText("rice")).toBeInTheDocument()
     expect(screen.getByRole("alert")).toHaveTextContent('Items from "Stew" removed')
 

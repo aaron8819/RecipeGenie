@@ -78,6 +78,7 @@ jobs:
               ('recipes'),
               ('weekly_plans'),
               ('shopping_list'),
+              ('shopping_recipe_contributions'),
               ('pantry_items'),
               ('recipe_shares'),
               ('plan_templates'),
@@ -96,7 +97,9 @@ jobs:
               ('filter_recipes_by_tags'),
               ('rename_tag'),
               ('merge_tags'),
-              ('delete_tag')
+              ('delete_tag'),
+              ('apply_recipe_shopping_contribution_command'),
+              ('get_recipe_shopping_contribution_state')
             ) AS f(function_name)
             WHERE NOT EXISTS (
               SELECT 1
