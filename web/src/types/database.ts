@@ -49,6 +49,13 @@ export type ShoppingItem = {
   additionalAmounts?: { amount: number; unit: string }[]
   checked?: boolean
   excludedBy?: string
+  contributionKey?: string
+  derivedQuantity?: {
+    amount: number | null
+    unit: string
+    additionalAmounts?: { amount: number; unit: string }[]
+  }
+  legacyRecipeProvenance?: boolean
 }
 
 export type ShoppingItemOrderPreferences = Record<string, string[]>
@@ -140,11 +147,19 @@ export type WeeklyPlan = Omit<WeeklyPlanBase, "day_assignments"> & {
 type ShoppingListBase = Database["public"]["Tables"]["shopping_list"]["Row"]
 export type ShoppingList = Omit<
   ShoppingListBase,
-  "items" | "already_have" | "excluded"
+  | "items"
+  | "already_have"
+  | "excluded"
+  | "contribution_revision"
+  | "contribution_overrides"
+  | "legacy_items_preserved"
 > & {
   items: ShoppingItem[]
   already_have: ShoppingItem[]
   excluded: ShoppingItem[]
+  contribution_revision?: number
+  contribution_overrides?: Json
+  legacy_items_preserved?: boolean
 }
 
 type RecipeShareBase = Database["public"]["Tables"]["recipe_shares"]["Row"]

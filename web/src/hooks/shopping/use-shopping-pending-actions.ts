@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useUndoToast } from "@/components/ui/undo-toast"
 import { requireShoppingRowId } from "@/lib/shopping-row-identity"
-import { removeRecipeByNameFromItems } from "@/lib/shopping-list-merging"
 import type { ShoppingItem, ShoppingList } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { principalId, shoppingKeys } from "@/lib/query-keys"
 import { getActivePrincipalId } from "@/lib/principal-session"
+import type { RecipeContributionIdentity } from "./use-shopping-recipes"
 
 const DEFAULT_UNDO_DURATION_MS = 5000
 
@@ -25,7 +25,7 @@ type PendingAction =
   | {
       id: string
       kind: "remove-recipe"
-      recipeName: string
+      recipe: RecipeContributionIdentity
       message: string
       createdAt: number
       commit: () => Promise<unknown>
@@ -68,12 +68,9 @@ export function applyPendingShoppingActions(
     }
 
     if (action.kind === "remove-recipe") {
-      projected = {
-        ...projected,
-        items: removeRecipeByNameFromItems(projected.items, action.recipeName),
-        already_have: removeRecipeByNameFromItems(projected.already_have, action.recipeName),
-        excluded: removeRecipeByNameFromItems(projected.excluded, action.recipeName),
-      }
+      // Per-source quantities live in the authoritative contribution store.
+      // Keep the projection unchanged until the command returns rather than
+      // showing the old, quantitatively incorrect source-only subtraction.
       continue
     }
 
@@ -94,7 +91,7 @@ export function applyPendingShoppingActions(
 
 export function useShoppingPendingActions(params: {
   removeItemCommit: { mutateAsync: (rowId: string) => Promise<unknown> }
-  removeRecipeCommit: { mutateAsync: (recipeName: string) => Promise<unknown> }
+  removeRecipeCommit: { mutateAsync: (recipe: RecipeContributionIdentity) => Promise<unknown> }
   clearListCommit: { mutateAsync: () => Promise<unknown> }
 }) {
   const queryClient = useQueryClient()
@@ -135,7 +132,11 @@ export function useShoppingPendingActions(params: {
       if (resolution === "commit") {
         try {
           await action.commit()
-          await queryClient.invalidateQueries({ queryKey: shoppingKeys.detail(ownerUserId) })
+          if (action.kind === "remove-item") {
+            await queryClient.invalidateQueries({
+              queryKey: shoppingKeys.detail(ownerUserId),
+            })
+          }
         } catch {
           showUndoToast({
             message: "Failed to update shopping list",
@@ -245,7 +246,7 @@ export function useShoppingPendingActions(params: {
     ])
   }, [params.removeItemCommit, syncQueue])
 
-  const enqueueRemoveRecipe = useCallback((recipeName: string) => {
+  const enqueueRemoveRecipe = useCallback((recipe: RecipeContributionIdentity) => {
     const actionId = `shopping-remove-recipe-${idCounterRef.current++}`
     const createdAt = Date.now()
     syncQueue((current) => [
@@ -253,10 +254,10 @@ export function useShoppingPendingActions(params: {
       {
         id: actionId,
         kind: "remove-recipe",
-        recipeName,
-        message: `Items from "${recipeName}" removed`,
+        recipe,
+        message: `Items from "${recipe.recipeName || "recipe"}" removed`,
         createdAt,
-        commit: () => params.removeRecipeCommit.mutateAsync(recipeName),
+        commit: () => params.removeRecipeCommit.mutateAsync(recipe),
       },
     ])
   }, [params.removeRecipeCommit, syncQueue])

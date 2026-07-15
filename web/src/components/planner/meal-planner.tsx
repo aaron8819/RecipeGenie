@@ -1303,7 +1303,10 @@ export function MealPlanner() {
   const handleGenerateShoppingList = async () => {
     if (!weeklyPlan?.recipe_ids || weeklyPlan.recipe_ids.length === 0) return
     try {
-      const result = await addToShoppingList.mutateAsync({ recipeIds: weeklyPlan.recipe_ids })
+      const result = await addToShoppingList.mutateAsync({
+        recipeIds: weeklyPlan.recipe_ids,
+        scale: weeklyPlan.scale || 1,
+      })
 
       undoToast.show({
         message: formatShoppingAddMessage(result, {
