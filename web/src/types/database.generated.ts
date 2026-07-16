@@ -34,30 +34,36 @@ export type Database = {
         Row: {
           category_selection: Json | null
           created_at: string | null
+          day_assignment_recipe_uuids: Json
           day_assignments: Json | null
           id: string
           name: string
           recipe_ids: string[]
+          recipe_uuids: string[]
           updated_at: string | null
           user_id: string
         }
         Insert: {
           category_selection?: Json | null
           created_at?: string | null
+          day_assignment_recipe_uuids?: Json
           day_assignments?: Json | null
           id?: string
           name: string
           recipe_ids?: string[]
+          recipe_uuids?: string[]
           updated_at?: string | null
           user_id: string
         }
         Update: {
           category_selection?: Json | null
           created_at?: string | null
+          day_assignment_recipe_uuids?: Json
           day_assignments?: Json | null
           id?: string
           name?: string
           recipe_ids?: string[]
+          recipe_uuids?: string[]
           updated_at?: string | null
           user_id?: string
         }
@@ -68,18 +74,21 @@ export type Database = {
           date_made: string
           id: number
           recipe_id: string
+          recipe_uuid: string | null
           user_id: string
         }
         Insert: {
           date_made?: string
           id?: never
           recipe_id: string
+          recipe_uuid?: string | null
           user_id: string
         }
         Update: {
           date_made?: string
           id?: never
           recipe_id?: string
+          recipe_uuid?: string | null
           user_id?: string
         }
         Relationships: []
@@ -87,6 +96,7 @@ export type Database = {
       recipe_shares: {
         Row: {
           accepted_recipe_id: string | null
+          accepted_recipe_uuid: string | null
           created_at: string
           id: string
           message: string | null
@@ -97,10 +107,12 @@ export type Database = {
           sender_user_id: string
           source_recipe_id: string
           source_recipe_snapshot: Json
+          source_recipe_uuid: string | null
           status: string
         }
         Insert: {
           accepted_recipe_id?: string | null
+          accepted_recipe_uuid?: string | null
           created_at?: string
           id?: string
           message?: string | null
@@ -111,10 +123,12 @@ export type Database = {
           sender_user_id: string
           source_recipe_id: string
           source_recipe_snapshot: Json
+          source_recipe_uuid?: string | null
           status?: string
         }
         Update: {
           accepted_recipe_id?: string | null
+          accepted_recipe_uuid?: string | null
           created_at?: string
           id?: string
           message?: string | null
@@ -125,6 +139,7 @@ export type Database = {
           sender_user_id?: string
           source_recipe_id?: string
           source_recipe_snapshot?: Json
+          source_recipe_uuid?: string | null
           status?: string
         }
         Relationships: []
@@ -227,6 +242,7 @@ export type Database = {
           items: Json | null
           legacy_items_preserved: boolean
           scale: number | null
+          source_recipe_uuids: string[]
           source_recipes: string[] | null
           total_servings: number | null
           user_id: string
@@ -241,6 +257,7 @@ export type Database = {
           items?: Json | null
           legacy_items_preserved?: boolean
           scale?: number | null
+          source_recipe_uuids?: string[]
           source_recipes?: string[] | null
           total_servings?: number | null
           user_id: string
@@ -255,6 +272,7 @@ export type Database = {
           items?: Json | null
           legacy_items_preserved?: boolean
           scale?: number | null
+          source_recipe_uuids?: string[]
           source_recipes?: string[] | null
           total_servings?: number | null
           user_id?: string
@@ -267,6 +285,7 @@ export type Database = {
           idempotency_key: string
           normalization_version: number
           recipe_id: string
+          recipe_uuid: string
           scale: number
           servings: number
           snapshot: Json
@@ -278,6 +297,7 @@ export type Database = {
           idempotency_key: string
           normalization_version: number
           recipe_id: string
+          recipe_uuid: string
           scale: number
           servings: number
           snapshot: Json
@@ -289,6 +309,7 @@ export type Database = {
           idempotency_key?: string
           normalization_version?: number
           recipe_id?: string
+          recipe_uuid?: string
           scale?: number
           servings?: number
           snapshot?: Json
@@ -302,6 +323,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "recipes"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopping_recipe_contributions_recipe_uuid_fkey"
+            columns: ["recipe_uuid"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["recipe_uuid"]
           },
         ]
       }
@@ -361,28 +389,37 @@ export type Database = {
       }
       weekly_plans: {
         Row: {
+          day_assignment_recipe_uuids: Json
           day_assignments: Json | null
           generated_at: string | null
           made_recipe_ids: string[] | null
+          made_recipe_uuids: string[]
           recipe_ids: string[]
+          recipe_uuids: string[]
           scale: number | null
           user_id: string
           week_date: string
         }
         Insert: {
+          day_assignment_recipe_uuids?: Json
           day_assignments?: Json | null
           generated_at?: string | null
           made_recipe_ids?: string[] | null
+          made_recipe_uuids?: string[]
           recipe_ids?: string[]
+          recipe_uuids?: string[]
           scale?: number | null
           user_id: string
           week_date: string
         }
         Update: {
+          day_assignment_recipe_uuids?: Json
           day_assignments?: Json | null
           generated_at?: string | null
           made_recipe_ids?: string[] | null
+          made_recipe_uuids?: string[]
           recipe_ids?: string[]
+          recipe_uuids?: string[]
           scale?: number | null
           user_id?: string
           week_date?: string

@@ -68,6 +68,11 @@ from (
     ('fixture-unrelated-owner', extensions.uuid_generate_v5(extensions.uuid_nil(), 'migration-008-owner-2'))
 ) as fixture_recipes(recipe_id, owner_id);
 
+-- This fixture reconstructs the pre-008 stale state after all migrations have
+-- loaded. Stage 2A correctly rejects such writes, so bypass only its parity
+-- trigger while inserting the historical input that migration 008 consumes.
+alter table public.weekly_plans disable trigger sync_weekly_plan_recipe_uuids;
+
 insert into public.weekly_plans (
   user_id,
   week_date,
@@ -106,6 +111,8 @@ select
   timestamptz '2099-01-01 12:00:00+00' + ((context.week_date - date '2099-01-01') * interval '1 day')
 from reconciliation_fixture_context as context;
 
+alter table public.weekly_plans enable trigger sync_weekly_plan_recipe_uuids;
+
 insert into public.weekly_plans (
   user_id,
   week_date,
@@ -140,6 +147,8 @@ select * from public.weekly_plans;
 create temporary table reconciliation_recipe_before on commit drop as
 select id, user_id, recipe_uuid, to_jsonb(recipes) as row_value from public.recipes;
 
+alter table public.weekly_plans disable trigger sync_weekly_plan_recipe_uuids;
+
 do $$
 declare
   context reconciliation_fixture_context%rowtype;
@@ -173,6 +182,16 @@ begin
   end loop;
 end;
 $$;
+
+alter table public.weekly_plans enable trigger sync_weekly_plan_recipe_uuids;
+
+update public.weekly_plans as plan
+set recipe_ids = plan.recipe_ids,
+    day_assignments = plan.day_assignments,
+    made_recipe_ids = plan.made_recipe_ids
+from reconciliation_fixture_context as context
+where plan.user_id = context.owner_id
+  and plan.week_date = context.week_date;
 
 select extensions.ok(
   not (wp.day_assignments ? context.stale_id)
@@ -247,8 +266,19 @@ select extensions.ok(
     from reconciliation_fixture_context as context
     join public.weekly_plans as wp on wp.user_id = context.owner_id and wp.week_date = context.week_date
     join reconciliation_plan_before as before on before.user_id = context.owner_id and before.week_date = context.week_date
-    where (to_jsonb(wp) - array['recipe_ids', 'day_assignments'])
-      is distinct from (to_jsonb(before) - array['recipe_ids', 'day_assignments'])
+    where (to_jsonb(wp) - array[
+      'recipe_ids',
+      'day_assignments',
+      'recipe_uuids',
+      'day_assignment_recipe_uuids',
+      'made_recipe_uuids'
+    ]) is distinct from (to_jsonb(before) - array[
+      'recipe_ids',
+      'day_assignments',
+      'recipe_uuids',
+      'day_assignment_recipe_uuids',
+      'made_recipe_uuids'
+    ])
   ),
   'ownership, week, made-state, scale, timestamp, and unrelated row fields are preserved'
 );
@@ -329,6 +359,8 @@ select extensions.is(
   'active planner reference audit reports zero unresolved values'
 );
 
+alter table public.weekly_plans disable trigger sync_weekly_plan_recipe_uuids;
+
 insert into public.weekly_plans (user_id, week_date, recipe_ids, day_assignments, made_recipe_ids)
 select
   owner_id,
@@ -338,6 +370,8 @@ select
   array['fixture-valid-a1']
 from reconciliation_fixture_context
 where reference_label = 'Ref-A';
+
+alter table public.weekly_plans enable trigger sync_weekly_plan_recipe_uuids;
 
 select extensions.throws_ok(
   format(

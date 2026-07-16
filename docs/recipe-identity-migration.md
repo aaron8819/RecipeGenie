@@ -114,9 +114,11 @@ An in-place type replacement was rejected because text arrays, JSON object keys,
 
 | Stage | Database change | Application change | Compatibility | Verification gate |
 | --- | --- | --- | --- | --- |
-| 1 (this PR) | Add/backfill unique, not-null, immutable `recipes.recipe_uuid`; keep text PK and all references | Generated types and structural guard only | Old and new deployed application behavior remains unchanged | Clean reset, pgTAP identity/backfill tests, type drift, full app verification; production remains unmodified |
-| 2 | Add/migrate UUID reference fields and exact UUID RPCs; retain explicit legacy columns for snapshots; add ownership validation | Switch create/import/default/share, queries, planner/templates/history/shopping/deletion to UUID | Migration deploys first; old application continues on legacy fields while new application dual-reads only where documented | Zero unresolved active refs, row-for-row migration assertions, security tests, preview smoke, redacted production dry run |
-| 3 | Promote UUID to `recipes.id`; rename old key to `legacy_id`; remove active legacy fields, triggers, and obsolete RPCs | Remove legacy reads and transitional types | New application only; rollback uses database backup plus prior matching app/schema pair | Zero legacy writes/reads for one rollback window, CI/preview/production smoke, catalog audit |
+| 1 (complete) | Add/backfill unique, not-null, immutable `recipes.recipe_uuid`; keep text PK and all references | Generated types and structural guard only | Deployed application behavior remains unchanged | Production mapping is complete and immutable |
+| 2A (this PR) | Add/backfill UUID mirrors for active references; nullable UUID linkage for historical evidence; synchronize legacy writes | No application behavior switch | Migration deploys first; the old application continues to write legacy fields while triggers maintain exact UUID parity | Zero active unresolved refs, row-for-row migration assertions, security tests, clean reset, and redacted production dry run |
+| 2B | Add exact UUID RPCs and switch create/import/default/share, queries, planner/templates/history/shopping/deletion to UUID | Canonical application identity becomes `Recipe.id = recipe_uuid`; legacy alias is mapped only at persistence boundaries | UUID columns already exist; explicit legacy compatibility resolution remains removable | Duplicate-name/rename, cache, API, planner, template, share, history, shopping, and deletion smoke |
+| 2C | Reject legacy-only active writes and remove Stage 2A synchronization authority | Remove active legacy writes and fallback from core commands | Historical legacy snapshots and the explicit resolver remain for Stage 3 | UUID-only write contracts and a full rollback observation window |
+| 3 | Promote UUID to `recipes.id`; rename old key to `legacy_id`; remove active legacy fields, triggers, and obsolete RPCs | Remove remaining compatibility reads and transitional types | New application only; rollback uses database backup plus prior matching app/schema pair | Zero legacy writes/reads for one rollback window, CI/preview/production smoke, catalog audit |
 
 Stage 1 rollback is straightforward before later references depend on the UUID: drop the immutability trigger/function, unique constraint, and column. After Stage 2, rollback requires the preserved one-to-one legacy mapping and the prior matching application. Stage 3 requires an established Supabase backup/restore point and coordinated application rollback.
 
@@ -149,6 +151,75 @@ The reusable count-only query at `supabase/verification/active_planner_reference
 | Unresolved assignment keys | 0 |
 | Unresolved made-state values | 0 |
 
-Local fixture contracts prove those zero counts and preservation guarantees. Production remains at the read-only pre-deployment state of two unresolved memberships, two unresolved assignment keys, and zero unresolved made-state values until migration 008 is approved and deployed. Therefore Stage 2 remains blocked. It becomes ready only after migration 008 is present in production migration history, the production count-only audit returns zero for all three active fields, valid planner hashes and the UUID mapping are unchanged, and CI plus production verification pass.
+Local fixture contracts prove those zero counts and preservation guarantees. Migration 008 is now present in production migration history. The 2026-07-16 post-deployment count-only audit returned zero unresolved memberships, assignment keys, and made-state values, so the Stage 2A gate is clear.
 
 Migration 008 is forward-only. If a precondition fails, the transaction rolls back without partial reconciliation. After successful production application, reversal requires an operator-reviewed restore from the pre-migration database backup or a new guarded forward migration; the audit intentionally does not retain raw stale values and is not a reconstruction source.
+
+## Stage 2A active-reference schema
+
+Migration `009_add_uuid_recipe_references.sql` is the first complete,
+backward-compatible Stage 2 slice. It does not change application behavior.
+
+### Post-reconciliation production assessment
+
+The read-only audit was repeated immediately before migration design. It emitted
+only aggregate counts. Every resolvable reference had the expected owner.
+
+| Category | Total | UUID resolvable | Active unresolved | Historical unresolved | Stage 2A policy |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Weekly membership | 145 | 145 | 0 | 0 | Ordered `uuid[]` mirror; strict same-owner synchronization |
+| Weekly assignments | 126 | 126 | 0 | 0 | UUID-keyed JSON mirror; values preserved exactly |
+| Weekly made-state | 72 | 72 | 0 | 0 | Ordered `uuid[]` mirror; strict same-owner synchronization |
+| Template membership | 42 | 42 | 0 | 0 | Ordered `uuid[]` mirror |
+| Template assignments | 6 | 6 | 0 | 0 | UUID-keyed JSON mirror |
+| History | 94 | 93 | 0 | 1 | Nullable UUID linkage plus unchanged legacy evidence |
+| Share source | 4 | 2 | 0 | 2 | Nullable sender-owned UUID; snapshot and alias retained |
+| Share accepted copy | 3 | 2 | 0 | 1 | Nullable recipient-owned UUID; sender UUID is never reused |
+| Shopping JSON source entries | 305 | 275 | 0 | 30 | Add `recipeUuid` when exact; add `legacyRecipeId` when unresolved |
+| Shopping source array | 0 | 0 | 0 | 0 | Ordered `uuid[]` operational mirror |
+| Shopping contributions | 0 | 0 | 0 | 0 | Required UUID identity and unique `(user_id, recipe_uuid)` |
+
+Historical unresolved counts are not active commands. Pending share source
+references are fully resolvable. No UUID is generated for a missing recipe.
+
+### Reference-field strategy
+
+| Location | Legacy compatibility field | Stage 2 canonical field | Policy in 2A |
+| --- | --- | --- | --- |
+| Weekly plans | `recipe_ids` | `recipe_uuids` | Strict ordered mirror |
+| Weekly plans | `day_assignments` | `day_assignment_recipe_uuids` | Strict UUID-keyed mirror |
+| Weekly plans | `made_recipe_ids` | `made_recipe_uuids` | Strict ordered mirror |
+| Plan templates | `recipe_ids` | `recipe_uuids` | Strict ordered mirror |
+| Plan templates | `day_assignments` | `day_assignment_recipe_uuids` | Strict UUID-keyed mirror |
+| Recipe history | `recipe_id` | `recipe_uuid` | Nullable historical linkage |
+| Recipe shares | `source_recipe_id` | `source_recipe_uuid` | Nullable snapshot provenance; pending must resolve |
+| Recipe shares | `accepted_recipe_id` | `accepted_recipe_uuid` | Nullable recipient-owned linkage |
+| Shopping list | `source_recipes` | `source_recipe_uuids` | Strict ordered operational mirror |
+| Shopping JSON sources | `recipeId` | `recipeUuid` | Enriched in place; unresolved retains explicit `legacyRecipeId` |
+| Contributions | `recipe_id` | `recipe_uuid` | Required same-owner UUID identity |
+
+Database triggers maintain these mirrors when the old application writes legacy
+fields. Active arrays reject unresolved, cross-owner, and duplicate canonical
+references. Historical history/share/shopping evidence remains nullable and is
+never guessed. Helper functions are inaccessible to application roles; existing
+table RLS continues to protect the added columns.
+
+Stage 2A rollback is a forward migration that drops the synchronization
+triggers, indexes, constraints, helper functions, and added columns. Because the
+old application remains on legacy fields, an application rollback is not needed
+before Stage 2B. After Stage 2B begins writing UUID fields, rollback must use the
+matching pre-2B application/schema pair.
+
+### Deployment order
+
+| Step | Database | Application | Compatibility | Gate |
+| --- | --- | --- | --- | --- |
+| 1 | Deploy migration 009 | Current legacy app | Old writes populate UUID mirrors through triggers | Every parity count in `stage2a_uuid_reference_audit.sql` is zero |
+| 2 | No destructive schema change | Deploy Stage 2B UUID-aware app | UUID reads/writes plus one explicit legacy resolver | Duplicate-name, rename, planner/template/share/history/shopping smoke |
+| 3 | Deploy migration 010 enforcement | Stage 2B app | Reject new legacy-only active writes; retain historical aliases | UUID-only commands pass and legacy-only commands fail |
+
+Migration 009 must precede Stage 2B. Its mismatch window is safe because the
+currently deployed application does not select or require the new fields, and
+the database maintains parity for every legacy write. Stage 3 primary-key
+promotion, alias removal, and compatibility cleanup remain explicitly out of
+scope.

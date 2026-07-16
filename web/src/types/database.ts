@@ -141,11 +141,18 @@ export type UserConfig = Omit<
   shopping_item_order: ShoppingItemOrderPreferences
 }
 
-export type RecipeHistory = Database["public"]["Tables"]["recipe_history"]["Row"]
+type RecipeHistoryBase = Database["public"]["Tables"]["recipe_history"]["Row"]
+export type RecipeHistory = Omit<RecipeHistoryBase, "recipe_uuid">
 export type RecipeHistoryStatsRow = RecipeHistoryStats
 
 type WeeklyPlanBase = Database["public"]["Tables"]["weekly_plans"]["Row"]
-export type WeeklyPlan = Omit<WeeklyPlanBase, "day_assignments"> & {
+export type WeeklyPlan = Omit<
+  WeeklyPlanBase,
+  | "day_assignments"
+  | "recipe_uuids"
+  | "day_assignment_recipe_uuids"
+  | "made_recipe_uuids"
+> & {
   day_assignments: Record<string, number> | null
 }
 
@@ -158,6 +165,7 @@ export type ShoppingList = Omit<
   | "contribution_revision"
   | "contribution_overrides"
   | "legacy_items_preserved"
+  | "source_recipe_uuids"
 > & {
   items: ShoppingItem[]
   already_have: ShoppingItem[]
@@ -165,10 +173,15 @@ export type ShoppingList = Omit<
   contribution_revision?: number
   contribution_overrides?: Json
   legacy_items_preserved?: boolean
+  /** Database-maintained compatibility mirror; application use begins in Stage 2B. */
+  readonly source_recipe_uuids?: string[]
 }
 
 type RecipeShareBase = Database["public"]["Tables"]["recipe_shares"]["Row"]
-export type RecipeShare = Omit<RecipeShareBase, "source_recipe_snapshot"> & {
+export type RecipeShare = Omit<
+  RecipeShareBase,
+  "source_recipe_snapshot" | "source_recipe_uuid" | "accepted_recipe_uuid"
+> & {
   source_recipe_snapshot: RecipeShareSnapshot
 }
 
@@ -176,7 +189,7 @@ type RecipeShareInsertBase =
   Database["public"]["Tables"]["recipe_shares"]["Insert"]
 export type RecipeShareInsert = Omit<
   RecipeShareInsertBase,
-  "source_recipe_snapshot"
+  "source_recipe_snapshot" | "source_recipe_uuid" | "accepted_recipe_uuid"
 > & {
   source_recipe_snapshot: RecipeShareSnapshot
 }
@@ -185,7 +198,7 @@ type RecipeShareUpdateBase =
   Database["public"]["Tables"]["recipe_shares"]["Update"]
 export type RecipeShareUpdate = Omit<
   RecipeShareUpdateBase,
-  "source_recipe_snapshot"
+  "source_recipe_snapshot" | "source_recipe_uuid" | "accepted_recipe_uuid"
 > & {
   source_recipe_snapshot?: RecipeShareSnapshot
 }
@@ -193,7 +206,10 @@ export type RecipeShareUpdate = Omit<
 type PlanTemplateBase = Database["public"]["Tables"]["plan_templates"]["Row"]
 export type PlanTemplate = Omit<
   PlanTemplateBase,
-  "day_assignments" | "category_selection"
+  | "day_assignments"
+  | "category_selection"
+  | "recipe_uuids"
+  | "day_assignment_recipe_uuids"
 > & {
   day_assignments: Record<string, number> | null
   category_selection: Record<string, number> | null
