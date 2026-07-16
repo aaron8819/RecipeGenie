@@ -384,24 +384,28 @@ export function RecipeList() {
   }, [isLoadingWithNoData])
   const showSkeleton = isLoadingWithNoData && skeletonDelayed
 
-  const handleDelete = useCallback(async (recipe: Recipe) => {
-    if (confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
-      try {
-        await deleteRecipe.mutateAsync(recipe.id)
-        showToast({
-          message: `"${recipe.name}" deleted`,
-        })
-        return true
-      } catch (error) {
-        showToast({
-          message: getErrorMessage(error, `Failed to delete "${recipe.name}"`),
-          duration: 4000,
-        })
-        return false
-      }
+  const deleteRecipeAndNotify = useCallback(async (recipe: Recipe) => {
+    try {
+      await deleteRecipe.mutateAsync(recipe.id)
+      showToast({
+        message: `"${recipe.name}" deleted`,
+      })
+      return true
+    } catch (error) {
+      showToast({
+        message: getErrorMessage(error, `Failed to delete "${recipe.name}"`),
+        duration: 4000,
+      })
+      return false
     }
-    return false
   }, [deleteRecipe, showToast])
+
+  const handleDelete = useCallback(async (recipe: Recipe) => {
+    if (!confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
+      return false
+    }
+    return deleteRecipeAndNotify(recipe)
+  }, [deleteRecipeAndNotify])
 
   const handleAddToShoppingList = useCallback(async (recipe: Recipe) => {
     setAddingToShoppingListId(recipe.id)
@@ -863,7 +867,7 @@ export function RecipeList() {
           setViewingRecipeId(null)
           setEditingRecipeId(recipe.id)
         }}
-        onDelete={handleDelete}
+        onDelete={deleteRecipeAndNotify}
         onAddToPlan={(recipe) => setAddToPlanRecipeId(recipe.id)}
         onAddToShoppingList={handleAddToShoppingList}
         onMarkAsMade={handleMarkAsMade}

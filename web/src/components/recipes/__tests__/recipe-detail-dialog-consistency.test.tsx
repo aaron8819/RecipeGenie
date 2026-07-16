@@ -60,9 +60,21 @@ vi.mock("@/components/ui/dialog", () => ({
 }))
 
 vi.mock("@/components/ui/alert-dialog", () => ({
-  AlertDialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  AlertDialogAction: ({ children }: { children: React.ReactNode }) => <button type="button">{children}</button>,
-  AlertDialogCancel: ({ children }: { children: React.ReactNode }) => <button type="button">{children}</button>,
+  AlertDialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
+    open ? <div role="alertdialog">{children}</div> : null,
+  AlertDialogAction: ({
+    children,
+    onClick,
+    disabled,
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" onClick={onClick} disabled={disabled}>{children}</button>
+  ),
+  AlertDialogCancel: ({
+    children,
+    disabled,
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button type="button" disabled={disabled}>{children}</button>
+  ),
   AlertDialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogDescription: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AlertDialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -245,5 +257,71 @@ describe("RecipeDetailDialog cache consistency", () => {
     expect(screen.getByText("Sauce")).toBeInTheDocument()
     expect(screen.getByText("Rest before serving.")).toBeInTheDocument()
     expect(screen.queryByText("Notes:")).not.toBeInTheDocument()
+  })
+
+  it("exposes one actionable confirmation and prevents duplicate deletion while pending", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    let resolveDelete: ((deleted: boolean) => void) | undefined
+    const onDelete = vi.fn(() => new Promise<boolean>((resolve) => {
+      resolveDelete = resolve
+    }))
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RecipeDetailDialog
+          open={true}
+          onOpenChange={() => {}}
+          recipeId="recipe-1"
+          recipe={makeRecipe()}
+          onDelete={onDelete}
+        />
+      </QueryClientProvider>
+    )
+
+    expect(screen.queryByRole("button", { name: /^Delete$/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Delete Recipe" }))
+
+    const confirmButton = screen.getByRole("button", { name: /^Delete$/ })
+    expect(confirmButton).toBeEnabled()
+    fireEvent.click(confirmButton)
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Deleting..." })).toBeDisabled()
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Deleting..." }))
+    expect(onDelete).toHaveBeenCalledTimes(1)
+
+    resolveDelete?.(true)
+    await waitFor(() => {
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument()
+    })
+  })
+
+  it("keeps deletion confirmation recoverable when the parent reports failure", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    const onDelete = vi.fn().mockResolvedValue(false)
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RecipeDetailDialog
+          open={true}
+          onOpenChange={() => {}}
+          recipeId="recipe-1"
+          recipe={makeRecipe()}
+          onDelete={onDelete}
+        />
+      </QueryClientProvider>
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Recipe" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Delete$/ }))
+
+    await waitFor(() => expect(onDelete).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Delete$/ })).toBeEnabled()
   })
 })
