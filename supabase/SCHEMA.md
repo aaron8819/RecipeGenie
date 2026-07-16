@@ -832,3 +832,55 @@ The permanent `private.planner_reference_reconciliation_audit` table is operator
 The reconciliation invariant is: every recipe reference in `weekly_plans.recipe_ids`, every top-level `weekly_plans.day_assignments` key, and every value in `weekly_plans.made_recipe_ids` must resolve exactly to a recipe with the same owner. Run `supabase/verification/active_planner_reference_audit.sql` as an operator; it returns counts only and must report zero for all three fields before Stage 2 begins.
 
 A clean reset is explicitly recognized only when auth users and all relevant application tables are pristine before seed execution. In that state migration 008 installs its guarded mechanism and skips production fingerprints; pgTAP then creates representative Ref-A/Ref-B/Ref-C fixtures and verifies the same reconciliation path. Any populated environment must satisfy the exact approved global counts and row/field fingerprints or the migration aborts.
+
+## Migration 009 UUID-reference trigger authority
+
+Migration `009_add_uuid_recipe_references.sql` adds UUID mirrors while the
+deployed application still writes legacy recipe IDs. Migration 008 has already
+revoked application-role access to `private`; consequently an invoker trigger
+cannot call migration 009's private resolution helpers. The original invoker
+model caused otherwise RLS-authorized authenticated writes to fail with
+`insufficient_privilege`.
+
+The final authority chain is:
+
+```text
+authenticated RLS-authorized write
+-> postgres-owned SECURITY DEFINER trigger wrapper (search_path = '')
+-> explicit NEW-row owner and identity validation
+-> schema-qualified private helper
+-> atomic NEW-row UUID mirror synchronization
+```
+
+Planner, template, history, share, shopping provenance, and shopping
+contribution wrappers are `BEFORE INSERT OR UPDATE` row triggers. They update
+`NEW` directly, include both legacy and UUID identity columns in their update
+filters, reject caller-supplied mismatches, and do not issue recursive updates.
+The single-owner wrappers require `auth.uid() = NEW.user_id`; the share wrapper
+requires the authenticated principal to be the sender or recipient and validates
+source and accepted-copy recipes against their separate owners. Direct
+migration-owner setup and the nested trusted `auth.users` default-seeding path
+are the only documented null-`auth.uid()` paths.
+
+All wrappers are owned by `postgres`, have an empty search path, accept no
+caller arguments, and expose no result beyond trigger semantics. `EXECUTE` is
+revoked from `PUBLIC`, `anon`, `authenticated`, and `service_role`. The same
+roles retain no `USAGE` on `private` and no direct execution on resolution,
+enrichment, validation, or ownership helpers. Trigger-mediated writes require
+no application-role execute grant and remain subject to the original table RLS
+policy.
+
+Authenticated pgTAP contracts use two JWT principals plus anonymous and
+migration-owner contexts. They prove same-owner compatibility and UUID parity
+for every Stage 2A write category, cross-owner and unresolved active rejection,
+historical nullable preservation, malformed/mismatched identity rejection,
+direct helper denial, recipe creation, default seeding, and accepted-share and
+contribution workflows. `privileged_function_guard.sql` enforces the authority
+and catalog shape. CI must run this suite after a clean reset; green schema-only
+tests are not a sufficient rollout signal.
+
+Do not deploy migration 009 until the exact PR head passes the database suite,
+generated-type drift, Stage 2A parity audit, active-reference audit, application
+verification, and preview checks. Production must remain on 001-008 during PR
+repair. Stage 2B is blocked until migration 009 is deployed separately and its
+production parity audit passes.

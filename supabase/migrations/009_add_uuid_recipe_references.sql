@@ -198,6 +198,90 @@ as $$
   end;
 $$;
 
+create function private.validate_recipe_source_items(
+  p_user_id uuid,
+  p_items jsonb
+)
+returns void
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+declare
+  v_item record;
+  v_source record;
+  v_legacy_recipe_id text;
+  v_supplied_recipe_uuid uuid;
+  v_owned_recipe_uuid uuid;
+begin
+  if jsonb_typeof(coalesce(p_items, '[]'::jsonb)) <> 'array' then
+    raise exception 'shopping recipe source items must be a JSON array'
+      using errcode = '22023';
+  end if;
+
+  for v_item in
+    select value
+    from jsonb_array_elements(coalesce(p_items, '[]'::jsonb))
+  loop
+    if jsonb_typeof(v_item.value) <> 'object' then
+      raise exception 'shopping recipe source item must be a JSON object'
+        using errcode = '22023';
+    end if;
+
+    if v_item.value ? 'sources'
+      and jsonb_typeof(v_item.value -> 'sources') <> 'array'
+    then
+      raise exception 'shopping recipe sources must be a JSON array'
+        using errcode = '22023';
+    end if;
+
+    for v_source in
+      select value
+      from jsonb_array_elements(
+        case
+          when jsonb_typeof(v_item.value -> 'sources') = 'array'
+            then v_item.value -> 'sources'
+          else '[]'::jsonb
+        end
+      )
+    loop
+      if jsonb_typeof(v_source.value) <> 'object' then
+        raise exception 'shopping recipe source must be a JSON object'
+          using errcode = '22023';
+      end if;
+
+      if nullif(v_source.value ->> 'recipeUuid', '') is null then
+        continue;
+      end if;
+
+      begin
+        v_supplied_recipe_uuid := (v_source.value ->> 'recipeUuid')::uuid;
+      exception
+        when invalid_text_representation then
+          raise exception 'shopping recipe UUID metadata is malformed'
+            using errcode = '22023';
+      end;
+
+      v_legacy_recipe_id := nullif(v_source.value ->> 'recipeId', '');
+      select recipe.recipe_uuid
+      into v_owned_recipe_uuid
+      from public.recipes as recipe
+      where recipe.id = v_legacy_recipe_id
+        and recipe.user_id = p_user_id;
+
+      if v_legacy_recipe_id is null
+        or v_owned_recipe_uuid is null
+        or v_supplied_recipe_uuid <> v_owned_recipe_uuid
+      then
+        raise exception 'shopping recipe legacy and UUID metadata disagree or cross owners'
+          using errcode = '23503';
+      end if;
+    end loop;
+  end loop;
+end;
+$$;
+
 revoke all privileges on function private.resolve_owned_recipe_uuid_array(uuid, text[])
   from public, anon, authenticated, service_role;
 revoke all privileges on function private.resolve_owned_recipe_assignment_keys(uuid, jsonb)
@@ -207,6 +291,8 @@ revoke all privileges on function private.enrich_recipe_source_array(uuid, jsonb
 revoke all privileges on function private.enrich_recipe_source_items(uuid, jsonb)
   from public, anon, authenticated, service_role;
 revoke all privileges on function private.enrich_recipe_contribution_snapshot(uuid, jsonb)
+  from public, anon, authenticated, service_role;
+revoke all privileges on function private.validate_recipe_source_items(uuid, jsonb)
   from public, anon, authenticated, service_role;
 
 update public.weekly_plans as plan
@@ -283,22 +369,85 @@ create index recipe_shares_accepted_recipe_uuid_idx
   on public.recipe_shares(accepted_recipe_uuid)
   where accepted_recipe_uuid is not null;
 
-create function private.sync_weekly_plan_recipe_uuids()
-returns trigger
+-- SECURITY DEFINER trigger wrappers still preserve the table's outer RLS
+-- decision. This helper adds the row-owner check required before the wrapper
+-- reads recipes with the migration owner privileges. A null auth.uid() is
+-- accepted only for direct migration-owner work and the nested trusted
+-- auth.users -> handle_new_user -> shopping_list trigger path.
+create function private.assert_uuid_sync_row_owner(p_row_user_id uuid)
+returns void
 language plpgsql
+stable
 security invoker
 set search_path = ''
 as $$
+declare
+  v_authenticated_user_id uuid := auth.uid();
 begin
-  new.recipe_uuids := private.resolve_owned_recipe_uuid_array(new.user_id, new.recipe_ids);
-  new.day_assignment_recipe_uuids := private.resolve_owned_recipe_assignment_keys(
+  if v_authenticated_user_id is not null then
+    if v_authenticated_user_id <> p_row_user_id then
+      raise exception 'UUID synchronization row owner does not match authenticated user'
+        using errcode = '42501';
+    end if;
+    return;
+  end if;
+
+  if session_user = 'postgres' or pg_catalog.pg_trigger_depth() > 1 then
+    return;
+  end if;
+
+  raise exception 'UUID synchronization requires an authenticated row owner'
+    using errcode = '42501';
+end;
+$$;
+
+alter function private.assert_uuid_sync_row_owner(uuid) owner to postgres;
+revoke all privileges on function private.assert_uuid_sync_row_owner(uuid)
+  from public, anon, authenticated, service_role;
+
+create function private.sync_weekly_plan_recipe_uuids()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_recipe_uuids uuid[];
+  v_assignment_recipe_uuids jsonb;
+  v_made_recipe_uuids uuid[];
+begin
+  perform private.assert_uuid_sync_row_owner(new.user_id);
+
+  v_recipe_uuids := private.resolve_owned_recipe_uuid_array(new.user_id, new.recipe_ids);
+  v_assignment_recipe_uuids := private.resolve_owned_recipe_assignment_keys(
     new.user_id,
     new.day_assignments
   );
-  new.made_recipe_uuids := private.resolve_owned_recipe_uuid_array(
+  v_made_recipe_uuids := private.resolve_owned_recipe_uuid_array(
     new.user_id,
     new.made_recipe_ids
   );
+
+  if (tg_op = 'INSERT' and cardinality(new.recipe_uuids) > 0 and new.recipe_uuids <> v_recipe_uuids)
+    or (tg_op = 'UPDATE' and new.recipe_uuids is distinct from old.recipe_uuids
+      and new.recipe_uuids <> v_recipe_uuids)
+    or (tg_op = 'INSERT' and new.day_assignment_recipe_uuids <> '{}'::jsonb
+      and new.day_assignment_recipe_uuids <> v_assignment_recipe_uuids)
+    or (tg_op = 'UPDATE'
+      and new.day_assignment_recipe_uuids is distinct from old.day_assignment_recipe_uuids
+      and new.day_assignment_recipe_uuids <> v_assignment_recipe_uuids)
+    or (tg_op = 'INSERT' and cardinality(new.made_recipe_uuids) > 0
+      and new.made_recipe_uuids <> v_made_recipe_uuids)
+    or (tg_op = 'UPDATE' and new.made_recipe_uuids is distinct from old.made_recipe_uuids
+      and new.made_recipe_uuids <> v_made_recipe_uuids)
+  then
+    raise exception 'weekly plan legacy and UUID recipe identities disagree'
+      using errcode = '23503';
+  end if;
+
+  new.recipe_uuids := v_recipe_uuids;
+  new.day_assignment_recipe_uuids := v_assignment_recipe_uuids;
+  new.made_recipe_uuids := v_made_recipe_uuids;
   return new;
 end;
 $$;
@@ -306,15 +455,36 @@ $$;
 create function private.sync_plan_template_recipe_uuids()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
+declare
+  v_recipe_uuids uuid[];
+  v_assignment_recipe_uuids jsonb;
 begin
-  new.recipe_uuids := private.resolve_owned_recipe_uuid_array(new.user_id, new.recipe_ids);
-  new.day_assignment_recipe_uuids := private.resolve_owned_recipe_assignment_keys(
+  perform private.assert_uuid_sync_row_owner(new.user_id);
+
+  v_recipe_uuids := private.resolve_owned_recipe_uuid_array(new.user_id, new.recipe_ids);
+  v_assignment_recipe_uuids := private.resolve_owned_recipe_assignment_keys(
     new.user_id,
     new.day_assignments
   );
+
+  if (tg_op = 'INSERT' and cardinality(new.recipe_uuids) > 0 and new.recipe_uuids <> v_recipe_uuids)
+    or (tg_op = 'UPDATE' and new.recipe_uuids is distinct from old.recipe_uuids
+      and new.recipe_uuids <> v_recipe_uuids)
+    or (tg_op = 'INSERT' and new.day_assignment_recipe_uuids <> '{}'::jsonb
+      and new.day_assignment_recipe_uuids <> v_assignment_recipe_uuids)
+    or (tg_op = 'UPDATE'
+      and new.day_assignment_recipe_uuids is distinct from old.day_assignment_recipe_uuids
+      and new.day_assignment_recipe_uuids <> v_assignment_recipe_uuids)
+  then
+    raise exception 'plan template legacy and UUID recipe identities disagree'
+      using errcode = '23503';
+  end if;
+
+  new.recipe_uuids := v_recipe_uuids;
+  new.day_assignment_recipe_uuids := v_assignment_recipe_uuids;
   return new;
 end;
 $$;
@@ -322,15 +492,32 @@ $$;
 create function private.sync_recipe_history_uuid()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
+declare
+  v_recipe_uuid uuid;
 begin
+  perform private.assert_uuid_sync_row_owner(new.user_id);
+
   select recipe.recipe_uuid
-  into new.recipe_uuid
+  into v_recipe_uuid
   from public.recipes as recipe
   where recipe.id = new.recipe_id
     and recipe.user_id = new.user_id;
+
+  if new.recipe_uuid is not null
+    and (
+      (tg_op = 'INSERT' and new.recipe_uuid is distinct from v_recipe_uuid)
+      or (tg_op = 'UPDATE' and new.recipe_uuid is distinct from old.recipe_uuid
+        and new.recipe_uuid is distinct from v_recipe_uuid)
+    )
+  then
+    raise exception 'recipe history legacy and UUID identities disagree'
+      using errcode = '23503';
+  end if;
+
+  new.recipe_uuid := v_recipe_uuid;
   return new;
 end;
 $$;
@@ -338,26 +525,75 @@ $$;
 create function private.sync_recipe_share_uuids()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
+declare
+  v_authenticated_user_id uuid := auth.uid();
+  v_source_recipe_uuid uuid;
+  v_accepted_recipe_uuid uuid;
 begin
+  if v_authenticated_user_id is not null
+    and v_authenticated_user_id <> new.sender_user_id
+    and v_authenticated_user_id <> new.recipient_user_id
+  then
+    raise exception 'recipe share owner does not match authenticated user'
+      using errcode = '42501';
+  elsif v_authenticated_user_id is null and session_user <> 'postgres' then
+    raise exception 'recipe share synchronization requires an authenticated participant'
+      using errcode = '42501';
+  end if;
+
   select recipe.recipe_uuid
-  into new.source_recipe_uuid
+  into v_source_recipe_uuid
   from public.recipes as recipe
   where recipe.id = new.source_recipe_id
     and recipe.user_id = new.sender_user_id;
 
   select recipe.recipe_uuid
-  into new.accepted_recipe_uuid
+  into v_accepted_recipe_uuid
   from public.recipes as recipe
   where recipe.id = new.accepted_recipe_id
     and recipe.user_id = new.recipient_user_id;
 
-  if new.status = 'pending' and new.source_recipe_uuid is null then
+  if new.status = 'pending' and v_source_recipe_uuid is null then
     raise exception 'pending share source recipe is unresolved or belongs to another user'
       using errcode = '23503';
   end if;
+
+  if v_authenticated_user_id is not null
+    and new.status = 'accepted'
+    and new.accepted_recipe_id is not null
+    and v_accepted_recipe_uuid is null
+  then
+    raise exception 'accepted share copy is unresolved or belongs to another user'
+      using errcode = '23503';
+  end if;
+
+  if new.source_recipe_uuid is not null
+    and (
+      (tg_op = 'INSERT' and new.source_recipe_uuid is distinct from v_source_recipe_uuid)
+      or (tg_op = 'UPDATE' and new.source_recipe_uuid is distinct from old.source_recipe_uuid
+        and new.source_recipe_uuid is distinct from v_source_recipe_uuid)
+    )
+  then
+    raise exception 'share source legacy and UUID identities disagree'
+      using errcode = '23503';
+  end if;
+
+  if new.accepted_recipe_uuid is not null
+    and (
+      (tg_op = 'INSERT' and new.accepted_recipe_uuid is distinct from v_accepted_recipe_uuid)
+      or (tg_op = 'UPDATE' and new.accepted_recipe_uuid is distinct from old.accepted_recipe_uuid
+        and new.accepted_recipe_uuid is distinct from v_accepted_recipe_uuid)
+    )
+  then
+    raise exception 'share accepted-copy legacy and UUID identities disagree'
+      using errcode = '23503';
+  end if;
+
+  new.source_recipe_uuid := v_source_recipe_uuid;
+  new.accepted_recipe_uuid := v_accepted_recipe_uuid;
 
   return new;
 end;
@@ -366,14 +602,32 @@ $$;
 create function private.sync_shopping_list_recipe_uuids()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
+declare
+  v_source_recipe_uuids uuid[];
 begin
-  new.source_recipe_uuids := private.resolve_owned_recipe_uuid_array(
+  perform private.assert_uuid_sync_row_owner(new.user_id);
+
+  v_source_recipe_uuids := private.resolve_owned_recipe_uuid_array(
     new.user_id,
     new.source_recipes
   );
+
+  if (tg_op = 'INSERT' and cardinality(new.source_recipe_uuids) > 0
+      and new.source_recipe_uuids <> v_source_recipe_uuids)
+    or (tg_op = 'UPDATE' and new.source_recipe_uuids is distinct from old.source_recipe_uuids
+      and new.source_recipe_uuids <> v_source_recipe_uuids)
+  then
+    raise exception 'shopping source legacy and UUID identities disagree'
+      using errcode = '23503';
+  end if;
+
+  new.source_recipe_uuids := v_source_recipe_uuids;
+  perform private.validate_recipe_source_items(new.user_id, new.items);
+  perform private.validate_recipe_source_items(new.user_id, new.already_have);
+  perform private.validate_recipe_source_items(new.user_id, new.excluded);
   new.items := private.enrich_recipe_source_items(new.user_id, new.items);
   new.already_have := private.enrich_recipe_source_items(new.user_id, new.already_have);
   new.excluded := private.enrich_recipe_source_items(new.user_id, new.excluded);
@@ -384,12 +638,14 @@ $$;
 create function private.sync_shopping_contribution_recipe_uuid()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
   v_recipe_uuid uuid;
 begin
+  perform private.assert_uuid_sync_row_owner(new.user_id);
+
   select recipe.recipe_uuid
   into v_recipe_uuid
   from public.recipes as recipe
@@ -401,16 +657,34 @@ begin
       using errcode = '23503';
   end if;
 
-  if new.recipe_uuid is not null and new.recipe_uuid <> v_recipe_uuid then
+  if new.recipe_uuid is not null
+    and (
+      (tg_op = 'INSERT' and new.recipe_uuid <> v_recipe_uuid)
+      or (tg_op = 'UPDATE' and new.recipe_uuid is distinct from old.recipe_uuid
+        and new.recipe_uuid <> v_recipe_uuid)
+    )
+  then
     raise exception 'shopping contribution recipe identities disagree'
       using errcode = '23503';
   end if;
 
   new.recipe_uuid := v_recipe_uuid;
+  if jsonb_typeof(new.snapshot) = 'object'
+    and jsonb_typeof(new.snapshot -> 'items') = 'array'
+  then
+    perform private.validate_recipe_source_items(new.user_id, new.snapshot -> 'items');
+  end if;
   new.snapshot := private.enrich_recipe_contribution_snapshot(new.user_id, new.snapshot);
   return new;
 end;
 $$;
+
+alter function private.sync_weekly_plan_recipe_uuids() owner to postgres;
+alter function private.sync_plan_template_recipe_uuids() owner to postgres;
+alter function private.sync_recipe_history_uuid() owner to postgres;
+alter function private.sync_recipe_share_uuids() owner to postgres;
+alter function private.sync_shopping_list_recipe_uuids() owner to postgres;
+alter function private.sync_shopping_contribution_recipe_uuid() owner to postgres;
 
 revoke all privileges on function private.sync_weekly_plan_recipe_uuids()
   from public, anon, authenticated, service_role;
@@ -426,28 +700,31 @@ revoke all privileges on function private.sync_shopping_contribution_recipe_uuid
   from public, anon, authenticated, service_role;
 
 create trigger sync_weekly_plan_recipe_uuids
-before insert or update of user_id, recipe_ids, day_assignments, made_recipe_ids
+before insert or update of user_id, recipe_ids, day_assignments, made_recipe_ids,
+  recipe_uuids, day_assignment_recipe_uuids, made_recipe_uuids
 on public.weekly_plans
 for each row execute function private.sync_weekly_plan_recipe_uuids();
 
 create trigger sync_plan_template_recipe_uuids
-before insert or update of user_id, recipe_ids, day_assignments
+before insert or update of user_id, recipe_ids, day_assignments,
+  recipe_uuids, day_assignment_recipe_uuids
 on public.plan_templates
 for each row execute function private.sync_plan_template_recipe_uuids();
 
 create trigger sync_recipe_history_uuid
-before insert or update of user_id, recipe_id
+before insert or update of user_id, recipe_id, recipe_uuid
 on public.recipe_history
 for each row execute function private.sync_recipe_history_uuid();
 
 create trigger sync_recipe_share_uuids
 before insert or update of sender_user_id, recipient_user_id, source_recipe_id,
-  accepted_recipe_id, status
+  accepted_recipe_id, status, source_recipe_uuid, accepted_recipe_uuid
 on public.recipe_shares
 for each row execute function private.sync_recipe_share_uuids();
 
 create trigger sync_shopping_list_recipe_uuids
-before insert or update of user_id, items, already_have, excluded, source_recipes
+before insert or update of user_id, items, already_have, excluded, source_recipes,
+  source_recipe_uuids
 on public.shopping_list
 for each row execute function private.sync_shopping_list_recipe_uuids();
 

@@ -204,6 +204,59 @@ references. Historical history/share/shopping evidence remains nullable and is
 never guessed. Helper functions are inaccessible to application roles; existing
 table RLS continues to protect the added columns.
 
+### Stage 2A trigger authority model
+
+The original migration 009 draft used `SECURITY INVOKER` trigger functions.
+That was incompatible with migration 008, which intentionally revoked
+`private` schema usage and private-helper execution from `anon`,
+`authenticated`, and `service_role`. An authenticated table write therefore
+reached its synchronization trigger and failed when the invoker attempted to
+call a private UUID resolver. Schema-only and migration-owner tests did not
+exercise that authority chain.
+
+Migration 009 now uses this boundary:
+
+```text
+authenticated RLS-authorized table write
+-> postgres-owned SECURITY DEFINER BEFORE-row trigger wrapper
+-> explicit row-owner and legacy/UUID consistency checks
+-> schema-qualified private UUID helpers and public recipe lookup
+-> atomic assignment to NEW UUID mirrors
+```
+
+All six synchronization wrappers have an empty `search_path`, accept no
+arguments, return only trigger semantics, and are attached only to their
+intended table events. Execution is revoked from `PUBLIC`, `anon`,
+`authenticated`, and `service_role`; PostgreSQL trigger invocation does not
+require an application-role `EXECUTE` grant. The private schema and every
+resolution, enrichment, validation, and ownership helper remain directly
+inaccessible to application roles.
+
+The wrapper does not replace table RLS. RLS still authorizes the outer write,
+then the wrapper verifies `auth.uid()` against the owner carried by `NEW` before
+using definer privileges to resolve a recipe. Share synchronization accepts only
+the authenticated sender or recipient and resolves source and accepted-copy
+UUIDs against their distinct owners. A null `auth.uid()` is reserved for direct
+migration-owner work and the nested, already-hardened `auth.users` signup
+trigger that creates the default shopping row. Historical unresolved
+history/share/shopping evidence remains nullable, while active unresolved,
+cross-owner, duplicate, malformed, and disagreeing legacy/UUID inputs fail the
+statement atomically.
+
+The database contract suite switches among migration-owner setup,
+authenticated User A, authenticated User B, and anonymous contexts. It covers
+planner, template, history, share/acceptance, shopping provenance, contribution
+add/replace/remove, recipe creation, default seeding, cross-owner and unresolved
+rejections, and direct private-helper denial. The catalog guard additionally
+checks wrapper mode, owner, search path, grants, arguments, trigger timing,
+event columns, and attachment table.
+
+Migration 009 remains a production rollout gate. It must not merge or deploy
+until the authenticated suite runs in CI on the exact PR head, the Stage 2A and
+active-reference audits are zero, preview/build checks pass, and production
+migration history is still verified to end at 008. Stage 2B remains blocked
+until migration 009 is deployed separately and production parity passes.
+
 Stage 2A rollback is a forward migration that drops the synchronization
 triggers, indexes, constraints, helper functions, and added columns. Because the
 old application remains on legacy fields, an application rollback is not needed
