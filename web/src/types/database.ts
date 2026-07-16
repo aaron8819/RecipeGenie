@@ -87,6 +87,7 @@ export type Recipe = Omit<
   | "ingredients"
   | "notes"
   | "instruction_groups"
+  | "recipe_uuid"
   | "prep_time_minutes"
   | "cook_time_minutes"
   | "total_time_minutes"
@@ -97,6 +98,8 @@ export type Recipe = Omit<
   prep_time_minutes?: number | null
   cook_time_minutes?: number | null
   total_time_minutes?: number | null
+  /** Permanent identity introduced in migration Stage 1; active reads switch in Stage 2. */
+  recipe_uuid?: string
 }
 
 type RecipeInsertBase = Database["public"]["Tables"]["recipes"]["Insert"]
@@ -105,6 +108,7 @@ export type RecipeInsert = Omit<
   | "ingredients"
   | "notes"
   | "instruction_groups"
+  | "recipe_uuid"
 > & {
   ingredients?: Ingredient[]
   notes?: string[] | null
@@ -117,6 +121,7 @@ export type RecipeUpdate = Omit<
   | "ingredients"
   | "notes"
   | "instruction_groups"
+  | "recipe_uuid"
 > & {
   ingredients?: Ingredient[]
   notes?: string[] | null

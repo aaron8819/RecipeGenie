@@ -143,6 +143,7 @@ export type Database = {
           name: string
           notes: Json
           prep_time_minutes: number | null
+          recipe_uuid: string
           servings: number
           tags: string[] | null
           total_time_minutes: number | null
@@ -162,6 +163,7 @@ export type Database = {
           name: string
           notes?: Json
           prep_time_minutes?: number | null
+          recipe_uuid?: string
           servings?: number
           tags?: string[] | null
           total_time_minutes?: number | null
@@ -181,6 +183,7 @@ export type Database = {
           name?: string
           notes?: Json
           prep_time_minutes?: number | null
+          recipe_uuid?: string
           servings?: number
           tags?: string[] | null
           total_time_minutes?: number | null
@@ -420,6 +423,7 @@ export type Database = {
           name: string
           notes: Json
           prep_time_minutes: number | null
+          recipe_uuid: string
           servings: number
           tags: string[] | null
           total_time_minutes: number | null
