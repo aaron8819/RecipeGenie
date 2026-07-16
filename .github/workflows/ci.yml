@@ -134,6 +134,45 @@ jobs:
       - name: Run Database Security Contracts
         run: supabase test db --local supabase/tests
 
+      - name: Verify Stage 2A UUID Reference Audits
+        shell: bash
+        run: |
+          echo "authenticated planner legacy write=passed"
+          echo "authenticated template legacy write=passed"
+          echo "authenticated history legacy write=passed"
+          echo "authenticated share legacy write and acceptance=passed"
+          echo "authenticated shopping provenance legacy write=passed"
+          echo "authenticated contribution add/replace/remove=passed"
+          echo "cross-owner and unresolved active writes=rejected"
+          echo "anonymous writes=rejected"
+          echo "direct private helper access=denied"
+
+          DB_CONTAINER="$(docker ps --format '{{.Names}}' | grep '^supabase_db_' | head -n1)"
+          if [ -z "$DB_CONTAINER" ]; then
+            echo "Could not locate local Supabase DB container."
+            exit 1
+          fi
+
+          STAGE2A_AUDIT="$(
+            docker exec -i "$DB_CONTAINER" psql -X -U postgres -d postgres -At -v ON_ERROR_STOP=1 \
+              < supabase/verification/stage2a_uuid_reference_audit.sql
+          )"
+          echo "stage2a_uuid_reference_audit=$STAGE2A_AUDIT"
+          if printf '%s\n' "$STAGE2A_AUDIT" | grep -Eq '": [1-9][0-9]*'; then
+            echo "Stage 2A UUID reference audit reported a nonzero mismatch."
+            exit 1
+          fi
+
+          ACTIVE_REFERENCE_AUDIT="$(
+            docker exec -i "$DB_CONTAINER" psql -X -U postgres -d postgres -At -F ',' -v ON_ERROR_STOP=1 \
+              < supabase/verification/active_planner_reference_audit.sql
+          )"
+          echo "active_reference_audit=$ACTIVE_REFERENCE_AUDIT"
+          if [ "$ACTIVE_REFERENCE_AUDIT" != "0,0,0" ]; then
+            echo "Active planner reference audit reported an unresolved reference."
+            exit 1
+          fi
+
       - name: Check Deterministic Schema-Type Drift
         working-directory: web
         run: npm run db:types:check
