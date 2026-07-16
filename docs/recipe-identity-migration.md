@@ -125,3 +125,30 @@ The maximum mismatch window for Stage 1 is unbounded-safe because current code i
 ## Stage 1 boundaries and residual risks
 
 Stage 1 intentionally does not convert application identity or claim the product now supports same-name recipes. It establishes the permanent mapping safely while leaving behavior unchanged. Remaining risks are the three distinct stale planner-only IDs, historical references not represented by live recipes, embedded JSON rewrite correctness, share/history deletion semantics, existing image object paths, production shapes absent from fixtures, and rollback complexity after reference migration.
+
+## Planner reconciliation approval and Stage 2 gate
+
+On 2026-07-16, the operator approved a narrow removal-only reconciliation for the three planner-only references. Ref-A is confirmed deleted and appears only as an assignment key. Ref-B is confirmed deleted and appears only in active recipe membership. Ref-C is ambiguous and appears in both active membership and assignment-key state; it has no exact current-recipe mapping or deterministic transition evidence. Ref-C must not be mapped by name similarity. No reference is mapped to another recipe, and no UUID is generated or assigned.
+
+Migration `008_reconcile_stale_planner_references.sql` removes exactly these active fields:
+
+- Ref-A: one assignment key;
+- Ref-B: one recipe membership;
+- Ref-C: one recipe membership and one assignment key;
+- made-state: no values.
+
+The migration identifies each owner/week row and stale value through SHA-256 fingerprints rather than committed raw identifiers. Before locking and updating a row, it verifies the row fingerprint, full active-field hashes, field counts, exact occurrence shape, absence from made-state, absence of any live recipe row, and absence from templates, history, shares, shopping source state, and shopping contributions. It aborts the transaction on any mismatch. Array filtering uses exact equality with ordinality so valid order is retained; assignment removal uses the exact top-level JSON key. Postconditions compare preserved fields, unrelated rows, planner-row count, recipe-row count, and the complete legacy-ID-to-UUID mapping.
+
+Non-sensitive historical evidence is stored in the operator-only `private.planner_reference_reconciliation_audit` table. Each of the four removals records only the migration identifier, Ref-A/Ref-B/Ref-C label, one-way reference and planner-row fingerprints, action type, reason classification, and transaction timestamp. Raw stale values, recipe names, planner contents, user identifiers, and week values are not retained in the audit object.
+
+The reusable count-only query at `supabase/verification/active_planner_reference_audit.sql` is the active Stage 2 gate. Migration and pgTAP postconditions require the post-reconciliation counts to be:
+
+| Active field | Required count |
+| --- | ---: |
+| Unresolved recipe memberships | 0 |
+| Unresolved assignment keys | 0 |
+| Unresolved made-state values | 0 |
+
+Local fixture contracts prove those zero counts and preservation guarantees. Production remains at the read-only pre-deployment state of two unresolved memberships, two unresolved assignment keys, and zero unresolved made-state values until migration 008 is approved and deployed. Therefore Stage 2 remains blocked. It becomes ready only after migration 008 is present in production migration history, the production count-only audit returns zero for all three active fields, valid planner hashes and the UUID mapping are unchanged, and CI plus production verification pass.
+
+Migration 008 is forward-only. If a precondition fails, the transaction rolls back without partial reconciliation. After successful production application, reversal requires an operator-reviewed restore from the pre-migration database backup or a new guarded forward migration; the audit intentionally does not retain raw stale values and is not a reconstruction source.
