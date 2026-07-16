@@ -822,3 +822,13 @@ If the reason for drift is not clear, stop. Investigate the schema state and mig
 - Generate local types: `cd web && npm run db:types:regen`
 - Generate linked remote types: `cd web && npm run db:types:regen:linked`
 - Check generated type parity against committed baseline: `cd web && npm run db:types:check`
+
+## Migration 008 planner-reference reconciliation invariant
+
+Migration `008_reconcile_stale_planner_references.sql` is a forward-only, removal-only reconciliation that must complete before Stage 2 of recipe UUID identity migration. It does not change the `recipes` primary key, recipe UUID schema, application APIs, or planner behavior.
+
+The permanent `private.planner_reference_reconciliation_audit` table is operator-only and stores non-sensitive evidence for the four approved active-field removals. Application roles have no schema, table, sequence, helper-function, or procedure privileges. The migration-specific `private.reconcile_stale_planner_reference_008` procedure is retained solely so isolated database contracts can exercise the exact production implementation; all application-role execution privileges are revoked.
+
+The reconciliation invariant is: every recipe reference in `weekly_plans.recipe_ids`, every top-level `weekly_plans.day_assignments` key, and every value in `weekly_plans.made_recipe_ids` must resolve exactly to a recipe with the same owner. Run `supabase/verification/active_planner_reference_audit.sql` as an operator; it returns counts only and must report zero for all three fields before Stage 2 begins.
+
+A clean reset is explicitly recognized only when auth users and all relevant application tables are pristine before seed execution. In that state migration 008 installs its guarded mechanism and skips production fingerprints; pgTAP then creates representative Ref-A/Ref-B/Ref-C fixtures and verifies the same reconciliation path. Any populated environment must satisfy the exact approved global counts and row/field fingerprints or the migration aborts.
