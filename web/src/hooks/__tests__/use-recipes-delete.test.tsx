@@ -8,21 +8,9 @@ import { useDeleteRecipe } from "@/hooks/use-recipes"
 import type { Recipe, ShoppingList } from "@/types/database"
 
 const runContributionCommand = vi.fn()
-const deleteRecipeRpc = vi.fn()
-const deleteRecipeFallbackResult = vi.fn()
-const deleteRecipeFallbackOwner = vi.fn(() => deleteRecipeFallbackResult())
-const deleteRecipeFallbackUuid = vi.fn(() => ({ eq: deleteRecipeFallbackOwner }))
-const deleteRecipeFallback = vi.fn(() => ({ eq: deleteRecipeFallbackUuid }))
-const fromRecipes = vi.fn(() => ({ delete: deleteRecipeFallback }))
+const deleteRecipeByUuid = vi.fn()
+const supabaseClient = { kind: "test-client" }
 const RECIPE_UUID = "71111111-1111-4111-8111-111111111111"
-const MISSING_RPC_ERROR = {
-  code: "PGRST202",
-  details:
-    "Searched for the function public.delete_recipe with parameter p_recipe_uuid or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.",
-  hint: null,
-  message:
-    "Could not find the function public.delete_recipe(p_recipe_uuid) in the schema cache",
-}
 
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: () => ({ user: { id: "user-a" } }),
@@ -32,11 +20,12 @@ vi.mock("@/lib/shopping-contribution-client", () => ({
   runRecipeContributionCommand: (...args: unknown[]) => runContributionCommand(...args),
 }))
 
+vi.mock("@/lib/recipe-deletion", () => ({
+  deleteRecipeByUuid: (...args: unknown[]) => deleteRecipeByUuid(...args),
+}))
+
 vi.mock("@/lib/supabase/client", () => ({
-  getSupabase: () => ({
-    rpc: deleteRecipeRpc,
-    from: fromRecipes,
-  }),
+  getSupabase: () => supabaseClient,
 }))
 
 function recipe(): Recipe {
@@ -100,12 +89,43 @@ beforeEach(() => {
   vi.clearAllMocks()
   setActivePrincipalId("user-a")
   runContributionCommand.mockResolvedValue({ shopping_list: shoppingList() })
-  deleteRecipeRpc.mockResolvedValue({ data: RECIPE_UUID, error: null })
-  deleteRecipeFallbackResult.mockResolvedValue({ error: null })
+  deleteRecipeByUuid.mockResolvedValue(undefined)
 })
 
 describe("useDeleteRecipe", () => {
-  it("removes the contribution before the recipe and reconciles scoped caches", async () => {
+  it("uses the atomic migration-012 adapter without pre-cleaning shopping", async () => {
+    const { wrapper, queryClient } = createWrapper()
+    seedRecipeCache(queryClient)
+    const { result } = renderHook(() => useDeleteRecipe(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync(RECIPE_UUID)
+    })
+
+    expect(deleteRecipeByUuid).toHaveBeenCalledWith(
+      supabaseClient,
+      RECIPE_UUID,
+      "user-a",
+      expect.any(Function)
+    )
+    expect(runContributionCommand).not.toHaveBeenCalled()
+    expect(queryClient.getQueryData<Recipe[]>(recipeKeys.list("user-a", {
+      category: null,
+      search: null,
+      favoritesOnly: false,
+      tags: [],
+      limit: null,
+    }))).toEqual([])
+    expect(queryClient.getQueryData(recipeKeys.detail("user-a", RECIPE_UUID))).toBeNull()
+  })
+
+  it("supplies migration-011 contribution cleanup and reconciles its cache", async () => {
+    deleteRecipeByUuid.mockImplementationOnce(async (
+      _client: unknown,
+      recipeUuid: string,
+      _owner: string,
+      cleanup: (id: string) => Promise<unknown>
+    ) => cleanup(recipeUuid))
     const { wrapper, queryClient } = createWrapper()
     seedRecipeCache(queryClient)
     const { result } = renderHook(() => useDeleteRecipe(), { wrapper })
@@ -117,43 +137,16 @@ describe("useDeleteRecipe", () => {
     expect(runContributionCommand).toHaveBeenCalledWith("DELETE", expect.objectContaining({
       recipeIds: [RECIPE_UUID],
     }))
-    expect(deleteRecipeRpc).toHaveBeenCalledWith("delete_recipe", {
-      p_recipe_uuid: RECIPE_UUID,
-    })
-    expect(fromRecipes).not.toHaveBeenCalled()
-    expect(runContributionCommand.mock.invocationCallOrder[0]).toBeLessThan(
-      deleteRecipeRpc.mock.invocationCallOrder[0]
-    )
-    expect(queryClient.getQueryData(shoppingKeys.detail("user-a"))).toEqual(shoppingList())
-    expect(queryClient.getQueryData<Recipe[]>(recipeKeys.list("user-a", {
-      category: null,
-      search: null,
-      favoritesOnly: false,
-      tags: [],
-      limit: null,
-    }))).toEqual([])
-    expect(queryClient.getQueryData(recipeKeys.detail("user-a", RECIPE_UUID))).toBeNull()
-  })
-
-  it("uses the migration-011 UUID-column fallback after contribution cleanup", async () => {
-    deleteRecipeRpc.mockResolvedValueOnce({ data: null, error: MISSING_RPC_ERROR })
-    const { wrapper, queryClient } = createWrapper()
-    seedRecipeCache(queryClient)
-    const { result } = renderHook(() => useDeleteRecipe(), { wrapper })
-
-    await act(async () => {
-      await result.current.mutateAsync(RECIPE_UUID)
-    })
-
-    expect(runContributionCommand.mock.invocationCallOrder[0]).toBeLessThan(
-      deleteRecipeRpc.mock.invocationCallOrder[0]
-    )
-    expect(deleteRecipeFallbackUuid).toHaveBeenCalledWith("recipe_uuid", RECIPE_UUID)
-    expect(deleteRecipeFallbackOwner).toHaveBeenCalledWith("user_id", "user-a")
     expect(queryClient.getQueryData(shoppingKeys.detail("user-a"))).toEqual(shoppingList())
   })
 
-  it("does not delete the recipe when contribution removal fails", async () => {
+  it("restores recipe caches when migration-011 contribution cleanup fails", async () => {
+    deleteRecipeByUuid.mockImplementationOnce(async (
+      _client: unknown,
+      recipeUuid: string,
+      _owner: string,
+      cleanup: (id: string) => Promise<unknown>
+    ) => cleanup(recipeUuid))
     runContributionCommand.mockRejectedValueOnce(new Error("contribution cleanup failed"))
     const { wrapper, queryClient } = createWrapper()
     seedRecipeCache(queryClient)
@@ -163,15 +156,21 @@ describe("useDeleteRecipe", () => {
       "contribution cleanup failed"
     )
 
-    expect(deleteRecipeRpc).not.toHaveBeenCalled()
-    expect(fromRecipes).not.toHaveBeenCalled()
     expect(queryClient.getQueryData<Recipe>(recipeKeys.detail("user-a", RECIPE_UUID))).toMatchObject({
       id: RECIPE_UUID,
     })
   })
 
-  it("keeps contribution cleanup but restores recipe cache when recipe deletion fails", async () => {
-    deleteRecipeRpc.mockResolvedValueOnce({ data: null, error: new Error("recipe delete failed") })
+  it("surfaces later migration-011 failure while retaining the completed shopping cleanup", async () => {
+    deleteRecipeByUuid.mockImplementationOnce(async (
+      _client: unknown,
+      recipeUuid: string,
+      _owner: string,
+      cleanup: (id: string) => Promise<unknown>
+    ) => {
+      await cleanup(recipeUuid)
+      throw new Error("recipe delete failed")
+    })
     const { wrapper, queryClient } = createWrapper()
     seedRecipeCache(queryClient)
     const { result } = renderHook(() => useDeleteRecipe(), { wrapper })

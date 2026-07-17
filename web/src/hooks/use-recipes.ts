@@ -18,9 +18,11 @@ import {
 } from "@/lib/recipe-identity"
 import {
   configurationKeys,
+  plannerKeys,
   principalId,
   recipeKeys,
   shoppingKeys,
+  templateKeys,
 } from "@/lib/query-keys"
 import {
   normalizeRecipeInstructionGroups,
@@ -438,18 +440,33 @@ export function useDeleteRecipe() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const contributionResult = await runRecipeContributionCommand("DELETE", {
-        recipeIds: [id],
-        idempotencyKey: crypto.randomUUID(),
-      })
-      if (getActivePrincipalId() === ownerUserId) {
+      const compatibilityResult = await deleteRecipeByUuid(
+        getSupabase(),
+        id,
+        user!.id,
+        async (recipeUuid) => {
+          const contributionResult = await runRecipeContributionCommand("DELETE", {
+            recipeIds: [recipeUuid],
+            idempotencyKey: crypto.randomUUID(),
+          })
+          if (getActivePrincipalId() === ownerUserId) {
+            queryClient.setQueryData(
+              shoppingKeys.detail(ownerUserId),
+              contributionResult.shopping_list
+            )
+          }
+          return { shoppingList: contributionResult.shopping_list }
+        }
+      )
+      if (
+        compatibilityResult?.shoppingList
+        && getActivePrincipalId() === ownerUserId
+      ) {
         queryClient.setQueryData(
           shoppingKeys.detail(ownerUserId),
-          contributionResult.shopping_list
+          compatibilityResult.shoppingList
         )
       }
-
-      await deleteRecipeByUuid(getSupabase(), id, user!.id)
       return id
     },
     // Optimistic update
@@ -488,6 +505,9 @@ export function useDeleteRecipe() {
     onSuccess: (deletedId) => {
       // Invalidate tags queries to refresh tag lists
       queryClient.invalidateQueries({ queryKey: recipesKey })
+      queryClient.invalidateQueries({ queryKey: plannerKeys.all(ownerUserId) })
+      queryClient.invalidateQueries({ queryKey: templateKeys.all(ownerUserId) })
+      queryClient.invalidateQueries({ queryKey: shoppingKeys.all(ownerUserId) })
     },
     onSettled: () => {
       // Always refetch to ensure consistency
