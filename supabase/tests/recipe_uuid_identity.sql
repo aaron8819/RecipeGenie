@@ -14,7 +14,7 @@ select extensions.col_not_null(
   'every recipe has a canonical UUID'
 );
 
-select extensions.matches(
+select extensions.is(
   (
     select column_default
     from information_schema.columns
@@ -22,8 +22,8 @@ select extensions.matches(
       and table_name = 'recipes'
       and column_name = 'recipe_uuid'
   ),
-  'gen_random_uuid\(\)',
-  'the database generates recipe UUIDs'
+  null,
+  'active recipe creation has no implicit UUID default'
 );
 
 select extensions.ok(

@@ -362,3 +362,131 @@ currently deployed application does not select or require the new fields, and
 the database maintains parity for every legacy write. Stage 3 primary-key
 promotion, alias removal, and compatibility cleanup remain explicitly out of
 scope.
+
+## Stage 2C UUID-only active-write enforcement
+
+Classification: Recipe UUID migration Stage 2C — UUID-only active-write
+enforcement.
+
+Migration `012_enforce_uuid_active_recipe_writes.sql` makes UUID the sole
+authority accepted from authenticated active callers. The physical
+`recipes.id` text primary key and every legacy compatibility column remain in
+place for Stage 3; Stage 2C changes authority, not storage shape.
+
+### Legacy-capable write inventory
+
+| Write path | UUID accepted | Legacy-only accepted | Pair accepted | Stage 2C action |
+| --- | ---: | ---: | ---: | --- |
+| Recipe create/import/default/share copy | Yes | No | Matching only for trusted fixtures | Drop implicit UUID default; derive the text PK from UUID |
+| Recipe update | UUID predicate | No application fallback | N/A | Structural guard keeps active row lookup on `recipe_uuid` |
+| Recipe deletion | Yes | No | No | Revoke authenticated table delete; add same-owner `delete_recipe(uuid)` |
+| Planner membership/assignment/made state | Yes | No | Matching | UUID-authoritative trigger derives all text/JSON mirrors |
+| Plan template membership/assignment | Yes | No | Matching | UUID-authoritative trigger derives text/JSON mirrors |
+| Live history linkage | Yes | No | Matching | Authenticated legacy-only linkage rejects; unresolved migration-owner evidence remains nullable |
+| Share creation/source | Yes | No | Matching | Pending/live shares require sender-owned UUID |
+| Share acceptance | Yes, share UUID plus generated recipe UUID | No recipe alias authority | Matching internal output | Acceptance creates a recipient-owned UUID and derives mirrors |
+| Shopping contribution add/replace/remove | Yes | No | Matching payload metadata | Only UUID RPC is executable; text command is postgres-internal |
+| Operational shopping provenance | Yes | No | Matching | UUID source arrays/metadata derive legacy projection fields |
+| Historical shopping provenance | Nullable | Unresolved evidence only | Matching when live | Never invent UUID linkage for deleted/unresolved evidence |
+| Compatibility resolver | Yes | Explicit legacy lookup only | Matching | One same-owner measured lookup seam; never used by active commands |
+
+Legacy uses are classified as follows:
+
+- Active compatibility input: removed from authenticated planner, template,
+  history, share, shopping, made-state, creation, and deletion commands.
+- Derived compatibility output: retained text arrays, JSON keys, share/history
+  aliases, contribution keys, and the physical text recipe key.
+- Historical evidence: unresolved history, non-pending shares, and shopping
+  snapshots remain nullable on the UUID side.
+- Internal migration support: migration-owner/reset fixtures retain narrowly
+  scoped legacy-to-UUID synchronization; this is not granted through the Data
+  API.
+- Obsolete contract: the text made-state overload is dropped and authenticated
+  execution of the text shopping command is revoked.
+- Test fixture: final-schema pgTAP fixtures use the migration-owner seam only
+  to reconstruct pre-Stage-2C states.
+
+### RPC inventory and removal policy
+
+| Function | UUID overload | Legacy overload | Current caller | Historical need | Removal policy |
+| --- | ---: | ---: | --- | --- | --- |
+| `toggle_weekly_recipe_made` | Required (`uuid,date,...`) | Removed | Planner hook | None after Stage 2B | Removed in 012 |
+| `apply_recipe_shopping_contribution_uuid_command` | Required | Separate text helper is ungranted | Shopping API route | Internal projection until Stage 3 | Keep postgres-internal; drop with compatibility columns |
+| `accept_recipe_share` | Share UUID | None | Share acceptance route | Snapshot survives deletion | Keep UUID contract |
+| `delete_recipe` | Required | Authenticated table delete revoked | Recipe hook | Service/migration administration only | Keep UUID RPC through Stage 3 |
+| `resolve_recipe_identity` | UUID or explicit alias lookup | One measured alias parameter | No normal application caller | Old external references/admin migration support | Remove after zero alias lookups for the Stage 3 observation window |
+| `get_recipe_history_stats` | UUID result | None | Planner/history query | Unresolved historical rows excluded | Keep UUID result |
+
+### Production dependency observation
+
+The Stage 2B application at commit `19cd6bc` was already production-verified
+before Stage 2C work began. Its recorded workflow matrix covered same-name
+creation, rename, planner, made-state, templates, shopping, history, shares,
+query/cache identity, and cleanup using UUID-aware requests. A fresh read-only
+check on 2026-07-17 confirmed that the successful production deployment still
+points at that commit, production migration history contains 011 and not 012,
+all 11 Stage 2A parity counters are zero, and all three active planner
+unresolved counters are zero. No legacy-only active request was recorded in the
+Stage 2B production matrix. Source and caller inventory found no active
+legacy-only path. Migration 012 is intentionally not deployed by this PR.
+
+The pre-012 schema has no durable input-authority counter, so database row
+parity alone cannot distinguish whether a matching legacy mirror was supplied
+or derived. Stage 2C therefore adds a narrow aggregate counter for the one
+remaining explicit alias resolver and a count-only
+`stage2c_uuid_active_write_audit.sql` query. It records no identifiers, names,
+users, or payload content.
+
+### Enforcement, compatibility, and historical policy
+
+Authenticated writes follow this contract:
+
+```text
+UUID only -> accepted; legacy mirrors derived
+UUID + matching legacy alias -> accepted only at retained pair-validation seams
+legacy alias only -> rejected (22023)
+UUID + mismatching/cross-owner alias -> rejected (23503)
+missing or malformed UUID -> rejected (22023/22P02)
+```
+
+Triggers are UUID-authoritative for application traffic. Reverse mapping
+remains only when `auth.uid()` is null and the migration owner is replaying or
+resetting historical fixtures, plus the transaction-local marker used by the
+validated UUID shopping wrapper to call its ungranted compatibility
+implementation. Historical unresolved evidence is never resolved by name and
+never receives an invented UUID.
+
+The compatibility resolver is `SECURITY DEFINER` with an empty search path,
+derives the principal from `auth.uid()`, checks same-owner identity, gives the
+same not-found category for unknown and cross-owner aliases, and increments
+only a date-bucketed aggregate counter when an alias parameter is supplied.
+Normal UUID commands call private UUID helpers directly and do not increment
+that counter.
+
+### Deployment and rollback
+
+| Step | Application state | Database state | Gate |
+| --- | --- | --- | --- |
+| 1 — observe | UUID-aware Stage 2B live | Migrations through 011; bidirectional compatibility | Current production commit; representative UUID workflows; zero legacy-only observed; parity and active unresolved counters zero |
+| 2 — enforce | Same UUID-aware application | Deploy migration 012 | Clean reset, 275 pgTAP assertions, full application verification, CI and preview green |
+| 3 — prove | UUID-aware application remains live | Migration 012 active | UUID workflows pass; transaction probes reject legacy-only calls; resolver count and parity audit reviewed; no valid-flow 4xx/5xx increase |
+
+The pre-Stage-2B legacy application is not compatible with migration 012: its
+planner/template/history/share/shopping/made-state writes and direct recipe
+delete no longer have authority. Do not roll the application back to that
+version after enforcement. Prefer a guarded forward repair. Re-enabling old
+clients would require a reviewed forward migration restoring grants, the text
+made-state function, recipe UUID allocation behavior, authenticated table
+delete, and bidirectional active synchronization; it is not a safe ad hoc
+rollback. A full schema/application rollback requires the pre-012 matching pair
+and the approved database backup/restore process. No destructive production
+rollback test is part of Stage 2C.
+
+### Stage 3 removal criteria
+
+Stage 3 remains responsible for promoting `recipes.recipe_uuid` to the physical
+primary key, renaming/removing the text key and compatibility columns, deleting
+internal reverse-sync branches and the text shopping helper, removing the
+resolver/counter after a full zero-use window, updating constraints/indexes,
+and coordinating backup-backed schema/application rollout. Stage 2C does not
+perform any of those physical-key or column removals.

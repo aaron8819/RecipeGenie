@@ -21,7 +21,7 @@ select extensions.is(
     where namespace.nspname = 'public'
       and procedure.prosecdef
   ),
-  E'public.accept_recipe_share(p_share_id uuid)\npublic.apply_recipe_shopping_contribution_command(p_expected_revision bigint, p_contributions jsonb, p_remove_recipe_ids text[], p_projection jsonb, p_contribution_overrides jsonb, p_idempotency_key text, p_command_type text)\npublic.apply_recipe_shopping_contribution_uuid_command(p_expected_revision bigint, p_contributions jsonb, p_remove_recipe_uuids uuid[], p_projection jsonb, p_contribution_overrides jsonb, p_idempotency_key text, p_command_type text)\npublic.handle_new_user()\npublic.toggle_weekly_recipe_made(p_recipe_uuid uuid, p_week_date date, p_made boolean, p_made_at timestamp with time zone)',
+  E'public.accept_recipe_share(p_share_id uuid)\npublic.apply_recipe_shopping_contribution_command(p_expected_revision bigint, p_contributions jsonb, p_remove_recipe_ids text[], p_projection jsonb, p_contribution_overrides jsonb, p_idempotency_key text, p_command_type text)\npublic.apply_recipe_shopping_contribution_uuid_command(p_expected_revision bigint, p_contributions jsonb, p_remove_recipe_uuids uuid[], p_projection jsonb, p_contribution_overrides jsonb, p_idempotency_key text, p_command_type text)\npublic.delete_recipe(p_recipe_uuid uuid)\npublic.get_recipe_identity_compat_usage()\npublic.handle_new_user()\npublic.resolve_recipe_identity(p_recipe_uuid uuid, p_legacy_id text)\npublic.toggle_weekly_recipe_made(p_recipe_uuid uuid, p_week_date date, p_made boolean, p_made_at timestamp with time zone)',
   'only reviewed SECURITY DEFINER functions exist'
 );
 

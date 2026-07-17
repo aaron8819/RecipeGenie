@@ -8,9 +8,8 @@ import { useDeleteRecipe } from "@/hooks/use-recipes"
 import type { Recipe, ShoppingList } from "@/types/database"
 
 const runContributionCommand = vi.fn()
-const deleteRecipeRow = vi.fn()
-const deleteById = vi.fn(() => ({ eq: deleteRecipeRow }))
-const deleteRows = vi.fn(() => ({ eq: deleteById }))
+const deleteRecipeRpc = vi.fn()
+const RECIPE_UUID = "71111111-1111-4111-8111-111111111111"
 
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: () => ({ user: { id: "user-a" } }),
@@ -22,13 +21,13 @@ vi.mock("@/lib/shopping-contribution-client", () => ({
 
 vi.mock("@/lib/supabase/client", () => ({
   getSupabase: () => ({
-    from: vi.fn(() => ({ delete: deleteRows })),
+    rpc: deleteRecipeRpc,
   }),
 }))
 
 function recipe(): Recipe {
   return {
-    id: "recipe-a",
+    id: RECIPE_UUID,
     user_id: "user-a",
     name: "Recipe A",
     category: "Dinner",
@@ -86,7 +85,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   setActivePrincipalId("user-a")
   runContributionCommand.mockResolvedValue({ shopping_list: shoppingList() })
-  deleteRecipeRow.mockResolvedValue({ error: null })
+  deleteRecipeRpc.mockResolvedValue({ data: RECIPE_UUID, error: null })
 })
 
 describe("useDeleteRecipe", () => {
@@ -96,14 +95,14 @@ describe("useDeleteRecipe", () => {
     const { result } = renderHook(() => useDeleteRecipe(), { wrapper })
 
     await act(async () => {
-      await result.current.mutateAsync("recipe-a")
+      await result.current.mutateAsync(RECIPE_UUID)
     })
 
     expect(runContributionCommand).toHaveBeenCalledWith("DELETE", expect.objectContaining({
-      recipeIds: ["recipe-a"],
+      recipeIds: [RECIPE_UUID],
     }))
     expect(runContributionCommand.mock.invocationCallOrder[0]).toBeLessThan(
-      deleteRows.mock.invocationCallOrder[0]
+      deleteRecipeRpc.mock.invocationCallOrder[0]
     )
     expect(queryClient.getQueryData(shoppingKeys.detail("user-a"))).toEqual(shoppingList())
     expect(queryClient.getQueryData<Recipe[]>(recipeKeys.list("user-a", {
@@ -113,7 +112,7 @@ describe("useDeleteRecipe", () => {
       tags: [],
       limit: null,
     }))).toEqual([])
-    expect(queryClient.getQueryData(recipeKeys.detail("user-a", "recipe-a"))).toBeNull()
+    expect(queryClient.getQueryData(recipeKeys.detail("user-a", RECIPE_UUID))).toBeNull()
   })
 
   it("does not delete the recipe when contribution removal fails", async () => {
@@ -122,28 +121,28 @@ describe("useDeleteRecipe", () => {
     seedRecipeCache(queryClient)
     const { result } = renderHook(() => useDeleteRecipe(), { wrapper })
 
-    await expect(result.current.mutateAsync("recipe-a")).rejects.toThrow(
+    await expect(result.current.mutateAsync(RECIPE_UUID)).rejects.toThrow(
       "contribution cleanup failed"
     )
 
-    expect(deleteRows).not.toHaveBeenCalled()
-    expect(queryClient.getQueryData<Recipe>(recipeKeys.detail("user-a", "recipe-a"))).toMatchObject({
-      id: "recipe-a",
+    expect(deleteRecipeRpc).not.toHaveBeenCalled()
+    expect(queryClient.getQueryData<Recipe>(recipeKeys.detail("user-a", RECIPE_UUID))).toMatchObject({
+      id: RECIPE_UUID,
     })
   })
 
   it("keeps contribution cleanup but restores recipe cache when recipe deletion fails", async () => {
-    deleteRecipeRow.mockResolvedValueOnce({ error: new Error("recipe delete failed") })
+    deleteRecipeRpc.mockResolvedValueOnce({ data: null, error: new Error("recipe delete failed") })
     const { wrapper, queryClient } = createWrapper()
     seedRecipeCache(queryClient)
     const { result } = renderHook(() => useDeleteRecipe(), { wrapper })
 
-    await expect(result.current.mutateAsync("recipe-a")).rejects.toThrow("recipe delete failed")
+    await expect(result.current.mutateAsync(RECIPE_UUID)).rejects.toThrow("recipe delete failed")
 
     expect(runContributionCommand).toHaveBeenCalledTimes(1)
     expect(queryClient.getQueryData(shoppingKeys.detail("user-a"))).toEqual(shoppingList())
-    expect(queryClient.getQueryData<Recipe>(recipeKeys.detail("user-a", "recipe-a"))).toMatchObject({
-      id: "recipe-a",
+    expect(queryClient.getQueryData<Recipe>(recipeKeys.detail("user-a", RECIPE_UUID))).toMatchObject({
+      id: RECIPE_UUID,
     })
   })
 })
