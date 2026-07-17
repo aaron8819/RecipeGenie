@@ -429,7 +429,7 @@ history in the browser:
 | Path | Migration 011 | Migration 012 |
 | --- | --- | --- |
 | Recipe creation | Matching `id = recipe_uuid::text` pair | Same matching pair |
-| Recipe deletion | Exact missing-RPC response enables same-owner `recipe_uuid` table delete | `delete_recipe(uuid)` succeeds; no table fallback |
+| Recipe deletion | Exact missing-RPC response enables same-owner planner/template cleanup, authoritative contribution removal, then owner-scoped `recipe_uuid` table delete | `delete_recipe(uuid)` atomically detaches active references, removes contribution authority, and deletes the recipe; no table fallback |
 | Canonical identity | `Recipe.id = recipe_uuid` | `Recipe.id = recipe_uuid` |
 | Compatibility metadata | `Recipe.legacyId = recipes.id` | `Recipe.legacyId = recipes.id` |
 
@@ -440,21 +440,95 @@ slug exists. The deletion adapter does not cache capability: every deletion
 attempts the UUID RPC first. Fallback requires `PGRST202` plus the exact
 `public.delete_recipe(p_recipe_uuid)` schema-cache message and parameter-search
 details. Permission, validation, not-found, timeout, network, foreign-key, and
-runtime failures propagate without fallback. Contribution removal remains
-first and recipe deletion second; this sequence is intentionally non-atomic.
+runtime failures propagate without fallback.
+
+### Stage 2C deletion-integrity prerequisite
+
+The production preflight found one active weekly-plan membership whose legacy
+and canonical values were the same UUID-shaped identity but whose recipe had
+already been deleted. Arrays have no foreign-key enforcement, and the old
+deletion paths removed shopping contributions and the recipe without detaching
+planner or template references. Migration 012's strict parity gate correctly
+rejects this state and remains unchanged.
+
+Reference surfaces were classified from schema, trigger, RLS, application, and
+test behavior:
+
+| Surface | Deletion semantic | Enforcement/rationale |
+| --- | --- | --- |
+| `weekly_plans.recipe_ids` / `recipe_uuids` | Detach every matching ordinal | Active membership arrays; remaining order and mirror alignment are preserved |
+| `weekly_plans.day_assignments` / `day_assignment_recipe_uuids` | Remove the matching top-level key | Active placement, including assignment-only stale state |
+| `weekly_plans.made_recipe_ids` / `made_recipe_uuids` | Remove every match | Active week state; durable made history remains in `recipe_history` |
+| `plan_templates.recipe_ids` / `recipe_uuids` | Detach every matching ordinal | Active reusable membership |
+| `plan_templates.day_assignments` / `day_assignment_recipe_uuids` | Remove the matching top-level key | Active reusable placement |
+| `shopping_recipe_contributions` | Delete before the recipe | Authoritative active source; restrictive recipe foreign key |
+| `shopping_list.source_recipes` / `source_recipe_uuids` and item source metadata | Detach the deleted source | Compatibility projection; source mirrors and nested provenance must not retain an active deleted identity |
+| `recipe_history` | Preserve | Historical made event; nullable UUID linkage and legacy evidence intentionally outlive the recipe |
+| `recipe_shares` and `source_recipe_snapshot` | Preserve | Historical/share snapshot provenance intentionally outlives the source or accepted copy |
+| Recipe image storage path | Unrelated database reference | Storage lifecycle is handled separately by the image workflow and is not a relational recipe reference |
+| User/category/pantry configuration | Unrelated | Contains no recipe identity |
+
+Under migration 012, `delete_recipe(uuid)` is one transaction. It resolves
+`auth.uid()`, locks the same-owner recipe, then locks affected weekly plans,
+templates, and the owner's shopping projection in deterministic order. A
+transaction-local deletion marker lets the existing UUID-authority triggers
+derive all legacy mirrors even when repairing previously divergent legacy
+data. The RPC removes every canonical membership occurrence, assignment key,
+and made-state occurrence; removes template references; deletes the matching
+shopping contribution; removes shopping source metadata; and finally deletes
+the recipe. Any error, including a forced final-delete failure, rolls all
+cleanup back. A second delete, an unknown UUID, and a cross-owner UUID return
+the same non-disclosing `23503` result. The function remains `SECURITY DEFINER`
+with an empty `search_path`, explicit schema qualification, authenticated-only
+execute, and authenticated table `DELETE` revoked.
+
+Under migration 011, no existing database RPC can combine planner, template,
+shopping, and recipe mutation atomically. The application therefore attempts
+the migration-012 RPC first and enters compatibility cleanup only for the exact
+missing-function `PGRST202`. It reads only same-owner rows, removes shopping
+contribution authority first, updates canonical and legacy planner/template
+mirrors with UUID identity, uses original canonical values as optimistic
+concurrency predicates, deletes the owner-scoped recipe last, and re-reads
+planner/template state before reporting success. Cleanup errors and zero-row
+optimistic updates abort the sequence; a post-delete reference causes an
+explicit partial-failure error rather than false success.
+
+The unavoidable migration-011 partial states are:
+
+- contribution cleanup may commit before a later planner/template cleanup
+  fails; retry recomputes the same idempotent removal;
+- some planner/template rows may be detached before a later row conflicts;
+  the recipe remains and retry cleans the remainder;
+- all active rows may be detached before the owner-scoped recipe delete fails;
+  the recipe remains valid but no longer appears in those plans/templates;
+- a racing add can occur after cleanup and before table deletion because the
+  client cannot hold database row locks across requests; the post-delete read
+  detects this and refuses to report success, but recovery requires another
+  compatible cleanup.
+
+Migration 012 closes these race windows with transaction-level locks. Its
+parity gate must remain strict: weakening it would convert unknown identity
+corruption into silent linkage. Rollout order is durable deletion code and
+tests first, then recovery readiness, then an separately authorized controlled
+repair of the known production orphan, a zero-count audit, and only then an
+explicitly authorized migration-012 deployment. The orphan must not be changed
+without recovery capability because its only surviving evidence is active
+planner data. This repository change neither establishes recovery capability
+nor authorizes production repair or migration deployment.
 
 ### Production dependency observation
 
 The Stage 2B application at commit `19cd6bc` was already production-verified
-before Stage 2C work began. Its recorded workflow matrix covered same-name
-creation, rename, planner, made-state, templates, shopping, history, shares,
-query/cache identity, and cleanup using UUID-aware requests. A fresh read-only
-check on 2026-07-17 confirmed that the successful production deployment still
-points at that commit, production migration history contains 011 and not 012,
-all 11 Stage 2A parity counters are zero, and all three active planner
-unresolved counters are zero. No legacy-only active request was recorded in the
-Stage 2B production matrix. Source and caller inventory found no active
-legacy-only path. Migration 012 is intentionally not deployed by this PR.
+before Stage 2C enforcement work began. Its recorded workflow matrix covered
+same-name creation, rename, planner, made-state, templates, shopping, history,
+shares, query/cache identity, and cleanup using UUID-aware requests. A later
+read-only deletion preflight on 2026-07-17 confirmed that production migration
+history contains 011 and not 012, but found the deletion orphan described above
+at `1 / 0 / 0` active membership/assignment/made references. That result
+supersedes the earlier zero-count observation and blocks migration 012. No
+legacy-only active request was recorded in the Stage 2B production matrix.
+Source and caller inventory found no active legacy-only path. Migration 012 is
+intentionally not deployed by this PR.
 
 The pre-012 schema has no durable input-authority counter, so database row
 parity alone cannot distinguish whether a matching legacy mirror was supplied

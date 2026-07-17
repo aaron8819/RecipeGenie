@@ -141,6 +141,9 @@ declare
   v_expected_legacy text[];
   v_expected_json jsonb;
   v_internal_migration boolean := auth.uid() is null and session_user = 'postgres';
+  v_recipe_deletion boolean := coalesce(
+    current_setting('recipe_genie.recipe_deletion', true), ''
+  ) = 'on';
 begin
   perform private.assert_uuid_sync_row_owner(new.user_id);
 
@@ -148,6 +151,7 @@ begin
     or (tg_op = 'UPDATE' and new.recipe_ids is distinct from old.recipe_ids);
   v_uuid_changed := (tg_op = 'INSERT' and cardinality(new.recipe_uuids) > 0)
     or (tg_op = 'UPDATE' and new.recipe_uuids is distinct from old.recipe_uuids);
+  if v_recipe_deletion then v_uuid_changed := true; end if;
   if v_legacy_changed and not v_uuid_changed then
     if v_internal_migration then
       new.recipe_uuids := private.resolve_owned_recipe_uuid_array(new.user_id, new.recipe_ids);
@@ -168,6 +172,7 @@ begin
     or (tg_op = 'UPDATE' and new.day_assignments is distinct from old.day_assignments);
   v_uuid_changed := (tg_op = 'INSERT' and new.day_assignment_recipe_uuids <> '{}'::jsonb)
     or (tg_op = 'UPDATE' and new.day_assignment_recipe_uuids is distinct from old.day_assignment_recipe_uuids);
+  if v_recipe_deletion then v_uuid_changed := true; end if;
   if v_legacy_changed and not v_uuid_changed then
     if v_internal_migration then
       new.day_assignment_recipe_uuids := private.resolve_owned_recipe_assignment_keys(
@@ -192,6 +197,7 @@ begin
     or (tg_op = 'UPDATE' and new.made_recipe_ids is distinct from old.made_recipe_ids);
   v_uuid_changed := (tg_op = 'INSERT' and cardinality(new.made_recipe_uuids) > 0)
     or (tg_op = 'UPDATE' and new.made_recipe_uuids is distinct from old.made_recipe_uuids);
+  if v_recipe_deletion then v_uuid_changed := true; end if;
   if v_legacy_changed and not v_uuid_changed then
     if v_internal_migration then
       new.made_recipe_uuids := private.resolve_owned_recipe_uuid_array(
@@ -225,12 +231,16 @@ declare
   v_expected_legacy text[];
   v_expected_json jsonb;
   v_internal_migration boolean := auth.uid() is null and session_user = 'postgres';
+  v_recipe_deletion boolean := coalesce(
+    current_setting('recipe_genie.recipe_deletion', true), ''
+  ) = 'on';
 begin
   perform private.assert_uuid_sync_row_owner(new.user_id);
   v_legacy_changed := (tg_op = 'INSERT' and cardinality(new.recipe_ids) > 0)
     or (tg_op = 'UPDATE' and new.recipe_ids is distinct from old.recipe_ids);
   v_uuid_changed := (tg_op = 'INSERT' and cardinality(new.recipe_uuids) > 0)
     or (tg_op = 'UPDATE' and new.recipe_uuids is distinct from old.recipe_uuids);
+  if v_recipe_deletion then v_uuid_changed := true; end if;
   if v_legacy_changed and not v_uuid_changed then
     if v_internal_migration then
       new.recipe_uuids := private.resolve_owned_recipe_uuid_array(new.user_id, new.recipe_ids);
@@ -251,6 +261,7 @@ begin
     or (tg_op = 'UPDATE' and new.day_assignments is distinct from old.day_assignments);
   v_uuid_changed := (tg_op = 'INSERT' and new.day_assignment_recipe_uuids <> '{}'::jsonb)
     or (tg_op = 'UPDATE' and new.day_assignment_recipe_uuids is distinct from old.day_assignment_recipe_uuids);
+  if v_recipe_deletion then v_uuid_changed := true; end if;
   if v_legacy_changed and not v_uuid_changed then
     if v_internal_migration then
       new.day_assignment_recipe_uuids := private.resolve_owned_recipe_assignment_keys(
@@ -481,6 +492,8 @@ declare
   v_expected_legacy text[];
   v_internal_uuid_command boolean := coalesce(
     current_setting('recipe_genie.uuid_command', true), ''
+  ) = 'on' or coalesce(
+    current_setting('recipe_genie.recipe_deletion', true), ''
   ) = 'on' or (auth.uid() is null and session_user = 'postgres');
 begin
   perform private.assert_uuid_sync_row_owner(new.user_id);
@@ -488,6 +501,9 @@ begin
     or (tg_op = 'UPDATE' and new.source_recipes is distinct from old.source_recipes);
   v_uuid_changed := (tg_op = 'INSERT' and cardinality(new.source_recipe_uuids) > 0)
     or (tg_op = 'UPDATE' and new.source_recipe_uuids is distinct from old.source_recipe_uuids);
+  if coalesce(current_setting('recipe_genie.recipe_deletion', true), '') = 'on' then
+    v_uuid_changed := true;
+  end if;
   if v_legacy_changed and not v_uuid_changed and not v_internal_uuid_command then
     raise exception 'shopping source recipe UUIDs are required' using errcode = '22023';
   end if;
@@ -688,6 +704,65 @@ drop function public.toggle_weekly_recipe_made(text, text, boolean, timestamptz)
 
 -- Table DELETE cannot reveal whether its predicate used UUID or legacy text.
 -- Route deletion through one UUID-only same-owner command instead.
+create function private.remove_recipe_uuid_from_array(
+  p_values uuid[],
+  p_recipe_uuid uuid
+)
+returns uuid[]
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select coalesce(array_agg(entry.value order by entry.position), '{}'::uuid[])
+  from unnest(coalesce(p_values, '{}'::uuid[])) with ordinality as entry(value, position)
+  where entry.value <> p_recipe_uuid;
+$$;
+
+create function private.remove_recipe_source_from_items(
+  p_items jsonb,
+  p_recipe_uuid uuid,
+  p_legacy_id text
+)
+returns jsonb
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  with items as (
+    select item.value, item.position,
+      case when jsonb_typeof(item.value -> 'sources') = 'array'
+        then item.value -> 'sources' else null end as sources
+    from jsonb_array_elements(
+      case when jsonb_typeof(p_items) = 'array' then p_items else '[]'::jsonb end
+    ) with ordinality as item(value, position)
+  ), cleaned as (
+    select value, position, sources,
+      case when sources is null then null else coalesce((
+        select jsonb_agg(source.value order by source.position)
+        from jsonb_array_elements(sources) with ordinality as source(value, position)
+        where nullif(source.value ->> 'recipeUuid', '') is distinct from p_recipe_uuid::text
+          and nullif(source.value ->> 'recipeId', '') is distinct from p_legacy_id
+          and nullif(source.value ->> 'legacyRecipeId', '') is distinct from p_legacy_id
+      ), '[]'::jsonb) end as remaining_sources
+    from items
+  )
+  select coalesce(jsonb_agg(
+    case when sources is null then value
+      else jsonb_set(value, '{sources}', remaining_sources, true) end
+    order by position
+  ) filter (where sources is null or jsonb_array_length(remaining_sources) > 0), '[]'::jsonb)
+  from cleaned;
+$$;
+
+alter function private.remove_recipe_uuid_from_array(uuid[], uuid) owner to postgres;
+alter function private.remove_recipe_source_from_items(jsonb, uuid, text) owner to postgres;
+revoke all privileges on function private.remove_recipe_uuid_from_array(uuid[], uuid)
+  from public, anon, authenticated, service_role;
+revoke all privileges on function private.remove_recipe_source_from_items(jsonb, uuid, text)
+  from public, anon, authenticated, service_role;
+
 create function public.delete_recipe(p_recipe_uuid uuid)
 returns uuid
 language plpgsql
@@ -696,18 +771,133 @@ set search_path = ''
 as $$
 declare
   v_user_id uuid := auth.uid();
+  v_legacy_id text;
   v_deleted uuid;
+  v_previous_deletion_setting text := coalesce(
+    current_setting('recipe_genie.recipe_deletion', true), ''
+  );
 begin
   if v_user_id is null then
     raise exception 'authentication required' using errcode = '42501';
   end if;
+
+  select recipe.id into v_legacy_id
+  from public.recipes as recipe
+  where recipe.user_id = v_user_id
+    and recipe.recipe_uuid = p_recipe_uuid
+  for update;
+  if v_legacy_id is null then
+    raise exception 'recipe UUID is unresolved or belongs to another user'
+      using errcode = '23503';
+  end if;
+
+  -- Establish a deterministic lock order before mutation. Recipe writes that
+  -- race this command either complete before these locks and are cleaned, or
+  -- resume after deletion and fail same-owner UUID validation.
+  perform 1 from public.weekly_plans as plan
+  where plan.user_id = v_user_id
+    and (
+      p_recipe_uuid = any(plan.recipe_uuids)
+      or v_legacy_id = any(plan.recipe_ids)
+      or plan.day_assignment_recipe_uuids ? p_recipe_uuid::text
+      or coalesce(plan.day_assignments, '{}'::jsonb) ? v_legacy_id
+      or p_recipe_uuid = any(plan.made_recipe_uuids)
+      or v_legacy_id = any(plan.made_recipe_ids)
+    )
+  order by plan.week_date
+  for update;
+
+  perform 1 from public.plan_templates as template
+  where template.user_id = v_user_id
+    and (
+      p_recipe_uuid = any(template.recipe_uuids)
+      or v_legacy_id = any(template.recipe_ids)
+      or template.day_assignment_recipe_uuids ? p_recipe_uuid::text
+      or coalesce(template.day_assignments, '{}'::jsonb) ? v_legacy_id
+    )
+  order by template.id
+  for update;
+
+  perform 1 from public.shopping_list as shopping
+  where shopping.user_id = v_user_id
+  for update;
+
+  perform set_config('recipe_genie.recipe_deletion', 'on', true);
+
+  update public.weekly_plans as plan
+  set recipe_uuids = private.remove_recipe_uuid_from_array(plan.recipe_uuids, p_recipe_uuid),
+      day_assignment_recipe_uuids = coalesce(plan.day_assignment_recipe_uuids, '{}'::jsonb)
+        - p_recipe_uuid::text,
+      made_recipe_uuids = private.remove_recipe_uuid_from_array(
+        plan.made_recipe_uuids, p_recipe_uuid
+      )
+  where plan.user_id = v_user_id
+    and (
+      p_recipe_uuid = any(plan.recipe_uuids)
+      or v_legacy_id = any(plan.recipe_ids)
+      or plan.day_assignment_recipe_uuids ? p_recipe_uuid::text
+      or coalesce(plan.day_assignments, '{}'::jsonb) ? v_legacy_id
+      or p_recipe_uuid = any(plan.made_recipe_uuids)
+      or v_legacy_id = any(plan.made_recipe_ids)
+    );
+
+  update public.plan_templates as template
+  set recipe_uuids = private.remove_recipe_uuid_from_array(
+        template.recipe_uuids, p_recipe_uuid
+      ),
+      day_assignment_recipe_uuids = coalesce(
+        template.day_assignment_recipe_uuids, '{}'::jsonb
+      ) - p_recipe_uuid::text
+  where template.user_id = v_user_id
+    and (
+      p_recipe_uuid = any(template.recipe_uuids)
+      or v_legacy_id = any(template.recipe_ids)
+      or template.day_assignment_recipe_uuids ? p_recipe_uuid::text
+      or coalesce(template.day_assignments, '{}'::jsonb) ? v_legacy_id
+    );
+
+  delete from public.shopping_recipe_contributions as contribution
+  where contribution.user_id = v_user_id
+    and contribution.recipe_uuid = p_recipe_uuid;
+
+  update public.shopping_list as shopping
+  set source_recipe_uuids = private.remove_recipe_uuid_from_array(
+        shopping.source_recipe_uuids, p_recipe_uuid
+      ),
+      items = private.remove_recipe_source_from_items(
+        shopping.items, p_recipe_uuid, v_legacy_id
+      ),
+      already_have = private.remove_recipe_source_from_items(
+        shopping.already_have, p_recipe_uuid, v_legacy_id
+      ),
+      excluded = private.remove_recipe_source_from_items(
+        shopping.excluded, p_recipe_uuid, v_legacy_id
+      ),
+      scale = case
+        when (select count(*) from public.shopping_recipe_contributions as remaining
+              where remaining.user_id = v_user_id) = 1
+        then (select remaining.scale from public.shopping_recipe_contributions as remaining
+              where remaining.user_id = v_user_id limit 1)
+        else 1
+      end,
+      total_servings = coalesce((
+        select sum(remaining.servings)
+        from public.shopping_recipe_contributions as remaining
+        where remaining.user_id = v_user_id
+      ), 0)
+  where shopping.user_id = v_user_id;
+
   delete from public.recipes as recipe
-  where recipe.user_id = v_user_id and recipe.recipe_uuid = p_recipe_uuid
+  where recipe.user_id = v_user_id
+    and recipe.recipe_uuid = p_recipe_uuid
   returning recipe.recipe_uuid into v_deleted;
   if v_deleted is null then
     raise exception 'recipe UUID is unresolved or belongs to another user'
       using errcode = '23503';
   end if;
+  perform set_config(
+    'recipe_genie.recipe_deletion', v_previous_deletion_setting, true
+  );
   return v_deleted;
 end;
 $$;

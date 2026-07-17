@@ -93,8 +93,7 @@ async function insertRecipe(
   return mapRecipeRow(result.data as RecipeRow)
 }
 
-async function removeContributionFirst(recipeUuid: string) {
-  const runCommand = async (adding: boolean) => {
+async function updateContribution(recipeUuid: string, adding: boolean) {
     const current = await owner.from("shopping_list").select("*").single()
     if (current.error) throw current.error
     const command = await owner.rpc("apply_recipe_shopping_contribution_uuid_command", {
@@ -123,24 +122,6 @@ async function removeContributionFirst(recipeUuid: string) {
       p_command_type: adding ? "add_or_replace" : "remove",
     })
     if (command.error) throw command.error
-  }
-
-  await runCommand(true)
-  const created = await owner
-    .from("shopping_recipe_contributions")
-    .select("recipe_uuid", { count: "exact", head: true })
-    .eq("recipe_uuid", recipeUuid)
-  if (created.error) throw created.error
-  expect(created.count).toBe(1)
-
-  await runCommand(false)
-
-  const remaining = await owner
-    .from("shopping_recipe_contributions")
-    .select("recipe_uuid", { count: "exact", head: true })
-    .eq("recipe_uuid", recipeUuid)
-  if (remaining.error) throw remaining.error
-  expect(remaining.count).toBe(0)
 }
 
 beforeAll(async () => {
@@ -201,14 +182,29 @@ describe(`Stage 2C application against migration ${schemaVersion}`, () => {
     }
   })
 
-  it("cleans contributions first and deletes through the schema-appropriate UUID path", async () => {
-    await removeContributionFirst(OWNER_RECIPE)
+  it("detaches planner, template, made-state, and shopping references before deletion", async () => {
+    const plan = await owner.from("weekly_plans").insert({
+      user_id: ownerId,
+      week_date: "2026-07-20",
+      recipe_uuids: [SAME_NAME_RECIPE, OWNER_RECIPE],
+      day_assignment_recipe_uuids: { [OWNER_RECIPE]: 2, [SAME_NAME_RECIPE]: 4 },
+      made_recipe_uuids: [OWNER_RECIPE, SAME_NAME_RECIPE],
+    })
+    if (plan.error) throw plan.error
+    const template = await owner.from("plan_templates").insert({
+      user_id: ownerId,
+      name: "Deletion matrix template",
+      recipe_uuids: [OWNER_RECIPE, SAME_NAME_RECIPE],
+      day_assignment_recipe_uuids: { [OWNER_RECIPE]: 1, [SAME_NAME_RECIPE]: 5 },
+    })
+    if (template.error) throw template.error
+    await updateContribution(OWNER_RECIPE, true)
 
-    let fallbackCalls = 0
+    let fallbackUsed = false
     const observedClient = {
       rpc: owner.rpc.bind(owner),
       from: (table: "recipes") => {
-        fallbackCalls += 1
+        fallbackUsed = true
         return owner.from(table)
       },
     }
@@ -220,8 +216,14 @@ describe(`Stage 2C application against migration ${schemaVersion}`, () => {
       expect(isMissingDeleteRecipeRpc(capability.error)).toBe(true)
     }
 
-    await deleteRecipeByUuid(observedClient, OWNER_RECIPE, ownerId)
-    expect(fallbackCalls).toBe(schemaVersion === "011" ? 1 : 0)
+    let cleanupCalls = 0
+    await deleteRecipeByUuid(observedClient, OWNER_RECIPE, ownerId, async (recipeUuid) => {
+      cleanupCalls += 1
+      await updateContribution(recipeUuid, false)
+      return {}
+    })
+    expect(fallbackUsed).toBe(schemaVersion === "011")
+    expect(cleanupCalls).toBe(schemaVersion === "011" ? 1 : 0)
 
     const deleted = await admin
       .from("recipes")
@@ -234,6 +236,34 @@ describe(`Stage 2C application against migration ${schemaVersion}`, () => {
       .select("recipe_uuid", { count: "exact", head: true })
       .in("recipe_uuid", [SAME_NAME_RECIPE, OTHER_OWNER_RECIPE])
     expect(unrelated.count).toBe(2)
+
+    const cleanedPlan = await owner.from("weekly_plans")
+      .select("recipe_ids,recipe_uuids,day_assignments,day_assignment_recipe_uuids,made_recipe_ids,made_recipe_uuids")
+      .eq("week_date", "2026-07-20")
+      .single()
+    if (cleanedPlan.error) throw cleanedPlan.error
+    expect(cleanedPlan.data.recipe_uuids).toEqual([SAME_NAME_RECIPE])
+    expect(cleanedPlan.data.recipe_ids).toEqual([SAME_NAME_RECIPE])
+    expect(cleanedPlan.data.day_assignment_recipe_uuids).toEqual({ [SAME_NAME_RECIPE]: 4 })
+    expect(cleanedPlan.data.day_assignments).toEqual({ [SAME_NAME_RECIPE]: 4 })
+    expect(cleanedPlan.data.made_recipe_uuids).toEqual([SAME_NAME_RECIPE])
+    expect(cleanedPlan.data.made_recipe_ids).toEqual([SAME_NAME_RECIPE])
+
+    const cleanedTemplate = await owner.from("plan_templates")
+      .select("recipe_ids,recipe_uuids,day_assignments,day_assignment_recipe_uuids")
+      .eq("name", "Deletion matrix template")
+      .single()
+    if (cleanedTemplate.error) throw cleanedTemplate.error
+    expect(cleanedTemplate.data.recipe_uuids).toEqual([SAME_NAME_RECIPE])
+    expect(cleanedTemplate.data.recipe_ids).toEqual([SAME_NAME_RECIPE])
+    expect(cleanedTemplate.data.day_assignment_recipe_uuids).toEqual({ [SAME_NAME_RECIPE]: 5 })
+    expect(cleanedTemplate.data.day_assignments).toEqual({ [SAME_NAME_RECIPE]: 5 })
+
+    const contribution = await owner.from("shopping_recipe_contributions")
+      .select("recipe_uuid", { count: "exact", head: true })
+      .eq("recipe_uuid", OWNER_RECIPE)
+    if (contribution.error) throw contribution.error
+    expect(contribution.count).toBe(0)
 
     const crossOwnerClient = {
       rpc: owner.rpc.bind(owner),

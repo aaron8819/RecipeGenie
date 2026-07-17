@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(59);
+select extensions.plan(71);
 
 insert into auth.users(id, email) values
   ('61000000-0000-4000-8000-000000000001', 'stage2c-a@example.test'),
@@ -298,14 +298,6 @@ select extensions.ok(
 );
 
 select set_config('request.jwt.claim.sub', '61000000-0000-4000-8000-000000000001', true);
-select extensions.lives_ok($$
-  select public.apply_recipe_shopping_contribution_uuid_command(
-    (select contribution_revision from public.shopping_list where user_id = auth.uid()),
-    '[]'::jsonb, array['61111111-1111-4111-8111-111111111111'::uuid],
-    '{"items":[],"already_have":[],"excluded":[],"source_recipe_uuids":[],"scale":1,"total_servings":0,"custom_order":false}'::jsonb,
-    '{}'::jsonb, 'stage2c-remove-01', 'remove'
-  )
-$$, 'UUID contribution removal succeeds before deletion');
 select extensions.is(
   public.delete_recipe('61111111-1111-4111-8111-111111111111'),
   '61111111-1111-4111-8111-111111111111'::uuid, 'UUID deletion command returns canonical identity'
@@ -318,6 +310,124 @@ select extensions.ok(
   exists(select 1 from public.recipe_history where recipe_id = 'stage2c-a-1'),
   'recipe deletion preserves historical legacy evidence'
 );
+select extensions.is(
+  (select recipe_uuids from public.weekly_plans
+   where user_id = auth.uid() and week_date = date '2026-07-20'),
+  array['61222222-2222-4222-8222-222222222222'::uuid],
+  'recipe deletion removes all canonical planner memberships and preserves order'
+);
+select extensions.is(
+  (select recipe_ids from public.weekly_plans
+   where user_id = auth.uid() and week_date = date '2026-07-20'),
+  array['stage2c-a-2']::text[],
+  'recipe deletion keeps planner membership mirrors aligned'
+);
+select extensions.ok(
+  (select not (day_assignment_recipe_uuids ? '61111111-1111-4111-8111-111111111111')
+      and not (coalesce(day_assignments, '{}'::jsonb) ? 'stage2c-a-1')
+   from public.weekly_plans where user_id = auth.uid() and week_date = date '2026-07-20'),
+  'recipe deletion removes canonical and legacy planner assignment keys'
+);
+select extensions.ok(
+  (select not ('61111111-1111-4111-8111-111111111111'::uuid = any(made_recipe_uuids))
+      and not ('stage2c-a-1' = any(made_recipe_ids))
+   from public.weekly_plans where user_id = auth.uid() and week_date = date '2026-07-20'),
+  'recipe deletion removes canonical and legacy made-state references'
+);
+select extensions.ok(
+  (select recipe_uuids = '{}'::uuid[] and recipe_ids = '{}'::text[]
+      and day_assignment_recipe_uuids = '{}'::jsonb
+      and coalesce(day_assignments, '{}'::jsonb) = '{}'::jsonb
+   from public.plan_templates where user_id = auth.uid()),
+  'recipe deletion detaches template membership and assignments'
+);
+select extensions.is(
+  (select count(*)::integer from public.shopping_recipe_contributions
+   where user_id = auth.uid() and recipe_uuid = '61111111-1111-4111-8111-111111111111'),
+  0, 'recipe deletion removes the authoritative shopping contribution'
+);
+select extensions.ok(
+  (select source_recipe_uuids = '{}'::uuid[] and source_recipes = '{}'::text[]
+      and items = '[]'::jsonb
+   from public.shopping_list where user_id = auth.uid()),
+  'recipe deletion removes shopping projection references and aligned source mirrors'
+);
+select extensions.throws_ok($$
+  select public.delete_recipe('61111111-1111-4111-8111-111111111111')
+$$, '23503', 'recipe UUID is unresolved or belongs to another user',
+  'duplicate deletion returns the non-disclosing not-found result'
+);
+
+insert into public.recipes(recipe_uuid, user_id, name, category, servings, ingredients, instructions)
+values ('61666666-6666-4666-8666-666666666666', auth.uid(), 'Rollback recipe', 'test', 4, '[]', '{}');
+update public.weekly_plans
+set recipe_uuids = recipe_uuids || '61666666-6666-4666-8666-666666666666'::uuid,
+    day_assignment_recipe_uuids = day_assignment_recipe_uuids
+      || '{"61666666-6666-4666-8666-666666666666":3}'::jsonb,
+    made_recipe_uuids = made_recipe_uuids || '61666666-6666-4666-8666-666666666666'::uuid
+where user_id = auth.uid() and week_date = date '2026-07-20';
+update public.plan_templates
+set recipe_uuids = array['61666666-6666-4666-8666-666666666666'::uuid],
+    day_assignment_recipe_uuids = '{"61666666-6666-4666-8666-666666666666":3}'::jsonb
+where user_id = auth.uid();
+select public.apply_recipe_shopping_contribution_uuid_command(
+  (select contribution_revision from public.shopping_list where user_id = auth.uid()),
+  '[{"recipe_uuid":"61666666-6666-4666-8666-666666666666","servings":4,"scale":1,"normalization_version":1,"snapshot":{"items":[]}}]'::jsonb,
+  '{}'::uuid[],
+  '{"items":[],"already_have":[],"excluded":[],"source_recipe_uuids":["61666666-6666-4666-8666-666666666666"],"scale":1,"total_servings":4,"custom_order":false}'::jsonb,
+  '{}'::jsonb, 'stage2c-rollback-add', 'add_or_replace'
+);
+
+reset role;
+create function private.force_recipe_delete_failure()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if old.recipe_uuid = '61666666-6666-4666-8666-666666666666'::uuid then
+    raise exception 'forced recipe deletion failure';
+  end if;
+  return old;
+end;
+$$;
+create trigger force_recipe_delete_failure
+before delete on public.recipes
+for each row execute function private.force_recipe_delete_failure();
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '61000000-0000-4000-8000-000000000001', true);
+
+select extensions.throws_ok($$
+  select public.delete_recipe('61666666-6666-4666-8666-666666666666')
+$$, 'P0001', 'forced recipe deletion failure',
+  'cleanup-stage failure rolls back the atomic deletion RPC'
+);
+select extensions.is(
+  (select count(*)::integer from public.recipes
+   where user_id = auth.uid() and recipe_uuid = '61666666-6666-4666-8666-666666666666'),
+  1, 'failed atomic deletion preserves the recipe'
+);
+select extensions.ok(
+  (select '61666666-6666-4666-8666-666666666666'::uuid = any(recipe_uuids)
+      and day_assignment_recipe_uuids ? '61666666-6666-4666-8666-666666666666'
+      and '61666666-6666-4666-8666-666666666666'::uuid = any(made_recipe_uuids)
+   from public.weekly_plans where user_id = auth.uid() and week_date = date '2026-07-20'),
+  'failed atomic deletion preserves every planner reference'
+);
+select extensions.ok(
+  (select '61666666-6666-4666-8666-666666666666'::uuid = any(recipe_uuids)
+      and day_assignment_recipe_uuids ? '61666666-6666-4666-8666-666666666666'
+   from public.plan_templates where user_id = auth.uid()),
+  'failed atomic deletion preserves every template reference'
+);
+select extensions.is(
+  (select count(*)::integer from public.shopping_recipe_contributions
+   where user_id = auth.uid() and recipe_uuid = '61666666-6666-4666-8666-666666666666'),
+  1, 'failed atomic deletion preserves the shopping contribution'
+);
+
+reset role;
+drop trigger force_recipe_delete_failure on public.recipes;
+drop function private.force_recipe_delete_failure();
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '61000000-0000-4000-8000-000000000001', true);
 select extensions.throws_ok($$
   select public.delete_recipe('not-a-uuid')
 $$, '22P02', null, 'malformed deletion UUID rejects before execution');

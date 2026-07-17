@@ -42,6 +42,10 @@ for (const contract of [
   /drop function public\.toggle_weekly_recipe_made\(text, text, boolean, timestamptz\)/,
   /revoke all privileges on function public\.apply_recipe_shopping_contribution_command/,
   /create function public\.delete_recipe\(p_recipe_uuid uuid\)/,
+  /update public\.weekly_plans as plan[\s\S]*private\.remove_recipe_uuid_from_array/,
+  /update public\.plan_templates as template[\s\S]*day_assignment_recipe_uuids/,
+  /delete from public\.shopping_recipe_contributions as contribution/,
+  /perform set_config\('recipe_genie\.recipe_deletion', 'on', true\)/,
   /create table private\.recipe_identity_compat_usage/,
   /create function public\.get_recipe_identity_compat_usage\(\)/,
   /raise exception 'weekly plan recipe UUIDs are required'/,
@@ -72,7 +76,7 @@ for (const required of [
   /recipeUuidWrite\(recipeUuid\)/,
   /mapRecipeRow/,
   /runRecipeContributionCommand\("DELETE"/,
-  /deleteRecipeByUuid\(getSupabase\(\), id, user!\.id\)/,
+  /deleteRecipeByUuid\([\s\S]*getSupabase\(\),[\s\S]*id,[\s\S]*user!\.id/,
 ]) {
   if (!required.test(recipeHooks)) failures.push(`recipe hook UUID seam missing: ${required}`)
 }
@@ -83,15 +87,18 @@ for (const required of [
   /candidate\.message === MISSING_DELETE_RECIPE_RPC_MESSAGE/,
   /candidate\.details === MISSING_DELETE_RECIPE_RPC_DETAILS/,
   /rpc\("delete_recipe", \{ p_recipe_uuid: id \}\)/,
-  /\.eq\("recipe_uuid", id\)/,
+  /\.eq\("recipe_uuid", recipeUuid\)/,
   /\.eq\("user_id", ownerUserId\)/,
+  /client\.from\("weekly_plans"\)/,
+  /client\.from\("plan_templates"\)/,
+  /Migration011DeletionPartialFailureError/,
 ]) {
   if (!required.test(deletionAdapter)) {
     failures.push(`recipe deletion compatibility contract missing: ${required}`)
   }
 }
 for (const forbidden of [
-  /\.eq\("id",/,
+  /from\("recipes"\)[\s\S]{0,200}\.eq\("id",/,
   /message\.includes\(/,
   /catch\s*\(/,
 ]) {
