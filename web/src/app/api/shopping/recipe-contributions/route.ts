@@ -49,6 +49,10 @@ function userCorrelation(userId: string): string {
   return createHash("sha256").update(userId).digest("hex").slice(0, 12)
 }
 
+function identifierCorrelation(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12)
+}
+
 function parseBody(body: CommandBody) {
   const recipeIds = [...new Set((body.recipeIds || []).map((id) => id.trim()))]
     .filter(Boolean)
@@ -256,6 +260,8 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         config.shopping_item_order
       ),
     })
+    const recipeCorrelations = input.recipeIds.map(identifierCorrelation)
+    const idempotencyCorrelation = identifierCorrelation(input.idempotencyKey)
 
     const uuidCommandClient = supabase as unknown as {
       rpc: (name: string, args: Record<string, unknown>) => Promise<{
@@ -284,8 +290,9 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       console.info("shopping_contribution_command", {
         commandType,
         user: correlation,
-        recipeIds: input.recipeIds,
-        idempotencyKey: input.idempotencyKey,
+        recipeCount: input.recipeIds.length,
+        recipeCorrelations,
+        idempotencyCorrelation,
         normalizationVersion: SHOPPING_NORMALIZATION_VERSION,
         result: "revision_retry",
         attempt: attempt + 1,
@@ -296,8 +303,9 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       console.error("shopping_contribution_command", {
         commandType,
         user: correlation,
-        recipeIds: input.recipeIds,
-        idempotencyKey: input.idempotencyKey,
+        recipeCount: input.recipeIds.length,
+        recipeCorrelations,
+        idempotencyCorrelation,
         normalizationVersion: SHOPPING_NORMALIZATION_VERSION,
         failureCategory: error.code || "database_error",
       })
@@ -314,8 +322,9 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
     console.info("shopping_contribution_command", {
       commandType,
       user: correlation,
-      recipeIds: input.recipeIds,
-      idempotencyKey: input.idempotencyKey,
+      recipeCount: input.recipeIds.length,
+      recipeCorrelations,
+      idempotencyCorrelation,
       normalizationVersion: SHOPPING_NORMALIZATION_VERSION,
       result: result.outcome,
       affectedAggregateItemCount:

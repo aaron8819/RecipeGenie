@@ -77,6 +77,14 @@ if (!contributionRoute.includes("apply_recipe_shopping_contribution_uuid_command
 if (/recipeNames/.test(contributionRoute) || /\.in\("name"/.test(contributionRoute)) {
   failures.push("shopping contribution route retains recipe-name identity resolution")
 }
+for (const forbidden of [
+  /recipeIds:\s*input\.recipeIds/,
+  /idempotencyKey:\s*input\.idempotencyKey/,
+]) {
+  if (forbidden.test(contributionRoute)) {
+    failures.push(`shopping contribution logs expose raw identity metadata: ${forbidden}`)
+  }
+}
 
 const shareRoute = read("src/app/api/recipe-shares/route.ts")
 if (!shareRoute.includes("source_recipe_uuid") || !shareRoute.includes("assertRecipeUuid")) {
