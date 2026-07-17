@@ -8,7 +8,13 @@ import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
 import { getActivePrincipalId } from "@/lib/principal-session"
 import { runRecipeContributionCommand } from "@/lib/shopping-contribution-client"
-import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
+import {
+  createRecipeUuid,
+  mapRecipeRow,
+  mapRecipeRows,
+  recipeUuidWrite,
+  type RecipeRow,
+} from "@/lib/recipe-identity"
 import {
   configurationKeys,
   principalId,
@@ -118,7 +124,7 @@ export function useRecipes(options?: {
           p_tags: options.tags,
         })
         if (error) throw error
-        let result = (data as Recipe[]) || []
+        let result = mapRecipeRows(data as RecipeRow[] | null)
         // Apply any additional filters that the RPC does not handle.
         if (options.category) result = result.filter((r) => r.category === options.category)
         if (options.search) {
@@ -157,7 +163,7 @@ export function useRecipes(options?: {
       const { data, error } = await query
       if (error) throw error
       // JSON recipe fields are normalized by the write path and database schema.
-      return (data as unknown as Recipe[]) || []
+      return mapRecipeRows(data as unknown as RecipeRow[] | null)
     },
     // Show cached data immediately while refetching (stale-while-revalidate)
     placeholderData: (previousData) => previousData,
@@ -183,12 +189,12 @@ export function useRecipe(id: string | null) {
       const { data, error } = await supabase
         .from("recipes")
         .select("*")
-        .eq("id", id)
+        .eq("recipe_uuid", id)
         .eq("user_id", user!.id)
         .single()
 
       if (error) throw error
-      return data as Recipe
+      return mapRecipeRow(data as RecipeRow)
     },
     initialData: id ? findRecipeInCache(queryClient, ownerUserId, id) : undefined,
     enabled: !!id && !!user,
@@ -207,28 +213,43 @@ export function useCreateRecipe() {
   const recipesKey = recipeKeys.all(ownerUserId)
 
   return useMutation({
-    mutationFn: async (recipe: Omit<RecipeInsert, "id" | "user_id">) => {
-      const id = sanitizeRecipeNameForStorage(recipe.name)
-      const now = new Date().toISOString()
+    mutationFn: async (recipe: Omit<RecipeInsert, "id" | "user_id"> & { recipeUuid?: string }) => {
+      const recipeUuid = recipe.recipeUuid || createRecipeUuid()
+      const { recipeUuid: _recipeUuid, ...values } = recipe
 
       const supabase = getSupabase()
       const recipeInsert = supabase.from("recipes") as unknown as {
-        insert: (values: Omit<RecipeInsert, "id" | "user_id"> & { id: string; user_id: string }) => {
+        insert: (values: Omit<RecipeInsert, "id" | "user_id"> & { id: string; recipe_uuid: string; user_id: string }) => {
           select: () => {
-            single: () => Promise<{ data: Recipe | null; error: { message: string } | null }>
+            single: () => Promise<{
+              data: RecipeRow | null
+              error: { code?: string; message: string } | null
+            }>
           }
         }
       }
       const { data, error } = await recipeInsert
-        .insert({ ...recipe, id, user_id: user!.id })
+        .insert({ ...values, ...recipeUuidWrite(recipeUuid), user_id: user!.id })
         .select()
         .single()
 
+      if (error?.code === "23505") {
+        // A retry after a lost successful response reuses the mutation UUID.
+        // Reconcile that owned row instead of duplicating or changing identity.
+        const { data: existing, error: readError } = await supabase
+          .from("recipes")
+          .select("*")
+          .eq("recipe_uuid", recipeUuid)
+          .eq("user_id", user!.id)
+          .single()
+        if (!readError && existing) return mapRecipeRow(existing)
+      }
       if (error) throw error
-      return data as Recipe
+      return mapRecipeRow(data as RecipeRow)
     },
     // Optimistic update
     onMutate: async (recipe) => {
+      recipe.recipeUuid ||= createRecipeUuid()
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: recipesKey })
 
@@ -236,10 +257,11 @@ export function useCreateRecipe() {
       const previousQueries = queryClient.getQueriesData<Recipe[]>({ queryKey: recipesKey })
 
       // Create optimistic recipe
-      const id = sanitizeRecipeNameForStorage(recipe.name)
+      const id = recipe.recipeUuid
       const now = new Date().toISOString()
       const optimisticRecipe: Recipe = {
         id,
+        legacyId: id,
         user_id: user?.id || "",
         name: recipe.name,
         category: recipe.category,
@@ -337,7 +359,7 @@ export function useUpdateRecipe() {
           eq: (column: string, value: string) => {
             eq: (column: string, value: string) => {
               select: () => {
-                single: () => Promise<{ data: Recipe | null; error: { message: string } | null }>
+            single: () => Promise<{ data: RecipeRow | null; error: { message: string } | null }>
               }
             }
           }
@@ -345,13 +367,13 @@ export function useUpdateRecipe() {
       }
       const { data, error } = await recipeUpdate
         .update(normalizedUpdates)
-        .eq("id", id)
+        .eq("recipe_uuid", id)
         .eq("user_id", user!.id)
         .select()
         .single()
 
       if (error) throw error
-      return data as Recipe
+      return mapRecipeRow(data as RecipeRow)
     },
     // Optimistic update
     onMutate: async ({ id, updates }) => {
@@ -427,7 +449,7 @@ export function useDeleteRecipe() {
       }
 
       const supabase = getSupabase()
-      const { error } = await supabase.from("recipes").delete().eq("id", id).eq("user_id", user!.id)
+      const { error } = await supabase.from("recipes").delete().eq("recipe_uuid", id).eq("user_id", user!.id)
       if (error) throw error
       return id
     },
@@ -493,7 +515,7 @@ export function useToggleFavorite() {
           eq: (column: string, value: string) => {
             eq: (column: string, value: string) => {
               select: () => {
-                single: () => Promise<{ data: Recipe | null; error: { message: string } | null }>
+                single: () => Promise<{ data: RecipeRow | null; error: { message: string } | null }>
               }
             }
           }
@@ -501,13 +523,13 @@ export function useToggleFavorite() {
       }
       const { data, error } = await recipeFavoriteUpdate
         .update({ favorite: !favorite })
-        .eq("id", id)
+        .eq("recipe_uuid", id)
         .eq("user_id", user!.id)
         .select()
         .single()
 
       if (error) throw error
-      return data as Recipe
+      return mapRecipeRow(data as RecipeRow)
     },
     // Optimistic update
     onMutate: async ({ id, favorite }) => {

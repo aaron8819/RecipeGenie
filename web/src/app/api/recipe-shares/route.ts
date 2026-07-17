@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { buildRecipeShareSnapshot } from '@/lib/recipe-sharing';
 import { checkRateLimit } from '@/lib/rate-limit';
 import type { Recipe } from '@/types/database';
+import { assertRecipeUuid, mapRecipeRow, type RecipeRow } from '@/lib/recipe-identity';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MESSAGE_LIMIT = 300;
@@ -98,6 +99,11 @@ export async function POST(request: Request) {
   if (!recipeId) {
     return NextResponse.json({ error: 'Recipe ID is required' }, { status: 400 });
   }
+  try {
+    assertRecipeUuid(recipeId);
+  } catch {
+    return NextResponse.json({ error: 'Recipe ID must be a UUID' }, { status: 400 });
+  }
 
   if (!EMAIL_REGEX.test(recipientEmail)) {
     return NextResponse.json(
@@ -123,7 +129,7 @@ export async function POST(request: Request) {
   const { data: sourceRecipe, error: recipeError } = await supabase
     .from('recipes')
     .select('*')
-    .eq('id', recipeId)
+    .eq('recipe_uuid', recipeId)
     .eq('user_id', user.id)
     .single();
 
@@ -131,7 +137,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
   }
 
-  const typedSourceRecipe = sourceRecipe as Recipe;
+  const typedSourceRecipe = mapRecipeRow(sourceRecipe as RecipeRow);
 
   let recipientUser:
     | {
@@ -161,7 +167,7 @@ export async function POST(request: Request) {
     .select('id')
     .eq('sender_user_id', user.id)
     .eq('recipient_user_id', recipientUser.id)
-    .eq('source_recipe_id', recipeId)
+    .eq('source_recipe_uuid', recipeId)
     .eq('status', 'pending')
     .maybeSingle();
 
@@ -175,14 +181,20 @@ export async function POST(request: Request) {
     });
   }
 
-  const { data: inserted, error: insertError } = await supabase
-    .from('recipe_shares')
+  const shareInsert = supabase.from('recipe_shares') as unknown as {
+    insert: (values: Record<string, unknown>) => {
+      select: (columns: string) => {
+        single: () => Promise<{ data: { id: string; status: string } | null; error: { message: string } | null }>
+      }
+    }
+  };
+  const { data: inserted, error: insertError } = await shareInsert
     .insert({
       sender_user_id: user.id,
       sender_email: normalizeEmail(user.email || ''),
       recipient_user_id: recipientUser.id,
       recipient_email: recipientEmail,
-      source_recipe_id: typedSourceRecipe.id,
+      source_recipe_uuid: typedSourceRecipe.id,
       source_recipe_snapshot: buildRecipeShareSnapshot(typedSourceRecipe),
       message,
       status: 'pending',

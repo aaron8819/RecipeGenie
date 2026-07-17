@@ -735,6 +735,7 @@ export function ShoppingListView() {
 
   // Handle recipe items removal with undo
   const handleRemoveRecipeItems = useCallback((recipeId: string | undefined, recipeName: string) => {
+    if (!recipeId) return
     pendingActions.enqueueRemoveRecipe({ recipeId, recipeName })
   }, [pendingActions])
 

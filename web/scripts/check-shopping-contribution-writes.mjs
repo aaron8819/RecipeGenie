@@ -29,8 +29,8 @@ for (const file of forbiddenClientFiles) {
 }
 
 const commandRoute = read("src/app/api/shopping/recipe-contributions/route.ts")
-if (!commandRoute.includes("apply_recipe_shopping_contribution_command")) {
-  failures.push("authoritative route does not call the atomic contribution RPC")
+if (!commandRoute.includes("apply_recipe_shopping_contribution_uuid_command")) {
+  failures.push("authoritative route does not call the UUID atomic contribution RPC")
 }
 if (!commandRoute.includes("generateShoppingList")) {
   failures.push("authoritative route does not own recipe contribution generation")

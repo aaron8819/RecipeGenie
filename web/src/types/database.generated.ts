@@ -80,7 +80,7 @@ export type Database = {
         Insert: {
           date_made?: string
           id?: never
-          recipe_id: string
+          recipe_id?: string
           recipe_uuid?: string | null
           user_id: string
         }
@@ -121,7 +121,7 @@ export type Database = {
           responded_at?: string | null
           sender_email: string
           sender_user_id: string
-          source_recipe_id: string
+          source_recipe_id?: string
           source_recipe_snapshot: Json
           source_recipe_uuid?: string | null
           status?: string
@@ -296,7 +296,7 @@ export type Database = {
           created_at?: string
           idempotency_key: string
           normalization_version: number
-          recipe_id: string
+          recipe_id?: string
           recipe_uuid: string
           scale: number
           servings: number
@@ -444,6 +444,18 @@ export type Database = {
         }
         Returns: Json
       }
+      apply_recipe_shopping_contribution_uuid_command: {
+        Args: {
+          p_command_type: string
+          p_contribution_overrides: Json
+          p_contributions: Json
+          p_expected_revision: number
+          p_idempotency_key: string
+          p_projection: Json
+          p_remove_recipe_uuids: string[]
+        }
+        Returns: Json
+      }
       delete_tag: { Args: { p_tag: string }; Returns: undefined }
       filter_recipes_by_tags: {
         Args: { p_tags: string[] }
@@ -500,6 +512,10 @@ export type Database = {
         Args: { p_new_tag: string; p_old_tag: string }
         Returns: undefined
       }
+      resolve_recipe_identity: {
+        Args: { p_legacy_id?: string; p_recipe_uuid?: string }
+        Returns: string
+      }
       toggle_shopping_item_checked: {
         Args: { p_row_id: string }
         Returns: {
@@ -508,21 +524,37 @@ export type Database = {
           updated_at: string
         }[]
       }
-      toggle_weekly_recipe_made: {
-        Args: {
-          p_date_made?: string
-          p_is_made_for_week: boolean
-          p_recipe_id: string
-          p_week_date: string
-        }
-        Returns: {
-          action: string
-          history_date_made: string
-          made_recipe_ids: string[]
-          recipe_id: string
-          week_date: string
-        }[]
-      }
+      toggle_weekly_recipe_made:
+        | {
+            Args: {
+              p_date_made?: string
+              p_is_made_for_week: boolean
+              p_recipe_id: string
+              p_week_date: string
+            }
+            Returns: {
+              action: string
+              history_date_made: string
+              made_recipe_ids: string[]
+              recipe_id: string
+              week_date: string
+            }[]
+          }
+        | {
+            Args: {
+              p_made: boolean
+              p_made_at?: string
+              p_recipe_uuid: string
+              p_week_date: string
+            }
+            Returns: {
+              action: string
+              history_date_made: string
+              made_recipe_uuids: string[]
+              recipe_uuid: string
+              week_date: string
+            }[]
+          }
     }
     Enums: {
       [_ in never]: never

@@ -108,14 +108,13 @@ select extensions.throws_ok(
   'weekly unresolved active reference is rejected'
 );
 
-select extensions.throws_ok(
+select extensions.lives_ok(
   format(
     'update public.weekly_plans set recipe_uuids = array[%L]::uuid[] where week_date = %L',
     (select recipe_uuid from public.recipes where id = 'stage2a-a-1'),
     '2026-07-13'
   ),
-  '23503', 'weekly plan legacy and UUID recipe identities disagree',
-  'weekly mismatched legacy and UUID identities are rejected'
+  'weekly UUID-first update derives its legacy compatibility mirror'
 );
 
 select extensions.throws_ok(
@@ -164,14 +163,13 @@ select extensions.throws_ok(
   'template unresolved active reference is rejected'
 );
 
-select extensions.throws_ok(
+select extensions.lives_ok(
   format(
     'update public.plan_templates set recipe_uuids = array[%L]::uuid[] where id = %L',
     (select recipe_uuid from public.recipes where id = 'stage2a-a-2'),
     '64000000-0000-0000-0000-000000000004'
   ),
-  '23503', 'plan template legacy and UUID recipe identities disagree',
-  'template mismatched legacy and UUID identities are rejected'
+  'template UUID-first update derives its legacy compatibility mirror'
 );
 
 select extensions.lives_ok(
@@ -208,7 +206,7 @@ select extensions.throws_ok(
     '61000000-0000-0000-0000-000000000001', 'stage2a-a-1',
     '62330000-0000-0000-0000-000000000003'::uuid
   ),
-  '23503', 'recipe history legacy and UUID identities disagree',
+  '23503', 'recipe UUID is unresolved or belongs to another user',
   'history cross-owner UUID linkage is rejected'
 );
 
@@ -217,7 +215,7 @@ select extensions.throws_ok(
     insert into public.recipe_history (user_id, recipe_id, recipe_uuid)
     values ('61000000-0000-0000-0000-000000000001', 'stage2a-a-1', gen_random_uuid())
   $$,
-  '23503', 'recipe history legacy and UUID identities disagree',
+  '23503', 'recipe UUID is unresolved or belongs to another user',
   'history malformed active identity pairing is rejected'
 );
 
@@ -253,7 +251,7 @@ select extensions.throws_ok(
       'stage2a-b-1', '{}'::jsonb
     )
   $$,
-  '23503', 'pending share source recipe is unresolved or belongs to another user',
+  '23503', 'pending share source is unresolved or belongs to another user',
   'share cross-owner source reference is rejected'
 );
 
@@ -329,25 +327,24 @@ select extensions.throws_ok(
   'shopping unresolved active source is rejected'
 );
 
-select extensions.throws_ok(
+select extensions.lives_ok(
   format(
     'update public.shopping_list set source_recipe_uuids = array[%L]::uuid[]',
     (select recipe_uuid from public.recipes where id = 'stage2a-a-1')
   ),
-  '23503', 'shopping source legacy and UUID identities disagree',
-  'shopping mismatched legacy and UUID identities are rejected'
+  'shopping UUID-first update derives its legacy compatibility mirror'
 );
 
 select extensions.throws_ok(
   $$ update public.shopping_list set items = '[{"sources":[{"recipeId":"stage2a-a-1","recipeUuid":"not-a-uuid"}]}]'::jsonb $$,
-  '22023', 'shopping recipe UUID metadata is malformed',
+  '22023', 'shopping recipe source UUID is malformed',
   'shopping malformed UUID metadata is rejected'
 );
 
 select extensions.lives_ok(
   $$
     select public.apply_recipe_shopping_contribution_command(
-      1,
+      2,
       '[{"recipe_id":"stage2a-a-1","servings":4,"scale":1,"normalization_version":1,"snapshot":{"recipeName":"Owner A One","items":[{"bucket":"items","item":"milk","amount":1,"unit":"cup","categoryKey":"dairy","categoryOrder":5,"sources":[{"recipeId":"stage2a-a-1","recipeName":"Owner A One"}]}]}}]'::jsonb,
       '{}'::text[],
       '{"items":[{"rowId":"milk","item":"milk","amount":1,"unit":"cup","categoryKey":"dairy","categoryOrder":5,"sources":[{"recipeId":"stage2a-a-1","recipeName":"Owner A One"}]}],"already_have":[],"excluded":[],"source_recipes":["stage2a-a-1"],"scale":1,"total_servings":4,"custom_order":false}'::jsonb,
@@ -372,7 +369,7 @@ select extensions.is(
 select extensions.lives_ok(
   $$
     select public.apply_recipe_shopping_contribution_command(
-      2,
+      3,
       '[{"recipe_id":"stage2a-a-1","servings":8,"scale":2,"normalization_version":1,"snapshot":{"recipeName":"Owner A One","items":[]}}]'::jsonb,
       '{}'::text[],
       '{"items":[],"already_have":[],"excluded":[],"source_recipes":["stage2a-a-1"],"scale":2,"total_servings":8,"custom_order":false}'::jsonb,
@@ -390,7 +387,7 @@ select extensions.ok(
 select extensions.lives_ok(
   $$
     select public.apply_recipe_shopping_contribution_command(
-      3, '[]'::jsonb, array['stage2a-a-1'],
+      4, '[]'::jsonb, array['stage2a-a-1'],
       '{"items":[],"already_have":[],"excluded":[],"source_recipes":[]}'::jsonb,
       '{}'::jsonb, 'stage2a-remove', 'remove'
     )
@@ -407,7 +404,7 @@ select extensions.is(
 select extensions.throws_ok(
   $$
     select public.apply_recipe_shopping_contribution_command(
-      4, '[{"recipe_id":"stage2a-b-1","servings":4,"scale":1,"normalization_version":1,"snapshot":{"items":[]}}]'::jsonb,
+      5, '[{"recipe_id":"stage2a-b-1","servings":4,"scale":1,"normalization_version":1,"snapshot":{"items":[]}}]'::jsonb,
       '{}'::text[], '{"items":[],"already_have":[],"excluded":[],"source_recipes":[]}'::jsonb,
       '{}'::jsonb, 'stage2a-cross-owner', 'add_or_replace'
     )
@@ -419,7 +416,7 @@ select extensions.throws_ok(
 select extensions.throws_ok(
   $$
     select public.apply_recipe_shopping_contribution_command(
-      4, '[{"recipe_id":"missing-active","servings":4,"scale":1,"normalization_version":1,"snapshot":{"items":[]}}]'::jsonb,
+      5, '[{"recipe_id":"missing-active","servings":4,"scale":1,"normalization_version":1,"snapshot":{"items":[]}}]'::jsonb,
       '{}'::text[], '{"items":[],"already_have":[],"excluded":[],"source_recipes":[]}'::jsonb,
       '{}'::jsonb, 'stage2a-unresolved', 'add_or_replace'
     )
@@ -511,7 +508,7 @@ select extensions.throws_ok(
     '61220000-0000-0000-0000-000000000002'::uuid,
     '66000000-0000-0000-0000-000000000006'
   ),
-  '23503', 'share accepted-copy legacy and UUID identities disagree',
+  '23503', 'recipe UUID is unresolved or belongs to another user',
   'sender and recipient UUID conflation is rejected'
 );
 

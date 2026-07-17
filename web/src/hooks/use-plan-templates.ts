@@ -9,6 +9,7 @@ import { useAuthContext } from '@/lib/auth-context';
 import { getSupabase } from '@/lib/supabase/client';
 import type { PlanTemplate } from '@/types/database';
 import { principalId, templateKeys } from '@/lib/query-keys';
+import { mapPlanTemplateRow } from '@/lib/recipe-identity';
 
 /**
  * Fetch all plan templates for the current user.
@@ -26,7 +27,7 @@ export function usePlanTemplates() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as PlanTemplate[];
+      return (data || []).map(mapPlanTemplateRow);
     },
     enabled: !!user,
   });
@@ -58,8 +59,8 @@ export function useSavePlanTemplate() {
         .insert({
           user_id: user!.id,
           name,
-          recipe_ids: recipeIds,
-          day_assignments: dayAssignments || null,
+          recipe_uuids: recipeIds,
+          day_assignment_recipe_uuids: dayAssignments || null,
           category_selection:
             categorySelection || null,
         })
@@ -67,7 +68,7 @@ export function useSavePlanTemplate() {
         .single();
 
       if (error) throw error;
-      return data as PlanTemplate;
+      return mapPlanTemplateRow(data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

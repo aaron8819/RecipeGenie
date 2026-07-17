@@ -15,7 +15,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from('recipe_shares')
     .select(
-      'id, sender_user_id, sender_email, recipient_email, source_recipe_id, source_recipe_snapshot, message, status, accepted_recipe_id, created_at, responded_at'
+      'id, sender_user_id, sender_email, recipient_email, source_recipe_id:source_recipe_uuid, source_recipe_snapshot, message, status, accepted_recipe_id:accepted_recipe_uuid, created_at, responded_at'
     )
     .eq('sender_user_id', user.id)
     .order('created_at', { ascending: false });

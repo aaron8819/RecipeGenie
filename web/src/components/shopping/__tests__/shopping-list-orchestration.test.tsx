@@ -1003,7 +1003,10 @@ describe("ShoppingListView orchestration", () => {
   it("removes recipe items authoritatively and restores them on undo", async () => {
     currentShoppingList = makeList({
       items: [
-        makeItem("garlic", { sources: [{ recipeName: "Stew" }] }),
+        makeItem("garlic", { sources: [{
+          recipeId: "11111111-1111-4111-8111-111111111111",
+          recipeName: "Stew",
+        }] }),
         makeItem("rice", { sources: [{ recipeName: "Manual" }] }),
       ],
     })

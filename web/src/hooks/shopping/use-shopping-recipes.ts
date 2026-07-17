@@ -11,7 +11,7 @@ import {
 import { SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
 
 export type RecipeContributionIdentity = {
-  recipeId?: string
+  recipeId: string
   recipeName: string
 }
 
@@ -36,8 +36,7 @@ export function useRemoveRecipeItems() {
     scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${ownerUserId}` },
     mutationFn: async (identity: RecipeContributionIdentity) => {
       const result = await runRecipeContributionCommand("DELETE", {
-        recipeIds: identity.recipeId ? [identity.recipeId] : [],
-        recipeNames: identity.recipeId ? [] : [identity.recipeName],
+        recipeIds: [identity.recipeId],
         idempotencyKey: crypto.randomUUID(),
       })
       return { ...result, ownerUserId, identity }

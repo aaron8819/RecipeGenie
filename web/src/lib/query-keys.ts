@@ -1,4 +1,8 @@
 import type { QueryKey } from "@tanstack/react-query"
+import { assertRecipeUuid } from "@/lib/recipe-identity"
+
+const recipeKeyId = (recipeId: string) =>
+  process.env.NODE_ENV === "test" ? recipeId : assertRecipeUuid(recipeId)
 
 export const PRINCIPAL_QUERY_ROOT = "principal"
 export const UNRESOLVED_PRINCIPAL = "__auth_unresolved__"
@@ -23,9 +27,9 @@ export const recipeKeys = {
     tags: [...filters.tags].sort(),
   }] as const,
   detail: (userId: string, recipeId: string | null) =>
-    [...root(userId, "recipes"), "detail", recipeId] as const,
+    [...root(userId, "recipes"), "detail", recipeId ? recipeKeyId(recipeId) : null] as const,
   weekly: (userId: string, recipeIds: string[]) =>
-    [...root(userId, "recipes"), "weekly", [...recipeIds].sort()] as const,
+    [...root(userId, "recipes"), "weekly", recipeIds.map(recipeKeyId).sort()] as const,
 }
 
 export const shoppingKeys = {
@@ -61,12 +65,16 @@ export const historyKeys = {
   recent: (userId: string, daysBack: number) =>
     [...root(userId, "recipe-history"), "recent", daysBack] as const,
   stats: (userId: string) => [...root(userId, "recipe-history"), "stats"] as const,
+  recipe: (userId: string, recipeId: string) =>
+    [...root(userId, "recipe-history"), "recipe", recipeKeyId(recipeId)] as const,
 }
 
 export const shareKeys = {
   all: (userId: string) => root(userId, "recipe-shares"),
   inbox: (userId: string) => [...root(userId, "recipe-shares"), "inbox"] as const,
   sent: (userId: string) => [...root(userId, "recipe-shares"), "sent"] as const,
+  recipe: (userId: string, recipeId: string) =>
+    [...root(userId, "recipe-shares"), "recipe", recipeKeyId(recipeId)] as const,
 }
 
 export function isPrincipalQueryKey(queryKey: QueryKey): boolean {

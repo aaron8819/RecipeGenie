@@ -39,6 +39,7 @@ export type ShoppingItem = {
   categoryOrder: number
   sources?: {
     recipeId?: string
+    legacyRecipeId?: string
     recipeName: string
     originalItem?: string
     originalAmount?: number | null
@@ -84,6 +85,7 @@ export interface RecipeHistoryStats {
 type RecipeBase = Database["public"]["Tables"]["recipes"]["Row"]
 export type Recipe = Omit<
   RecipeBase,
+  | "id"
   | "ingredients"
   | "notes"
   | "instruction_groups"
@@ -98,8 +100,10 @@ export type Recipe = Omit<
   prep_time_minutes?: number | null
   cook_time_minutes?: number | null
   total_time_minutes?: number | null
-  /** Permanent identity introduced in migration Stage 1; active reads switch in Stage 2. */
-  recipe_uuid?: string
+  /** Canonical application identity. */
+  id: string
+  /** Immutable compatibility alias, never used as application identity. */
+  legacyId?: string
 }
 
 type RecipeInsertBase = Database["public"]["Tables"]["recipes"]["Insert"]

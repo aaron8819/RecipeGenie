@@ -13,6 +13,7 @@ import { useAuthContext } from "@/lib/auth-context"
 import { HOME_TAB_NAVIGATE_EVENT, persistHomeTab } from "@/lib/home-navigation"
 import { getSupabase } from "@/lib/supabase/client"
 import { configurationKeys, historyKeys, pantryKeys, shoppingKeys } from "@/lib/query-keys"
+import { mapShoppingListRow } from "@/lib/recipe-identity"
 import {
   HOME_DEFAULT_TAB,
   isValidHomeTab,
@@ -109,13 +110,16 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
             queryFn: async () => {
               const { data, error } = await supabase
                 .from("recipe_history")
-                .select("recipe_id, date_made")
+                .select("recipe_uuid, date_made")
                 .eq("user_id", userId)
                 .gte("date_made", cutoff.toISOString())
                 .order("date_made", { ascending: false })
                 .limit(500)
               if (error) throw error
-              return data
+              return (data || []).flatMap((entry) => entry.recipe_uuid ? [{
+                recipe_id: entry.recipe_uuid,
+                date_made: entry.date_made,
+              }] : [])
             },
             staleTime: 30_000,
           })
@@ -143,10 +147,10 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
           queryFn: async () => {
             const { data, error } = await supabase
               .from("shopping_list")
-              .select("already_have,contribution_overrides,contribution_revision,custom_order,excluded,generated_at,items,legacy_items_preserved,scale,source_recipes,total_servings,user_id")
+              .select("already_have,contribution_overrides,contribution_revision,custom_order,excluded,generated_at,items,legacy_items_preserved,scale,source_recipe_uuids,total_servings,user_id")
               .maybeSingle()
             if (error) throw error
-            return data
+            return data ? mapShoppingListRow(data as never) : data
           },
           staleTime: 30_000,
         })
