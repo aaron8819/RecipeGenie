@@ -16,6 +16,7 @@
     "test": "vitest",
     "test:watch": "vitest --watch",
     "test:coverage": "vitest --coverage",
+    "test:stage2c-compatibility": "node scripts/run-stage2c-compatibility-matrix.mjs",
     "test:e2e": "playwright test --project=core-ci",
     "test:e2e:core": "playwright test --project=core-ci",
     "test:e2e:core:list": "playwright test --project=core-ci --list",

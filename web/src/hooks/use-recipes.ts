@@ -8,6 +8,7 @@ import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
 import { getActivePrincipalId } from "@/lib/principal-session"
 import { runRecipeContributionCommand } from "@/lib/shopping-contribution-client"
+import { deleteRecipeByUuid } from "@/lib/recipe-deletion"
 import {
   createRecipeUuid,
   mapRecipeRow,
@@ -448,9 +449,7 @@ export function useDeleteRecipe() {
         )
       }
 
-      const supabase = getSupabase()
-      const { error } = await supabase.from("recipes").delete().eq("recipe_uuid", id).eq("user_id", user!.id)
-      if (error) throw error
+      await deleteRecipeByUuid(getSupabase(), id, user!.id)
       return id
     },
     // Optimistic update

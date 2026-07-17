@@ -45,8 +45,8 @@ export function mapRecipeRows(rows: RecipeRow[] | null): Recipe[] {
 export function recipeUuidWrite(recipeUuid: string) {
   const id = assertRecipeUuid(recipeUuid)
   return {
-    // Stage 2B keeps the compatibility alias opaque and immutable. New rows
-    // use the canonical UUID serialized as text so Stage 3 can remove it.
+    // Stage 2C keeps one compatibility alias for migration 011. Migration 012
+    // accepts the same matching pair while canonical identity stays recipe_uuid.
     id,
     recipe_uuid: id,
   }

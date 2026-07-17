@@ -86,6 +86,10 @@ describe("useCreateRecipe identity reconciliation", () => {
   })
 
   it("uses the same name-independent UUID for optimistic and server-backed recipe entries", async () => {
+    const allocatedUuid = "31111111-1111-4111-8111-111111111111"
+    const randomUuid = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue(allocatedUuid)
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     })
@@ -142,6 +146,7 @@ describe("useCreateRecipe identity reconciliation", () => {
     expect(queryClient.getQueryData<Recipe[]>(recipesKey)).toEqual([
       expect.objectContaining({
         id: optimisticId,
+        legacyId: optimisticId,
         name: "Mom's Best Pasta!",
       }),
     ])
@@ -155,6 +160,9 @@ describe("useCreateRecipe identity reconciliation", () => {
         user_id: "user-1",
       })
     )
+    expect(optimisticId).toBe(allocatedUuid)
+    expect(randomUuid).toHaveBeenCalledTimes(1)
+    randomUuid.mockRestore()
   })
 
   it("reconciles a lost successful response by the same UUID without cache duplication", async () => {
