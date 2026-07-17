@@ -124,6 +124,62 @@ Stage 1 rollback is straightforward before later references depend on the UUID: 
 
 The maximum mismatch window for Stage 1 is unbounded-safe because current code ignores the additive column. Stage 2's additive database migration must precede the application and remain backward compatible for the deployment window. Stage 3 must be a coordinated schema/application release after telemetry and audit gates pass.
 
+## Stage 2B application identity contract
+
+Stage 2B makes `recipes.recipe_uuid` the canonical identity at every application
+boundary. `Recipe.id` is populated only by `mapRecipeRow`, which maps
+`recipe_uuid -> id` and the database text primary key `id -> legacyId`.
+Components, hooks, API DTOs, optimistic state, and query keys never use
+`legacyId` as identity.
+
+New client-created recipes allocate one `crypto.randomUUID()` before image
+upload and reuse it for the optimistic entity, insert, response reconciliation,
+and retry of that mutation attempt. The compatibility alias is the same UUID
+serialized as text. It is opaque, immutable, independent of the display name,
+globally collision-safe, and mechanically removable in Stage 3. Trusted default
+creation and share acceptance generate the UUID in PostgreSQL and write that
+same value to both columns. Accepted shares always create a new
+recipient-owned UUID; the sender UUID remains provenance only.
+
+The one compatibility resolver is
+`public.resolve_recipe_identity(p_recipe_uuid uuid, p_legacy_id text)`. It
+derives the principal from `auth.uid()`, prefers UUID, validates same-owner
+resolution, rejects mismatched pairs, and performs no name lookup. Core Stage
+2B commands accept UUIDs directly; the resolver exists only for explicit legacy
+input adaptation and can be removed mechanically in Stage 3.
+
+Migration `010_enable_uuid_application_identity.sql` is required because
+migration 009 is legacy-first. Migration 010 makes the rollout policy explicit:
+
+```text
+new application writes UUID fields
+-> database derives legacy compatibility mirrors
+
+old application writes legacy fields
+-> database derives UUID mirrors
+```
+
+Matching pairs are accepted, inconsistent pairs supplied together are
+rejected, UUID-only active writes derive legacy aliases, and legacy-only writes
+remain accepted during the rollout window. Active references with neither form
+are rejected where identity is required. Historical unresolved history/share
+evidence remains nullable on the UUID side and is never mapped by name.
+
+Planner/template arrays retain order and assignment JSON values. History uses
+nullable live UUID linkage separately from immutable legacy snapshot evidence.
+Shopping contributions are externally commanded by `(user_id, recipe_uuid)`;
+the Stage 2B UUID RPC translates only inside the database compatibility layer
+while the UUID unique key remains canonical. Recipe deletion retains the
+documented contribution-removal-first, recipe-delete-second non-atomic policy.
+
+Deployment order is migration 010 first, then the UUID-aware application.
+Migration 010 is backward compatible with the old application. Rolling the
+application back is safe while migration 010 remains installed because
+legacy-first writes are still synchronized. Stage 2C begins only after a full
+observation window shows no active legacy-only application writes; it will
+reject those writes. Stage 3 remains responsible for promoting UUID to the
+primary key and removing compatibility columns, triggers, resolver, and adapter.
+
 ## Stage 1 boundaries and residual risks
 
 Stage 1 intentionally does not convert application identity or claim the product now supports same-name recipes. It establishes the permanent mapping safely while leaving behavior unchanged. Remaining risks are the three distinct stale planner-only IDs, historical references not represented by live recipes, embedded JSON rewrite correctness, share/history deletion semantics, existing image object paths, production shapes absent from fixtures, and rollback complexity after reference migration.

@@ -10,6 +10,7 @@ import { getSupabase } from "@/lib/supabase/client"
 import { runRecipeContributionCommand } from "@/lib/shopping-contribution-client"
 import type { ShoppingItem, ShoppingList } from "@/types/database"
 import { SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import { mapShoppingListRow } from "@/lib/recipe-identity"
 
 export function useShoppingList() {
   const { user } = useAuthContext()
@@ -25,7 +26,7 @@ export function useShoppingList() {
 
       if (error) throw error
       if (data) {
-        const ensured = ensureShoppingListRowIds(data as ShoppingList)
+        const ensured = ensureShoppingListRowIds(mapShoppingListRow(data))
         if (ensured.changed) {
           const { error: saveError } = await supabase
             .from("shopping_list")

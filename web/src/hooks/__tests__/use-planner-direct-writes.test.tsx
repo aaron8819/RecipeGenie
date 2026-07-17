@@ -124,8 +124,14 @@ function makeWeeklyPlan(overrides: Partial<WeeklyPlan> = {}): WeeklyPlan {
     },
     scale: 2,
     generated_at: "2026-03-01T00:00:00.000Z",
+    recipe_uuids: ["recipe-1", "recipe-2"],
+    made_recipe_uuids: ["recipe-2"],
+    day_assignment_recipe_uuids: {
+      "recipe-1": 1,
+      "recipe-2": 3,
+    },
     ...overrides,
-  }
+  } as WeeklyPlan
 }
 
 beforeEach(() => {
@@ -152,9 +158,9 @@ describe("direct weekly_plans write contract", () => {
     expect(dbState.lastUpsert).toMatchObject({
       user_id: "test-user-id",
       week_date: "2026-03-02",
-      recipe_ids: ["recipe-3"],
-      day_assignments: null,
-      made_recipe_ids: ["recipe-2"],
+      recipe_uuids: ["recipe-3"],
+      day_assignment_recipe_uuids: null,
+      made_recipe_uuids: ["recipe-2"],
       scale: 1,
     })
     expect(typeof dbState.lastUpsert?.generated_at).toBe("string")
@@ -175,9 +181,9 @@ describe("direct weekly_plans write contract", () => {
     expect(dbState.lastUpsert).toMatchObject({
       user_id: "test-user-id",
       week_date: "2026-03-02",
-      recipe_ids: [],
-      day_assignments: { "recipe-9": 4 },
-      made_recipe_ids: [],
+      recipe_uuids: [],
+      day_assignment_recipe_uuids: { "recipe-9": 4 },
+      made_recipe_uuids: [],
       scale: 1,
     })
     expect(typeof dbState.lastUpsert?.generated_at).toBe("string")
@@ -200,9 +206,9 @@ describe("direct weekly_plans write contract", () => {
     expect(dbState.lastUpsert).toMatchObject({
       user_id: "test-user-id",
       week_date: "2026-03-02",
-      recipe_ids: ["recipe-1"],
-      made_recipe_ids: [],
-      day_assignments: { "recipe-1": 1 },
+      recipe_uuids: ["recipe-1"],
+      made_recipe_uuids: [],
+      day_assignment_recipe_uuids: { "recipe-1": 1 },
       scale: 2,
       generated_at: "2026-03-01T00:00:00.000Z",
     })

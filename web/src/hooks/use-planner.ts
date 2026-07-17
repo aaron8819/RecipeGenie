@@ -8,6 +8,12 @@ import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import { useCategories, useUpdateUserConfig, useUserConfig } from "@/hooks/shared/user-config"
 import { historyKeys, plannerKeys, principalId, recipeKeys } from "@/lib/query-keys"
+import {
+  mapRecipeHistoryRow,
+  mapRecipeRows,
+  mapWeeklyPlanRow,
+  type RecipeRow,
+} from "@/lib/recipe-identity"
 
 type DirectWeeklyPlanWrite = {
   weekDate: string
@@ -30,7 +36,7 @@ async function fetchExistingWeeklyPlan(userId: string, weekDate: string) {
     .maybeSingle()
 
   if (error) throw error
-  return (data as WeeklyPlan | null) || null
+  return data ? mapWeeklyPlanRow(data) : null
 }
 
 async function persistWeeklyPlanDirect(userId: string, write: DirectWeeklyPlanWrite) {
@@ -40,12 +46,12 @@ async function persistWeeklyPlanDirect(userId: string, write: DirectWeeklyPlanWr
   const payload = {
     user_id: userId,
     week_date: write.weekDate,
-    recipe_ids: write.recipeIds ?? existingPlan?.recipe_ids ?? [],
-    day_assignments:
+    recipe_uuids: write.recipeIds ?? existingPlan?.recipe_ids ?? [],
+    day_assignment_recipe_uuids:
       write.dayAssignments !== undefined
         ? write.dayAssignments
         : (existingPlan?.day_assignments ?? null),
-    made_recipe_ids: write.madeRecipeIds ?? existingPlan?.made_recipe_ids ?? [],
+    made_recipe_uuids: write.madeRecipeIds ?? existingPlan?.made_recipe_ids ?? [],
     scale: write.scale ?? existingPlan?.scale ?? 1.0,
     generated_at:
       write.refreshGeneratedAt
@@ -183,7 +189,7 @@ export function useWeeklyPlan(weekDate: string) {
         .maybeSingle()
 
       if (error) throw error
-      return (data as WeeklyPlan | null) || emptyPlan
+      return data ? mapWeeklyPlanRow(data) : emptyPlan
     },
     enabled: !!weekDate && !!user,
   })
@@ -206,10 +212,10 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
         .from("recipes")
         .select("*")
         .eq("user_id", user!.id)
-        .in("id", recipeIds)
+        .in("recipe_uuid", recipeIds)
 
       if (error) throw error
-      const recipes = data as Recipe[]
+      const recipes = mapRecipeRows(data as RecipeRow[] | null)
 
       // Preserve order according to recipeIds array
       const recipeMap = new Map(recipes.map((r) => [r.id, r]))
@@ -237,7 +243,7 @@ export function useRecipeHistory() {
         .order("date_made", { ascending: false })
 
       if (error) throw error
-      return data as RecipeHistory[]
+      return (data || []).map(mapRecipeHistoryRow)
     },
     enabled: !!user,
   })
@@ -260,14 +266,14 @@ export function useRecentRecipeHistory() {
       cutoff.setDate(cutoff.getDate() - daysBack)
       const { data, error } = await supabase
         .from("recipe_history")
-        .select("recipe_id, date_made")
+        .select("id, user_id, recipe_id, recipe_uuid, date_made")
         .eq("user_id", user!.id)
         .gte("date_made", cutoff.toISOString())
         .order("date_made", { ascending: false })
         .limit(500)
 
       if (error) throw error
-      return data as RecipeHistory[]
+      return (data || []).map(mapRecipeHistoryRow)
     },
     enabled: !!user,
   })
@@ -334,7 +340,7 @@ export function useGenerateMealPlan() {
         { data: config, error: configError },
         { data: existingPlan },
       ] = await Promise.all([
-        supabase.from("recipes").select("id, category, name").eq("user_id", user!.id),
+        supabase.from("recipes").select("recipe_uuid, category, name").eq("user_id", user!.id),
         supabase
           .from("user_config")
           .select("history_exclusion_days, excluded_days, preferred_days, auto_assign_days, enabled_planner_categories")
@@ -349,12 +355,15 @@ export function useGenerateMealPlan() {
       if (recipesError) throw recipesError
       if (configError && configError.code !== "PGRST116") throw configError
 
-      const typedPlan = existingPlan as WeeklyPlan | null
+      const typedPlan = existingPlan ? mapWeeklyPlanRow(existingPlan) : null
       const madeRecipeIds = typedPlan?.made_recipe_ids || []
       const existingDayAssignments = typedPlan?.day_assignments || null
 
       // If regenerating and we need to preserve made recipes, filter them out from selection
-      let recipesToGenerate = recipes as Recipe[]
+      let recipesToGenerate = (recipes || []).map((recipe) => ({
+        ...recipe,
+        id: recipe.recipe_uuid,
+      })) as unknown as Recipe[]
       let preservedRecipeIds: string[] = []
 
       if (existingPlan && madeRecipeIds.length > 0) {
@@ -378,7 +387,7 @@ export function useGenerateMealPlan() {
 
       const { data: history, error: historyError } = await supabase
         .from("recipe_history")
-        .select("recipe_id, date_made")
+        .select("recipe_uuid, date_made")
         .eq("user_id", user!.id)
         .gte("date_made", cutoff.toISOString())
         .order("date_made", { ascending: false })
@@ -398,7 +407,10 @@ export function useGenerateMealPlan() {
 
       const result = generateMealPlan(
         recipesToGenerate,
-        history as RecipeHistory[],
+        (history || []).flatMap((entry) => entry.recipe_uuid ? [{
+          ...entry,
+          recipe_id: entry.recipe_uuid,
+        } as unknown as RecipeHistory] : []),
         filteredSelection,
         historyExclusionDays
       )
@@ -423,9 +435,9 @@ export function useGenerateMealPlan() {
         const { error: saveError } = await supabase
           .from("weekly_plans")
           .update({
-            recipe_ids: allRecipeIds,
-            made_recipe_ids: madeRecipeIds,
-            day_assignments: dayAssignments,
+            recipe_uuids: allRecipeIds,
+            made_recipe_uuids: madeRecipeIds,
+            day_assignment_recipe_uuids: dayAssignments,
             scale: 1.0,
             generated_at: new Date().toISOString(),
           })
@@ -437,8 +449,8 @@ export function useGenerateMealPlan() {
         const { error: saveError } = await supabase.from("weekly_plans").insert({
           user_id: user!.id,
           week_date: weekDate,
-          recipe_ids: allRecipeIds,
-          day_assignments: dayAssignments,
+          recipe_uuids: allRecipeIds,
+          day_assignment_recipe_uuids: dayAssignments,
           scale: 1.0,
           generated_at: new Date().toISOString(),
         })
@@ -465,11 +477,11 @@ export function useFetchRecipeIds() {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        .select("id")
+        .select("recipe_uuid")
         .eq("user_id", user!.id)
 
       if (error) throw error
-      return ((data as { id: string }[] | null) || []).map((row) => row.id)
+      return ((data as { recipe_uuid: string }[] | null) || []).map((row) => row.recipe_uuid)
     },
   })
 }
@@ -492,23 +504,30 @@ export function useSwapRecipe() {
       // Full recipe data is re-fetched by useWeeklyPlanRecipes after invalidation.
       const { data: recipes, error: recipesError } = await supabase
         .from("recipes")
-        .select("id, category, name")
+        .select("recipe_uuid, category, name")
         .eq("user_id", user!.id)
       if (recipesError) throw recipesError
 
-      const newRecipe = getSwapRecipe(recipes as Recipe[], category, excludeIds)
+      const newRecipe = getSwapRecipe(
+        (recipes || []).map((recipe) => ({ ...recipe, id: recipe.recipe_uuid })) as unknown as Recipe[],
+        category,
+        excludeIds
+      )
       if (!newRecipe) throw new Error(`No more ${category} recipes available`)
 
       const { data: plan, error: planError } = await supabase
         .from("weekly_plans")
-        .select("recipe_ids, day_assignments")
+        .select("recipe_uuids, day_assignment_recipe_uuids")
         .eq("user_id", user!.id)
         .eq("week_date", weekDate)
         .single()
 
       if (planError) throw planError
 
-      const typedPlan = plan as { recipe_ids?: string[]; day_assignments?: Record<string, number> | null } | null
+      const typedPlan = plan ? {
+        recipe_ids: plan.recipe_uuids,
+        day_assignments: plan.day_assignment_recipe_uuids as Record<string, number> | null,
+      } : null
       const newRecipeIds = (typedPlan?.recipe_ids || []).map((id) => id === oldRecipeId ? newRecipe.id : id)
       const prevAssignments = typedPlan?.day_assignments || {}
       const dayIndex = prevAssignments[oldRecipeId]
@@ -609,7 +628,7 @@ export function useAddRecipeToPlan() {
   return useMutation({
     mutationFn: async ({ weekDate, recipeId, dayOfWeek }: { weekDate: string; recipeId: string; dayOfWeek?: number }) => {
       const existingPlan = await fetchExistingWeeklyPlan(user!.id, weekDate)
-      const typedPlan = existingPlan as { recipe_ids?: string[]; day_assignments?: Record<string, number> | null } | null
+      const typedPlan = existingPlan
       const currentIds = typedPlan?.recipe_ids || []
       if (currentIds.includes(recipeId)) {
         throw new Error("Recipe is already in this week's meal plan")
@@ -740,9 +759,12 @@ export function useMarkRecipeAsMade() {
   return useMutation({
     mutationFn: async (recipeId: string) => {
       const supabase = getSupabase()
-      const { error: insertError } = await supabase
-        .from("recipe_history")
-        .insert({ user_id: user!.id, recipe_id: recipeId, date_made: new Date().toISOString() })
+      const historyInsert = supabase.from("recipe_history") as unknown as {
+        insert: (values: { user_id: string; recipe_uuid: string; date_made: string }) =>
+          Promise<{ error: { message: string } | null }>
+      }
+      const { error: insertError } = await historyInsert
+        .insert({ user_id: user!.id, recipe_uuid: recipeId, date_made: new Date().toISOString() })
 
       if (insertError) throw insertError
       return { recipeId }
@@ -813,7 +835,7 @@ export function useUnmarkRecipeAsMade() {
         .from("recipe_history")
         .select("id")
         .eq("user_id", user!.id)
-        .eq("recipe_id", recipeId)
+        .eq("recipe_uuid", recipeId)
         .order("date_made", { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -903,7 +925,7 @@ export function useMarkRecipeMade() {
         rpc: (
           fn: "toggle_weekly_recipe_made",
           args: {
-            p_recipe_id: string
+            p_recipe_uuid: string
             p_week_date: string
             p_is_made_for_week: boolean
             p_date_made: string | null
@@ -911,9 +933,9 @@ export function useMarkRecipeMade() {
         ) => Promise<{
           data: Array<{
             action: "marked" | "unmarked"
-            recipe_id: string
+            recipe_uuid: string
             week_date: string
-            made_recipe_ids: string[]
+            made_recipe_uuids: string[]
             history_date_made: string | null
           }> | null
           error: { message: string } | null
@@ -921,7 +943,7 @@ export function useMarkRecipeMade() {
       }
 
       const { data, error } = await rpcClient.rpc("toggle_weekly_recipe_made", {
-        p_recipe_id: recipeId,
+        p_recipe_uuid: recipeId,
         p_week_date: weekDate,
         p_is_made_for_week: isMadeForWeek,
         p_date_made: dateMade || null,
@@ -934,9 +956,9 @@ export function useMarkRecipeMade() {
 
       return {
         action: row.action,
-        recipeId: row.recipe_id,
+        recipeId: row.recipe_uuid,
         weekDate: row.week_date,
-        madeRecipeIds: row.made_recipe_ids,
+        madeRecipeIds: row.made_recipe_uuids,
       }
     },
 

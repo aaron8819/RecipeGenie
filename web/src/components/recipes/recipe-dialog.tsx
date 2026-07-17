@@ -35,7 +35,7 @@ import { useDebouncedCallback } from "@/hooks/use-debounce"
 import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient, RecipeInstructionGroup } from "@/types/database"
-import { sanitizeRecipeNameForStorage } from "@/lib/recipe-id-utils"
+import { createRecipeUuid } from "@/lib/recipe-identity"
 import {
   RecipeDialogActions,
   RecipeIngredientsSection,
@@ -130,6 +130,7 @@ export function RecipeDialog({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const wasOpenRef = useRef(false)
   const hydratedRecipeIdRef = useRef<string | null>(null)
+  const pendingCreateUuidRef = useRef<string | null>(null)
   
   // Import state
   const [importText, setImportText] = useState("")
@@ -180,6 +181,7 @@ export function RecipeDialog({
     if (!open) {
       wasOpenRef.current = false
       hydratedRecipeIdRef.current = null
+      pendingCreateUuidRef.current = null
       return
     }
 
@@ -472,12 +474,13 @@ export function RecipeDialog({
 
     try {
       let finalImageUrl = imageUrl
+      const nextRecipeId = editingRecipe?.id ??
+        (pendingCreateUuidRef.current ||= createRecipeUuid())
 
       // Upload new image if one was selected
       if (imageFile) {
         setIsUploadingImage(true)
         try {
-          const nextRecipeId = editingRecipe?.id ?? sanitizeRecipeNameForStorage(name)
           finalImageUrl = await uploadImage(nextRecipeId, imageFile)
         } catch (error) {
           console.error("Failed to upload image:", error)
@@ -518,7 +521,10 @@ export function RecipeDialog({
           updates: recipeData,
         })
       } else {
-        const created = await createRecipe.mutateAsync(recipeData)
+        const created = await createRecipe.mutateAsync({
+          ...recipeData,
+          recipeUuid: nextRecipeId,
+        })
         onRecipeCreated?.(created as Recipe)
       }
       onOpenChange(false)

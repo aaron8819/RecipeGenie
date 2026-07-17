@@ -3,9 +3,13 @@ import type { Recipe, ShoppingList } from "@/types/database"
 
 let rpcAttempt = 0
 const rpcMock = vi.fn()
+const RECIPE_A = "11111111-1111-4111-8111-111111111111"
+const RECIPE_B = "22222222-2222-4222-8222-222222222222"
+const RECIPE_C = "33333333-3333-4333-8333-333333333333"
 
-const recipeB: Recipe = {
-  id: "recipe-b",
+const recipeB = {
+  id: "legacy-b",
+  recipe_uuid: RECIPE_B,
   user_id: "user-a",
   name: "Recipe B",
   category: "test",
@@ -17,12 +21,12 @@ const recipeB: Recipe = {
   image_url: null,
   created_at: "2026-07-14T00:00:00.000Z",
   updated_at: "2026-07-14T00:00:00.000Z",
-}
+} as unknown as Recipe
 
 function storedContribution(recipeId: string, amount: number) {
   return {
     user_id: "user-a",
-    recipe_id: recipeId,
+    recipe_uuid: recipeId,
     servings: 4,
     scale: 1,
     normalization_version: 1,
@@ -39,7 +43,11 @@ function storedContribution(recipeId: string, amount: number) {
           unit: "cup",
           categoryKey: "dairy",
           categoryOrder: 5,
-          sources: [{ recipeId, recipeName: `Recipe ${recipeId.toUpperCase()}` }],
+          sources: [{
+            recipeId,
+            recipeUuid: recipeId,
+            recipeName: `Recipe ${recipeId.toUpperCase()}`,
+          }],
         },
       ],
     },
@@ -59,8 +67,9 @@ function currentList(recipeIds: string[], amount: number, revision: number): Sho
         categoryOrder: 5,
         sources: recipeIds.map((recipeId) => ({
           recipeId,
+          recipeUuid: recipeId,
           recipeName: `Recipe ${recipeId.toUpperCase()}`,
-        })),
+        })) as never,
         contributionKey: "milk",
         derivedQuantity: { amount, unit: "cup" },
       },
@@ -68,6 +77,7 @@ function currentList(recipeIds: string[], amount: number, revision: number): Sho
     already_have: [],
     excluded: [],
     source_recipes: recipeIds,
+    source_recipe_uuids: recipeIds,
     scale: 1,
     total_servings: recipeIds.length * 4,
     custom_order: false,
@@ -80,14 +90,14 @@ function currentList(recipeIds: string[], amount: number, revision: number): Sho
 
 const states = [
   {
-    list: currentList(["recipe-a"], 1, 0),
-    contributions: [storedContribution("recipe-a", 1)],
+    list: currentList([RECIPE_A], 1, 0),
+    contributions: [storedContribution(RECIPE_A, 1)],
   },
   {
-    list: currentList(["recipe-a", "recipe-c"], 5, 1),
+    list: currentList([RECIPE_A, RECIPE_C], 5, 1),
     contributions: [
-      storedContribution("recipe-a", 1),
-      storedContribution("recipe-c", 4),
+      storedContribution(RECIPE_A, 1),
+      storedContribution(RECIPE_C, 4),
     ],
   },
 ]
@@ -185,7 +195,7 @@ describe("recipe contribution command route", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        recipeIds: ["recipe-b"],
+        recipeIds: [RECIPE_B],
         scale: 1,
         idempotencyKey: "concurrent-add-b",
       }),
@@ -196,16 +206,17 @@ describe("recipe contribution command route", () => {
 
     expect(response.status).toBe(200)
     const writeCalls = rpcMock.mock.calls.filter(
-      ([functionName]) => functionName === "apply_recipe_shopping_contribution_command"
+      ([functionName]) => functionName === "apply_recipe_shopping_contribution_uuid_command"
     )
     expect(writeCalls).toHaveLength(2)
     expect(writeCalls[0][1].p_expected_revision).toBe(0)
     expect(writeCalls[1][1].p_expected_revision).toBe(1)
-    expect(writeCalls[1][1].p_projection.source_recipes).toEqual([
-      "recipe-a",
-      "recipe-b",
-      "recipe-c",
+    expect(writeCalls[1][1].p_projection.source_recipe_uuids).toEqual([
+      RECIPE_A,
+      RECIPE_B,
+      RECIPE_C,
     ])
+    expect(writeCalls[1][1].p_projection.items[0].amount).toBe(7)
     expect(result.shopping_list.items[0].amount).toBe(7)
   })
 })

@@ -13,7 +13,6 @@ export async function runRecipeContributionCommand(
   method: "POST" | "DELETE",
   body: {
     recipeIds: string[]
-    recipeNames?: string[]
     scale?: number
     clearAll?: boolean
     idempotencyKey: string

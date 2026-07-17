@@ -403,8 +403,13 @@ describe("RecipeDialog image orchestration", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add Recipe" }))
 
+    let uploadedRecipeUuid = ""
     await waitFor(() => {
-      expect(uploadImageMock).toHaveBeenCalledWith("fancy-soup", file)
+      uploadedRecipeUuid = uploadImageMock.mock.calls[0]?.[0] || ""
+      expect(uploadedRecipeUuid).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      )
+      expect(uploadImageMock).toHaveBeenCalledWith(uploadedRecipeUuid, file)
     })
 
     expect(uploadImageMock.mock.invocationCallOrder[0]).toBeLessThan(
@@ -419,6 +424,7 @@ describe("RecipeDialog image orchestration", () => {
         instructions: [],
         instruction_groups: [],
         image_url: "https://cdn.example.com/fancy-soup.jpg",
+        recipeUuid: uploadedRecipeUuid,
       })
     )
     expect(onRecipeCreated).toHaveBeenCalledWith(currentCreatedRecipe)

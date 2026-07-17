@@ -53,9 +53,9 @@ beforeEach(() => {
   mockSupabase.rpc.mockResolvedValue({
     data: [{
       action: "marked",
-      recipe_id: "recipe-1",
+      recipe_uuid: "recipe-1",
       week_date: "2026-03-02",
-      made_recipe_ids: ["recipe-1"],
+      made_recipe_uuids: ["recipe-1"],
       history_date_made: new Date().toISOString(),
     }],
     error: null,
@@ -85,9 +85,9 @@ describe("useMarkRecipeMade", () => {
       .mockResolvedValueOnce({
         data: [{
           action: "marked",
-          recipe_id: "recipe-1",
+          recipe_uuid: "recipe-1",
           week_date: weekDate,
-          made_recipe_ids: ["recipe-1"],
+          made_recipe_uuids: ["recipe-1"],
           history_date_made: "2026-03-05T00:00:00.000Z",
         }],
         error: null,
@@ -95,9 +95,9 @@ describe("useMarkRecipeMade", () => {
       .mockResolvedValueOnce({
         data: [{
           action: "unmarked",
-          recipe_id: "recipe-1",
+          recipe_uuid: "recipe-1",
           week_date: weekDate,
-          made_recipe_ids: [],
+          made_recipe_uuids: [],
           history_date_made: null,
         }],
         error: null,
@@ -120,13 +120,13 @@ describe("useMarkRecipeMade", () => {
     expect(cached?.made_recipe_ids).toEqual([])
 
     expect(mockSupabase.rpc).toHaveBeenNthCalledWith(1, "toggle_weekly_recipe_made", {
-      p_recipe_id: "recipe-1",
+      p_recipe_uuid: "recipe-1",
       p_week_date: weekDate,
       p_is_made_for_week: false,
       p_date_made: "2026-03-05T00:00:00.000Z",
     })
     expect(mockSupabase.rpc).toHaveBeenNthCalledWith(2, "toggle_weekly_recipe_made", {
-      p_recipe_id: "recipe-1",
+      p_recipe_uuid: "recipe-1",
       p_week_date: weekDate,
       p_is_made_for_week: true,
       p_date_made: null,
@@ -143,9 +143,9 @@ describe("useMarkRecipeMade", () => {
       .mockResolvedValueOnce({
         data: [{
           action: "marked",
-          recipe_id: "recipe-1",
+          recipe_uuid: "recipe-1",
           week_date: weekDate,
-          made_recipe_ids: ["recipe-1"],
+          made_recipe_uuids: ["recipe-1"],
           history_date_made: "2026-03-05T00:00:00.000Z",
         }],
         error: null,
@@ -153,9 +153,9 @@ describe("useMarkRecipeMade", () => {
       .mockResolvedValueOnce({
         data: [{
           action: "unmarked",
-          recipe_id: "recipe-1",
+          recipe_uuid: "recipe-1",
           week_date: weekDate,
-          made_recipe_ids: [],
+          made_recipe_uuids: [],
           history_date_made: null,
         }],
         error: null,

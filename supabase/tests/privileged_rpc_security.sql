@@ -115,7 +115,7 @@ select extensions.results_eq(
 
 select extensions.results_eq(
   $$ select recipe_id, times_made from public.get_recipe_history_stats() $$,
-  $$ values ('a-owned'::text, 2::integer) $$,
+  $$ select recipe_uuid, 2::integer from public.recipes where id = 'a-owned' $$,
   'User A history statistics return only User A data'
 );
 
@@ -147,7 +147,7 @@ select extensions.throws_ok(
 );
 
 select extensions.ok(
-  public.accept_recipe_share('a1000000-0000-0000-0000-000000000001') like 'shared-for-a-%',
+  public.accept_recipe_share('a1000000-0000-0000-0000-000000000001') is not null,
   'User A can accept a share addressed to User A'
 );
 
@@ -222,7 +222,7 @@ select extensions.results_eq(
 
 select extensions.results_eq(
   $$ select recipe_id, times_made from public.get_recipe_history_stats() $$,
-  $$ values ('b-owned'::text, 1::integer) $$,
+  $$ select recipe_uuid, 1::integer from public.recipes where id = 'b-owned' $$,
   'User B history statistics return only User B data'
 );
 
@@ -254,7 +254,7 @@ select extensions.throws_ok(
 );
 
 select extensions.ok(
-  public.accept_recipe_share('b2000000-0000-0000-0000-000000000002') like 'shared-for-b-%',
+  public.accept_recipe_share('b2000000-0000-0000-0000-000000000002') is not null,
   'User B can accept a share addressed to User B'
 );
 

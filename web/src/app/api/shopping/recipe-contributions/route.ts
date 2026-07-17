@@ -11,20 +11,26 @@ import {
 } from "@/lib/shopping-contributions"
 import { normalizeShoppingItemOrderPreferences } from "@/lib/shopping-item-order"
 import type { PantryItem, Recipe, ShoppingList } from "@/types/database"
+import {
+  isRecipeUuid,
+  mapRecipeRows,
+  mapShoppingItems,
+  mapShoppingListRow,
+  type RecipeRow,
+} from "@/lib/recipe-identity"
 
 const MAX_COMMAND_RETRIES = 4
 const MAX_RECIPES_PER_COMMAND = 100
 
 type CommandBody = {
   recipeIds?: string[]
-  recipeNames?: string[]
   scale?: number
   idempotencyKey?: string
   clearAll?: boolean
 }
 
 type StoredContribution = {
-  recipe_id: string
+  recipe_uuid: string
   servings: number
   scale: number
   normalization_version: number
@@ -47,14 +53,14 @@ function parseBody(body: CommandBody) {
   const recipeIds = [...new Set((body.recipeIds || []).map((id) => id.trim()))]
     .filter(Boolean)
     .sort()
-  const recipeNames = [
-    ...new Set((body.recipeNames || []).map((name) => name.trim())),
-  ].filter(Boolean)
   const scale = body.scale ?? 1
   const idempotencyKey = body.idempotencyKey?.trim() || ""
 
-  if (recipeIds.length + recipeNames.length > MAX_RECIPES_PER_COMMAND) {
+  if (recipeIds.length > MAX_RECIPES_PER_COMMAND) {
     throw new Error("Too many recipes in one shopping command")
+  }
+  if (recipeIds.some((id) => !isRecipeUuid(id))) {
+    throw new Error("Recipe IDs must be UUIDs")
   }
   if (!Number.isFinite(scale) || scale <= 0 || scale > 100) {
     throw new Error("Scale must be greater than zero")
@@ -65,7 +71,6 @@ function parseBody(body: CommandBody) {
 
   return {
     recipeIds,
-    recipeNames,
     scale,
     idempotencyKey,
     clearAll: Boolean(body.clearAll),
@@ -74,12 +79,12 @@ function parseBody(body: CommandBody) {
 
 function storedToDomain(row: StoredContribution): RecipeShoppingContribution {
   return {
-    recipeId: row.recipe_id,
+    recipeId: row.recipe_uuid,
     recipeName: row.snapshot.recipeName,
     servings: row.servings,
     scale: row.scale,
     normalizationVersion: row.normalization_version,
-    items: row.snapshot.items,
+    items: mapShoppingItems(row.snapshot.items),
   }
 }
 
@@ -155,36 +160,12 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
   if (
     commandType === "remove" &&
     input.recipeIds.length === 0 &&
-    input.recipeNames.length === 0 &&
     !input.clearAll
   ) {
     return NextResponse.json({ error: "At least one recipe is required" }, { status: 400 })
   }
 
   const correlation = userCorrelation(user.id)
-
-  if (commandType === "remove" && input.recipeNames.length > 0) {
-    const { data: namedRecipes, error: namedRecipeError } = await supabase
-      .from("recipes")
-      .select("id, name")
-      .in("name", input.recipeNames)
-      .eq("user_id", user.id)
-    if (namedRecipeError) throw namedRecipeError
-
-    for (const recipeName of input.recipeNames) {
-      const matches = (namedRecipes || []).filter(
-        (recipe) => recipe.name === recipeName
-      )
-      if (matches.length !== 1) {
-        return NextResponse.json(
-          { error: "Legacy recipe source could not be resolved uniquely" },
-          { status: 409 }
-        )
-      }
-      input.recipeIds.push(matches[0].id)
-    }
-    input.recipeIds = [...new Set(input.recipeIds)].sort()
-  }
 
   for (let attempt = 0; attempt < MAX_COMMAND_RETRIES; attempt++) {
     const [stateResult, pantryResult, configResult] =
@@ -202,7 +183,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
     if (configResult.error) throw configResult.error
 
     const state = stateResult.data as unknown as StoredContributionState
-    const currentList = state.shopping_list
+    const currentList = mapShoppingListRow(state.shopping_list as never)
     const previousContributions = (state.contributions || []).map(storedToDomain)
     const pantryItems = (pantryResult.data || []) as PantryItem[]
     const config = (configResult.data || {}) as {
@@ -212,7 +193,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
     }
     let nextContributions = [...previousContributions]
     let contributionPayload: Array<{
-      recipe_id: string
+      recipe_uuid: string
       servings: number
       scale: number
       normalization_version: number
@@ -223,7 +204,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       const { data: recipes, error: recipeError } = await supabase
         .from("recipes")
         .select("*")
-        .in("id", input.recipeIds)
+        .in("recipe_uuid", input.recipeIds)
         .eq("user_id", user.id)
 
       if (recipeError) throw recipeError
@@ -231,7 +212,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         return NextResponse.json({ error: "Recipe not found" }, { status: 404 })
       }
 
-      const replacements = (recipes as Recipe[])
+      const replacements = mapRecipeRows(recipes as RecipeRow[] | null)
         .map((recipe) => buildContribution(recipe, pantryItems, config, input.scale))
         .sort((left, right) => left.recipeId.localeCompare(right.recipeId))
       const replacementIds = new Set(replacements.map((item) => item.recipeId))
@@ -242,7 +223,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         ...replacements,
       ]
       contributionPayload = replacements.map((contribution) => ({
-        recipe_id: contribution.recipeId,
+        recipe_uuid: contribution.recipeId,
         servings: contribution.servings,
         scale: contribution.scale,
         normalization_version: contribution.normalizationVersion,
@@ -276,14 +257,23 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       ),
     })
 
-    const { data, error } = await supabase.rpc(
-      "apply_recipe_shopping_contribution_command",
+    const uuidCommandClient = supabase as unknown as {
+      rpc: (name: string, args: Record<string, unknown>) => Promise<{
+        data: unknown
+        error: { code?: string; message: string } | null
+      }>
+    }
+    const { data, error } = await uuidCommandClient.rpc(
+      "apply_recipe_shopping_contribution_uuid_command",
       {
         p_expected_revision: currentList.contribution_revision || 0,
         p_contributions: contributionPayload,
-        p_remove_recipe_ids:
+        p_remove_recipe_uuids:
           commandType === "remove" ? input.recipeIds : [],
-        p_projection: projection.shoppingList,
+        p_projection: {
+          ...projection.shoppingList,
+          source_recipe_uuids: projection.shoppingList.source_recipes,
+        },
         p_contribution_overrides: projection.overrides,
         p_idempotency_key: input.idempotencyKey,
         p_command_type: commandType,
@@ -318,6 +308,9 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       outcome: "applied" | "deduplicated"
       shopping_list: ShoppingList
     }
+    const applicationShoppingList = mapShoppingListRow(
+      result.shopping_list as never
+    )
     console.info("shopping_contribution_command", {
       commandType,
       user: correlation,
@@ -326,15 +319,15 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       normalizationVersion: SHOPPING_NORMALIZATION_VERSION,
       result: result.outcome,
       affectedAggregateItemCount:
-        result.shopping_list.items.length +
-        result.shopping_list.already_have.length +
-        result.shopping_list.excluded.length,
+        applicationShoppingList.items.length +
+        applicationShoppingList.already_have.length +
+        applicationShoppingList.excluded.length,
     })
 
     const previousKeys = new Set(
       currentList.items.map((item) => item.contributionKey || item.rowId || item.item)
     )
-    const nextKeys = result.shopping_list.items.map(
+    const nextKeys = applicationShoppingList.items.map(
       (item) => item.contributionKey || item.rowId || item.item
     )
     const added = result.outcome === "deduplicated"
@@ -344,7 +337,12 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       ? 0
       : nextKeys.filter((key) => previousKeys.has(key)).length
 
-    return NextResponse.json({ ...result, added, merged })
+    return NextResponse.json({
+      ...result,
+      shopping_list: applicationShoppingList,
+      added,
+      merged,
+    })
   }
 
   return NextResponse.json(

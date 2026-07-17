@@ -318,7 +318,7 @@ select extensions.throws_ok(
     )
   $$,
   '23503',
-  'pending share source recipe is unresolved or belongs to another user',
+  'pending share source is unresolved or belongs to another user',
   'new pending shares cannot store unresolved legacy-only identity'
 );
 
@@ -330,15 +330,13 @@ select extensions.lives_ok(
   'historical unresolved linkage remains preservable'
 );
 
-select extensions.throws_ok(
+select extensions.lives_ok(
   format(
     'update public.shopping_recipe_contributions set recipe_uuid = %L where recipe_id = %L',
     (select recipe_uuid from public.recipes where id = 'uuid-ref-a-2'),
     'uuid-ref-a-1'
   ),
-  '23503',
-  'shopping contribution recipe identities disagree',
-  'contribution canonical and legacy identities cannot disagree'
+  'contribution UUID-first update derives its legacy compatibility mirror'
 );
 
 select extensions.ok(
