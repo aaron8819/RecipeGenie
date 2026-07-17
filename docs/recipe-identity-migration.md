@@ -172,13 +172,42 @@ the Stage 2B UUID RPC translates only inside the database compatibility layer
 while the UUID unique key remains canonical. Recipe deletion retains the
 documented contribution-removal-first, recipe-delete-second non-atomic policy.
 
-Deployment order is migration 010 first, then the UUID-aware application.
-Migration 010 is backward compatible with the old application. Rolling the
-application back is safe while migration 010 remains installed because
-legacy-first writes are still synchronized. Stage 2C begins only after a full
-observation window shows no active legacy-only application writes; it will
-reject those writes. Stage 3 remains responsible for promoting UUID to the
-primary key and removing compatibility columns, triggers, resolver, and adapter.
+Deployment order is migrations 010 and 011 first, then the UUID-aware
+application. Migration 010 is backward compatible with the old application.
+Migration 011 repairs the production-blocking UUID made-state date contract
+while retaining the authenticated legacy overload. Rolling the application
+back is safe while both migrations remain installed because legacy-first
+writes are still synchronized. Stage 2C begins only after a full observation
+window shows no active legacy-only application writes; it will reject those
+writes. Stage 3 remains responsible for promoting UUID to the primary key and
+removing compatibility columns, triggers, resolver, and adapter.
+
+### Migration 011 UUID made-state repair
+
+Migration `011_fix_uuid_made_state_date_contract.sql` replaces the defective
+UUID/text RPC with one canonical date-typed desired-state command:
+
+| Signature | Role | Status |
+| --- | --- | --- |
+| `toggle_weekly_recipe_made(uuid, date, boolean, timestamptz)` | Canonical UUID command; `p_made = true` marks and `false` unmarks | Required |
+| `toggle_weekly_recipe_made(uuid, text, boolean, timestamptz)` | Defective Stage 2B overload | Removed |
+| `toggle_weekly_recipe_made(text, text, boolean, timestamptz)` | Deployed old-client compatibility | Retained |
+
+The canonical function derives authority from `auth.uid()`, resolves the UUID
+to a same-owner compatibility alias, locks the same-owner weekly plan by its
+`date` column, updates UUID and legacy made-state arrays in one statement, and
+writes history with UUID linkage plus legacy evidence in one insert. It is a
+`postgres`-owned `SECURITY DEFINER` function with an empty search path and an
+execute grant only to `authenticated`. The legacy function remains an invoker,
+also with an empty search path and authenticated-only execution. No UUID/text
+wrapper is retained, avoiding ambiguous PostgREST overload resolution.
+
+Focused pgTAP coverage proves mark/unmark parity, stable unrelated ordering,
+history linkage, repeated-mark behavior, legacy compatibility, cross-owner and
+unresolved rejection, anonymous denial, exact catalog shape, and calendar-date
+behavior across month, year, and leap-day boundaries. Migration 011 must be
+deployed and transactionally probed while the legacy application remains live;
+PR #11 must not merge before that production proof passes.
 
 ## Stage 1 boundaries and residual risks
 
@@ -324,8 +353,9 @@ matching pre-2B application/schema pair.
 | Step | Database | Application | Compatibility | Gate |
 | --- | --- | --- | --- | --- |
 | 1 | Deploy migration 009 | Current legacy app | Old writes populate UUID mirrors through triggers | Every parity count in `stage2a_uuid_reference_audit.sql` is zero |
-| 2 | No destructive schema change | Deploy Stage 2B UUID-aware app | UUID reads/writes plus one explicit legacy resolver | Duplicate-name, rename, planner/template/share/history/shopping smoke |
-| 3 | Deploy migration 010 enforcement | Stage 2B app | Reject new legacy-only active writes; retain historical aliases | UUID-only commands pass and legacy-only commands fail |
+| 2 | Deploy migration 010 | Current legacy app | UUID-first and legacy-first writes both maintain compatibility mirrors | Stage 2B UUID-first compatibility suite passes |
+| 3 | Deploy migration 011 | Current legacy app | Date-typed UUID made-state command plus retained legacy overload | Authenticated UUID and legacy production probes pass; SQLSTATE 42883 is absent |
+| 4 | No destructive schema change | Deploy Stage 2B UUID-aware app | UUID reads/writes plus one explicit legacy resolver | Full duplicate-name, rename, planner/template/share/history/shopping/deletion matrix passes |
 
 Migration 009 must precede Stage 2B. Its mismatch window is safe because the
 currently deployed application does not select or require the new fields, and

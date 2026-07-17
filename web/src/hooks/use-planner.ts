@@ -927,8 +927,8 @@ export function useMarkRecipeMade() {
           args: {
             p_recipe_uuid: string
             p_week_date: string
-            p_is_made_for_week: boolean
-            p_date_made: string | null
+            p_made: boolean
+            p_made_at: string | null
           }
         ) => Promise<{
           data: Array<{
@@ -945,8 +945,8 @@ export function useMarkRecipeMade() {
       const { data, error } = await rpcClient.rpc("toggle_weekly_recipe_made", {
         p_recipe_uuid: recipeId,
         p_week_date: weekDate,
-        p_is_made_for_week: isMadeForWeek,
-        p_date_made: dateMade || null,
+        p_made: !isMadeForWeek,
+        p_made_at: dateMade || null,
       })
 
       if (error) throw error

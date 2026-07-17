@@ -542,8 +542,8 @@ export type Database = {
           }
         | {
             Args: {
-              p_date_made?: string
-              p_is_made_for_week: boolean
+              p_made: boolean
+              p_made_at?: string
               p_recipe_uuid: string
               p_week_date: string
             }

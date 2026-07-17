@@ -122,14 +122,14 @@ describe("useMarkRecipeMade", () => {
     expect(mockSupabase.rpc).toHaveBeenNthCalledWith(1, "toggle_weekly_recipe_made", {
       p_recipe_uuid: "recipe-1",
       p_week_date: weekDate,
-      p_is_made_for_week: false,
-      p_date_made: "2026-03-05T00:00:00.000Z",
+      p_made: true,
+      p_made_at: "2026-03-05T00:00:00.000Z",
     })
     expect(mockSupabase.rpc).toHaveBeenNthCalledWith(2, "toggle_weekly_recipe_made", {
       p_recipe_uuid: "recipe-1",
       p_week_date: weekDate,
-      p_is_made_for_week: true,
-      p_date_made: null,
+      p_made: false,
+      p_made_at: null,
     })
   })
 

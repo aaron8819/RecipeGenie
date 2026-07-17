@@ -611,6 +611,12 @@ The repository now uses a baseline-first bootstrap strategy:
 3. **003_shopping_item_order_preferences.sql** - Added `shopping_item_order` to `user_config` for learned within-category shopping item order preferences.
 4. **004_reconcile_production_schema_to_main.sql** - Guardedly reconciled the abandoned recipe-audit branch and restored canonical user-key constraints.
 5. **005_secure_privileged_rpcs.sql** - Removed caller-selected user identities, dropped unsafe overloads, moved user RPCs to RLS-backed invoker execution, and hardened the remaining definer functions and grants.
+6. **006_authoritative_shopping_contributions.sql** - Added authoritative shopping contribution commands and projection guards.
+7. **007_add_recipe_uuid_identity.sql** - Added permanent recipe UUID identity.
+8. **008_reconcile_stale_planner_references.sql** - Reconciled approved stale active planner references.
+9. **009_add_uuid_recipe_references.sql** - Added UUID reference mirrors and compatibility synchronization.
+10. **010_enable_uuid_application_identity.sql** - Enabled UUID-first application writes while preserving legacy-first compatibility.
+11. **011_fix_uuid_made_state_date_contract.sql** - Replaced the defective UUID/text made-state RPC with the canonical UUID/date command and retained the authenticated legacy overload.
 
 Legacy notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.

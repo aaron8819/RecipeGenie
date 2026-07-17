@@ -20,6 +20,17 @@ for (const contract of [
   }
 }
 
+const madeStateRepair = read("../supabase/migrations/011_fix_uuid_made_state_date_contract.sql")
+for (const contract of [
+  /p_recipe_uuid uuid,\s*p_week_date date,\s*p_made boolean,/,
+  /drop function public\.toggle_weekly_recipe_made\(uuid, text, boolean, timestamptz\)/,
+  /grant execute on function public\.toggle_weekly_recipe_made\(uuid, date, boolean, timestamptz\)\s*to authenticated/,
+]) {
+  if (!contract.test(madeStateRepair)) {
+    failures.push(`migration 011 made-state contract missing: ${contract}`)
+  }
+}
+
 const mapper = read("src/lib/recipe-identity.ts")
 if (!/id: legacyId, recipe_uuid: id/.test(mapper)) {
   failures.push("Recipe row mapper does not map recipe_uuid -> Recipe.id and id -> legacyId")
@@ -60,6 +71,7 @@ for (const required of [
   /day_assignment_recipe_uuids:/,
   /made_recipe_uuids:/,
   /p_recipe_uuid:/,
+  /p_made: !isMadeForWeek/,
   /\.in\("recipe_uuid", recipeIds\)/,
 ]) {
   if (!required.test(planner)) failures.push(`planner UUID contract missing: ${required}`)
