@@ -150,10 +150,12 @@ describe("useCreateRecipe identity reconciliation", () => {
     ])
     expect(insertMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: optimisticId,
         recipe_uuid: optimisticId,
         user_id: "user-1",
       })
+    )
+    expect(insertMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({ id: expect.anything() })
     )
   })
 
