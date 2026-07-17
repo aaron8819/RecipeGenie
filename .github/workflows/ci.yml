@@ -60,6 +60,10 @@ jobs:
       - name: Start Local Supabase
         run: supabase start
 
+      - name: Run Stage 2C Migration 011/012 Application Matrix
+        working-directory: web
+        run: npm run test:stage2c-compatibility
+
       - name: Reset Local Database
         run: supabase db reset --local
 
