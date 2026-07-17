@@ -9,7 +9,6 @@ import { getSupabase } from "@/lib/supabase/client"
 import { getActivePrincipalId } from "@/lib/principal-session"
 import { runRecipeContributionCommand } from "@/lib/shopping-contribution-client"
 import {
-  assertRecipeUuid,
   createRecipeUuid,
   mapRecipeRow,
   mapRecipeRows,
@@ -220,7 +219,7 @@ export function useCreateRecipe() {
 
       const supabase = getSupabase()
       const recipeInsert = supabase.from("recipes") as unknown as {
-        insert: (values: Omit<RecipeInsert, "id" | "user_id"> & { recipe_uuid: string; user_id: string }) => {
+        insert: (values: Omit<RecipeInsert, "id" | "user_id"> & { id: string; recipe_uuid: string; user_id: string }) => {
           select: () => {
             single: () => Promise<{
               data: RecipeRow | null
@@ -262,6 +261,7 @@ export function useCreateRecipe() {
       const now = new Date().toISOString()
       const optimisticRecipe: Recipe = {
         id,
+        legacyId: id,
         user_id: user?.id || "",
         name: recipe.name,
         category: recipe.category,
@@ -449,13 +449,7 @@ export function useDeleteRecipe() {
       }
 
       const supabase = getSupabase()
-      const rpcClient = supabase as unknown as {
-        rpc: (
-          fn: "delete_recipe",
-          args: { p_recipe_uuid: string }
-        ) => Promise<{ data: string | null; error: { message: string } | null }>
-      }
-      const { error } = await rpcClient.rpc("delete_recipe", { p_recipe_uuid: assertRecipeUuid(id) })
+      const { error } = await supabase.from("recipes").delete().eq("recipe_uuid", id).eq("user_id", user!.id)
       if (error) throw error
       return id
     },

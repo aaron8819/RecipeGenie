@@ -43,10 +43,12 @@ export function mapRecipeRows(rows: RecipeRow[] | null): Recipe[] {
 }
 
 export function recipeUuidWrite(recipeUuid: string) {
+  const id = assertRecipeUuid(recipeUuid)
   return {
-    // Stage 2C sends only canonical identity. PostgreSQL derives the temporary
-    // text primary-key mirror until Stage 3 promotes recipe_uuid physically.
-    recipe_uuid: assertRecipeUuid(recipeUuid),
+    // Stage 2B keeps the compatibility alias opaque and immutable. New rows
+    // use the canonical UUID serialized as text so Stage 3 can remove it.
+    id,
+    recipe_uuid: id,
   }
 }
 

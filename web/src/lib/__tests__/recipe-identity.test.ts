@@ -54,7 +54,7 @@ describe("recipe application identity mapping", () => {
   })
 
   it("writes the canonical UUID as an opaque removable compatibility alias", () => {
-    expect(recipeUuidWrite(UUID_A)).toEqual({ recipe_uuid: UUID_A })
+    expect(recipeUuidWrite(UUID_A)).toEqual({ id: UUID_A, recipe_uuid: UUID_A })
   })
 
   it("rejects malformed application recipe identity", () => {

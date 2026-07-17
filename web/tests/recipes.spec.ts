@@ -1,7 +1,5 @@
 import { test, expect } from './fixtures'
-import type { Page, Request } from '@playwright/test'
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+import type { Page } from '@playwright/test'
 
 type RecipeDraft = {
   name: string
@@ -205,15 +203,6 @@ test.describe('Recipes', () => {
       ingredients: [{ amount: '1', item: `delete ingredient ${seed}` }],
     }
     let nativeConfirmCount = 0
-    const identityWrites: Request[] = []
-    page.on('request', (request) => {
-      const url = request.url()
-      if (url.includes('/rest/v1/recipes')
-        || url.includes('/api/shopping/recipe-contributions')
-        || url.includes('/rest/v1/rpc/delete_recipe')) {
-        identityWrites.push(request)
-      }
-    })
     page.on('dialog', async (dialog) => {
       nativeConfirmCount += 1
       await dialog.dismiss()
@@ -237,8 +226,8 @@ test.describe('Recipes', () => {
       response.request().method() === 'DELETE'
     )
     const recipeResponse = page.waitForResponse((response) =>
-      response.url().includes('/rest/v1/rpc/delete_recipe') &&
-      response.request().method() === 'POST'
+      response.url().includes('/rest/v1/recipes') &&
+      response.request().method() === 'DELETE'
     )
 
     await confirmButton.click()
@@ -249,30 +238,6 @@ test.describe('Recipes', () => {
 
     expect(contributionResult.ok()).toBe(true)
     expect(recipeResult.ok()).toBe(true)
-    const recipeCreate = identityWrites.find((request) =>
-      request.method() === 'POST' && request.url().includes('/rest/v1/recipes')
-    )
-    const contributionWrites = identityWrites.filter((request) =>
-      request.url().includes('/api/shopping/recipe-contributions')
-    )
-    const recipeDelete = identityWrites.find((request) =>
-      request.url().includes('/rest/v1/rpc/delete_recipe')
-    )
-    expect(recipeCreate).toBeDefined()
-    expect(recipeDelete).toBeDefined()
-    expect(contributionWrites).toHaveLength(2)
-
-    const createPayload = recipeCreate?.postDataJSON() as Record<string, unknown>
-    expect(createPayload.recipe_uuid).toEqual(expect.stringMatching(UUID_PATTERN))
-    expect(createPayload).not.toHaveProperty('id')
-
-    for (const request of contributionWrites) {
-      const payload = request.postDataJSON() as { recipeIds?: unknown[] }
-      expect(payload.recipeIds).toEqual([expect.stringMatching(UUID_PATTERN)])
-    }
-
-    const deletePayload = recipeDelete?.postDataJSON() as Record<string, unknown>
-    expect(deletePayload).toEqual({ p_recipe_uuid: expect.stringMatching(UUID_PATTERN) })
     expect(nativeConfirmCount).toBe(0)
     await expect(page.getByRole('alertdialog')).toHaveCount(0)
     await expect(page.getByRole('dialog')).toHaveCount(0)

@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(33);
+select extensions.plan(42);
 
 select extensions.ok(
   to_regprocedure('public.toggle_weekly_recipe_made(uuid,date,boolean,timestamp with time zone)') is not null,
@@ -12,8 +12,8 @@ select extensions.ok(
   'defective UUID/text overload is absent'
 );
 select extensions.ok(
-  to_regprocedure('public.toggle_weekly_recipe_made(text,text,boolean,timestamp with time zone)') is null,
-  'legacy made-state overload is absent'
+  to_regprocedure('public.toggle_weekly_recipe_made(text,text,boolean,timestamp with time zone)') is not null,
+  'legacy made-state overload remains available'
 );
 select extensions.is(
   pg_get_function_result(
@@ -46,6 +46,23 @@ select extensions.ok(
   ),
   'service role has no direct canonical made-state grant'
 );
+select extensions.ok(
+  has_function_privilege(
+    'authenticated',
+    'public.toggle_weekly_recipe_made(text,text,boolean,timestamp with time zone)',
+    'EXECUTE'
+  ),
+  'authenticated retains legacy made-state access'
+);
+select extensions.ok(
+  not has_function_privilege(
+    'anon',
+    'public.toggle_weekly_recipe_made(text,text,boolean,timestamp with time zone)',
+    'EXECUTE'
+  ),
+  'anonymous cannot execute legacy made-state command'
+);
+
 insert into auth.users(id, email) values
   ('81000000-0000-4000-8000-000000000001', 'made-state-a@example.test'),
   ('82000000-0000-4000-8000-000000000002', 'made-state-b@example.test');
@@ -181,6 +198,35 @@ select extensions.ok(
   'remaining history retains UUID and legacy linkage'
 );
 
+select extensions.lives_ok($$
+  select public.toggle_weekly_recipe_made(
+    'made-a-target', '2026-08-01', false, timestamptz '2026-08-01 12:00:00+00'
+  )
+$$, 'legacy application mark-made remains compatible');
+select extensions.ok(
+  (select made_recipe_ids = array['made-a-target'] and made_recipe_uuids = array['81111111-1111-4111-8111-111111111111'::uuid]
+   from public.weekly_plans where user_id = auth.uid() and week_date = date '2026-08-01'),
+  'legacy mark synchronizes both made-state mirrors'
+);
+select extensions.ok(
+  exists(
+    select 1 from public.recipe_history
+    where user_id = auth.uid()
+      and recipe_id = 'made-a-target'
+      and recipe_uuid = '81111111-1111-4111-8111-111111111111'
+      and date_made = timestamptz '2026-08-01 12:00:00+00'
+  ),
+  'legacy mark preserves history UUID linkage'
+);
+select extensions.lives_ok($$
+  select public.toggle_weekly_recipe_made('made-a-target', '2026-08-01', true, null)
+$$, 'legacy application unmark remains compatible');
+select extensions.ok(
+  (select cardinality(made_recipe_ids) = 0 and cardinality(made_recipe_uuids) = 0
+   from public.weekly_plans where user_id = auth.uid() and week_date = date '2026-08-01'),
+  'legacy unmark synchronizes both empty mirrors'
+);
+
 select extensions.throws_ok($$
   select public.toggle_weekly_recipe_made(
     '82333333-3333-4333-8333-333333333333'::uuid,
@@ -245,6 +291,11 @@ select extensions.throws_ok($$
   )
 $$, '42501', 'permission denied for function toggle_weekly_recipe_made',
   'anonymous canonical invocation rejects');
+select extensions.throws_ok($$
+  select public.toggle_weekly_recipe_made('made-a-target', '2026-07-20', false, null)
+$$, '42501', 'permission denied for function toggle_weekly_recipe_made',
+  'anonymous legacy invocation rejects');
+
 reset role;
 select extensions.ok(
   (
@@ -256,5 +307,16 @@ select extensions.ok(
   ),
   'canonical function has reviewed definer owner and search path'
 );
+select extensions.ok(
+  (
+    select not procedure.prosecdef
+      and pg_get_userbyid(procedure.proowner) = 'postgres'
+      and coalesce(procedure.proconfig, '{}'::text[]) @> array['search_path=""']
+    from pg_proc as procedure
+    where procedure.oid = 'public.toggle_weekly_recipe_made(text,text,boolean,timestamp with time zone)'::regprocedure
+  ),
+  'legacy function remains invoker with reviewed owner and search path'
+);
+
 select * from extensions.finish();
 rollback;

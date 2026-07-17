@@ -178,7 +178,7 @@ export type Database = {
           name: string
           notes?: Json
           prep_time_minutes?: number | null
-          recipe_uuid: string
+          recipe_uuid?: string
           servings?: number
           tags?: string[] | null
           total_time_minutes?: number | null
@@ -456,7 +456,6 @@ export type Database = {
         }
         Returns: Json
       }
-      delete_recipe: { Args: { p_recipe_uuid: string }; Returns: string }
       delete_tag: { Args: { p_tag: string }; Returns: undefined }
       filter_recipes_by_tags: {
         Args: { p_tags: string[] }
@@ -495,7 +494,6 @@ export type Database = {
           times_made: number
         }[]
       }
-      get_recipe_identity_compat_usage: { Args: never; Returns: number }
       get_recipe_shopping_contribution_state: { Args: never; Returns: Json }
       merge_tags: {
         Args: { p_source_tag: string; p_target_tag: string }
@@ -526,21 +524,37 @@ export type Database = {
           updated_at: string
         }[]
       }
-      toggle_weekly_recipe_made: {
-        Args: {
-          p_made: boolean
-          p_made_at?: string
-          p_recipe_uuid: string
-          p_week_date: string
-        }
-        Returns: {
-          action: string
-          history_date_made: string
-          made_recipe_uuids: string[]
-          recipe_uuid: string
-          week_date: string
-        }[]
-      }
+      toggle_weekly_recipe_made:
+        | {
+            Args: {
+              p_date_made?: string
+              p_is_made_for_week: boolean
+              p_recipe_id: string
+              p_week_date: string
+            }
+            Returns: {
+              action: string
+              history_date_made: string
+              made_recipe_ids: string[]
+              recipe_id: string
+              week_date: string
+            }[]
+          }
+        | {
+            Args: {
+              p_made: boolean
+              p_made_at?: string
+              p_recipe_uuid: string
+              p_week_date: string
+            }
+            Returns: {
+              action: string
+              history_date_made: string
+              made_recipe_uuids: string[]
+              recipe_uuid: string
+              week_date: string
+            }[]
+          }
     }
     Enums: {
       [_ in never]: never

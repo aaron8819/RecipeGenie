@@ -31,26 +31,6 @@ for (const contract of [
   }
 }
 
-const enforcement = read("../supabase/migrations/012_enforce_uuid_active_recipe_writes.sql")
-for (const contract of [
-  /alter table public\.recipes alter column recipe_uuid drop default/,
-  /create trigger enforce_recipe_uuid_insert/,
-  /drop function public\.toggle_weekly_recipe_made\(text, text, boolean, timestamptz\)/,
-  /revoke all privileges on function public\.apply_recipe_shopping_contribution_command/,
-  /create function public\.delete_recipe\(p_recipe_uuid uuid\)/,
-  /create table private\.recipe_identity_compat_usage/,
-  /create function public\.get_recipe_identity_compat_usage\(\)/,
-  /raise exception 'weekly plan recipe UUIDs are required'/,
-  /raise exception 'template recipe UUIDs are required'/,
-  /raise exception 'active recipe history UUID is required'/,
-  /raise exception 'active share source UUID is required'/,
-  /raise exception 'shopping contribution recipe UUID is required'/,
-]) {
-  if (!contract.test(enforcement)) {
-    failures.push(`migration 012 enforcement contract missing: ${contract}`)
-  }
-}
-
 const mapper = read("src/lib/recipe-identity.ts")
 if (!/id: legacyId, recipe_uuid: id/.test(mapper)) {
   failures.push("Recipe row mapper does not map recipe_uuid -> Recipe.id and id -> legacyId")
@@ -65,30 +45,14 @@ for (const required of [
   /recipeUuidWrite\(recipeUuid\)/,
   /mapRecipeRow/,
   /runRecipeContributionCommand\("DELETE"/,
-  /rpc\("delete_recipe", \{ p_recipe_uuid: assertRecipeUuid\(id\) \}\)/,
 ]) {
   if (!required.test(recipeHooks)) failures.push(`recipe hook UUID seam missing: ${required}`)
 }
 for (const forbidden of [
   /sanitizeRecipeNameForStorage/,
   /\.eq\("id", id\)/,
-  /from\("recipes"\)\.delete\(/,
 ]) {
   if (forbidden.test(recipeHooks)) failures.push(`recipe hooks retain legacy identity behavior: ${forbidden}`)
-}
-
-const activeLegacyIdUsers = [
-  "src/hooks/use-recipes.ts",
-  "src/hooks/use-planner.ts",
-  "src/hooks/use-plan-templates.ts",
-  "src/app/api/shopping/recipe-contributions/route.ts",
-  "src/app/api/recipe-shares/route.ts",
-  "src/lib/query-keys.ts",
-]
-for (const file of activeLegacyIdUsers) {
-  if (/\blegacyId\b/.test(read(file))) {
-    failures.push(`${file} uses Recipe.legacyId in an active application seam`)
-  }
 }
 
 const dialog = read("src/components/recipes/recipe-dialog.tsx")
@@ -140,9 +104,9 @@ if (!shareRoute.includes("source_recipe_uuid") || !shareRoute.includes("assertRe
 }
 
 if (failures.length > 0) {
-  console.error("Recipe UUID Stage 2C guard failed:")
+  console.error("Recipe UUID Stage 2B guard failed:")
   failures.forEach((failure) => console.error(`- ${failure}`))
   process.exit(1)
 }
 
-console.log("Recipe UUID Stage 2C active-write guard passed.")
+console.log("Recipe UUID Stage 2B application identity guard passed.")

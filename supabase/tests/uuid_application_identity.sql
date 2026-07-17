@@ -60,19 +60,15 @@ select extensions.is(
   'UUID-first made-state derives legacy compatibility'
 );
 
-select extensions.throws_ok($$
+select extensions.lives_ok($$
   update public.weekly_plans
   set recipe_ids = array['71111111-1111-4111-8111-111111111111']
   where user_id = auth.uid() and week_date = '2026-07-20'
-$$, '22023', 'weekly plan recipe UUIDs are required',
-  'legacy-first planner update is rejected');
+$$, 'old application legacy-first planner update still succeeds');
 select extensions.is(
   (select recipe_uuids from public.weekly_plans where user_id = auth.uid() and week_date = '2026-07-20'),
-  array[
-    '71222222-2222-4222-8222-222222222222'::uuid,
-    '71111111-1111-4111-8111-111111111111'::uuid
-  ],
-  'rejected legacy-first update leaves canonical membership unchanged'
+  array['71111111-1111-4111-8111-111111111111'::uuid],
+  'legacy-first planner update derives UUID membership'
 );
 select extensions.throws_ok($$
   insert into public.weekly_plans(user_id, week_date, recipe_ids, recipe_uuids)
