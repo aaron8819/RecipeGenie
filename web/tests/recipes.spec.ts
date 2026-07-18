@@ -1,5 +1,8 @@
 import { test, expect } from './fixtures'
 import type { Page, Request } from '@playwright/test'
+import { randomUUID } from 'node:crypto'
+import { createClient } from '@supabase/supabase-js'
+import { E2E_CONFIG } from './e2e-env'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -11,8 +14,106 @@ type RecipeDraft = {
   instructions: string
 }
 
+type RecipeRunState = {
+  runId: string
+  recipeUuids: Set<string>
+  contributionRecipeUuids: Set<string>
+  idempotencyKeys: Set<string>
+}
+
+function captureRecipeIdentity(request: Request, state: RecipeRunState) {
+  const url = request.url()
+  let payload: unknown
+  try {
+    payload = request.postDataJSON()
+  } catch {
+    return
+  }
+
+  if (request.method() === 'POST' && url.includes('/rest/v1/recipes')) {
+    const rows = Array.isArray(payload) ? payload : [payload]
+    for (const row of rows) {
+      const recipeUuid = (row as { recipe_uuid?: unknown } | null)?.recipe_uuid
+      if (typeof recipeUuid === 'string' && UUID_PATTERN.test(recipeUuid)) {
+        state.recipeUuids.add(recipeUuid)
+      }
+    }
+  }
+
+  if (url.includes('/api/shopping/recipe-contributions')) {
+    const command = payload as {
+      recipeIds?: unknown
+      idempotencyKey?: unknown
+    } | null
+    const recipeIds = command?.recipeIds
+    if (Array.isArray(recipeIds)) {
+      for (const recipeUuid of recipeIds) {
+        if (typeof recipeUuid === 'string' && UUID_PATTERN.test(recipeUuid)) {
+          state.contributionRecipeUuids.add(recipeUuid)
+        }
+      }
+    }
+    if (typeof command?.idempotencyKey === 'string' && command.idempotencyKey) {
+      state.idempotencyKeys.add(command.idempotencyKey)
+    }
+  }
+}
+
+async function cleanupRecipeRun(state: RecipeRunState) {
+  const recipeUuids = [...new Set([
+    ...state.recipeUuids,
+    ...state.contributionRecipeUuids,
+  ])]
+  if (recipeUuids.length === 0) return
+
+  const supabase = createClient(E2E_CONFIG.supabaseUrl, E2E_CONFIG.supabaseAnonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: E2E_CONFIG.email,
+    password: E2E_CONFIG.password,
+  })
+  if (signInError) throw signInError
+
+  try {
+    const { data: existingRecipes, error: recipeLookupError } = await supabase
+      .from('recipes')
+      .select('recipe_uuid')
+      .in('recipe_uuid', recipeUuids)
+    if (recipeLookupError) throw recipeLookupError
+
+    for (const recipe of existingRecipes || []) {
+      const { error } = await supabase.rpc('delete_recipe', {
+        p_recipe_uuid: recipe.recipe_uuid,
+      })
+      if (error) throw error
+    }
+
+    const [recipeResult, contributionResult] = await Promise.all([
+      supabase.from('recipes').select('recipe_uuid').in('recipe_uuid', recipeUuids),
+      supabase
+        .from('shopping_recipe_contributions')
+        .select('recipe_uuid')
+        .in('recipe_uuid', recipeUuids),
+    ])
+    if (recipeResult.error) throw recipeResult.error
+    if (contributionResult.error) throw contributionResult.error
+    expect(recipeResult.data, `recipe cleanup failed for run ${state.runId}`).toEqual([])
+    expect(
+      contributionResult.data,
+      `shopping contribution cleanup failed for run ${state.runId}`
+    ).toEqual([])
+  } finally {
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+  }
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function shoppingItemName(value: string): RegExp {
+  return new RegExp(`^${escapeRegex(value)}s?$`, 'i')
 }
 
 function buildRecipe(seed: string): RecipeDraft {
@@ -99,9 +200,23 @@ async function deleteOpenRecipe(page: Page) {
 test.describe.configure({ mode: 'serial' })
 
 test.describe('Recipes', () => {
-  test.beforeEach(async ({ setupAuth, navigateToTab }) => {
+  let recipeRun: RecipeRunState | undefined
+
+  test.beforeEach(async ({ page, setupAuth, navigateToTab }) => {
+    const run: RecipeRunState = {
+      runId: randomUUID(),
+      recipeUuids: new Set(),
+      contributionRecipeUuids: new Set(),
+      idempotencyKeys: new Set(),
+    }
+    recipeRun = run
+    page.on('request', (request) => captureRecipeIdentity(request, run))
     await setupAuth()
     await navigateToTab('recipes')
+  })
+
+  test.afterEach(async () => {
+    if (recipeRun) await cleanupRecipeRun(recipeRun)
   })
 
   test('creates a recipe, finds it deterministically, opens detail, and edits the same recipe from detail @core', async ({ page }) => {
@@ -137,7 +252,7 @@ test.describe('Recipes', () => {
   })
 
   test('shows recipe detail actions and adds its ingredients to shopping @extended', async ({ page, navigateToTab }) => {
-    const seed = `${Date.now()}-actions`
+    const seed = `${recipeRun!.runId}-actions`
     const recipe = buildRecipe(seed)
 
     await createRecipe(page, recipe)
@@ -180,7 +295,7 @@ test.describe('Recipes', () => {
   })
 
   test('imports pasted recipe text into an editable recipe and saves it @extended', async ({ page }) => {
-    const seed = `${Date.now()}-import`
+    const seed = `${recipeRun!.runId}-import`
     const recipeName = `Imported E2E Recipe ${seed}`
     const ingredient = `imported ingredient ${seed}`
 
@@ -196,6 +311,76 @@ test.describe('Recipes', () => {
 
     await dialog.getByRole('button', { name: /^add recipe$/i }).click()
     await expect(page.getByRole('dialog').last().locator('h1').filter({ hasText: recipeName })).toBeVisible()
+  })
+
+  test('replaces edited recipe contributions without stale or duplicate shopping rows @extended', async ({ page, navigateToTab }) => {
+    const seed = `${recipeRun!.runId}-replace`
+    const originalIngredient = `e2e orzo ${seed}`
+    const editedIngredient = `e2e farro ${seed}`
+    const deletedIngredient = `e2e broccolini ${seed}`
+    const recipe = {
+      ...buildRecipe(seed),
+      ingredients: [
+        { amount: '1', item: originalIngredient },
+        { amount: '2', item: deletedIngredient },
+      ],
+    }
+
+    await createRecipe(page, recipe)
+    const createdDetail = page.getByRole('dialog').last()
+    await expect(createdDetail.getByText(originalIngredient, { exact: true })).toBeVisible()
+    await expect(createdDetail.getByText(deletedIngredient, { exact: true })).toBeVisible()
+    await addOpenRecipeToShopping(page)
+    await addOpenRecipeToShopping(page)
+    await closeDialog(page)
+
+    await navigateToTab('shopping')
+    await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(1)
+
+    await navigateToTab('recipes')
+    await searchRecipes(page, recipe.name)
+    await page.getByText(recipe.name, { exact: true }).click()
+    await page.getByRole('button', { name: /edit recipe/i }).click()
+
+    const editDialog = page.getByRole('dialog').first()
+    await editDialog.locator('#servings-edit').fill('8')
+    await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
+    await editDialog.locator('input[placeholder="Ingredient"]').first().fill(editedIngredient)
+    await editDialog.getByRole('button', {
+      name: new RegExp(`delete ingredient 2: ${escapeRegex(deletedIngredient)}`, 'i'),
+    }).click()
+    await editDialog.getByRole('button', { name: /save changes/i }).click()
+    await expect(editDialog).toBeHidden({ timeout: 15000 })
+
+    const remainingDialog = page.getByRole('dialog').last()
+    if (await remainingDialog.isVisible().catch(() => false)) {
+      await closeDialog(page)
+    }
+
+    await searchRecipes(page, recipe.name)
+    await page.getByText(recipe.name, { exact: true }).click()
+    const detailDialog = page.getByRole('dialog').last()
+    await expect(detailDialog.getByText(/8 servings/i)).toBeVisible()
+    await addOpenRecipeToShopping(page)
+    await closeDialog(page)
+
+    await navigateToTab('shopping')
+    await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(0)
+    await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(0)
+
+    await page.reload()
+    await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(1)
+    await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(0)
+    await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(0)
+
+    await navigateToTab('recipes')
+    await searchRecipes(page, recipe.name)
+    await page.getByText(recipe.name, { exact: true }).click()
+    await deleteOpenRecipe(page)
+    await navigateToTab('shopping')
+    await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(0)
   })
 
   test('deletes an active recipe contribution through one visible confirmation @smoke', async ({ page, navigateToTab }) => {

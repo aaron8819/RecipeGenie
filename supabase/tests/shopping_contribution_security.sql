@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(10);
+select extensions.plan(12);
 
 insert into auth.users(id, email) values
   ('31000000-0000-4000-8000-000000000001', 'contribution-a@example.test'),
@@ -40,6 +40,19 @@ select extensions.is(
     '{}'::jsonb, 'uuid-command-0001', 'add_or_replace'
   ) ->> 'outcome'),
   'deduplicated', 'UUID command replay is idempotent'
+);
+select extensions.lives_ok($$
+  select public.apply_recipe_shopping_contribution_uuid_command(
+    (select contribution_revision from public.shopping_list where user_id = auth.uid()),
+    '[{"recipe_uuid":"31111111-1111-4111-8111-111111111111","servings":8,"scale":2,"normalization_version":1,"snapshot":{"items":[]}}]'::jsonb,
+    '{}'::uuid[],
+    '{"items":[],"already_have":[],"excluded":[],"source_recipe_uuids":["31111111-1111-4111-8111-111111111111"],"scale":2,"total_servings":8,"custom_order":false}'::jsonb,
+    '{}'::jsonb, 'uuid-command-0005', 'add_or_replace'
+  )
+$$, 'UUID contribution replacement with a new command key succeeds');
+select extensions.is(
+  (select servings from public.shopping_recipe_contributions where user_id = auth.uid()),
+  8, 'UUID contribution replacement updates the existing canonical row'
 );
 select extensions.throws_ok($$
   select public.apply_recipe_shopping_contribution_uuid_command(

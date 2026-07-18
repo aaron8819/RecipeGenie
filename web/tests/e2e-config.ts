@@ -3,6 +3,7 @@ import path from 'node:path'
 import { config as loadDotEnv } from 'dotenv'
 
 export const PRODUCTION_ORIGIN = 'https://recipe-genie-peach.vercel.app'
+export const PRODUCTION_SUPABASE_PROJECT_REF = 'eyaoahwzixqetjgfghsh'
 export const LOCAL_E2E_PORT = '3107'
 
 export type E2ETarget = 'local' | 'preview' | 'production'
@@ -13,6 +14,8 @@ export type E2EConfig = {
   allowedOrigin: string
   email: string
   password: string
+  supabaseUrl: string
+  supabaseAnonKey: string
 }
 
 export function assertAllowedOrigin(
@@ -64,10 +67,31 @@ export function createE2EConfig(env: Environment): E2EConfig {
     throw new Error('RECIPE_GENIE_E2E_TARGET must be local, preview, or production')
   }
   const target = targetValue as E2ETarget
+  const localOnly = env.RECIPE_GENIE_E2E_LOCAL_ONLY === 'true'
   const baseUrl = parseOrigin(
     required(env, 'RECIPE_GENIE_E2E_BASE_URL'),
     'RECIPE_GENIE_E2E_BASE_URL'
   )
+  const supabaseUrl = parseOrigin(
+    required(env, 'NEXT_PUBLIC_SUPABASE_URL'),
+    'NEXT_PUBLIC_SUPABASE_URL'
+  )
+
+  if (
+    (target === 'local' || localOnly) &&
+    (supabaseUrl.hostname.includes(PRODUCTION_SUPABASE_PROJECT_REF) ||
+      supabaseUrl.href.includes(PRODUCTION_SUPABASE_PROJECT_REF))
+  ) {
+    throw new Error('Production Supabase project is forbidden for this E2E configuration')
+  }
+
+  if (localOnly && target !== 'local') {
+    throw new Error('RECIPE_GENIE_E2E_LOCAL_ONLY=true requires the local E2E target')
+  }
+
+  if (baseUrl.origin === PRODUCTION_ORIGIN && localOnly) {
+    throw new Error('Production application origin is forbidden in local-only E2E mode')
+  }
 
   if (target === 'local') {
     if (baseUrl.protocol !== 'http:') {
@@ -78,6 +102,12 @@ export function createE2EConfig(env: Environment): E2EConfig {
     }
     if (baseUrl.port !== LOCAL_E2E_PORT) {
       throw new Error(`Local E2E target must use port ${LOCAL_E2E_PORT}`)
+    }
+    if (
+      supabaseUrl.protocol !== 'http:' ||
+      !['localhost', '127.0.0.1'].includes(supabaseUrl.hostname)
+    ) {
+      throw new Error('Local E2E target requires a loopback-local Supabase URL')
     }
   }
 
@@ -112,6 +142,8 @@ export function createE2EConfig(env: Environment): E2EConfig {
     allowedOrigin: baseUrl.origin,
     email: required(env, 'RECIPE_GENIE_E2E_EMAIL'),
     password: required(env, 'RECIPE_GENIE_E2E_PASSWORD'),
+    supabaseUrl: supabaseUrl.origin,
+    supabaseAnonKey: required(env, 'NEXT_PUBLIC_SUPABASE_ANON_KEY'),
   }
 }
 

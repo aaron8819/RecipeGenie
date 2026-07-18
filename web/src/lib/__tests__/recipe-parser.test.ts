@@ -79,6 +79,14 @@ describe('parseIngredientLine', () => {
     });
   });
 
+  it('parses copied quantities when the unit is attached to the number', () => {
+    expect(parseIngredientLine('2tbsp soy sauce')).toMatchObject({
+      amount: 2,
+      unit: 'tbsp',
+      item: 'soy sauce',
+    });
+  });
+
   it('should return empty item for section headers', () => {
     const result = parseIngredientLine('Ingredients');
     expect(result.item).toBe('');
@@ -265,6 +273,47 @@ Cook and serve.`;
     expect(flattenedContent).toContain('Lower heat to medium.');
     expect(flattenedContent).toContain('Best served medium-rare to medium (130–140°F).');
   });
+
+  it('recognizes common copied ingredient headings without adding them as ingredients', () => {
+    const result = parseRecipeText(`Best Ever Guacamole
+Yield: 4 servings
+
+WHAT YOU'LL NEED
+3 avocados
+1 tbsp lime juice
+
+METHOD
+Step 1: Mash the avocados.`);
+
+    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+      'avocados',
+      'lime juice',
+    ]);
+    expect(result.warnings).not.toContain('"WHAT YOU\'LL NEED" has no amount');
+  });
+
+  it.each(['WHAT YOU NEED', 'WHAT YOU WILL NEED'])(
+    'recognizes the copied ingredient heading %s',
+    (heading) => {
+      const result = parseRecipeText(`Tomato Toast\n\n${heading}\n2 tomatoes\n\nMETHOD\nSlice and serve.`);
+
+      expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual(['tomatoes']);
+      expect(result.warnings).not.toContain(`"${heading}" has no amount`);
+    }
+  );
+
+  it('removes serving boilerplate from a title after extracting the count', () => {
+    const result = parseRecipeText(`Tacos — Makes 6 servings
+
+Ingredients:
+12 tortillas
+
+Instructions:
+Fill tortillas and serve.`);
+
+    expect(result.name).toBe('Tacos');
+    expect(result.servings).toBe(6);
+  });
 });
 
 describe('modifier extraction improvements', () => {
@@ -341,6 +390,13 @@ describe('modifier extraction improvements', () => {
 });
 
 describe('mixed fraction parsing (P0 fix)', () => {
+  it('should correctly parse ASCII mixed fractions', () => {
+    const result = parseIngredientLine('1 1/2 cups cornmeal');
+    expect(result.amount).toBe(1.5);
+    expect(result.unit).toBe('cups');
+    expect(result.item).toBe('cornmeal');
+  });
+
   it('should correctly parse simple mixed fractions', () => {
     const result = parseIngredientLine('1¾ cups flour');
     expect(result.amount).toBe(1.75); // NOT 1

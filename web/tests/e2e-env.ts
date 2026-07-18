@@ -118,19 +118,22 @@ export async function signInToRecipeGenie(page: Page, config: E2EConfig = E2E_CO
 }
 
 export async function dismissOnboardingModal(page: Page) {
-  const onboardingModal = page.getByText('Welcome to Recipe Genie').first()
-  if (await onboardingModal.isVisible().catch(() => false)) {
-    const continueButton = page.getByRole('button', { name: /continue/i })
+  const onboardingDialog = page.getByRole('dialog').filter({
+    hasText: 'Welcome to Recipe Genie',
+  }).first()
+  await onboardingDialog.waitFor({ state: 'visible', timeout: 2000 }).catch(() => undefined)
+  if (await onboardingDialog.isVisible().catch(() => false)) {
+    const continueButton = onboardingDialog.getByRole('button', { name: /continue/i })
     if (await continueButton.isVisible().catch(() => false)) {
       await continueButton.click()
-      await page.waitForTimeout(500)
     }
 
-    const getStartedButton = page.getByRole('button', { name: /get started/i })
+    const getStartedButton = onboardingDialog.getByRole('button', { name: /get started/i })
+    await getStartedButton.waitFor({ state: 'visible', timeout: 5000 }).catch(() => undefined)
     if (await getStartedButton.isVisible().catch(() => false)) {
       await getStartedButton.click()
-      await page.waitForTimeout(500)
     }
+    await onboardingDialog.waitFor({ state: 'hidden', timeout: 5000 })
 
     await page.evaluate(() => {
       localStorage.setItem('recipe-genie-onboarding-seen', 'true')

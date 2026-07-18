@@ -28,6 +28,7 @@
     "test:e2e:smoke:shopping": "node scripts/run-playwright-shopping-smoke.mjs",
     "test:e2e:smoke:list": "node scripts/check-smoke-tests.mjs",
     "test:e2e:ui": "playwright test --ui",
+    "bootstrap:e2e:local": "node scripts/bootstrap-local-e2e.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",

@@ -139,10 +139,13 @@ export const test = base.extend<RecipeGenieFixtures>({
       assertStorageStateContainsNoCredentials(statePath, E2E_CONFIG)
       writeStorageMetadata(metadataPath, E2E_CONFIG)
       await authContext.close()
-    } catch {
+    } catch (error) {
       await authContext.close().catch(() => undefined)
       removeRuntimeAuthFiles(statePath, metadataPath)
-      throw new Error('Failed to establish isolated runtime authentication state for Recipe Genie')
+      const safeReason = error instanceof Error && error.message.startsWith('Recipe Genie')
+        ? error.message
+        : 'Recipe Genie authentication failed at an unknown stage'
+      throw new Error(`Failed to establish isolated runtime authentication state: ${safeReason}`)
     }
 
     try {
@@ -206,16 +209,11 @@ export const test = base.extend<RecipeGenieFixtures>({
         // the app handler instead of the development-only overlay geometry.
         await navButton.evaluate((button: HTMLButtonElement) => button.click())
       } else {
-        let navButton = page.locator('header.md\\:fixed').getByRole('button', { name: new RegExp(tabName, 'i') })
-
-        if (!(await navButton.isVisible().catch(() => false))) {
-          navButton = page.locator('header').first().getByRole('button', { name: new RegExp(tabName, 'i') })
-        }
-
-        if (!(await navButton.isVisible().catch(() => false))) {
-          navButton = page.getByRole('button', { name: new RegExp(tabName, 'i') }).first()
-        }
-
+        const navButton = page
+          .getByRole('navigation')
+          .getByRole('button', { name: new RegExp(`^${tabName}$`, 'i') })
+          .first()
+        await expect(navButton).toBeVisible()
         await navButton.click()
       }
 

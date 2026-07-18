@@ -46,6 +46,10 @@ export default defineConfig({
         url: E2E_CONFIG.baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120 * 1000,
+        env: {
+          ...process.env,
+          JITI_CACHE: 'false',
+        },
       }
     : undefined,
 })

@@ -1,0 +1,3745 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`recipe workflow fixture corpus v1 > 'ascii-mixed-fractions-bread' 1`] = `
+{
+  "covers": [
+    "ASCII fractions",
+    "mixed fractions",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1.5,
+            "item": "cornmeal",
+            "modifier": undefined,
+            "originalText": "1 1/2 cups cornmeal",
+            "unit": "cups",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.75,
+            "item": "flour",
+            "modifier": undefined,
+            "originalText": "3/4 cup flour",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.3333333333333333,
+            "item": "sugar",
+            "modifier": undefined,
+            "originalText": "1/3 cup sugar",
+            "unit": "cup",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1.5,
+        "item": "cornmeal",
+        "modifier": undefined,
+        "originalText": "1 1/2 cups cornmeal",
+        "unit": "cups",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.75,
+        "item": "flour",
+        "modifier": undefined,
+        "originalText": "3/4 cup flour",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.3333333333333333,
+        "item": "sugar",
+        "modifier": undefined,
+        "originalText": "1/3 cup sugar",
+        "unit": "cup",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Mix the batter. Bake until golden.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Mix the batter. Bake until golden.",
+    ],
+    "metadata": undefined,
+    "name": "Skillet Cornbread",
+    "notes": undefined,
+    "servings": 8,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 1.5,
+        "excludedBy": undefined,
+        "item": "cornmeal",
+        "sources": [
+          {
+            "originalAmount": 1.5,
+            "originalItem": "cornmeal",
+            "originalUnit": "cups",
+            "prepIntent": undefined,
+            "recipeId": "ascii-mixed-fractions-bread",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.75,
+        "excludedBy": undefined,
+        "item": "flour",
+        "sources": [
+          {
+            "originalAmount": 0.75,
+            "originalItem": "flour",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "ascii-mixed-fractions-bread",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.3333333333333333,
+        "excludedBy": undefined,
+        "item": "sugar",
+        "sources": [
+          {
+            "originalAmount": 0.3333333333333333,
+            "originalItem": "sugar",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "ascii-mixed-fractions-bread",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 8,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'bom-crlf-bullets' 1`] = `
+{
+  "covers": [
+    "BOM",
+    "CRLF",
+    "bullet variations",
+    "non-breaking spaces",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "couscous",
+            "modifier": undefined,
+            "originalText": "1 cup couscous",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1.5,
+            "item": "broth",
+            "modifier": undefined,
+            "originalText": "1½ cups broth",
+            "unit": "cups",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "parsley",
+            "modifier": undefined,
+            "originalText": "2 tbsp parsley",
+            "unit": "tbsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "couscous",
+        "modifier": undefined,
+        "originalText": "1 cup couscous",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1.5,
+        "item": "broth",
+        "modifier": undefined,
+        "originalText": "1½ cups broth",
+        "unit": "cups",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "parsley",
+        "modifier": undefined,
+        "originalText": "2 tbsp parsley",
+        "unit": "tbsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Pour hot broth over couscous.",
+          "Rest, fluff, and add parsley.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Pour hot broth over couscous.",
+      "Rest, fluff, and add parsley.",
+    ],
+    "metadata": undefined,
+    "name": "Herbed Couscous",
+    "notes": undefined,
+    "servings": 3,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "parsley",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "parsley",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "bom-crlf-bullets",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1.5,
+        "excludedBy": undefined,
+        "item": "broth",
+        "sources": [
+          {
+            "originalAmount": 1.5,
+            "originalItem": "broth",
+            "originalUnit": "cups",
+            "prepIntent": undefined,
+            "recipeId": "bom-crlf-bullets",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "couscous",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "couscous",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "bom-crlf-bullets",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 3,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
+{
+  "covers": [
+    "decimal quantities",
+    "em dash range",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1.5,
+            "item": "water",
+            "modifier": undefined,
+            "originalText": "1.5 cups water",
+            "unit": "cups",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.5,
+            "item": "milk",
+            "modifier": undefined,
+            "originalText": "0.5 cup milk",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "pods cardamom",
+            "modifier": undefined,
+            "originalText": "2—4 pods cardamom",
+            "unit": "2-4",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1.5,
+        "item": "water",
+        "modifier": undefined,
+        "originalText": "1.5 cups water",
+        "unit": "cups",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.5,
+        "item": "milk",
+        "modifier": undefined,
+        "originalText": "0.5 cup milk",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "pods cardamom",
+        "modifier": undefined,
+        "originalText": "2—4 pods cardamom",
+        "unit": "2-4",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Boil water with cardamom. Add milk and steep.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Boil water with cardamom. Add milk and steep.",
+    ],
+    "metadata": undefined,
+    "name": "Spiced Tea",
+    "notes": undefined,
+    "servings": 2,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.5,
+        "excludedBy": undefined,
+        "item": "milk",
+        "sources": [
+          {
+            "originalAmount": 0.5,
+            "originalItem": "milk",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "decimal-and-dash-range",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "pods cardamom",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "pods cardamom",
+            "originalUnit": "2-4",
+            "prepIntent": undefined,
+            "recipeId": "decimal-and-dash-range",
+          },
+        ],
+        "unit": "2-4",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1.5,
+        "excludedBy": undefined,
+        "item": "water",
+        "sources": [
+          {
+            "originalAmount": 1.5,
+            "originalItem": "water",
+            "originalUnit": "cups",
+            "prepIntent": undefined,
+            "recipeId": "decimal-and-dash-range",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 2,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'ingredient-alternatives-curry' 1`] = `
+{
+  "covers": [
+    "ingredient alternatives",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": [
+              "cashew cream",
+            ],
+            "amount": 1,
+            "item": "coconut milk",
+            "modifier": undefined,
+            "originalText": "1 cup coconut milk or cashew cream",
+            "unit": "cup",
+          },
+          {
+            "alternatives": [
+              "parsley",
+            ],
+            "amount": 2,
+            "item": "cilantro",
+            "modifier": undefined,
+            "originalText": "2 tbsp cilantro or parsley",
+            "unit": "tbsp",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "chicken thighs",
+            "modifier": undefined,
+            "originalText": "1 lb chicken thighs",
+            "unit": "lb",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": [
+          "cashew cream",
+        ],
+        "amount": 1,
+        "item": "coconut milk",
+        "modifier": undefined,
+        "originalText": "1 cup coconut milk or cashew cream",
+        "unit": "cup",
+      },
+      {
+        "alternatives": [
+          "parsley",
+        ],
+        "amount": 2,
+        "item": "cilantro",
+        "modifier": undefined,
+        "originalText": "2 tbsp cilantro or parsley",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "chicken thighs",
+        "modifier": undefined,
+        "originalText": "1 lb chicken thighs",
+        "unit": "lb",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Simmer the chicken in coconut milk. Top with herbs.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Simmer the chicken in coconut milk. Top with herbs.",
+    ],
+    "metadata": undefined,
+    "name": "Weeknight Curry",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "cilantro (or parsley)",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "cilantro",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "ingredient-alternatives-curry",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "chicken thighs",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "chicken thighs",
+            "originalUnit": "lb",
+            "prepIntent": undefined,
+            "recipeId": "ingredient-alternatives-curry",
+          },
+        ],
+        "unit": "lb",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "coconut milk (or cashew cream)",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "coconut milk",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "ingredient-alternatives-curry",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'instruction-only-ingredients' 1`] = `
+{
+  "covers": [
+    "ingredients only in instructions",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "eggs",
+            "modifier": undefined,
+            "originalText": "2 eggs",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "butter",
+            "modifier": undefined,
+            "originalText": "1 tbsp butter",
+            "unit": "tbsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "eggs",
+        "modifier": undefined,
+        "originalText": "2 eggs",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "butter",
+        "modifier": undefined,
+        "originalText": "1 tbsp butter",
+        "unit": "tbsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Whisk the eggs with a splash of water. Melt butter, add eggs, and finish with chives.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Whisk the eggs with a splash of water. Melt butter, add eggs, and finish with chives.",
+    ],
+    "metadata": undefined,
+    "name": "Simple Omelet",
+    "notes": undefined,
+    "servings": 1,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "butter",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "butter",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "instruction-only-ingredients",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "eggs",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "eggs",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "instruction-only-ingredients",
+          },
+        ],
+        "unit": "count",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 1,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
+{
+  "covers": [
+    "legacy format",
+    "missing section headers",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "bread",
+            "modifier": undefined,
+            "originalText": "2 slices bread",
+            "unit": "slices",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "peanut butter",
+            "modifier": undefined,
+            "originalText": "2 tbsp peanut butter",
+            "unit": "tbsp",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "banana",
+            "modifier": undefined,
+            "originalText": "1 banana",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": null,
+            "item": "Toast the bread.",
+            "modifier": undefined,
+            "originalText": "Toast the bread.",
+            "unit": "",
+          },
+          {
+            "alternatives": undefined,
+            "amount": null,
+            "item": "Spread peanut butter and top with banana.",
+            "modifier": undefined,
+            "originalText": "Spread peanut butter and top with banana.",
+            "unit": "",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "bread",
+        "modifier": undefined,
+        "originalText": "2 slices bread",
+        "unit": "slices",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "peanut butter",
+        "modifier": undefined,
+        "originalText": "2 tbsp peanut butter",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "banana",
+        "modifier": undefined,
+        "originalText": "1 banana",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": null,
+        "item": "Toast the bread.",
+        "modifier": undefined,
+        "originalText": "Toast the bread.",
+        "unit": "",
+      },
+      {
+        "alternatives": undefined,
+        "amount": null,
+        "item": "Spread peanut butter and top with banana.",
+        "modifier": undefined,
+        "originalText": "Spread peanut butter and top with banana.",
+        "unit": "",
+      },
+    ],
+    "instructionGroups": undefined,
+    "instructions": [],
+    "metadata": undefined,
+    "name": "Peanut Butter Toast",
+    "notes": undefined,
+    "servings": 1,
+    "warnings": [
+      "2 ingredients have no amounts: Toast the bread., Spread peanut butter and top with banana.",
+      "No instructions found - add a "Directions" or "Instructions" section",
+    ],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "banana",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "banana",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "legacy-unheaded-format",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "bread",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "bread",
+            "originalUnit": "slices",
+            "prepIntent": undefined,
+            "recipeId": "legacy-unheaded-format",
+          },
+        ],
+        "unit": "slice",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": null,
+        "excludedBy": undefined,
+        "item": "toast the bread.",
+        "sources": [
+          {
+            "originalAmount": null,
+            "originalItem": "Toast the bread.",
+            "originalUnit": "",
+            "prepIntent": undefined,
+            "recipeId": "legacy-unheaded-format",
+          },
+        ],
+        "unit": "",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "peanut butter",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "peanut butter",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "legacy-unheaded-format",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": null,
+        "excludedBy": undefined,
+        "item": "spread peanut butter and top with banana.",
+        "sources": [
+          {
+            "originalAmount": null,
+            "originalItem": "Spread peanut butter and top with banana.",
+            "originalUnit": "",
+            "prepIntent": undefined,
+            "recipeId": "legacy-unheaded-format",
+          },
+        ],
+        "unit": "",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 1,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'metadata-times-and-notes' 1`] = `
+{
+  "covers": [
+    "field metadata",
+    "times",
+    "notes",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 4,
+            "item": "fillets salmon",
+            "modifier": undefined,
+            "originalText": "4 fillets salmon",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "olive oil",
+            "modifier": undefined,
+            "originalText": "2 tbsp olive oil",
+            "unit": "tbsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 4,
+        "item": "fillets salmon",
+        "modifier": undefined,
+        "originalText": "4 fillets salmon",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "olive oil",
+        "modifier": undefined,
+        "originalText": "2 tbsp olive oil",
+        "unit": "tbsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Heat the oven.",
+          "Roast salmon until flaky.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Heat the oven.",
+      "Roast salmon until flaky.",
+      "Notes:",
+      "Use center-cut fillets.",
+      "Serve immediately.",
+    ],
+    "metadata": {
+      "cookTime": "20 minutes",
+      "cookTimeMinutes": 20,
+      "prepTime": "15 minutes",
+      "prepTimeMinutes": 15,
+      "totalTime": "35 minutes",
+      "totalTimeMinutes": 35,
+    },
+    "name": "Sheet Pan Salmon",
+    "notes": [
+      "Use center-cut fillets.",
+      "Serve immediately.",
+    ],
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 4,
+        "excludedBy": undefined,
+        "item": "fillets salmon",
+        "sources": [
+          {
+            "originalAmount": 4,
+            "originalItem": "fillets salmon",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "metadata-times-and-notes",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "olive oil",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "olive oil",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "metadata-times-and-notes",
+          },
+        ],
+        "unit": "tbsp",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
+{
+  "covers": [
+    "metric units",
+    "mixed units",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 500,
+            "item": "lentils",
+            "modifier": undefined,
+            "originalText": "500 g lentils",
+            "unit": "g",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "vegetable broth",
+            "modifier": undefined,
+            "originalText": "1 liter vegetable broth",
+            "unit": "liter",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 250,
+            "item": "water",
+            "modifier": undefined,
+            "originalText": "250 ml water",
+            "unit": "ml",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "tomato paste",
+            "modifier": undefined,
+            "originalText": "2 tbsp tomato paste",
+            "unit": "tbsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 500,
+        "item": "lentils",
+        "modifier": undefined,
+        "originalText": "500 g lentils",
+        "unit": "g",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "vegetable broth",
+        "modifier": undefined,
+        "originalText": "1 liter vegetable broth",
+        "unit": "liter",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 250,
+        "item": "water",
+        "modifier": undefined,
+        "originalText": "250 ml water",
+        "unit": "ml",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "tomato paste",
+        "modifier": undefined,
+        "originalText": "2 tbsp tomato paste",
+        "unit": "tbsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Combine ingredients. Simmer until the lentils are tender.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Combine ingredients. Simmer until the lentils are tender.",
+    ],
+    "metadata": undefined,
+    "name": "Lentil Stew",
+    "notes": undefined,
+    "servings": 5,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 500,
+        "excludedBy": undefined,
+        "item": "lentils",
+        "sources": [
+          {
+            "originalAmount": 500,
+            "originalItem": "lentils",
+            "originalUnit": "g",
+            "prepIntent": undefined,
+            "recipeId": "metric-lentil-stew",
+          },
+        ],
+        "unit": "g",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "tomato paste",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "tomato paste",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "metric-lentil-stew",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "vegetable broth",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "vegetable broth",
+            "originalUnit": "liter",
+            "prepIntent": undefined,
+            "recipeId": "metric-lentil-stew",
+          },
+        ],
+        "unit": "l",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 250,
+        "excludedBy": undefined,
+        "item": "water",
+        "sources": [
+          {
+            "originalAmount": 250,
+            "originalItem": "water",
+            "originalUnit": "ml",
+            "prepIntent": undefined,
+            "recipeId": "metric-lentil-stew",
+          },
+        ],
+        "unit": "ml",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 5,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
+{
+  "covers": [
+    "missing quantities",
+    "garnish",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": null,
+            "item": "mixed greens",
+            "modifier": undefined,
+            "originalText": "mixed greens",
+            "unit": "",
+          },
+          {
+            "alternatives": undefined,
+            "amount": null,
+            "item": "salt",
+            "modifier": "to taste",
+            "originalText": "salt, to taste",
+            "unit": "",
+          },
+          {
+            "alternatives": undefined,
+            "amount": null,
+            "item": "black pepper",
+            "modifier": undefined,
+            "originalText": "black pepper",
+            "unit": "",
+          },
+          {
+            "alternatives": undefined,
+            "amount": null,
+            "item": "fresh herbs",
+            "modifier": "for garnish",
+            "originalText": "fresh herbs for garnish",
+            "unit": "",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": null,
+        "item": "mixed greens",
+        "modifier": undefined,
+        "originalText": "mixed greens",
+        "unit": "",
+      },
+      {
+        "alternatives": undefined,
+        "amount": null,
+        "item": "salt",
+        "modifier": "to taste",
+        "originalText": "salt, to taste",
+        "unit": "",
+      },
+      {
+        "alternatives": undefined,
+        "amount": null,
+        "item": "black pepper",
+        "modifier": undefined,
+        "originalText": "black pepper",
+        "unit": "",
+      },
+      {
+        "alternatives": undefined,
+        "amount": null,
+        "item": "fresh herbs",
+        "modifier": "for garnish",
+        "originalText": "fresh herbs for garnish",
+        "unit": "",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Combine in a bowl. Season and serve.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Combine in a bowl. Season and serve.",
+    ],
+    "metadata": undefined,
+    "name": "Garden Salad",
+    "notes": undefined,
+    "servings": undefined,
+    "warnings": [
+      "3 ingredients have no amounts: mixed greens, black pepper, fresh herbs",
+    ],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": null,
+        "excludedBy": undefined,
+        "item": "black pepper",
+        "sources": [
+          {
+            "originalAmount": null,
+            "originalItem": "black pepper",
+            "originalUnit": "",
+            "prepIntent": undefined,
+            "recipeId": "missing-quantities-salad",
+          },
+        ],
+        "unit": "",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": null,
+        "excludedBy": undefined,
+        "item": "fresh herbs",
+        "sources": [
+          {
+            "originalAmount": null,
+            "originalItem": "fresh herbs",
+            "originalUnit": "",
+            "prepIntent": undefined,
+            "recipeId": "missing-quantities-salad",
+          },
+        ],
+        "unit": "",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": null,
+        "excludedBy": undefined,
+        "item": "mixed greens",
+        "sources": [
+          {
+            "originalAmount": null,
+            "originalItem": "mixed greens",
+            "originalUnit": "",
+            "prepIntent": undefined,
+            "recipeId": "missing-quantities-salad",
+          },
+        ],
+        "unit": "",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": null,
+        "excludedBy": undefined,
+        "item": "salt",
+        "sources": [
+          {
+            "originalAmount": null,
+            "originalItem": "salt",
+            "originalUnit": "",
+            "prepIntent": undefined,
+            "recipeId": "missing-quantities-salad",
+          },
+        ],
+        "unit": "",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'mixed-units-cocoa' 1`] = `
+{
+  "covers": [
+    "mixed units",
+    "duplicate ingredients",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "milk",
+            "modifier": undefined,
+            "originalText": "1 cup milk",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 8,
+            "item": "milk",
+            "modifier": undefined,
+            "originalText": "8 fl oz milk",
+            "unit": "fl oz",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 4,
+            "item": "dark chocolate",
+            "modifier": undefined,
+            "originalText": "4 oz dark chocolate",
+            "unit": "oz",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "cocoa powder",
+            "modifier": undefined,
+            "originalText": "2 tbsp cocoa powder",
+            "unit": "tbsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "milk",
+        "modifier": undefined,
+        "originalText": "1 cup milk",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 8,
+        "item": "milk",
+        "modifier": undefined,
+        "originalText": "8 fl oz milk",
+        "unit": "fl oz",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 4,
+        "item": "dark chocolate",
+        "modifier": undefined,
+        "originalText": "4 oz dark chocolate",
+        "unit": "oz",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "cocoa powder",
+        "modifier": undefined,
+        "originalText": "2 tbsp cocoa powder",
+        "unit": "tbsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Heat the milk. Whisk in the remaining ingredients.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Heat the milk. Whisk in the remaining ingredients.",
+    ],
+    "metadata": undefined,
+    "name": "Double Chocolate Pudding",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "milk",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "milk",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "mixed-units-cocoa",
+          },
+          {
+            "originalAmount": 8,
+            "originalItem": "milk",
+            "originalUnit": "fl oz",
+            "prepIntent": undefined,
+            "recipeId": "mixed-units-cocoa",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "cocoa powder",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "cocoa powder",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "mixed-units-cocoa",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 4,
+        "excludedBy": undefined,
+        "item": "dark chocolate",
+        "sources": [
+          {
+            "originalAmount": 4,
+            "originalItem": "dark chocolate",
+            "originalUnit": "oz",
+            "prepIntent": undefined,
+            "recipeId": "mixed-units-cocoa",
+          },
+        ],
+        "unit": "oz",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] = `
+{
+  "covers": [
+    "multiple components",
+    "grouped ingredients",
+    "grouped instructions",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "groupLabel": "Chicken",
+            "item": "chicken breast",
+            "modifier": undefined,
+            "originalText": "1 lb chicken breast",
+            "unit": "lb",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "groupLabel": "Chicken",
+            "item": "olive oil",
+            "modifier": undefined,
+            "originalText": "1 tbsp olive oil",
+            "unit": "tbsp",
+          },
+        ],
+        "label": "Chicken",
+      },
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 0.5,
+            "groupLabel": "Sauce",
+            "item": "chicken broth",
+            "modifier": undefined,
+            "originalText": "1/2 cup chicken broth",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "groupLabel": "Sauce",
+            "item": "lemon juice",
+            "modifier": undefined,
+            "originalText": "1 tbsp lemon juice",
+            "unit": "tbsp",
+          },
+        ],
+        "label": "Sauce",
+      },
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "groupLabel": "Salad",
+            "item": "arugula",
+            "modifier": undefined,
+            "originalText": "2 cups arugula",
+            "unit": "cups",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "groupLabel": "Salad",
+            "item": "lemon",
+            "modifier": undefined,
+            "originalText": "1 whole lemon",
+            "unit": "count",
+          },
+        ],
+        "label": "Salad",
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "chicken breast",
+        "modifier": undefined,
+        "originalText": "1 lb chicken breast",
+        "unit": "lb",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "olive oil",
+        "modifier": undefined,
+        "originalText": "1 tbsp olive oil",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.5,
+        "item": "chicken broth",
+        "modifier": undefined,
+        "originalText": "1/2 cup chicken broth",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "lemon juice",
+        "modifier": undefined,
+        "originalText": "1 tbsp lemon juice",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "arugula",
+        "modifier": undefined,
+        "originalText": "2 cups arugula",
+        "unit": "cups",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "lemon",
+        "modifier": undefined,
+        "originalText": "1 whole lemon",
+        "unit": "count",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "label": "Chicken",
+        "steps": [
+          "Sear the chicken.",
+        ],
+      },
+      {
+        "label": "Sauce",
+        "steps": [
+          "Deglaze with broth and lemon juice.",
+        ],
+      },
+      {
+        "label": "Salad",
+        "steps": [
+          "Toss arugula with sliced lemon.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Chicken:",
+      "Sear the chicken.",
+      "Sauce:",
+      "Deglaze with broth and lemon juice.",
+      "Salad:",
+      "Toss arugula with sliced lemon.",
+    ],
+    "metadata": undefined,
+    "name": "Lemon Chicken with Salad",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "arugula",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "arugula",
+            "originalUnit": "cups",
+            "prepIntent": undefined,
+            "recipeId": "multiple-components-chicken",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1.25,
+        "excludedBy": undefined,
+        "item": "lemon",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "lemon juice",
+            "originalUnit": "tbsp",
+            "prepIntent": "juiced",
+            "recipeId": "multiple-components-chicken",
+          },
+          {
+            "originalAmount": 1,
+            "originalItem": "lemon",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "multiple-components-chicken",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "chicken breast",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "chicken breast",
+            "originalUnit": "lb",
+            "prepIntent": undefined,
+            "recipeId": "multiple-components-chicken",
+          },
+        ],
+        "unit": "lb",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.5,
+        "excludedBy": undefined,
+        "item": "chicken broth",
+        "sources": [
+          {
+            "originalAmount": 0.5,
+            "originalItem": "chicken broth",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "multiple-components-chicken",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "olive oil",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "olive oil",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "multiple-components-chicken",
+          },
+        ],
+        "unit": "tbsp",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
+{
+  "covers": [
+    "duplicate ingredients",
+    "near-duplicate ingredients",
+    "singular plural",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "onion",
+            "modifier": undefined,
+            "originalText": "1 onion",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "onions",
+            "modifier": undefined,
+            "originalText": "2 whole onions",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "red onion",
+            "modifier": "sliced",
+            "originalText": "1 cup red onion, sliced",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "butter",
+            "modifier": undefined,
+            "originalText": "1 tbsp butter",
+            "unit": "tbsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "onion",
+        "modifier": undefined,
+        "originalText": "1 onion",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "onions",
+        "modifier": undefined,
+        "originalText": "2 whole onions",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "red onion",
+        "modifier": "sliced",
+        "originalText": "1 cup red onion, sliced",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "butter",
+        "modifier": undefined,
+        "originalText": "1 tbsp butter",
+        "unit": "tbsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Cook the onions slowly. Toss with pasta and butter.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Cook the onions slowly. Toss with pasta and butter.",
+    ],
+    "metadata": undefined,
+    "name": "Onion Pasta",
+    "notes": undefined,
+    "servings": 2,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 3,
+        "excludedBy": undefined,
+        "item": "onion",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "onion",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "near-duplicate-onions",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "red onion",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "red onion",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "near-duplicate-onions",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "butter",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "butter",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "near-duplicate-onions",
+          },
+        ],
+        "unit": "tbsp",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 2,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'no-serving-count' 1`] = `
+{
+  "covers": [
+    "missing serving count",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "rice",
+            "modifier": undefined,
+            "originalText": "1 cup rice",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "water",
+            "modifier": undefined,
+            "originalText": "2 cups water",
+            "unit": "cups",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "garlic",
+            "modifier": undefined,
+            "originalText": "2 cloves garlic",
+            "unit": "cloves",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "rice",
+        "modifier": undefined,
+        "originalText": "1 cup rice",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "water",
+        "modifier": undefined,
+        "originalText": "2 cups water",
+        "unit": "cups",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "garlic",
+        "modifier": undefined,
+        "originalText": "2 cloves garlic",
+        "unit": "cloves",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Bring to a boil. Cover and cook until tender.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Bring to a boil. Cover and cook until tender.",
+    ],
+    "metadata": undefined,
+    "name": "Garlic Rice",
+    "notes": undefined,
+    "servings": undefined,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "garlic",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "garlic",
+            "originalUnit": "cloves",
+            "prepIntent": undefined,
+            "recipeId": "no-serving-count",
+          },
+        ],
+        "unit": "clove",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "rice",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "rice",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "no-serving-count",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "water",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "water",
+            "originalUnit": "cups",
+            "prepIntent": undefined,
+            "recipeId": "no-serving-count",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'noisy-copied-heading' 1`] = `
+{
+  "covers": [
+    "copied text",
+    "section aliases",
+    "numbered instructions",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 3,
+            "item": "avocados",
+            "modifier": undefined,
+            "originalText": "3 avocados",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "lime juice",
+            "modifier": undefined,
+            "originalText": "1 tbsp lime juice",
+            "unit": "tbsp",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.5,
+            "item": "kosher salt",
+            "modifier": undefined,
+            "originalText": "1/2 tsp kosher salt",
+            "unit": "tsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 3,
+        "item": "avocados",
+        "modifier": undefined,
+        "originalText": "3 avocados",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "lime juice",
+        "modifier": undefined,
+        "originalText": "1 tbsp lime juice",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.5,
+        "item": "kosher salt",
+        "modifier": undefined,
+        "originalText": "1/2 tsp kosher salt",
+        "unit": "tsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Step 1: Mash the avocados. Step 2: Fold in lime juice and salt.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Step 1: Mash the avocados. Step 2: Fold in lime juice and salt.",
+    ],
+    "metadata": undefined,
+    "name": "Best Ever Guacamole",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 3,
+        "excludedBy": undefined,
+        "item": "avocados",
+        "sources": [
+          {
+            "originalAmount": 3,
+            "originalItem": "avocados",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "noisy-copied-heading",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.5,
+        "excludedBy": undefined,
+        "item": "lime",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "lime juice",
+            "originalUnit": "tbsp",
+            "prepIntent": "juiced",
+            "recipeId": "noisy-copied-heading",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.5,
+        "excludedBy": undefined,
+        "item": "kosher salt",
+        "sources": [
+          {
+            "originalAmount": 0.5,
+            "originalItem": "kosher salt",
+            "originalUnit": "tsp",
+            "prepIntent": undefined,
+            "recipeId": "noisy-copied-heading",
+          },
+        ],
+        "unit": "tsp",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
+{
+  "covers": [
+    "optional ingredients",
+    "garnishes",
+    "parenthetical modifier",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "tomatoes",
+            "modifier": undefined,
+            "originalText": "2 cans tomatoes",
+            "unit": "cans",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "vegetable stock",
+            "modifier": undefined,
+            "originalText": "1 cup vegetable stock",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.5,
+            "item": "cream",
+            "modifier": "optional",
+            "originalText": "1/2 cup cream (optional)",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "basil",
+            "modifier": "for garnish",
+            "originalText": "2 tbsp basil, for garnish",
+            "unit": "tbsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "tomatoes",
+        "modifier": undefined,
+        "originalText": "2 cans tomatoes",
+        "unit": "cans",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "vegetable stock",
+        "modifier": undefined,
+        "originalText": "1 cup vegetable stock",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.5,
+        "item": "cream",
+        "modifier": "optional",
+        "originalText": "1/2 cup cream (optional)",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "basil",
+        "modifier": "for garnish",
+        "originalText": "2 tbsp basil, for garnish",
+        "unit": "tbsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Simmer tomatoes and stock. Blend, finish with cream, and garnish.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Simmer tomatoes and stock. Blend, finish with cream, and garnish.",
+    ],
+    "metadata": undefined,
+    "name": "Tomato Soup",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "basil",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "basil",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "optional-garnishes-soup",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "tomatoes",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "tomatoes",
+            "originalUnit": "cans",
+            "prepIntent": undefined,
+            "recipeId": "optional-garnishes-soup",
+          },
+        ],
+        "unit": "can",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.5,
+        "excludedBy": undefined,
+        "item": "cream",
+        "sources": [
+          {
+            "originalAmount": 0.5,
+            "originalItem": "cream",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "optional-garnishes-soup",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "vegetable stock",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "vegetable stock",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "optional-garnishes-soup",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'parenthetical-optional-alternative' 1`] = `
+{
+  "covers": [
+    "alternatives",
+    "optional modifier",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 12,
+            "item": "pasta",
+            "modifier": undefined,
+            "originalText": "12 oz pasta",
+            "unit": "oz",
+          },
+          {
+            "alternatives": [
+              "pecorino",
+            ],
+            "amount": 1,
+            "item": "parmesan",
+            "modifier": undefined,
+            "originalText": "1 cup parmesan or pecorino",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.25,
+            "item": "parsley",
+            "modifier": "optional",
+            "originalText": "1/4 cup parsley (optional)",
+            "unit": "cup",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 12,
+        "item": "pasta",
+        "modifier": undefined,
+        "originalText": "12 oz pasta",
+        "unit": "oz",
+      },
+      {
+        "alternatives": [
+          "pecorino",
+        ],
+        "amount": 1,
+        "item": "parmesan",
+        "modifier": undefined,
+        "originalText": "1 cup parmesan or pecorino",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.25,
+        "item": "parsley",
+        "modifier": "optional",
+        "originalText": "1/4 cup parsley (optional)",
+        "unit": "cup",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Cook pasta. Fold in cheese and parsley.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Cook pasta. Fold in cheese and parsley.",
+    ],
+    "metadata": undefined,
+    "name": "Creamy Pasta",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.25,
+        "excludedBy": undefined,
+        "item": "parsley",
+        "sources": [
+          {
+            "originalAmount": 0.25,
+            "originalItem": "parsley",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-optional-alternative",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "parmesan (or pecorino)",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "parmesan",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-optional-alternative",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 12,
+        "excludedBy": undefined,
+        "item": "pasta",
+        "sources": [
+          {
+            "originalAmount": 12,
+            "originalItem": "pasta",
+            "originalUnit": "oz",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-optional-alternative",
+          },
+        ],
+        "unit": "oz",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
+{
+  "covers": [
+    "parenthetical preparation notes",
+    "package size",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "crushed tomatoes",
+            "modifier": undefined,
+            "originalText": "1 (28 oz) can crushed tomatoes",
+            "unit": "can (28 oz)",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "black beans",
+            "modifier": "drained",
+            "originalText": "2 cans black beans (drained)",
+            "unit": "cans",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "large onion",
+            "modifier": "diced",
+            "originalText": "1 large onion (diced)",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 3,
+            "item": "garlic",
+            "modifier": "minced",
+            "originalText": "3 cloves garlic, minced",
+            "unit": "cloves",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "crushed tomatoes",
+        "modifier": undefined,
+        "originalText": "1 (28 oz) can crushed tomatoes",
+        "unit": "can (28 oz)",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "black beans",
+        "modifier": "drained",
+        "originalText": "2 cans black beans (drained)",
+        "unit": "cans",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "large onion",
+        "modifier": "diced",
+        "originalText": "1 large onion (diced)",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 3,
+        "item": "garlic",
+        "modifier": "minced",
+        "originalText": "3 cloves garlic, minced",
+        "unit": "cloves",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Combine all ingredients. Simmer for 30 minutes.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Combine all ingredients. Simmer for 30 minutes.",
+    ],
+    "metadata": undefined,
+    "name": "Bean Chili",
+    "notes": undefined,
+    "servings": 6,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 3,
+        "excludedBy": undefined,
+        "item": "garlic",
+        "sources": [
+          {
+            "originalAmount": 3,
+            "originalItem": "garlic",
+            "originalUnit": "cloves",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-preparation",
+          },
+        ],
+        "unit": "clove",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "large onion",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "large onion",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-preparation",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "black beans",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "black beans",
+            "originalUnit": "cans",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-preparation",
+          },
+        ],
+        "unit": "can",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "crushed tomatoes",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "crushed tomatoes",
+            "originalUnit": "can (28 oz)",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-preparation",
+          },
+        ],
+        "unit": "can (28 oz)",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 6,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'poorly-formatted-no-blank-lines' 1`] = `
+{
+  "covers": [
+    "poor formatting",
+    "multiline copied text",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 8,
+            "item": "noodles",
+            "modifier": undefined,
+            "originalText": "8 oz noodles",
+            "unit": "oz",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "soy sauce",
+            "modifier": undefined,
+            "originalText": "2tbsp soy sauce",
+            "unit": "tbsp",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "sesame oil",
+            "modifier": undefined,
+            "originalText": "1 tsp sesame oil",
+            "unit": "tsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 8,
+        "item": "noodles",
+        "modifier": undefined,
+        "originalText": "8 oz noodles",
+        "unit": "oz",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "soy sauce",
+        "modifier": undefined,
+        "originalText": "2tbsp soy sauce",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "sesame oil",
+        "modifier": undefined,
+        "originalText": "1 tsp sesame oil",
+        "unit": "tsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Boil noodles Drain well Toss with sauce",
+        ],
+      },
+    ],
+    "instructions": [
+      "Boil noodles Drain well Toss with sauce",
+    ],
+    "metadata": undefined,
+    "name": "Quick Noodles",
+    "notes": undefined,
+    "servings": 2,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 8,
+        "excludedBy": undefined,
+        "item": "noodles",
+        "sources": [
+          {
+            "originalAmount": 8,
+            "originalItem": "noodles",
+            "originalUnit": "oz",
+            "prepIntent": undefined,
+            "recipeId": "poorly-formatted-no-blank-lines",
+          },
+        ],
+        "unit": "oz",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "sesame oil",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "sesame oil",
+            "originalUnit": "tsp",
+            "prepIntent": undefined,
+            "recipeId": "poorly-formatted-no-blank-lines",
+          },
+        ],
+        "unit": "tsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "soy sauce",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "soy sauce",
+            "originalUnit": "tbsp",
+            "prepIntent": undefined,
+            "recipeId": "poorly-formatted-no-blank-lines",
+          },
+        ],
+        "unit": "tbsp",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 2,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
+{
+  "covers": [
+    "ranges",
+    "en dash",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "olive oil",
+            "modifier": undefined,
+            "originalText": "1–2 tablespoons olive oil",
+            "unit": "1-2 tablespoons",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "cumin",
+            "modifier": undefined,
+            "originalText": "2-3 tsp cumin",
+            "unit": "2-3 tsp",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "carrots",
+            "modifier": undefined,
+            "originalText": "1 lb carrots",
+            "unit": "lb",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "olive oil",
+        "modifier": undefined,
+        "originalText": "1–2 tablespoons olive oil",
+        "unit": "1-2 tablespoons",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "cumin",
+        "modifier": undefined,
+        "originalText": "2-3 tsp cumin",
+        "unit": "2-3 tsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "carrots",
+        "modifier": undefined,
+        "originalText": "1 lb carrots",
+        "unit": "lb",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Toss everything together. Roast until tender.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Toss everything together. Roast until tender.",
+    ],
+    "metadata": undefined,
+    "name": "Roasted Carrots",
+    "notes": undefined,
+    "servings": 6,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "carrots",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "carrots",
+            "originalUnit": "lb",
+            "prepIntent": undefined,
+            "recipeId": "range-seasoning",
+          },
+        ],
+        "unit": "lb",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "cumin",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "cumin",
+            "originalUnit": "2-3 tsp",
+            "prepIntent": undefined,
+            "recipeId": "range-seasoning",
+          },
+        ],
+        "unit": "2-3 tsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "olive oil",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "olive oil",
+            "originalUnit": "1-2 tablespoons",
+            "prepIntent": undefined,
+            "recipeId": "range-seasoning",
+          },
+        ],
+        "unit": "1-2 tablespoons",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 6,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'sauce-duplicate-citrus-prep' 1`] = `
+{
+  "covers": [
+    "duplicate citrus",
+    "preparation intent",
+    "shopping normalization",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "lemon juice",
+            "modifier": undefined,
+            "originalText": "2 tbsp lemon juice",
+            "unit": "tbsp",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "lemon zest",
+            "modifier": undefined,
+            "originalText": "1 tbsp lemon zest",
+            "unit": "tbsp",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.5,
+            "item": "olive oil",
+            "modifier": undefined,
+            "originalText": "1/2 cup olive oil",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "mustard",
+            "modifier": undefined,
+            "originalText": "1 tsp mustard",
+            "unit": "tsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "lemon juice",
+        "modifier": undefined,
+        "originalText": "2 tbsp lemon juice",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "lemon zest",
+        "modifier": undefined,
+        "originalText": "1 tbsp lemon zest",
+        "unit": "tbsp",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.5,
+        "item": "olive oil",
+        "modifier": undefined,
+        "originalText": "1/2 cup olive oil",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "mustard",
+        "modifier": undefined,
+        "originalText": "1 tsp mustard",
+        "unit": "tsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Whisk all ingredients until emulsified.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Whisk all ingredients until emulsified.",
+    ],
+    "metadata": undefined,
+    "name": "Lemon Dressing",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "lemon",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "lemon juice",
+            "originalUnit": "tbsp",
+            "prepIntent": "juiced",
+            "recipeId": "sauce-duplicate-citrus-prep",
+          },
+          {
+            "originalAmount": 1,
+            "originalItem": "lemon zest",
+            "originalUnit": "tbsp",
+            "prepIntent": "zested",
+            "recipeId": "sauce-duplicate-citrus-prep",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "mustard",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "mustard",
+            "originalUnit": "tsp",
+            "prepIntent": undefined,
+            "recipeId": "sauce-duplicate-citrus-prep",
+          },
+        ],
+        "unit": "tsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.5,
+        "excludedBy": undefined,
+        "item": "olive oil",
+        "sources": [
+          {
+            "originalAmount": 0.5,
+            "originalItem": "olive oil",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "sauce-duplicate-citrus-prep",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'servings-in-title' 1`] = `
+{
+  "covers": [
+    "serving count in title",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 12,
+            "item": "tortillas",
+            "modifier": undefined,
+            "originalText": "12 tortillas",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "ground beef",
+            "modifier": undefined,
+            "originalText": "1 lb ground beef",
+            "unit": "lb",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "salsa",
+            "modifier": undefined,
+            "originalText": "1 cup salsa",
+            "unit": "cup",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 12,
+        "item": "tortillas",
+        "modifier": undefined,
+        "originalText": "12 tortillas",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "ground beef",
+        "modifier": undefined,
+        "originalText": "1 lb ground beef",
+        "unit": "lb",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "salsa",
+        "modifier": undefined,
+        "originalText": "1 cup salsa",
+        "unit": "cup",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Brown the beef. Fill tortillas and serve.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Brown the beef. Fill tortillas and serve.",
+    ],
+    "metadata": undefined,
+    "name": "Tacos",
+    "notes": undefined,
+    "servings": 6,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 12,
+        "excludedBy": undefined,
+        "item": "tortillas",
+        "sources": [
+          {
+            "originalAmount": 12,
+            "originalItem": "tortillas",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "servings-in-title",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "ground beef",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "ground beef",
+            "originalUnit": "lb",
+            "prepIntent": undefined,
+            "recipeId": "servings-in-title",
+          },
+        ],
+        "unit": "lb",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "salsa",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "salsa",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "servings-in-title",
+          },
+        ],
+        "unit": "cup",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 6,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'unicode-fractions-pancakes' 1`] = `
+{
+  "covers": [
+    "unicode fractions",
+    "servings",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 1.5,
+            "item": "all-purpose flour",
+            "modifier": undefined,
+            "originalText": "1½ cups all-purpose flour",
+            "unit": "cups",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.5,
+            "item": "milk",
+            "modifier": undefined,
+            "originalText": "½ cup milk",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 0.25,
+            "item": "salt",
+            "modifier": undefined,
+            "originalText": "¼ tsp salt",
+            "unit": "tsp",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 1.5,
+        "item": "all-purpose flour",
+        "modifier": undefined,
+        "originalText": "1½ cups all-purpose flour",
+        "unit": "cups",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.5,
+        "item": "milk",
+        "modifier": undefined,
+        "originalText": "½ cup milk",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 0.25,
+        "item": "salt",
+        "modifier": undefined,
+        "originalText": "¼ tsp salt",
+        "unit": "tsp",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Whisk the dry ingredients.",
+          "Stir in milk and cook on a griddle.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Whisk the dry ingredients.",
+      "Stir in milk and cook on a griddle.",
+    ],
+    "metadata": undefined,
+    "name": "Fluffy Pancakes",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.5,
+        "excludedBy": undefined,
+        "item": "milk",
+        "sources": [
+          {
+            "originalAmount": 0.5,
+            "originalItem": "milk",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "unicode-fractions-pancakes",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1.5,
+        "excludedBy": undefined,
+        "item": "all-purpose flour",
+        "sources": [
+          {
+            "originalAmount": 1.5,
+            "originalItem": "all-purpose flour",
+            "originalUnit": "cups",
+            "prepIntent": undefined,
+            "recipeId": "unicode-fractions-pancakes",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 0.25,
+        "excludedBy": undefined,
+        "item": "salt",
+        "sources": [
+          {
+            "originalAmount": 0.25,
+            "originalItem": "salt",
+            "originalUnit": "tsp",
+            "prepIntent": undefined,
+            "recipeId": "unicode-fractions-pancakes",
+          },
+        ],
+        "unit": "tsp",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'unit-variations-potatoes' 1`] = `
+{
+  "covers": [
+    "singular plural units",
+    "unit variations",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "potatoes",
+            "modifier": undefined,
+            "originalText": "2 pounds potatoes",
+            "unit": "pounds",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "milk",
+            "modifier": undefined,
+            "originalText": "1 cup milk",
+            "unit": "cup",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "butter",
+            "modifier": undefined,
+            "originalText": "2 tablespoons butter",
+            "unit": "tablespoons",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "salt",
+            "modifier": undefined,
+            "originalText": "1 teaspoon salt",
+            "unit": "teaspoon",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "potatoes",
+        "modifier": undefined,
+        "originalText": "2 pounds potatoes",
+        "unit": "pounds",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "milk",
+        "modifier": undefined,
+        "originalText": "1 cup milk",
+        "unit": "cup",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "butter",
+        "modifier": undefined,
+        "originalText": "2 tablespoons butter",
+        "unit": "tablespoons",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "salt",
+        "modifier": undefined,
+        "originalText": "1 teaspoon salt",
+        "unit": "teaspoon",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Boil potatoes. Mash with milk, butter, and salt.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Boil potatoes. Mash with milk, butter, and salt.",
+    ],
+    "metadata": undefined,
+    "name": "Mashed Potatoes",
+    "notes": undefined,
+    "servings": 6,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "potatoes",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "potatoes",
+            "originalUnit": "pounds",
+            "prepIntent": undefined,
+            "recipeId": "unit-variations-potatoes",
+          },
+        ],
+        "unit": "lb",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "butter",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "butter",
+            "originalUnit": "tablespoons",
+            "prepIntent": undefined,
+            "recipeId": "unit-variations-potatoes",
+          },
+        ],
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "milk",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "milk",
+            "originalUnit": "cup",
+            "prepIntent": undefined,
+            "recipeId": "unit-variations-potatoes",
+          },
+        ],
+        "unit": "cup",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "salt",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "salt",
+            "originalUnit": "teaspoon",
+            "prepIntent": undefined,
+            "recipeId": "unit-variations-potatoes",
+          },
+        ],
+        "unit": "tsp",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 6,
+  },
+}
+`;
+
+exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
+{
+  "covers": [
+    "whole count units",
+    "count inference",
+  ],
+  "fixtureVersion": 1,
+  "parsed": {
+    "ingredientGroups": [
+      {
+        "ingredients": [
+          {
+            "alternatives": undefined,
+            "amount": 2,
+            "item": "limes",
+            "modifier": undefined,
+            "originalText": "2 limes",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "orange",
+            "modifier": undefined,
+            "originalText": "1 whole orange",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 3,
+            "item": "tomatoes",
+            "modifier": undefined,
+            "originalText": "3 count tomatoes",
+            "unit": "count",
+          },
+          {
+            "alternatives": undefined,
+            "amount": 1,
+            "item": "jalapeño",
+            "modifier": undefined,
+            "originalText": "1 piece jalapeño",
+            "unit": "piece",
+          },
+        ],
+      },
+    ],
+    "ingredients": [
+      {
+        "alternatives": undefined,
+        "amount": 2,
+        "item": "limes",
+        "modifier": undefined,
+        "originalText": "2 limes",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "orange",
+        "modifier": undefined,
+        "originalText": "1 whole orange",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 3,
+        "item": "tomatoes",
+        "modifier": undefined,
+        "originalText": "3 count tomatoes",
+        "unit": "count",
+      },
+      {
+        "alternatives": undefined,
+        "amount": 1,
+        "item": "jalapeño",
+        "modifier": undefined,
+        "originalText": "1 piece jalapeño",
+        "unit": "piece",
+      },
+    ],
+    "instructionGroups": [
+      {
+        "steps": [
+          "Dice all produce. Mix and chill.",
+        ],
+      },
+    ],
+    "instructions": [
+      "Dice all produce. Mix and chill.",
+    ],
+    "metadata": undefined,
+    "name": "Citrus Salsa",
+    "notes": undefined,
+    "servings": 4,
+    "warnings": [],
+  },
+  "shoppingContribution": {
+    "alreadyHave": [],
+    "excluded": [],
+    "items": [
+      {
+        "additionalAmounts": undefined,
+        "amount": 2,
+        "excludedBy": undefined,
+        "item": "lime",
+        "sources": [
+          {
+            "originalAmount": 2,
+            "originalItem": "limes",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "whole-count-variations",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "orange",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "orange",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "whole-count-variations",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 3,
+        "excludedBy": undefined,
+        "item": "tomatoes",
+        "sources": [
+          {
+            "originalAmount": 3,
+            "originalItem": "tomatoes",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "whole-count-variations",
+          },
+        ],
+        "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "jalapeño",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "jalapeño",
+            "originalUnit": "piece",
+            "prepIntent": undefined,
+            "recipeId": "whole-count-variations",
+          },
+        ],
+        "unit": "piece",
+      },
+    ],
+    "scale": 1,
+    "totalServings": 4,
+  },
+}
+`;

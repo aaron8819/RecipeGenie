@@ -94,6 +94,20 @@ describe('generateShoppingList', () => {
       expect(flour?.unit).toBe('cup')
       expect(sugar?.unit).toBe('tbsp')
     })
+
+    it('should preserve exact unconverted recipe fractions', () => {
+      const recipe = createMockRecipe({
+        ingredients: [
+          { item: 'Sugar', amount: 1 / 3, unit: 'cup' },
+          { item: 'Yeast', amount: 1 / 5, unit: 'tsp' },
+        ],
+      })
+
+      const result = generateShoppingList([recipe], [], [])
+
+      expect(result.items.find(i => i.item === 'sugar')?.amount).toBe(1 / 3)
+      expect(result.items.find(i => i.item === 'yeast')?.amount).toBe(1 / 5)
+    })
   })
 
   describe('ingredient aggregation', () => {

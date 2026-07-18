@@ -116,6 +116,54 @@ describe("authoritative recipe shopping contributions", () => {
     expect(result.shoppingList.total_servings).toBe(8)
   })
 
+  it("replaces an edited ingredient without leaving its stale contribution", () => {
+    const previous = contribution("a", 1)
+    const current = project(list(), [], [previous]).shoppingList
+    const replacement = contribution("a", 2)
+    replacement.items = [
+      item("a", replacement.recipeName, 2, {
+        item: "oat milk",
+      }),
+    ]
+
+    const result = project(
+      { ...list(), ...current },
+      [previous],
+      [replacement]
+    )
+
+    expect(result.shoppingList.items).toEqual([
+      expect.objectContaining({ item: "oat milk", amount: 2 }),
+    ])
+    expect(result.shoppingList.items.some((candidate) => candidate.item === "milk")).toBe(false)
+  })
+
+  it("removes a deleted ingredient and keeps the recipe's remaining contribution once", () => {
+    const previous = contribution("a", 1)
+    previous.items.push(
+      item("a", previous.recipeName, 2, {
+        item: "eggs",
+        unit: "count",
+      })
+    )
+    const current = project(list(), [], [previous]).shoppingList
+    const replacement = contribution("a", 1)
+
+    const result = project(
+      { ...list(), ...current },
+      [previous],
+      [replacement]
+    )
+
+    expect(result.shoppingList.items).toHaveLength(1)
+    expect(result.shoppingList.items[0]).toMatchObject({
+      item: "milk",
+      amount: 1,
+    })
+    expect(result.shoppingList.items[0].sources).toHaveLength(1)
+    expect(result.shoppingList.items.some((candidate) => candidate.item === "eggs")).toBe(false)
+  })
+
   it("sums two recipes sharing a normalized ingredient", () => {
     const result = project(
       list(),

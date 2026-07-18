@@ -214,7 +214,7 @@ function parseTopLevelSectionKind(line: string): SectionKind | null {
   const normalized = normalizeHeaderLabel(line)
   if (!normalized) return null
 
-  if (/^ingredients?$/.test(normalized)) {
+  if (/^(?:ingredients?|what (?:you(?:['’]?ll| will)? )?need)$/.test(normalized)) {
     return "ingredients"
   }
 
@@ -363,6 +363,10 @@ function cleanDetectedTitle(value: string): string {
 
 function stripServingsFromTitle(value: string): string {
   return value
+    .replace(
+      /\s*[\(\-–—,]?\s*(?:makes?|serves?)\s+\d+\s*(?:servings?|people|portions?)?\)?$/i,
+      ""
+    )
     .replace(/\s*[\(\-–—,]?\s*\d+\s*(?:servings?|people|portions?)\)?$/i, "")
     .replace(/\s*\(\s*serves?\s+\d+\s*\)$/i, "")
     .trim()
@@ -848,7 +852,7 @@ export function parseIngredientLine(line: string): Ingredient {
   cleaned = normalizeUnicode(cleaned)
 
   const amountPattern =
-    /^(\d+\/\d+|\d+\.\d+|\d+)(\s*[\u2013\u2014-]\s*(\d+\/\d+|\d+\.\d+|\d+))?(\s+|$)/
+    /^(\d+\s+\d+\/\d+|\d+\/\d+|\d+\.\d+|\d+)(\s*[\u2013\u2014-]\s*(\d+\s+\d+\/\d+|\d+\/\d+|\d+\.\d+|\d+))?(?=\s|$|[a-z])/i
   const amountMatch = cleaned.match(amountPattern)
 
   if (amountMatch) {
@@ -923,6 +927,16 @@ function normalizeUnicode(text: string): string {
 }
 
 function parseAmount(amountStr: string): number {
+  const mixedFraction = amountStr.match(/^(\d+)\s+(\d+)\/(\d+)$/)
+  if (mixedFraction) {
+    const whole = parseFloat(mixedFraction[1])
+    const numerator = parseFloat(mixedFraction[2])
+    const denominator = parseFloat(mixedFraction[3])
+    if (denominator !== 0) {
+      return whole + numerator / denominator
+    }
+  }
+
   if (amountStr.includes("/")) {
     return parseFraction(amountStr)
   }

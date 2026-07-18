@@ -28,7 +28,7 @@ export function middleware(request: NextRequest) {
     "font-src 'self' data:",
     // In dev: allow localhost for HMR WebSocket
     isDev
-      ? "connect-src 'self' https://*.supabase.co wss://*.supabase.co ws://localhost:* http://localhost:*"
+      ? "connect-src 'self' https://*.supabase.co wss://*.supabase.co ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*"
       : "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
     "frame-ancestors 'none'",
     "base-uri 'self'",

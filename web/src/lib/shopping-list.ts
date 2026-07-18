@@ -23,6 +23,32 @@ export interface ShoppingListResult {
   totalServings: number
 }
 
+const EXACT_RECIPE_FRACTIONS = [
+  1 / 6,
+  1 / 5,
+  1 / 3,
+  2 / 5,
+  3 / 5,
+  2 / 3,
+  4 / 5,
+  5 / 6,
+]
+
+function roundShoppingQuantity(value: number, preserveExactFraction: boolean): number {
+  if (preserveExactFraction) {
+    const whole = Math.floor(value)
+    const fractional = value - whole
+    const exactFraction = EXACT_RECIPE_FRACTIONS.find(
+      (candidate) => Math.abs(fractional - candidate) < 0.000001
+    )
+    if (exactFraction !== undefined) {
+      return whole + exactFraction
+    }
+  }
+
+  return roundForDisplay(value)
+}
+
 function mergeIntoAdditionalAmounts(
   existing: { amount: number; unit: string }[] | undefined,
   amount: number,
@@ -133,6 +159,7 @@ export function generateShoppingList(
       additionalAmounts?: { amount: number; unit: string }[]
       alternatives?: string[]
       citrusPrepByRecipe?: Map<string, CitrusPrepNeeds>
+      preserveExactFraction: boolean
     }
   >()
 
@@ -150,6 +177,9 @@ export function generateShoppingList(
       const itemName = purchase.purchaseName
       const amount = (purchase.purchaseQuantity || 0) * scale
       const unit = normalizeUnit(purchase.purchaseUnit || "")
+      const preserveExactFraction =
+        purchase.purchaseQuantity === purchase.originalQuantity &&
+        unit === normalizeUnit(purchase.originalUnit || "")
       const shoppingCategory = ingredient.shoppingCategory
       const recipeKey = recipe.id || recipe.name
       const source = {
@@ -172,6 +202,8 @@ export function generateShoppingList(
       if (ingredientMap.has(key)) {
         const existing = ingredientMap.get(key)!
         let amountToMerge = amount
+        existing.preserveExactFraction =
+          existing.preserveExactFraction && preserveExactFraction && existing.unit === unit
 
         if (isOverlappingCitrusPrep(itemName, unit, purchase.prepIntent)) {
           existing.citrusPrepByRecipe ||= new Map<string, CitrusPrepNeeds>()
@@ -227,6 +259,7 @@ export function generateShoppingList(
           sources: [source],
           alternatives: ingredient.alternatives?.map(a => normalizeItemName(a)),
           citrusPrepByRecipe,
+          preserveExactFraction,
         })
       }
     }
@@ -247,7 +280,9 @@ export function generateShoppingList(
 
     const shoppingItem: ShoppingItem = {
       item: ingredient.item, // Normalized to lowercase
-      amount: ingredient.amount > 0 ? roundForDisplay(ingredient.amount) : null,
+      amount: ingredient.amount > 0
+        ? roundShoppingQuantity(ingredient.amount, ingredient.preserveExactFraction)
+        : null,
       unit: ingredient.unit, // Normalized
       categoryKey: catKey,
       categoryOrder: catOrder,

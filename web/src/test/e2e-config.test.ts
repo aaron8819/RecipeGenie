@@ -4,6 +4,8 @@ import { assertAllowedOrigin, createE2EConfig, PRODUCTION_ORIGIN } from '../../t
 const fakeCredentials = {
   RECIPE_GENIE_E2E_EMAIL: 'playwright-user@example.invalid',
   RECIPE_GENIE_E2E_PASSWORD: 'fake-password-for-tests-only',
+  NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'fake-local-anon-key',
 }
 
 function localEnv(overrides: Record<string, string | undefined> = {}) {
@@ -51,6 +53,30 @@ describe('Playwright E2E configuration', () => {
     expect(createE2EConfig(localEnv()).allowedOrigin).toBe('http://127.0.0.1:3107')
     expect(() => createE2EConfig(localEnv({ RECIPE_GENIE_E2E_BASE_URL: 'http://127.0.0.1:3108' }))).toThrow('port 3107')
     expect(() => createE2EConfig(localEnv({ RECIPE_GENIE_E2E_BASE_URL: 'http://recipe-genie.local:3107' }))).toThrow('localhost')
+    expect(() => createE2EConfig(localEnv({ NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co' }))).toThrow('loopback-local')
+    expect(() => createE2EConfig(localEnv({
+      NEXT_PUBLIC_SUPABASE_URL: 'https://eyaoahwzixqetjgfghsh.supabase.co',
+    }))).toThrow('Production Supabase project')
+  })
+
+  it('keeps production available only outside explicit local-only mode', () => {
+    expect(createE2EConfig({
+      ...fakeCredentials,
+      NEXT_PUBLIC_SUPABASE_URL: 'https://eyaoahwzixqetjgfghsh.supabase.co',
+      RECIPE_GENIE_E2E_TARGET: 'production',
+      RECIPE_GENIE_E2E_BASE_URL: PRODUCTION_ORIGIN,
+      RECIPE_GENIE_E2E_ALLOW_PRODUCTION: 'true',
+    }).allowedOrigin).toBe(PRODUCTION_ORIGIN)
+  })
+
+  it('rejects production even with opt-in when local-only mode is enabled', () => {
+    expect(() => createE2EConfig({
+      ...fakeCredentials,
+      RECIPE_GENIE_E2E_TARGET: 'production',
+      RECIPE_GENIE_E2E_BASE_URL: PRODUCTION_ORIGIN,
+      RECIPE_GENIE_E2E_ALLOW_PRODUCTION: 'true',
+      RECIPE_GENIE_E2E_LOCAL_ONLY: 'true',
+    })).toThrow('local E2E target')
   })
 
   it('requires an exact approved HTTPS preview origin', () => {
