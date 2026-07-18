@@ -79,8 +79,63 @@ function ApiResponse([int]$statusCode, [string]$content, [string]$location=$null
 function ProjectJson([string]$projectRef=$ref,[string]$status='ACTIVE_HEALTHY',[string]$databaseHost="db.$ref.supabase.co") {
     [ordered]@{id='safe-id';ref=$projectRef;organization_id='safe-org';name='Recipe Genie';region='us-east-1';created_at='2026-01-01T00:00:00Z';status=$status;database=[ordered]@{host=$databaseHost;version='17';postgres_engine='17';release_channel='ga'}} | ConvertTo-Json -Compress -Depth 4
 }
+function RepositoryFixture($name, [string]$packageJson='{"name":"recipe-genie","private":true}', [switch]$MissingPackage) {
+    $dir = Join-Path $temp $name
+    foreach($relativePath in @('web','supabase/migrations','scripts/database')) {
+        [IO.Directory]::CreateDirectory((Join-Path $dir $relativePath)) | Out-Null
+    }
+    if (-not $MissingPackage) { [IO.File]::WriteAllText((Join-Path $dir 'web/package.json'), $packageJson) }
+    [IO.File]::WriteAllText((Join-Path $dir 'supabase/migrations/001_baseline.sql'), '-- fixture')
+    foreach($file in @('Backup-RecipeGenieProduction.ps1','RecipeGenieBackup.Common.ps1')) {
+        [IO.File]::Copy((Join-Path $root $file), (Join-Path $dir "scripts/database/$file"))
+    }
+    $dir
+}
 
 try {
+    Case 'canonical Recipe Genie repository layout is accepted' {
+        $fixture=RepositoryFixture 'canonical-layout'
+        Must (-not (Test-Path -LiteralPath (Join-Path $fixture 'package.json')))
+        Must (Test-RecipeGenieRepositoryRoot $fixture)
+    }
+    Case 'unrelated web package is rejected' { Must (-not (Test-RecipeGenieRepositoryRoot (RepositoryFixture 'wrong-package' '{"name":"unrelated-app","private":true}'))) }
+    Case 'missing web package is rejected' { Must (-not (Test-RecipeGenieRepositoryRoot (RepositoryFixture 'missing-package' -MissingPackage))) }
+    Case 'malformed web package fails closed' { Must (-not (Test-RecipeGenieRepositoryRoot (RepositoryFixture 'malformed-package' '{'))) }
+    Case 'ambiguous duplicate package metadata fails closed' { Must (-not (Test-RecipeGenieRepositoryRoot (RepositoryFixture 'duplicate-package' '{"name":"recipe-genie","name":"unrelated-app","private":true}'))) }
+    Case 'valid repository path containing spaces is accepted' { Must (Test-RecipeGenieRepositoryRoot (RepositoryFixture 'valid repository with spaces')) }
+    Case 'nested and unrelated explicit roots are rejected' {
+        $fixture=RepositoryFixture 'explicit-root'
+        Must (-not (Test-RecipeGenieRepositoryRoot (Join-Path $fixture 'web')))
+        Must (-not (Test-RecipeGenieRepositoryRoot (Join-Path $temp 'unrelated-root')))
+    }
+    Case 'valid fixture invocation passes repository identity and stops before API or database access' {
+        $fixture=RepositoryFixture 'valid invocation with spaces'
+        $null=Invoke-GitCapture $gitExecutable @('-C',$fixture,'init')
+        $oldUrl=$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL;$oldRef=$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF;$oldToken=$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN
+        try {
+            $env:RECIPE_GENIE_PRODUCTION_DATABASE_URL="postgresql://postgres:fixture-only@db.$ref.supabase.co/postgres"
+            $env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$ref
+            $env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN='fixture-only-token'
+            $destination=Join-Path $temp 'valid-invocation-output'
+            $result=Child (Join-Path $fixture 'scripts/database/Backup-RecipeGenieProduction.ps1') @('-DestinationRoot',('"'+$destination+'"'))
+            Must ($result.ExitCode -ne 0 -and $result.Output -match 'Connected project identity is unavailable')
+            Must (-not (Test-Path -LiteralPath $destination))
+        } finally { $env:RECIPE_GENIE_PRODUCTION_DATABASE_URL=$oldUrl;$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$oldRef;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN=$oldToken }
+    }
+    Case 'invalid repository identity stops before API or database access' {
+        $fixture=RepositoryFixture 'invalid-invocation' '{"name":"unrelated-app","private":true}'
+        $null=Invoke-GitCapture $gitExecutable @('-C',$fixture,'init')
+        $oldUrl=$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL;$oldRef=$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF;$oldToken=$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN
+        try {
+            $env:RECIPE_GENIE_PRODUCTION_DATABASE_URL="postgresql://postgres:fixture-only@db.$ref.supabase.co/postgres"
+            $env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$ref
+            $env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN='fixture-only-token'
+            $destination=Join-Path $temp 'invalid-invocation-output'
+            $result=Child (Join-Path $fixture 'scripts/database/Backup-RecipeGenieProduction.ps1') @('-DestinationRoot',('"'+$destination+'"'))
+            Must ($result.ExitCode -ne 0 -and $result.Output -match 'not the expected Recipe Genie repository')
+            Must (-not (Test-Path -LiteralPath $destination))
+        } finally { $env:RECIPE_GENIE_PRODUCTION_DATABASE_URL=$oldUrl;$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$oldRef;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN=$oldToken }
+    }
     $registeredWorktrees = Get-RegisteredGitWorktreePaths $repo $gitExecutable
     Case 'destination inside repository rejected' { Throws { Assert-ExternalDestination (Join-Path $repo 'x') $registeredWorktrees } 'outside' }
     Case 'destination inside another registered worktree rejected' {

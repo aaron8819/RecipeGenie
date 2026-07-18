@@ -26,9 +26,7 @@ $gitVersion = Get-SanitizedGitVersion $gitExecutablePath
 $rootResult = Invoke-GitCapture $gitExecutablePath @('-C', $PSScriptRoot, 'rev-parse', '--show-toplevel')
 if ($rootResult.ExitCode -ne 0 -or -not $rootResult.Output) { throw "Git repository root could not be established." }
 $repositoryRoot = $rootResult.Output.Trim()
-$packagePath = Join-Path $repositoryRoot 'package.json'
-try { $repositoryPackage = [IO.File]::ReadAllText($packagePath) | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Recipe Genie repository identity could not be established.' }
-if ($repositoryPackage.name -ne 'recipe-genie' -or -not (Test-Path -LiteralPath (Join-Path $repositoryRoot 'supabase/migrations/001_baseline.sql') -PathType Leaf)) {
+if (-not (Test-RecipeGenieRepositoryRoot -RepositoryRoot $repositoryRoot)) {
     throw 'Current repository is not the expected Recipe Genie repository.'
 }
 $registeredWorktrees = Get-RegisteredGitWorktreePaths -RepositoryRoot $repositoryRoot -GitExecutablePath $gitExecutablePath

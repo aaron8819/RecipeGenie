@@ -18,6 +18,8 @@ This directory provides a small PostgreSQL logical-backup gate. It creates one o
 
 ## Required inputs
 
+The backup entry point resolves the repository root from its own checked-in script location; it never falls back to the caller's current directory. Repository identity requires the private `recipe-genie` package metadata in `web/package.json`, `supabase/migrations/001_baseline.sql`, and the canonical backup entry point and common module under `scripts/database`. Missing, unreadable, malformed, duplicate, or unrelated package metadata fails closed before any Management API or database access.
+
 Set these in the current process only:
 
 - RECIPE_GENIE_PRODUCTION_DATABASE_URL: complete direct PostgreSQL URL, including password. A deliberately supplied compatible session-pooler URL is accepted only with AllowSessionPooler.

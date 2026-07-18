@@ -84,6 +84,41 @@ function Test-PathWithin {
     return $candidatePath.StartsWith($parentPath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Test-RecipeGenieRepositoryRoot {
+    param([Parameter(Mandatory)] [string]$RepositoryRoot)
+
+    $document = $null
+    try {
+        $root = Get-NormalizedFullPath $RepositoryRoot
+        $requiredFiles = @(
+            'web/package.json',
+            'supabase/migrations/001_baseline.sql',
+            'scripts/database/Backup-RecipeGenieProduction.ps1',
+            'scripts/database/RecipeGenieBackup.Common.ps1'
+        )
+        foreach ($relativePath in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath (Join-Path $root $relativePath) -PathType Leaf)) { return $false }
+        }
+
+        $packageText = [IO.File]::ReadAllText((Join-Path $root 'web/package.json'))
+        $document = [Text.Json.JsonDocument]::Parse($packageText)
+        Assert-NoDuplicateJsonProperties $document.RootElement
+        if ($document.RootElement.ValueKind -ne [Text.Json.JsonValueKind]::Object) { return $false }
+
+        $name = [Text.Json.JsonElement]::new()
+        $private = [Text.Json.JsonElement]::new()
+        if (-not $document.RootElement.TryGetProperty('name', [ref]$name) -or $name.ValueKind -ne [Text.Json.JsonValueKind]::String -or
+            -not $document.RootElement.TryGetProperty('private', [ref]$private) -or $private.ValueKind -notin @([Text.Json.JsonValueKind]::True, [Text.Json.JsonValueKind]::False)) {
+            return $false
+        }
+        return $name.GetString() -ceq 'recipe-genie' -and $private.GetBoolean()
+    } catch {
+        return $false
+    } finally {
+        if ($document) { $document.Dispose() }
+    }
+}
+
 function Resolve-GitExecutable {
     param([scriptblock]$CommandLookup)
 
