@@ -22,14 +22,19 @@ Set these in the current process only:
 
 - RECIPE_GENIE_PRODUCTION_DATABASE_URL: complete direct PostgreSQL URL, including password. A deliberately supplied compatible session-pooler URL is accepted only with AllowSessionPooler.
 - RECIPE_GENIE_PRODUCTION_PROJECT_REF: expected 20-character Recipe Genie Supabase project reference.
+- RECIPE_GENIE_SUPABASE_ACCESS_TOKEN: Supabase Management API token with only the metadata-read access needed by `GET /v1/projects/{ref}` (`projects:read` OAuth scope or the documented fine-grained `project_admin_read` permission).
 
-Never paste the URL into a command argument, source file, transcript, or PowerShell history assignment. Populate it through an approved secret source in the process environment.
+Never paste the database URL or Management API token into chat, a command argument, source code, a transcript, or a Git-tracked `.env` file. Populate them through an approved secret source in the current process environment. Do not substitute an anon key, service-role key, database password, or application JWT for the Management API token.
 
-The checkout must also have been linked independently with the Supabase CLI. The script reads `supabase/.temp/project-ref` and requires it to match both the explicit project reference and the project identity encoded by the supplied connection endpoint. The read-only connection probe then requires the Recipe Genie `public.recipes` marker and the exact pre-012 migration ledger (`001` through `011`). Missing or contradictory local identity evidence fails before a connection or output directory is created; connected schema/ledger disagreement quarantines the incomplete attempt and stops before `pg_dump`.
+The token is required because database-schema evidence alone cannot identify a Supabase project. Before any database connection or output directory is created, the script makes exactly one TLS Management API metadata read to `GET /v1/projects/{expected-ref}`. It requires an exact returned `ref`, `ACTIVE_HEALTHY` status, a present and internally consistent `database.host`, and endpoint compatibility. API errors, timeouts, malformed or duplicate JSON fields, redirects, missing fields, inactive status, and contradictions fail closed; Management API unavailability is never downgraded to a warning. The token is sent only in the Authorization header, is never a child-process argument, and is included in in-memory redaction inputs. No full response, token, database URL, or raw credential-bearing username is recorded in the manifest or summary.
+
+The checkout must also have been linked independently with the Supabase CLI. The script reads `supabase/.temp/project-ref` and requires it to match the explicit project reference and endpoint identity. The separate read-only database probe requires `current_database() = postgres`, the permitted current-user policy, a server version, `public.recipes`, `public.pantry_items`, `public.user_config`, and the exact pre-012 migration ledger (`001` through `011`). Missing or contradictory local or control-plane evidence fails before a connection or output directory is created; connected schema/ledger disagreement quarantines the incomplete attempt and stops before `pg_dump`.
 
 In Supabase Dashboard, obtain the project reference from Project Settings / General, the direct connection string from Connect / Direct connection, and the database password from the project database credentials (reset it if it is not available). Check the server major version in Dashboard or with the documented read-only select version() query. The repository local major is 17, but the script queries the connected server and requires matching pg_dump major version.
 
-Use the direct db.PROJECT_REF.supabase.co endpoint when local DNS/IPv6 permits. If direct-host DNS or IPv6 fails, manually supply the compatible port-5432 session-pooler URL and add AllowSessionPooler. The script never constructs, discovers, or substitutes an endpoint. Port 6543 transaction pooling is rejected.
+For a direct connection, the normalized configured host must exactly equal Management API `database.host`; case, a trailing DNS dot, and IPv6 bracket notation are normalized without DNS lookup or substitution. Use the direct `db.PROJECT_REF.supabase.co` endpoint when local DNS/IPv6 permits.
+
+If direct-host DNS or IPv6 fails, manually supply the compatible port-5432 session-pooler URL and add `-AllowSessionPooler`. The pooler hostname may legitimately differ from Management API `database.host`, so the gate instead requires an exact recognized `*.pooler.supabase.com` hostname, the exact `postgres.PROJECT_REF` login structure, explicit opt-in, the matching API project ref, and the internally consistent API direct database host. Unsafe substring host matching, transaction pooling on port 6543, endpoint discovery, DNS substitution, and implicit pooler selection are rejected.
 
 ## Commands for later authorized use
 
@@ -80,6 +85,8 @@ The database URL is parsed once and supplied to PostgreSQL tools through tempora
 
 Each backup is bound to one migration and its matching read-only preflight. Their SHA-256 values are computed from the exact Git blobs at `gitCommitSha`; the manifest records both paths, hashes, and commit identity. The migration assertion requires the current HEAD, worktree-normalized content, manifest commit, migration hash, and preflight hash all to agree. Migration 012 always requires `restoreVerified=true`, even if the caller omits `-RequireRestoreVerification`.
 
+Manifest schema version 3 makes control-plane identity evidence mandatory. Offline verification rejects all version 1 and version 2 manifests, as well as version 3 manifests missing the project-ref match, acceptable status, database-host match, repository-link match, connected database evidence, or final `identityVerification.verified=true`. This is an intentional compatibility break: older backups must not silently satisfy the stronger production identity gate.
+
 ## Risk policy
 
 Routine examples are additive nullable columns, safe additive indexes/tables, backward-compatible functions, and additive constraints already proven by preflight. Require a fresh verified logical backup, archive/project/age/size/hash/ledger/marker checks, migration-specific preflight when applicable, and explicit human authorization. Disposable restore is optional unless the owner requires it.
@@ -106,6 +113,8 @@ The repair and migration must not share authorization. Required application evid
 ## Disposable restore and limitations
 
 Archive validation is mandatory for every migration backup but does not prove restorability. Elevated/high risk and migration 012 require a successful disposable restore; periodic restore drills are also recommended during routine-only periods. Restore the exact unchanged archive, never ignore restore errors, and do not substitute repository migration replay for backup restoration.
+
+Control-plane verification confirms project metadata and endpoint compatibility; it does not prove that the resulting archive is restorable. Restorability remains a separate disposable-restore state and authorization.
 
 An isolated compatible Supabase project or Supabase-local environment is preferred. Generic PostgreSQL is acceptable only when every required schema/extension is supported. Supabase-managed configuration, Auth platform configuration, global roles, secrets, and Storage object payloads need separate recovery treatment. Storage object files in recipe-images are not in database.dump.
 

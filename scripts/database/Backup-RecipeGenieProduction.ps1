@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)] [string]$DestinationRoot,
     [switch]$AllowSessionPooler,
     [string]$PostgreSqlBinDirectory,
+    [ValidateRange(1, 60)] [int]$ManagementApiTimeoutSeconds = 10,
     [string]$MigrationPath = 'supabase/migrations/012_enforce_uuid_active_recipe_writes.sql'
 )
 
@@ -12,36 +13,48 @@ $ErrorActionPreference = 'Stop'
 
 $databaseUrlVariable = 'RECIPE_GENIE_PRODUCTION_DATABASE_URL'
 $projectReferenceVariable = 'RECIPE_GENIE_PRODUCTION_PROJECT_REF'
+$accessTokenVariable = 'RECIPE_GENIE_SUPABASE_ACCESS_TOKEN'
 $databaseUrl = [Environment]::GetEnvironmentVariable($databaseUrlVariable, 'Process')
 $projectReference = [Environment]::GetEnvironmentVariable($projectReferenceVariable, 'Process')
+$accessToken = [Environment]::GetEnvironmentVariable($accessTokenVariable, 'Process')
 if ([string]::IsNullOrWhiteSpace($databaseUrl)) { throw "Required environment variable $databaseUrlVariable is missing." }
 if ([string]::IsNullOrWhiteSpace($projectReference)) { throw "Required environment variable $projectReferenceVariable is missing." }
+if ([string]::IsNullOrWhiteSpace($accessToken)) { throw "Required environment variable $accessTokenVariable is missing." }
 
-$repositoryRoot = (git -C $PSScriptRoot rev-parse --show-toplevel 2>$null)
-if ($LASTEXITCODE -ne 0 -or -not $repositoryRoot) { throw "Git repository root could not be established." }
-$repositoryRoot = $repositoryRoot.Trim()
-$registeredWorktrees = Get-RegisteredGitWorktreePaths -RepositoryRoot $repositoryRoot
+$gitExecutablePath = Resolve-GitExecutable
+$gitVersion = Get-SanitizedGitVersion $gitExecutablePath
+$rootResult = Invoke-GitCapture $gitExecutablePath @('-C', $PSScriptRoot, 'rev-parse', '--show-toplevel')
+if ($rootResult.ExitCode -ne 0 -or -not $rootResult.Output) { throw "Git repository root could not be established." }
+$repositoryRoot = $rootResult.Output.Trim()
+$packagePath = Join-Path $repositoryRoot 'package.json'
+try { $repositoryPackage = [IO.File]::ReadAllText($packagePath) | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Recipe Genie repository identity could not be established.' }
+if ($repositoryPackage.name -ne 'recipe-genie' -or -not (Test-Path -LiteralPath (Join-Path $repositoryRoot 'supabase/migrations/001_baseline.sql') -PathType Leaf)) {
+    throw 'Current repository is not the expected Recipe Genie repository.'
+}
+$registeredWorktrees = Get-RegisteredGitWorktreePaths -RepositoryRoot $repositoryRoot -GitExecutablePath $gitExecutablePath
 Assert-ExternalDestination -DestinationRoot $DestinationRoot -RegisteredWorktreePaths $registeredWorktrees
 $linkedProjectReference = Get-LinkedProjectReference -RepositoryRoot $repositoryRoot
 if ($linkedProjectReference -ne $projectReference) {
     throw 'Expected project reference does not match the independently linked Supabase project.'
 }
 $connection = ConvertFrom-RecipeGenieDatabaseUrl -DatabaseUrl $databaseUrl -ExpectedProjectReference $projectReference -AllowSessionPooler:$AllowSessionPooler
+$controlPlane = Invoke-SupabaseProjectMetadata -AccessToken $accessToken -ExpectedProjectReference $projectReference -Connection $connection -TimeoutSeconds $ManagementApiTimeoutSeconds
 
-$gitCommitSha = (git -C $repositoryRoot rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0 -or $gitCommitSha -notmatch '^[0-9a-f]{40}$') { throw "Git commit SHA could not be captured." }
+$commitResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'rev-parse', 'HEAD')
+$gitCommitSha = if ($commitResult.Output) { $commitResult.Output.Trim() } else { '' }
+if ($commitResult.ExitCode -ne 0 -or $gitCommitSha -notmatch '^[0-9a-f]{40}$') { throw "Git commit SHA could not be captured." }
 $migrationRelativePath = $MigrationPath.Replace('\\', '/')
 $migrationFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $migrationRelativePath)
 if (-not (Test-PathWithin -Candidate $migrationFullPath -Parent $repositoryRoot) -or -not (Test-Path -LiteralPath $migrationFullPath -PathType Leaf)) {
     throw 'Migration file is missing or outside the repository.'
 }
-$migrationCommitHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $migrationRelativePath
-if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $migrationRelativePath)) { throw 'Migration file differs from the recorded Git commit.' }
+$migrationCommitHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $migrationRelativePath -GitExecutablePath $gitExecutablePath
+if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $migrationRelativePath -GitExecutablePath $gitExecutablePath)) { throw 'Migration file differs from the recorded Git commit.' }
 $preflightRelativePath = 'scripts/database/preflight/' + [IO.Path]::GetFileName($migrationRelativePath)
 $preflightFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $preflightRelativePath)
 if (-not (Test-Path -LiteralPath $preflightFullPath -PathType Leaf)) { throw 'Commit-bound migration preflight is missing.' }
-$preflightCommitHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath
-if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath)) { throw 'Migration preflight differs from the recorded Git commit.' }
+$preflightCommitHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath -GitExecutablePath $gitExecutablePath
+if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath -GitExecutablePath $gitExecutablePath)) { throw 'Migration preflight differs from the recorded Git commit.' }
 
 $destination = Get-NormalizedFullPath $DestinationRoot
 [IO.Directory]::CreateDirectory($destination) | Out-Null
@@ -55,10 +68,10 @@ $logsDirectory = Join-Path $backupDirectory 'logs'
 $archivePath = Join-Path $backupDirectory 'database.dump'
 $manifestPath = Join-Path $backupDirectory 'manifest.json'
 $summaryPath = Join-Path $backupDirectory 'summary.txt'
-$literalSecrets = @($databaseUrl, $connection.Password, [Uri]::EscapeDataString($connection.Password))
+$literalSecrets = @($databaseUrl, $connection.Password, [Uri]::EscapeDataString($connection.Password), $accessToken)
 
 $manifest = [ordered]@{
-    schemaVersion = 2
+    schemaVersion = 3
     appName = 'Recipe Genie'
     environment = 'production'
     projectReference = $projectReference
@@ -70,11 +83,21 @@ $manifest = [ordered]@{
         version = $PSVersionTable.PSVersion.ToString()
         architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
     }
-    connectedIdentity = [ordered]@{
-        linkedProjectReference = $linkedProjectReference
-        endpointAndLinkCorroborated = $true
-        databaseSchemaCorroborated = $false
+    identityVerification = [ordered]@{
+        verified = $false
+        expectedProjectReference = $projectReference
+        repositoryIdentityMatched = $true
+        repositoryLinkedReferenceMatched = $true
+        controlPlaneProjectReferenceMatched = $true
+        controlPlaneProjectStatus = $controlPlane.ProjectStatus
+        controlPlaneDatabaseHostMatched = $controlPlane.DatabaseHostMatched
+        endpointType = $connection.EndpointType
+        connectedDatabase = $null
+        connectedUserClass = $null
+        postgresServerVersionAvailable = $false
+        migrationLedgerFound = $false
         migrationLedgerVersions = $null
+        applicationMarkersFound = $false
     }
     migration = [ordered]@{
         path = $migrationRelativePath
@@ -100,7 +123,7 @@ $manifest = [ordered]@{
     }
     postgresServerVersion = $null
     connectionType = $connection.EndpointType
-    toolVersions = [ordered]@{}
+    toolVersions = [ordered]@{ git = $gitVersion }
     artifacts = @()
     archiveContents = [ordered]@{
         migrationLedgerFound = $false
@@ -149,7 +172,8 @@ try {
     $identityErr = Join-Path $logsDirectory 'identity.stderr.log'
     $identitySql = @"
 select current_database(), current_user, current_setting('server_version_num'), version(),
-       to_regclass('public.recipes')::text,
+       to_regclass('public.recipes')::text, to_regclass('public.pantry_items')::text,
+       to_regclass('public.user_config')::text,
        coalesce((select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations), '');
 "@
     $identityArguments = @('-X','--no-psqlrc','-At','--field-separator=|','--set=ON_ERROR_STOP=1', '--command', $identitySql)
@@ -158,23 +182,30 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $manifest.commandResults.serverVersionQueryExitCode = $identityResult.ExitCode
     Assert-NativeExitCode $identityResult 'Read-only server identity query'
     $identityLine = ([IO.File]::ReadAllLines($identityOut) | Where-Object { $_.Trim() } | Select-Object -First 1)
-    $identityParts = @($identityLine -split '\|', 6)
+    $identityParts = @($identityLine -split '\|', 8)
     $expectedLedger = '001,002,003,004,005,006,007,008,009,010,011'
-    if ($identityParts.Count -ne 6 -or $identityParts[0] -ne $connection.Database -or $identityParts[1] -ne 'postgres' -or
-        $identityParts[4] -ne 'public.recipes' -or $identityParts[5] -ne $expectedLedger) {
+    if ($identityParts.Count -ne 8 -or $identityParts[0] -ne 'postgres' -or $identityParts[0] -ne $connection.Database -or $identityParts[1] -ne 'postgres' -or
+        $identityParts[4] -ne 'public.recipes' -or $identityParts[5] -ne 'public.pantry_items' -or
+        $identityParts[6] -ne 'public.user_config' -or $identityParts[7] -ne $expectedLedger) {
         throw "Connected database does not corroborate the expected Recipe Genie pre-migration identity."
     }
-    $manifest.connectedIdentity.databaseSchemaCorroborated = $true
-    $manifest.connectedIdentity.migrationLedgerVersions = @($identityParts[5].Split(','))
+    $manifest.identityVerification.connectedDatabase = 'postgres'
+    $manifest.identityVerification.connectedUserClass = $connection.EndpointType
+    $manifest.identityVerification.migrationLedgerFound = $true
+    $manifest.identityVerification.migrationLedgerVersions = @($identityParts[7].Split(','))
+    $manifest.identityVerification.applicationMarkersFound = $true
     $serverVersionNumber = 0
     if (-not [int]::TryParse($identityParts[2], [ref]$serverVersionNumber)) { throw "Server version response was invalid." }
     $serverMajor = [Math]::Floor($serverVersionNumber / 10000)
     $clientMajor = Get-PostgreSqlMajorVersion $manifest.toolVersions.pg_dump
     if ($clientMajor -ne $serverMajor) { throw "pg_dump major version must match the PostgreSQL server major version." }
     $manifest.postgresServerVersion = Protect-RecipeGenieSecret -Text $identityParts[3] -LiteralSecrets $literalSecrets
+    $manifest.identityVerification.postgresServerVersionAvailable = $true
+    $manifest.identityVerification.verified = $true
 
-    $manifest.gitWorktreeClean = -not [bool](git -C $repositoryRoot status --porcelain)
-    if ($LASTEXITCODE -ne 0) { throw "Git worktree state could not be captured." }
+    $statusResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'status', '--porcelain')
+    if ($statusResult.ExitCode -ne 0) { throw "Git worktree state could not be captured." }
+    $manifest.gitWorktreeClean = [string]::IsNullOrWhiteSpace($statusResult.Output)
 
     $dumpOut = Join-Path $logsDirectory 'pg_dump.stdout.log'
     $dumpErr = Join-Path $logsDirectory 'pg_dump.stderr.log'
@@ -223,6 +254,8 @@ select current_database(), current_user, current_setting('server_version_num'), 
         "Created (UTC): $($manifest.createdAtUtc)",
         "Project reference: $projectReference",
         "Connection type: $($connection.EndpointType)",
+        'Control-plane project identity: verified',
+        'Connected database identity: verified',
         'Logical database backup: verified',
         'Archive structure: validated',
         'Migration ledger: present',
