@@ -12,7 +12,7 @@ export default defineConfig({
     environment: 'jsdom', // Changed from 'node' for React component testing
     testTimeout: 15_000,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['**/*.test.ts', '**/*.test.tsx'],
+    include: ['**/*.test.ts', '**/*.test.tsx', '**/*.test.mjs'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

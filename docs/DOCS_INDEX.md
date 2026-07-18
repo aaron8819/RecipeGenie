@@ -8,6 +8,7 @@ Start here when you need project documentation. This file defines which docs are
 |------|---------|
 | [`project_overview.md`](project_overview.md) | Canonical architecture overview: layers, domains, data flow, and where logic lives. |
 | [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTURE_GUARDRAILS.md) | Canonical contributor guardrails: non-negotiable boundaries, refactor stopping points, and verification baseline. |
+| [`operational-verification.md`](operational-verification.md) | Read-only deployment manifest, production verification, and data-integrity audit commands. |
 | [`../decisions.md`](../decisions.md) | Canonical architecture decision log. Record durable architecture decisions here instead of adding new plan docs. |
 
 ## Secondary Reference Docs
