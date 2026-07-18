@@ -169,10 +169,37 @@ try {
     $identityOut = Join-Path $logsDirectory 'identity.stdout.log'
     $identityErr = Join-Path $logsDirectory 'identity.stderr.log'
     $identitySql = @"
+with recipes_identity as (
+    select coalesce((array_agg(n.nspname order by n.nspname, c.oid))[1], '') as schema_name,
+           coalesce((array_agg(c.relname order by n.nspname, c.oid))[1], '') as relation_name,
+           coalesce((array_agg(c.relkind::text order by n.nspname, c.oid))[1], '') as relation_kind,
+           count(c.oid) as candidate_count
+      from pg_catalog.pg_class c
+      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+     where c.relname = 'recipes'
+), pantry_items_identity as (
+    select coalesce((array_agg(n.nspname order by n.nspname, c.oid))[1], '') as schema_name,
+           coalesce((array_agg(c.relname order by n.nspname, c.oid))[1], '') as relation_name,
+           coalesce((array_agg(c.relkind::text order by n.nspname, c.oid))[1], '') as relation_kind,
+           count(c.oid) as candidate_count
+      from pg_catalog.pg_class c
+      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+     where c.relname = 'pantry_items'
+), user_config_identity as (
+    select coalesce((array_agg(n.nspname order by n.nspname, c.oid))[1], '') as schema_name,
+           coalesce((array_agg(c.relname order by n.nspname, c.oid))[1], '') as relation_name,
+           coalesce((array_agg(c.relkind::text order by n.nspname, c.oid))[1], '') as relation_kind,
+           count(c.oid) as candidate_count
+      from pg_catalog.pg_class c
+      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
+     where c.relname = 'user_config'
+)
 select current_database(), current_user, current_setting('server_version_num'), version(),
-       to_regclass('public.recipes')::text, to_regclass('public.pantry_items')::text,
-       to_regclass('public.user_config')::text,
-       coalesce((select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations), '');
+       recipes_identity.schema_name, recipes_identity.relation_name, recipes_identity.relation_kind, recipes_identity.candidate_count,
+       pantry_items_identity.schema_name, pantry_items_identity.relation_name, pantry_items_identity.relation_kind, pantry_items_identity.candidate_count,
+       user_config_identity.schema_name, user_config_identity.relation_name, user_config_identity.relation_kind, user_config_identity.candidate_count,
+       coalesce((select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations), '')
+  from recipes_identity, pantry_items_identity, user_config_identity;
 "@
     $identityArguments = @('-X','--no-psqlrc','-At','--field-separator=|','--set=ON_ERROR_STOP=1', '--command', $identitySql)
     $identityResult = Invoke-RecipeGenieNativeProcess -ExecutablePath $tools.psql -ArgumentList $identityArguments -StdOutPath $identityOut -StdErrPath $identityErr -LiteralSecrets $literalSecrets
@@ -180,17 +207,12 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $manifest.commandResults.serverVersionQueryExitCode = $identityResult.ExitCode
     Assert-NativeExitCode $identityResult 'Read-only server identity query'
     $identityLine = ([IO.File]::ReadAllLines($identityOut) | Where-Object { $_.Trim() } | Select-Object -First 1)
-    $identityParts = @($identityLine -split '\|', 8)
-    $expectedLedger = '001,002,003,004,005,006,007,008,009,010,011'
-    if ($identityParts.Count -ne 8 -or $identityParts[0] -ne 'postgres' -or $identityParts[0] -ne $connection.Database -or $identityParts[1] -ne 'postgres' -or
-        $identityParts[4] -ne 'public.recipes' -or $identityParts[5] -ne 'public.pantry_items' -or
-        $identityParts[6] -ne 'public.user_config' -or $identityParts[7] -ne $expectedLedger) {
-        throw "Connected database does not corroborate the expected Recipe Genie pre-migration identity."
-    }
+    $identityParts = @($identityLine -split '\|', 17)
+    Assert-RecipeGenieConnectedDatabaseIdentity -Fields $identityParts -ConfiguredDatabase $connection.Database
     $manifest.identityVerification.connectedDatabase = 'postgres'
     $manifest.identityVerification.connectedUserClass = $connection.EndpointType
     $manifest.identityVerification.migrationLedgerFound = $true
-    $manifest.identityVerification.migrationLedgerVersions = @($identityParts[7].Split(','))
+    $manifest.identityVerification.migrationLedgerVersions = @($identityParts[16].Split(','))
     $manifest.identityVerification.applicationMarkersFound = $true
     $serverVersionNumber = 0
     if (-not [int]::TryParse($identityParts[2], [ref]$serverVersionNumber)) { throw "Server version response was invalid." }

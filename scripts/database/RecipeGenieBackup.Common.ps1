@@ -119,6 +119,45 @@ function Test-RecipeGenieRepositoryRoot {
     }
 }
 
+function Assert-RecipeGenieCatalogRelationIdentity {
+    param(
+        [AllowEmptyString()] [string]$SchemaName,
+        [AllowEmptyString()] [string]$RelationName,
+        [AllowEmptyString()] [string]$RelationKind,
+        [AllowEmptyString()] [string]$CandidateCount,
+        [Parameter(Mandatory)] [string]$ExpectedRelationName
+    )
+
+    $parsedCandidateCount = 0
+    if (-not [int]::TryParse($CandidateCount, [ref]$parsedCandidateCount) -or
+        $parsedCandidateCount -ne 1 -or
+        $SchemaName -cne 'public' -or
+        $RelationName -cne $ExpectedRelationName -or
+        $RelationKind -cne 'r') {
+        throw "Connected database catalog identity failed for public.$ExpectedRelationName."
+    }
+}
+
+function Assert-RecipeGenieConnectedDatabaseIdentity {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()] [string[]]$Fields,
+        [Parameter(Mandatory)] [string]$ConfiguredDatabase
+    )
+
+    $expectedLedger = '001,002,003,004,005,006,007,008,009,010,011'
+    if ($Fields.Count -ne 17 -or
+        $Fields[0] -cne 'postgres' -or
+        $Fields[0] -cne $ConfiguredDatabase -or
+        $Fields[1] -cne 'postgres' -or
+        $Fields[16] -cne $expectedLedger) {
+        throw 'Connected database does not corroborate the expected Recipe Genie pre-migration identity.'
+    }
+
+    Assert-RecipeGenieCatalogRelationIdentity -SchemaName $Fields[4] -RelationName $Fields[5] -RelationKind $Fields[6] -CandidateCount $Fields[7] -ExpectedRelationName 'recipes'
+    Assert-RecipeGenieCatalogRelationIdentity -SchemaName $Fields[8] -RelationName $Fields[9] -RelationKind $Fields[10] -CandidateCount $Fields[11] -ExpectedRelationName 'pantry_items'
+    Assert-RecipeGenieCatalogRelationIdentity -SchemaName $Fields[12] -RelationName $Fields[13] -RelationKind $Fields[14] -CandidateCount $Fields[15] -ExpectedRelationName 'user_config'
+}
+
 function Resolve-GitExecutable {
     param([scriptblock]$CommandLookup)
 

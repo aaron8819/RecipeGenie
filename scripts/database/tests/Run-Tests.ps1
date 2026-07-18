@@ -79,6 +79,15 @@ function ApiResponse([int]$statusCode, [string]$content, [string]$location=$null
 function ProjectJson([string]$projectRef=$ref,[string]$status='ACTIVE_HEALTHY',[string]$databaseHost="db.$ref.supabase.co") {
     [ordered]@{id='safe-id';ref=$projectRef;organization_id='safe-org';name='Recipe Genie';region='us-east-1';created_at='2026-01-01T00:00:00Z';status=$status;database=[ordered]@{host=$databaseHost;version='17';postgres_engine='17';release_channel='ga'}} | ConvertTo-Json -Compress -Depth 4
 }
+function ConnectedIdentityFields {
+    @(
+        'postgres','postgres','170006','PostgreSQL 17.6',
+        'public','recipes','r','1',
+        'public','pantry_items','r','1',
+        'public','user_config','r','1',
+        '001,002,003,004,005,006,007,008,009,010,011'
+    )
+}
 function RepositoryFixture($name, [string]$packageJson='{"name":"recipe-genie","private":true}', [switch]$MissingPackage) {
     $dir = Join-Path $temp $name
     foreach($relativePath in @('web','supabase/migrations','scripts/database')) {
@@ -185,6 +194,56 @@ try {
     Case 'session pooler requires explicit opt in' { Throws { ConvertFrom-RecipeGenieDatabaseUrl $session $ref } 'explicit' }
     Case 'explicit session pooler accepted' { Must ((ConvertFrom-RecipeGenieDatabaseUrl $session $ref -AllowSessionPooler).EndpointType -eq 'session-pooler') }
     Case 'transaction pooler rejected' { Throws { ConvertFrom-RecipeGenieDatabaseUrl ($session.Replace(':5432/',':6543/')) $ref -AllowSessionPooler } 'Transaction-pooler' }
+
+    $backupScriptText = [IO.File]::ReadAllText((Join-Path $root 'Backup-RecipeGenieProduction.ps1'))
+    Case 'normal search path catalog identity passes with unqualified regclass display' {
+        $searchPath = '"$user", public, extensions'
+        $visibleRegclassText = 'recipes'
+        Must ($searchPath -match 'public' -and $visibleRegclassText -eq 'recipes')
+        Assert-RecipeGenieConnectedDatabaseIdentity (ConnectedIdentityFields) 'postgres'
+        Must ($backupScriptText -notmatch '(?i)regclass|search_path')
+    }
+    Case 'schema-qualified display does not affect catalog identity' {
+        $visibleRegclassText = 'public.recipes'
+        Must ($visibleRegclassText -eq 'public.recipes')
+        Assert-RecipeGenieConnectedDatabaseIdentity (ConnectedIdentityFields) 'postgres'
+    }
+    Case 'correct relation name in wrong schema fails catalog identity' {
+        $fields=ConnectedIdentityFields;$fields[4]='private'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+    }
+    Case 'wrong relation kind fails catalog identity' {
+        $fields=ConnectedIdentityFields;$fields[10]='v'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+    }
+    Case 'duplicate catalog candidates fail closed' {
+        $fields=ConnectedIdentityFields;$fields[15]='2'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+    }
+    Case 'missing required table fails catalog identity' {
+        $fields=ConnectedIdentityFields;$fields[8]='';$fields[9]='';$fields[10]='';$fields[11]='0'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+    }
+    Case 'connected identity retains exact 001 through 011 ledger' {
+        $fields=ConnectedIdentityFields;$fields[16]='001,002,003,004,005,006,007,008,009,010'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'pre-migration identity'
+    }
+    Case 'catalog identity failure creates no output and invokes no external process' {
+        $probe=Join-Path $temp 'catalog-identity-pure';[IO.Directory]::CreateDirectory($probe)|Out-Null
+        $before=@(Get-ChildItem -LiteralPath $probe -Force).Count
+        $fields=ConnectedIdentityFields;$fields[7]='0'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+        $after=@(Get-ChildItem -LiteralPath $probe -Force).Count
+        Must ($before -eq $after)
+    }
+    Case 'connected identity query uses explicit catalogs and exact relation fields' {
+        Must ($backupScriptText -match 'pg_catalog\.pg_class')
+        Must ($backupScriptText -match 'pg_catalog\.pg_namespace')
+        Must ($backupScriptText -match 'n\.nspname')
+        Must ($backupScriptText -match 'c\.relname')
+        Must ($backupScriptText -match 'c\.relkind')
+        Must ($backupScriptText -match 'count\(c\.oid\)')
+    }
 
     Case 'valid explicit Git executable resolves' { Must ((Resolve-GitExecutable) -eq $gitExecutable) }
     Case 'explicit Git executable path is used' {
@@ -359,7 +418,7 @@ try {
         $text=Get-Content (Join-Path $root 'Backup-RecipeGenieProduction.ps1') -Raw
         Must ($text -notmatch '(?i)\bsupabase(?:\.exe)?\s+(?:db|migration)|\bdb\s+push\b')
         Must ($text -notmatch '(?im)^.*Invoke-RecipeGenieNativeProcess.*MigrationPath.*$')
-        Must ($text -match '(?s)\$identitySql\s*=\s*@"\s*select\s+current_database\(\).*?"@')
+        Must ($text -match '(?s)\$identitySql\s*=\s*@"\s*with\s+recipes_identity.*?select\s+current_database\(\).*?"@')
     }
     Case 'missing token prevents production database and API access' {
         $oldUrl=$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL;$oldRef=$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF;$oldToken=$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN
