@@ -24,6 +24,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 *.log
+*.dump
+*.backup
+recipe-genie-production-*/
+scripts/database/backups/
 
 # IDE/Editor
 .cursor/
