@@ -141,10 +141,11 @@ function Assert-RecipeGenieCatalogRelationIdentity {
 function Assert-RecipeGenieConnectedDatabaseIdentity {
     param(
         [Parameter(Mandatory)] [AllowEmptyString()] [string[]]$Fields,
-        [Parameter(Mandatory)] [string]$ConfiguredDatabase
+        [Parameter(Mandatory)] [string]$ConfiguredDatabase,
+        [Parameter(Mandatory)] [string[]]$ExpectedMigrationVersions
     )
 
-    $expectedLedger = '001,002,003,004,005,006,007,008,009,010,011'
+    $expectedLedger = $ExpectedMigrationVersions -join ','
     if ($Fields.Count -ne 17 -or
         $Fields[0] -cne 'postgres' -or
         $Fields[0] -cne $ConfiguredDatabase -or
@@ -156,6 +157,34 @@ function Assert-RecipeGenieConnectedDatabaseIdentity {
     Assert-RecipeGenieCatalogRelationIdentity -SchemaName $Fields[4] -RelationName $Fields[5] -RelationKind $Fields[6] -CandidateCount $Fields[7] -ExpectedRelationName 'recipes'
     Assert-RecipeGenieCatalogRelationIdentity -SchemaName $Fields[8] -RelationName $Fields[9] -RelationKind $Fields[10] -CandidateCount $Fields[11] -ExpectedRelationName 'pantry_items'
     Assert-RecipeGenieCatalogRelationIdentity -SchemaName $Fields[12] -RelationName $Fields[13] -RelationKind $Fields[14] -CandidateCount $Fields[15] -ExpectedRelationName 'user_config'
+}
+
+function Get-RecipeGenieMigrationBackupDefinition {
+    param([Parameter(Mandatory)] [string]$MigrationPath)
+
+    $normalizedPath = $MigrationPath.Replace('\', '/')
+    $definition = switch ($normalizedPath) {
+        'supabase/migrations/012_enforce_uuid_active_recipe_writes.sql' {
+            [ordered]@{
+                MigrationPath = $normalizedPath
+                PendingMigrationVersion = '012'
+                ExpectedAppliedMigrationVersions = @('001','002','003','004','005','006','007','008','009','010','011')
+                ExpectedProjectReference = 'eyaoahwzixqetjgfghsh'
+                RequireRestoreVerification = $true
+            }
+        }
+        'supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql' {
+            [ordered]@{
+                MigrationPath = $normalizedPath
+                PendingMigrationVersion = '013'
+                ExpectedAppliedMigrationVersions = @('001','002','003','004','005','006','007','008','009','010','011','012')
+                ExpectedProjectReference = 'eyaoahwzixqetjgfghsh'
+                RequireRestoreVerification = $true
+            }
+        }
+        default { throw 'Migration is not supported by the Recipe Genie production backup gate.' }
+    }
+    [pscustomobject]$definition
 }
 
 function Resolve-GitExecutable {

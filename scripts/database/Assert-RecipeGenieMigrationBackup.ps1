@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory)] [string]$BackupDirectory,
     [Parameter(Mandatory)] [string]$ExpectedProjectReference,
     [ValidateRange(1, 525600)] [int]$MaximumAgeMinutes = 60,
-    [string]$MigrationPath = 'supabase/migrations/012_enforce_uuid_active_recipe_writes.sql',
+    [string]$MigrationPath = 'supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql',
     [switch]$RequireRestoreVerification,
     [switch]$RequireStorageBackup
 )
@@ -21,7 +21,9 @@ try {
     $headResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'rev-parse', 'HEAD')
     $headCommit = if ($headResult.Output) { $headResult.Output.Trim() } else { '' }
     if ($headResult.ExitCode -ne 0 -or $headCommit -notmatch '^[0-9a-f]{40}$') { throw 'Current Git commit could not be established.' }
-    $normalizedMigrationPath = $MigrationPath.Replace('\\', '/')
+    $definition = Get-RecipeGenieMigrationBackupDefinition -MigrationPath $MigrationPath
+    if ($ExpectedProjectReference -cne $definition.ExpectedProjectReference) { throw 'Expected project reference is not the approved Recipe Genie production project.' }
+    $normalizedMigrationPath = $definition.MigrationPath
     & $testScript -BackupDirectory $BackupDirectory -ExpectedProjectReference $ExpectedProjectReference -MaximumAgeMinutes $MaximumAgeMinutes -ExpectedMigrationPath $normalizedMigrationPath -ExpectedGitCommitSha $headCommit
     $manifest = Get-Content -LiteralPath (Join-Path $BackupDirectory 'manifest.json') -Raw | ConvertFrom-Json
     $migrationHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $headCommit -RepositoryRelativePath $normalizedMigrationPath -GitExecutablePath $gitExecutablePath
@@ -37,7 +39,7 @@ try {
     if (-not (Test-Path -LiteralPath $preflightFullPath -PathType Leaf) -or -not (Test-GitPathMatchesCommit $repositoryRoot $headCommit $preflightPath $gitExecutablePath)) {
         throw 'Migration preflight worktree file does not match the recorded commit.'
     }
-    $restoreRequired = $RequireRestoreVerification -or [IO.Path]::GetFileName($normalizedMigrationPath) -eq '012_enforce_uuid_active_recipe_writes.sql'
+    $restoreRequired = $RequireRestoreVerification -or $definition.RequireRestoreVerification
     if ($restoreRequired -and $manifest.restoreVerified -ne $true) {
         throw "Disposable restore verification is required for this migration."
     }

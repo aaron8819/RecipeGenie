@@ -7,10 +7,14 @@ $pwsh = (Get-Process -Id $PID).Path
 $gitExecutable = Resolve-GitExecutable
 $repo = (Invoke-GitCapture $gitExecutable @('-C', $PSScriptRoot, 'rev-parse', '--show-toplevel')).Output.Trim()
 $headCommit = (Invoke-GitCapture $gitExecutable @('-C', $repo, 'rev-parse', 'HEAD')).Output.Trim()
-$migrationPath = 'supabase/migrations/012_enforce_uuid_active_recipe_writes.sql'
-$preflightPath = 'scripts/database/preflight/012_enforce_uuid_active_recipe_writes.sql'
-$migrationHash = Get-GitBlobSha256 $repo $headCommit $migrationPath $gitExecutable
-$preflightHash = Get-GitBlobSha256 $repo $headCommit $preflightPath $gitExecutable
+$migration012Path = 'supabase/migrations/012_enforce_uuid_active_recipe_writes.sql'
+$preflight012Path = 'scripts/database/preflight/012_enforce_uuid_active_recipe_writes.sql'
+$migration013Path = 'supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql'
+$preflight013Path = 'scripts/database/preflight/013_allow_uuid_shopping_contribution_replacement.sql'
+$migrationPath = $migration013Path
+$preflightPath = $preflight013Path
+$ledger012 = @('001','002','003','004','005','006','007','008','009','010','011')
+$ledger013 = @('001','002','003','004','005','006','007','008','009','010','011','012')
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('rg-backup-tests-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($temp) | Out-Null
 $passed = 0
@@ -28,6 +32,10 @@ function Throws([scriptblock]$body, $pattern) {
         if ($pattern -and $_.Exception.Message -notmatch $pattern) { throw "wrong exception: $($_.Exception.Message)" }
     }
 }
+function EvidenceHash([string]$path) {
+    try { Get-GitBlobSha256 $repo $headCommit $path $gitExecutable }
+    catch { (Get-FileHash -LiteralPath (Join-Path $repo $path) -Algorithm SHA256).Hash.ToLowerInvariant() }
+}
 function Child($scriptPath, [string[]]$arguments) {
     $id = [Guid]::NewGuid().ToString('N')
     $out = Join-Path $temp "$id.out"
@@ -36,7 +44,12 @@ function Child($scriptPath, [string[]]$arguments) {
     $p = Start-Process $pwsh -ArgumentList $args -RedirectStandardOutput $out -RedirectStandardError $err -Wait -PassThru -NoNewWindow
     [pscustomobject]@{ ExitCode=$p.ExitCode; Output=([IO.File]::ReadAllText($out)+[IO.File]::ReadAllText($err)) }
 }
-function Fixture($name) {
+function Fixture($name, [string]$selectedMigrationPath=$migrationPath, [string[]]$ledgerVersions=@()) {
+    $definition = Get-RecipeGenieMigrationBackupDefinition $selectedMigrationPath
+    if ($ledgerVersions.Count -eq 0) { $ledgerVersions = $definition.ExpectedAppliedMigrationVersions }
+    $selectedPreflightPath = 'scripts/database/preflight/' + [IO.Path]::GetFileName($selectedMigrationPath)
+    $selectedMigrationHash = EvidenceHash $selectedMigrationPath
+    $selectedPreflightHash = EvidenceHash $selectedPreflightPath
     $dir = Join-Path $temp $name
     [IO.Directory]::CreateDirectory($dir) | Out-Null
     $dump = Join-Path $dir 'database.dump'
@@ -47,9 +60,9 @@ function Fixture($name) {
         createdAtUtc=[DateTimeOffset]::UtcNow.ToString('o')
         gitCommitSha=$headCommit;gitWorktreeClean=$true
         runtime=[ordered]@{edition='Core';version='7.4.0';architecture='Arm64'}
-        identityVerification=[ordered]@{verified=$true;expectedProjectReference=$ref;repositoryIdentityMatched=$true;repositoryLinkedReferenceMatched=$true;controlPlaneProjectReferenceMatched=$true;controlPlaneProjectStatus='ACTIVE_HEALTHY';controlPlaneDatabaseHostMatched=$true;endpointType='direct';connectedDatabase='postgres';connectedUserClass='direct';postgresServerVersionAvailable=$true;migrationLedgerFound=$true;migrationLedgerVersions=@('001','002','003','004','005','006','007','008','009','010','011');applicationMarkersFound=$true}
-        migration=[ordered]@{path=$migrationPath;commitSha=$headCommit;sha256=$migrationHash;worktreeMatchesCommit=$true}
-        preflight=[ordered]@{path=$preflightPath;commitSha=$headCommit;sha256=$preflightHash;readOnly=$true;countOnly=$true;worktreeMatchesCommit=$true}
+        identityVerification=[ordered]@{verified=$true;expectedProjectReference=$ref;repositoryIdentityMatched=$true;repositoryLinkedReferenceMatched=$true;controlPlaneProjectReferenceMatched=$true;controlPlaneProjectStatus='ACTIVE_HEALTHY';controlPlaneDatabaseHostMatched=$true;endpointType='direct';connectedDatabase='postgres';connectedUserClass='direct';postgresServerVersionAvailable=$true;migrationLedgerFound=$true;migrationLedgerVersions=@($ledgerVersions);applicationMarkersFound=$true}
+        migration=[ordered]@{path=$selectedMigrationPath;commitSha=$headCommit;sha256=$selectedMigrationHash;worktreeMatchesCommit=$true}
+        preflight=[ordered]@{path=$selectedPreflightPath;commitSha=$headCommit;sha256=$selectedPreflightHash;readOnly=$true;countOnly=$true;worktreeMatchesCommit=$true}
         backupScope=[ordered]@{type='logical-database-custom-archive';includedSchemas=@('public','private','supabase_migrations');includesStorageObjectPayloads=$false;includesSupabaseManagedAuthConfiguration=$false;includesGlobalRoles=$false;includesSecrets=$false}
         toolVersions=[ordered]@{git='git version 2.50.1'}
         artifacts=@([ordered]@{fileName='database.dump';sizeBytes=6;sha256=$hash})
@@ -79,13 +92,13 @@ function ApiResponse([int]$statusCode, [string]$content, [string]$location=$null
 function ProjectJson([string]$projectRef=$ref,[string]$status='ACTIVE_HEALTHY',[string]$databaseHost="db.$ref.supabase.co") {
     [ordered]@{id='safe-id';ref=$projectRef;organization_id='safe-org';name='Recipe Genie';region='us-east-1';created_at='2026-01-01T00:00:00Z';status=$status;database=[ordered]@{host=$databaseHost;version='17';postgres_engine='17';release_channel='ga'}} | ConvertTo-Json -Compress -Depth 4
 }
-function ConnectedIdentityFields {
+function ConnectedIdentityFields([string[]]$versions=$ledger013) {
     @(
         'postgres','postgres','170006','PostgreSQL 17.6',
         'public','recipes','r','1',
         'public','pantry_items','r','1',
         'public','user_config','r','1',
-        '001,002,003,004,005,006,007,008,009,010,011'
+        ($versions -join ',')
     )
 }
 function RepositoryFixture($name, [string]$packageJson='{"name":"recipe-genie","private":true}', [switch]$MissingPackage) {
@@ -194,45 +207,84 @@ try {
     Case 'session pooler requires explicit opt in' { Throws { ConvertFrom-RecipeGenieDatabaseUrl $session $ref } 'explicit' }
     Case 'explicit session pooler accepted' { Must ((ConvertFrom-RecipeGenieDatabaseUrl $session $ref -AllowSessionPooler).EndpointType -eq 'session-pooler') }
     Case 'transaction pooler rejected' { Throws { ConvertFrom-RecipeGenieDatabaseUrl ($session.Replace(':5432/',':6543/')) $ref -AllowSessionPooler } 'Transaction-pooler' }
+    Case 'migration 013 definition binds the production identity and exact pre-state' {
+        $definition=Get-RecipeGenieMigrationBackupDefinition $migration013Path
+        Must ($definition.ExpectedProjectReference -ceq $ref)
+        Must (($definition.ExpectedAppliedMigrationVersions -join ',') -ceq ($ledger013 -join ','))
+        Must ($definition.PendingMigrationVersion -ceq '013')
+    }
+    Case 'missing database URL names the required variable and creates no output' {
+        $oldUrl=$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL;$oldRef=$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF;$oldToken=$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN
+        try {
+            $env:RECIPE_GENIE_PRODUCTION_DATABASE_URL='';$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$ref;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN='fixture-only-token'
+            $destination=Join-Path $temp 'missing-url-output';$result=Child (Join-Path $root 'Backup-RecipeGenieProduction.ps1') @('-DestinationRoot',('"'+$destination+'"'))
+            Must ($result.ExitCode -ne 0 -and $result.Output -match 'RECIPE_GENIE_PRODUCTION_DATABASE_URL' -and -not (Test-Path $destination))
+        } finally {$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL=$oldUrl;$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$oldRef;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN=$oldToken}
+    }
+    Case 'migration 013 rejects a different configured project before external access' {
+        $oldUrl=$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL;$oldRef=$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF;$oldToken=$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN
+        try {
+            $env:RECIPE_GENIE_PRODUCTION_DATABASE_URL='postgresql://postgres:fake@db.aaaaaaaaaaaaaaaaaaaa.supabase.co/postgres';$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF='aaaaaaaaaaaaaaaaaaaa';$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN='fixture-only-token'
+            $destination=Join-Path $temp 'wrong-ref-output';$result=Child (Join-Path $root 'Backup-RecipeGenieProduction.ps1') @('-DestinationRoot',('"'+$destination+'"'))
+            Must ($result.ExitCode -ne 0 -and $result.Output -match 'RECIPE_GENIE_PRODUCTION_PROJECT_REF' -and -not (Test-Path $destination))
+        } finally {$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL=$oldUrl;$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$oldRef;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN=$oldToken}
+    }
+    Case 'migration 012 definition remains supported' {
+        $definition=Get-RecipeGenieMigrationBackupDefinition $migration012Path
+        Must (($definition.ExpectedAppliedMigrationVersions -join ',') -ceq ($ledger012 -join ','))
+        Must ($definition.PendingMigrationVersion -ceq '012')
+    }
+    Case 'unsupported migration definition fails closed' { Throws { Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/014_unknown.sql' } 'not supported' }
 
     $backupScriptText = [IO.File]::ReadAllText((Join-Path $root 'Backup-RecipeGenieProduction.ps1'))
     Case 'normal search path catalog identity passes with unqualified regclass display' {
         $searchPath = '"$user", public, extensions'
         $visibleRegclassText = 'recipes'
         Must ($searchPath -match 'public' -and $visibleRegclassText -eq 'recipes')
-        Assert-RecipeGenieConnectedDatabaseIdentity (ConnectedIdentityFields) 'postgres'
+        Assert-RecipeGenieConnectedDatabaseIdentity (ConnectedIdentityFields) 'postgres' $ledger013
         Must ($backupScriptText -notmatch '(?i)regclass|search_path')
     }
     Case 'schema-qualified display does not affect catalog identity' {
         $visibleRegclassText = 'public.recipes'
         Must ($visibleRegclassText -eq 'public.recipes')
-        Assert-RecipeGenieConnectedDatabaseIdentity (ConnectedIdentityFields) 'postgres'
+        Assert-RecipeGenieConnectedDatabaseIdentity (ConnectedIdentityFields) 'postgres' $ledger013
     }
     Case 'correct relation name in wrong schema fails catalog identity' {
         $fields=ConnectedIdentityFields;$fields[4]='private'
-        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'catalog identity failed'
     }
     Case 'wrong relation kind fails catalog identity' {
         $fields=ConnectedIdentityFields;$fields[10]='v'
-        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'catalog identity failed'
     }
     Case 'duplicate catalog candidates fail closed' {
         $fields=ConnectedIdentityFields;$fields[15]='2'
-        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'catalog identity failed'
     }
     Case 'missing required table fails catalog identity' {
         $fields=ConnectedIdentityFields;$fields[8]='';$fields[9]='';$fields[10]='';$fields[11]='0'
-        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'catalog identity failed'
     }
-    Case 'connected identity retains exact 001 through 011 ledger' {
-        $fields=ConnectedIdentityFields;$fields[16]='001,002,003,004,005,006,007,008,009,010'
-        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'pre-migration identity'
+    Case 'migration 013 connected identity requires exact 001 through 012 ledger' {
+        $fields=ConnectedIdentityFields;$fields[16]=($ledger012 -join ',')
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'pre-migration identity'
+    }
+    Case 'migration 013 connected identity rejects 013 already applied' {
+        $fields=ConnectedIdentityFields ($ledger013 + '013')
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'pre-migration identity'
+    }
+    Case 'migration 013 connected identity rejects an unexpected migration' {
+        $fields=ConnectedIdentityFields ($ledger013 + '099')
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'pre-migration identity'
+    }
+    Case 'migration 012 connected identity behavior is preserved' {
+        Assert-RecipeGenieConnectedDatabaseIdentity (ConnectedIdentityFields $ledger012) 'postgres' $ledger012
     }
     Case 'catalog identity failure creates no output and invokes no external process' {
         $probe=Join-Path $temp 'catalog-identity-pure';[IO.Directory]::CreateDirectory($probe)|Out-Null
         $before=@(Get-ChildItem -LiteralPath $probe -Force).Count
         $fields=ConnectedIdentityFields;$fields[7]='0'
-        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' } 'catalog identity failed'
+        Throws { Assert-RecipeGenieConnectedDatabaseIdentity $fields 'postgres' $ledger013 } 'catalog identity failed'
         $after=@(Get-ChildItem -LiteralPath $probe -Force).Count
         Must ($before -eq $after)
     }
@@ -357,24 +409,62 @@ try {
         $m=Test-ArchiveTableOfContents $toc; Must ($m.MigrationLedgerFound -and $m.ExpectedApplicationMarkersFound)
     }
     Case 'migration 012 preflight is read-only and rolls back' {
-        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflightPath))
+        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflight012Path))
         Must ($sql -match '(?im)^begin transaction read only;\s*$'); Must ($sql -match '(?im)^rollback;\s*$')
     }
     Case 'migration 012 preflight requires exact 001 through 011 ledger' {
-        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflightPath))
+        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflight012Path))
         Must ($sql -match "'001','002','003','004','005','006','007','008','009','010','011'")
         Must ($sql -match 'actual_versions is distinct from expected_versions')
     }
     Case 'migration 012 preflight fails on every active planner orphan class' {
-        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflightPath))
+        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflight012Path))
         foreach($message in @('unresolved weekly recipe membership','unresolved weekly assignment key','unresolved weekly made-recipe reference')) { Must ($sql -match $message) }
     }
     Case 'migration 012 preflight incorporates count-only repository audits' {
-        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflightPath))
+        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflight012Path))
         Must ($sql -match 'stage2a_uuid_reference_audit\.sql'); Must ($sql -match 'active_planner_reference_audit\.sql')
+    }
+    Case 'modified migration file fails the commit comparison' {
+        $fixture=Join-Path $temp 'migration-drift-repo';[IO.Directory]::CreateDirectory((Join-Path $fixture 'supabase/migrations'))|Out-Null
+        $fixtureMigration='supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql'
+        [IO.File]::WriteAllText((Join-Path $fixture $fixtureMigration),'-- committed migration')
+        $null=Invoke-GitCapture $gitExecutable @('-C',$fixture,'init')
+        $null=Invoke-GitCapture $gitExecutable @('-C',$fixture,'add','--',$fixtureMigration)
+        $commit=Invoke-GitCapture $gitExecutable @('-C',$fixture,'-c','user.name=Recipe Genie Tests','-c','user.email=tests@example.invalid','commit','-m','fixture')
+        Must ($commit.ExitCode -eq 0)
+        $fixtureHead=(Invoke-GitCapture $gitExecutable @('-C',$fixture,'rev-parse','HEAD')).Output.Trim()
+        Must (Test-GitPathMatchesCommit $fixture $fixtureHead $fixtureMigration $gitExecutable)
+        [IO.File]::AppendAllText((Join-Path $fixture $fixtureMigration),[Environment]::NewLine+'-- drift')
+        Must (-not (Test-GitPathMatchesCommit $fixture $fixtureHead $fixtureMigration $gitExecutable))
+    }
+    Case 'migration 013 preflight is read-only, count-only, and rolls back' {
+        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflight013Path))
+        Must ($sql -match '(?im)^begin transaction read only;\s*$')
+        Must ($sql -match '(?im)^rollback;\s*$')
+        Must ($sql -notmatch '(?im)^\s*(insert|update|delete|merge|truncate|alter|create|drop|grant|revoke)\b')
+    }
+    Case 'migration 013 preflight requires exact 001 through 012 with 013 absent' {
+        $sql = [IO.File]::ReadAllText((Join-Path $repo $preflight013Path))
+        Must ($sql -match "'001','002','003','004','005','006','007','008','009','010','011','012'")
+        Must ($sql -match 'actual_versions is distinct from expected_versions')
+        Must ($sql -match 'migration 013 must be absent')
+    }
+    Case 'migration 013 evidence matches the committed Git blobs' {
+        Must (Test-GitPathMatchesCommit $repo $headCommit $migration013Path $gitExecutable)
+        Must ((Get-GitBlobSha256 $repo $headCommit $migration013Path $gitExecutable) -match '^[0-9a-f]{64}$')
+        Must (Test-Path -LiteralPath (Join-Path $repo $preflight013Path) -PathType Leaf)
     }
 
     Case 'valid fixture passes' { Must ((Verify (Fixture 'valid')).ExitCode -eq 0) }
+    Case 'migration 013 ledger stopping at 011 fails' { Must ((Verify (Fixture 'ledger-011' $migration013Path $ledger012)).ExitCode -ne 0) }
+    Case 'migration 013 already present fails' { Must ((Verify (Fixture 'ledger-013' $migration013Path ($ledger013 + '013'))).ExitCode -ne 0) }
+    Case 'unexpected migration fails' { Must ((Verify (Fixture 'ledger-unexpected' $migration013Path ($ledger013 + '099'))).ExitCode -ne 0) }
+    Case 'migration 012 backup verification remains supported' { Must ((Verify (Fixture 'migration-012-preserved' $migration012Path $ledger012)).ExitCode -eq 0) }
+    Case 'approved production project reference is required' {
+        $d=Fixture 'wrong-production-ref';Edit $d {param($m)$m.projectReference='aaaaaaaaaaaaaaaaaaaa';$m.identityVerification.expectedProjectReference='aaaaaaaaaaaaaaaaaaaa'}
+        Must ((Verify $d 'aaaaaaaaaaaaaaaaaaaa').ExitCode -ne 0)
+    }
     Case 'missing archive fails' { $d=Fixture 'missing';Remove-Item (Join-Path $d 'database.dump');Must ((Verify $d).ExitCode -ne 0) }
     Case 'zero byte archive fails' { $d=Fixture 'zero';[IO.File]::WriteAllBytes((Join-Path $d 'database.dump'),[byte[]]@());Must ((Verify $d).ExitCode -ne 0) }
     Case 'size mismatch fails' { $d=Fixture 'size';Edit $d {param($m)$m.artifacts[0].sizeBytes=99};Must ((Verify $d).ExitCode -ne 0) }
@@ -407,12 +497,20 @@ try {
     Case 'archive validation distinct from restore verification' { $r=Verify (Fixture 'restore-distinct');Must ($r.ExitCode -eq 0 -and $r.Output -match 'Disposable restore: not verified') }
     Case 'database backup distinct from Storage backup' { $r=Verify (Fixture 'storage-distinct');Must ($r.ExitCode -eq 0 -and $r.Output -match 'Storage files: not backed up') }
     Case 'dump success leaves restore and Storage false' { $d=Fixture 'states';$m=Get-Content (Join-Path $d 'manifest.json') -Raw|ConvertFrom-Json;Must ($m.dumpCompleted -and -not $m.restoreVerified -and -not $m.storageFilesBackedUp) }
-    Case 'migration 012 gate requires restore without opt-in flag' { Must ((Gate (Fixture 'migration-012')).ExitCode -ne 0) }
+    Case 'migration 012 gate requires restore without opt-in flag' {
+        Must ((Gate (Fixture 'migration-012' $migration012Path $ledger012) @('-MigrationPath',$migration012Path)).ExitCode -ne 0)
+    }
     Case 'restore gate fails when false' { Must ((Gate (Fixture 'restore-false') @('-RequireRestoreVerification')).ExitCode -ne 0) }
-    Case 'restore gate passes only when true' { $d=Fixture 'restore-true';Edit $d {param($m)$m.restoreVerified=$true;$m.restoreVerification=[pscustomobject]@{verifiedAtUtc=[DateTimeOffset]::UtcNow.ToString('o')}};Must ((Gate $d @('-RequireRestoreVerification')).ExitCode -eq 0) }
+    Case 'restore gate passes only when true' { $d=Fixture 'restore-true' $migration012Path $ledger012;Edit $d {param($m)$m.restoreVerified=$true;$m.restoreVerification=[pscustomobject]@{verifiedAtUtc=[DateTimeOffset]::UtcNow.ToString('o')}};Must ((Gate $d @('-MigrationPath',$migration012Path,'-RequireRestoreVerification')).ExitCode -eq 0) }
     Case 'Storage gate fails when false' { Must ((Gate (Fixture 'storage-false') @('-RequireStorageBackup')).ExitCode -ne 0) }
-    Case 'Storage gate passes only when true' { $d=Fixture 'storage-true';Edit $d {param($m)$m.storageFilesBackedUp=$true;$m.restoreVerified=$true;$m.restoreVerification=[pscustomobject]@{verifiedAtUtc=[DateTimeOffset]::UtcNow.ToString('o')}};Must ((Gate $d @('-RequireStorageBackup')).ExitCode -eq 0) }
+    Case 'Storage gate passes only when true' { $d=Fixture 'storage-true' $migration012Path $ledger012;Edit $d {param($m)$m.storageFilesBackedUp=$true;$m.restoreVerified=$true;$m.restoreVerification=[pscustomobject]@{verifiedAtUtc=[DateTimeOffset]::UtcNow.ToString('o')}};Must ((Gate $d @('-MigrationPath',$migration012Path,'-RequireStorageBackup')).ExitCode -eq 0) }
     Case 'migration gate never invokes migrations' { Must ((Get-Content (Join-Path $root 'Assert-RecipeGenieMigrationBackup.ps1') -Raw) -notmatch '(?i)\bsupabase(?:\.exe)?\s+(?:db|migration)|\bdb\s+push\b') }
+    Case 'preflight-only mode stops before pg_dump and never grants migration authorization' {
+        $text=Get-Content (Join-Path $root 'Backup-RecipeGenieProduction.ps1') -Raw
+        Must ($text -match '(?s)if \(\$PreflightOnly\).*?return')
+        Must ($text -match "Backup created: no")
+        Must ($text -match "Migration authorization: not granted")
+    }
     Case 'Management API write methods are absent' { $text=Get-Content (Join-Path $root 'RecipeGenieBackup.Common.ps1') -Raw;Must ($text -notmatch 'HttpMethod\]::(?:Post|Put|Patch|Delete)|Invoke-RestMethod.+-Method\s+(?:Post|Put|Patch|Delete)') }
     Case 'backup tooling constructs no migration command' {
         $text=Get-Content (Join-Path $root 'Backup-RecipeGenieProduction.ps1') -Raw
@@ -422,7 +520,7 @@ try {
     }
     Case 'missing token prevents production database and API access' {
         $oldUrl=$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL;$oldRef=$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF;$oldToken=$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN
-        try{$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL='postgresql://postgres:fake@db.eyaoahwzixqetjgfghsh.supabase.co/postgres';$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$ref;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN='';$d=Join-Path $temp 'must-not-connect';$r=Child (Join-Path $root 'Backup-RecipeGenieProduction.ps1') @('-DestinationRoot',('"'+$d+'"'));Must ($r.ExitCode -ne 0 -and -not (Test-Path $d))}finally{$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL=$oldUrl;$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$oldRef;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN=$oldToken}
+        try{$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL='postgresql://postgres:fake@db.eyaoahwzixqetjgfghsh.supabase.co/postgres';$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$ref;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN='';$d=Join-Path $temp 'must-not-connect';$r=Child (Join-Path $root 'Backup-RecipeGenieProduction.ps1') @('-DestinationRoot',('"'+$d+'"'));Must ($r.ExitCode -ne 0 -and $r.Output -match 'RECIPE_GENIE_SUPABASE_ACCESS_TOKEN' -and -not (Test-Path $d))}finally{$env:RECIPE_GENIE_PRODUCTION_DATABASE_URL=$oldUrl;$env:RECIPE_GENIE_PRODUCTION_PROJECT_REF=$oldRef;$env:RECIPE_GENIE_SUPABASE_ACCESS_TOKEN=$oldToken}
     }
     Case '.gitignore excludes backup artifacts and tracked env secrets' {
         foreach($path in @('probe.dump','recipe-genie-production-probe/database.dump','scripts/database/backups/probe.dump','.env.production.local')) {

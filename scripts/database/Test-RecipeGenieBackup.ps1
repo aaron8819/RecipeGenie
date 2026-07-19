@@ -27,6 +27,8 @@ try {
     if ($manifest.schemaVersion -ne 3) { throw "Unsupported manifest schema version; version 3 control-plane identity evidence is required." }
     if ($manifest.appName -ne 'Recipe Genie' -or $manifest.environment -ne 'production') { throw "Backup does not identify Recipe Genie production." }
     if ($manifest.projectReference -ne $ExpectedProjectReference) { throw "Backup project reference does not match the expected project." }
+    $definition = Get-RecipeGenieMigrationBackupDefinition -MigrationPath ([string]$manifest.migration.path)
+    if ($ExpectedProjectReference -cne $definition.ExpectedProjectReference) { throw 'Backup does not identify the approved Recipe Genie production project.' }
     $identity = $manifest.identityVerification
     if ($identity.verified -ne $true -or
         $identity.expectedProjectReference -ne $ExpectedProjectReference -or
@@ -40,7 +42,7 @@ try {
         $identity.connectedUserClass -ne $identity.endpointType -or
         $identity.postgresServerVersionAvailable -ne $true -or
         $identity.migrationLedgerFound -ne $true -or
-        (@($identity.migrationLedgerVersions) -join ',') -ne '001,002,003,004,005,006,007,008,009,010,011' -or
+        (@($identity.migrationLedgerVersions) -join ',') -cne ($definition.ExpectedAppliedMigrationVersions -join ',') -or
         $identity.applicationMarkersFound -ne $true) {
         throw "Backup lacks required control-plane, repository, or connected-database identity evidence."
     }

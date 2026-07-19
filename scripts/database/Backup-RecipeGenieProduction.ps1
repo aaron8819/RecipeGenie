@@ -2,9 +2,10 @@
 param(
     [Parameter(Mandatory)] [string]$DestinationRoot,
     [switch]$AllowSessionPooler,
+    [switch]$PreflightOnly,
     [string]$PostgreSqlBinDirectory,
     [ValidateRange(1, 60)] [int]$ManagementApiTimeoutSeconds = 10,
-    [string]$MigrationPath = 'supabase/migrations/012_enforce_uuid_active_recipe_writes.sql'
+    [string]$MigrationPath = 'supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql'
 )
 
 Set-StrictMode -Version Latest
@@ -20,6 +21,10 @@ $accessToken = [Environment]::GetEnvironmentVariable($accessTokenVariable, 'Proc
 if ([string]::IsNullOrWhiteSpace($databaseUrl)) { throw "Required environment variable $databaseUrlVariable is missing." }
 if ([string]::IsNullOrWhiteSpace($projectReference)) { throw "Required environment variable $projectReferenceVariable is missing." }
 if ([string]::IsNullOrWhiteSpace($accessToken)) { throw "Required environment variable $accessTokenVariable is missing." }
+$definition = Get-RecipeGenieMigrationBackupDefinition -MigrationPath $MigrationPath
+if ($projectReference -cne $definition.ExpectedProjectReference) {
+    throw "Required environment variable $projectReferenceVariable must identify the approved Recipe Genie production project."
+}
 
 $gitExecutablePath = Resolve-GitExecutable
 $gitVersion = Get-SanitizedGitVersion $gitExecutablePath
@@ -41,7 +46,7 @@ $controlPlane = Invoke-SupabaseProjectMetadata -AccessToken $accessToken -Expect
 $commitResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'rev-parse', 'HEAD')
 $gitCommitSha = if ($commitResult.Output) { $commitResult.Output.Trim() } else { '' }
 if ($commitResult.ExitCode -ne 0 -or $gitCommitSha -notmatch '^[0-9a-f]{40}$') { throw "Git commit SHA could not be captured." }
-$migrationRelativePath = $MigrationPath.Replace('\\', '/')
+$migrationRelativePath = $definition.MigrationPath
 $migrationFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $migrationRelativePath)
 if (-not (Test-PathWithin -Candidate $migrationFullPath -Parent $repositoryRoot) -or -not (Test-Path -LiteralPath $migrationFullPath -PathType Leaf)) {
     throw 'Migration file is missing or outside the repository.'
@@ -150,7 +155,8 @@ foreach ($name in $pgNames) {
 
 try {
     $tools = [ordered]@{}
-    foreach ($name in @('pg_dump','pg_restore','psql')) {
+    $requiredTools = if ($PreflightOnly) { @('psql') } else { @('pg_dump','pg_restore','psql') }
+    foreach ($name in $requiredTools) {
         $tools[$name] = Resolve-PostgreSqlTool -Name $name -BinDirectory $PostgreSqlBinDirectory
         $out = Join-Path $logsDirectory "$name-version.stdout.log"
         $err = Join-Path $logsDirectory "$name-version.stderr.log"
@@ -208,7 +214,7 @@ select current_database(), current_user, current_setting('server_version_num'), 
     Assert-NativeExitCode $identityResult 'Read-only server identity query'
     $identityLine = ([IO.File]::ReadAllLines($identityOut) | Where-Object { $_.Trim() } | Select-Object -First 1)
     $identityParts = @($identityLine -split '\|', 17)
-    Assert-RecipeGenieConnectedDatabaseIdentity -Fields $identityParts -ConfiguredDatabase $connection.Database
+    Assert-RecipeGenieConnectedDatabaseIdentity -Fields $identityParts -ConfiguredDatabase $connection.Database -ExpectedMigrationVersions $definition.ExpectedAppliedMigrationVersions
     $manifest.identityVerification.connectedDatabase = 'postgres'
     $manifest.identityVerification.connectedUserClass = $connection.EndpointType
     $manifest.identityVerification.migrationLedgerFound = $true
@@ -217,11 +223,26 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $serverVersionNumber = 0
     if (-not [int]::TryParse($identityParts[2], [ref]$serverVersionNumber)) { throw "Server version response was invalid." }
     $serverMajor = [Math]::Floor($serverVersionNumber / 10000)
-    $clientMajor = Get-PostgreSqlMajorVersion $manifest.toolVersions.pg_dump
-    if ($clientMajor -ne $serverMajor) { throw "pg_dump major version must match the PostgreSQL server major version." }
+    $clientVersionTool = if ($PreflightOnly) { 'psql' } else { 'pg_dump' }
+    $clientMajor = Get-PostgreSqlMajorVersion $manifest.toolVersions[$clientVersionTool]
+    if ($clientMajor -ne $serverMajor) { throw "PostgreSQL client major version must match the server major version." }
     $manifest.postgresServerVersion = Protect-RecipeGenieSecret -Text $identityParts[3] -LiteralSecrets $literalSecrets
     $manifest.identityVerification.postgresServerVersionAvailable = $true
     $manifest.identityVerification.verified = $true
+
+    if ($PreflightOnly) {
+        $preflightOut = Join-Path $logsDirectory 'preflight.stdout.log'
+        $preflightErr = Join-Path $logsDirectory 'preflight.stderr.log'
+        $preflightArguments = @('-X','--no-psqlrc','--set=ON_ERROR_STOP=1','--file',$preflightFullPath)
+        $preflightResult = Invoke-RecipeGenieNativeProcess -ExecutablePath $tools.psql -ArgumentList $preflightArguments -StdOutPath $preflightOut -StdErrPath $preflightErr -LiteralSecrets $literalSecrets
+        Assert-NativeExitCode $preflightResult "Migration $($definition.PendingMigrationVersion) read-only preflight"
+        if (-not (Test-PathWithin -Candidate $backupDirectory -Parent $destination)) { throw 'Preflight scratch directory escaped the supplied destination.' }
+        [IO.Directory]::Delete($backupDirectory, $true)
+        Write-Output "PASS: migration $($definition.PendingMigrationVersion) read-only preflight satisfied."
+        Write-Output 'Backup created: no'
+        Write-Output 'Migration authorization: not granted'
+        return
+    }
 
     $statusResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'status', '--porcelain')
     if ($statusResult.ExitCode -ne 0) { throw "Git worktree state could not be captured." }
@@ -295,7 +316,10 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $manifest.backupStatus = 'failed'
     $safeMessage = Protect-RecipeGenieSecret -Text $_.Exception.Message -LiteralSecrets $literalSecrets
     try {
-        if (Test-Path -LiteralPath $backupDirectory -PathType Container) {
+        if ($PreflightOnly -and (Test-Path -LiteralPath $backupDirectory -PathType Container)) {
+            if (-not (Test-PathWithin -Candidate $backupDirectory -Parent $destination)) { throw 'Preflight scratch directory escaped the supplied destination.' }
+            [IO.Directory]::Delete($backupDirectory, $true)
+        } elseif (Test-Path -LiteralPath $backupDirectory -PathType Container) {
             $manifestPath = Join-Path $backupDirectory 'manifest.json'
             $summaryPath = Join-Path $backupDirectory 'summary.txt'
             Write-SanitizedFile -Path $manifestPath -Content ($manifest | ConvertTo-Json -Depth 8) -LiteralSecrets $literalSecrets
