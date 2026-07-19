@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs"
+import { resolve } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import {
   EXPECTED_LATEST_MIGRATION,
@@ -13,6 +15,18 @@ afterEach(() => {
 })
 
 describe("deployment manifest", () => {
+  it("tracks the latest checked-in migration", () => {
+    const migrationsDirectory = resolve(process.cwd(), "../supabase/migrations")
+    const latestMigration = readdirSync(migrationsDirectory)
+      .filter((fileName) => /^\d{3}_[a-z0-9_]+\.sql$/.test(fileName))
+      .sort()
+      .at(-1)
+      ?.replace(/\.sql$/, "")
+
+    expect(EXPECTED_LATEST_MIGRATION).toBe(latestMigration)
+    expect(EXPECTED_LATEST_MIGRATION).not.toBe("012_enforce_uuid_active_recipe_writes")
+  })
+
   it("parses a complete build manifest", () => {
     expect(parseDeploymentManifest({
       gitSha: "6b9bdfeba08db9782f28bc54fae760d279ae4988",

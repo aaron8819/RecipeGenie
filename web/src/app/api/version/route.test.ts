@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest"
+import { EXPECTED_LATEST_MIGRATION } from "@/lib/deployment-manifest"
 import { GET } from "./route"
 
 const originalEnv = { ...process.env }
@@ -23,7 +24,7 @@ describe("GET /api/version", () => {
       gitSha: "6b9bdfe",
       buildTimestamp: "2026-07-18T12:00:00.000Z",
       applicationVersion: "0.1.0",
-      expectedLatestMigration: "012_enforce_uuid_active_recipe_writes",
+      expectedLatestMigration: EXPECTED_LATEST_MIGRATION,
       expectedSupabaseProjectRef: "eyaoahwzixqetjgfghsh",
     })
   })
