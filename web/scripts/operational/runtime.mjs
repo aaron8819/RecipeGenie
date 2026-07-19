@@ -150,6 +150,8 @@ export function parsePublicManifest(value) {
 
 export function databaseUrlMatchesProject(databaseUrl, expectedProjectRef) {
   const parsed = new URL(databaseUrl)
-  const haystack = `${parsed.hostname} ${decodeURIComponent(parsed.username)}`
-  return haystack.split(/[^a-z0-9]+/i).includes(expectedProjectRef)
+  const hostname = parsed.hostname.toLowerCase()
+  if (hostname === `db.${expectedProjectRef}.supabase.co`) return decodeURIComponent(parsed.username) === "postgres"
+  if (hostname !== "pooler.supabase.com" && !hostname.endsWith(".pooler.supabase.com")) return false
+  return decodeURIComponent(parsed.username) === `postgres.${expectedProjectRef}`
 }
