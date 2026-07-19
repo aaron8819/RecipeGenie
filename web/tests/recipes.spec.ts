@@ -108,6 +108,46 @@ async function cleanupRecipeRun(state: RecipeRunState) {
   }
 }
 
+async function expectDeletedRecipeState(recipeUuid: string, ingredient: string) {
+  const supabase = createClient(E2E_CONFIG.supabaseUrl, E2E_CONFIG.supabaseAnonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: E2E_CONFIG.email,
+    password: E2E_CONFIG.password,
+  })
+  if (signInError) throw signInError
+
+  try {
+    const [recipeResult, contributionResult, shoppingResult] = await Promise.all([
+      supabase.from('recipes').select('recipe_uuid').eq('recipe_uuid', recipeUuid),
+      supabase
+        .from('shopping_recipe_contributions')
+        .select('recipe_uuid')
+        .eq('recipe_uuid', recipeUuid),
+      supabase
+        .from('shopping_list')
+        .select('items,already_have,excluded,source_recipe_uuids'),
+    ])
+    if (recipeResult.error) throw recipeResult.error
+    if (contributionResult.error) throw contributionResult.error
+    if (shoppingResult.error) throw shoppingResult.error
+
+    expect(recipeResult.data).toEqual([])
+    expect(contributionResult.data).toEqual([])
+
+    const projection = shoppingResult.data[0]
+    expect(projection?.source_recipe_uuids || []).not.toContain(recipeUuid)
+    expect(JSON.stringify([
+      projection?.items,
+      projection?.already_have,
+      projection?.excluded,
+    ])).not.toContain(ingredient)
+  } finally {
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
+  }
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -417,22 +457,14 @@ test.describe('Recipes', () => {
     await expect(confirmButton).toBeVisible()
     await expect(confirmButton).toBeEnabled()
 
-    const contributionResponse = page.waitForResponse((response) =>
-      response.url().includes('/api/shopping/recipe-contributions') &&
-      response.request().method() === 'DELETE'
-    )
     const recipeResponse = page.waitForResponse((response) =>
       response.url().includes('/rest/v1/rpc/delete_recipe') &&
       response.request().method() === 'POST'
     )
 
     await confirmButton.click()
-    const [contributionResult, recipeResult] = await Promise.all([
-      contributionResponse,
-      recipeResponse,
-    ])
+    const recipeResult = await recipeResponse
 
-    expect(contributionResult.ok()).toBe(true)
     expect(recipeResult.ok()).toBe(true)
     const recipeCreate = identityWrites.find((request) =>
       request.method() === 'POST' && request.url().includes('/rest/v1/recipes')
@@ -445,11 +477,11 @@ test.describe('Recipes', () => {
     )
     expect(recipeCreate).toBeDefined()
     expect(recipeDelete).toBeDefined()
-    expect(contributionWrites).toHaveLength(2)
+    expect(contributionWrites).toHaveLength(1)
 
     const createPayload = recipeCreate?.postDataJSON() as Record<string, unknown>
     expect(createPayload.recipe_uuid).toEqual(expect.stringMatching(UUID_PATTERN))
-    expect(createPayload).not.toHaveProperty('id')
+    expect(createPayload.id).toBe(createPayload.recipe_uuid)
 
     for (const request of contributionWrites) {
       const payload = request.postDataJSON() as { recipeIds?: unknown[] }
@@ -458,6 +490,10 @@ test.describe('Recipes', () => {
 
     const deletePayload = recipeDelete?.postDataJSON() as Record<string, unknown>
     expect(deletePayload).toEqual({ p_recipe_uuid: expect.stringMatching(UUID_PATTERN) })
+    await expectDeletedRecipeState(
+      createPayload.recipe_uuid as string,
+      recipe.ingredients[0].item
+    )
     expect(nativeConfirmCount).toBe(0)
     await expect(page.getByRole('alertdialog')).toHaveCount(0)
     await expect(page.getByRole('dialog')).toHaveCount(0)
