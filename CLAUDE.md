@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+For Codex, root `AGENTS.md` is the authoritative operating policy. Use
+`docs/developer-workflow.md` for workflow-doctor and release-status command
+usage. This file remains technical project guidance and does not override those
+policies.
+
 ## Project Overview
 
 Recipe Genie is a weekly meal planning app. Users maintain recipes by category, generate randomized meal plans, get smart shopping lists with ingredient merging, and track what they've cooked.
