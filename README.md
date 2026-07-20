@@ -293,6 +293,7 @@ web/
 | `docs/DOCS_INDEX.md` | Canonical doc map: which docs are canonical, secondary, or historical |
 | `docs/project_overview.md` | Canonical architecture overview (layers, domains, ownership) |
 | `docs/ARCHITECTURE_GUARDRAILS.md` | Canonical contributor guardrails and current refactor stopping point |
+| `docs/developer-workflow.md` | Read-only workflow doctor, operational capability discovery, and risk tiers |
 | `CLAUDE.md` | Claude Code context — commands, conventions, architecture quick-ref |
 | `changelog.md` | Recent version history (v2.8+); `changelog-archive.md` for older |
 | `decisions.md` | Architectural Decision Records (ADRs 001–019) |

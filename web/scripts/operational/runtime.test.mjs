@@ -41,6 +41,7 @@ describe("operational runtime", () => {
     expect(databaseUrlMatchesProject(`postgresql://postgres:pw@db.${ref}.supabase.co/postgres`, ref)).toBe(true)
     expect(databaseUrlMatchesProject(`postgresql://postgres.${ref}:pw@aws-0-us.pooler.supabase.com/postgres`, ref)).toBe(true)
     expect(databaseUrlMatchesProject("postgresql://postgres:pw@localhost/postgres", ref)).toBe(false)
+    expect(databaseUrlMatchesProject(`postgresql://postgres.${ref}:pw@example.invalid/postgres`, ref)).toBe(false)
   })
 
   it("prohibits transaction pooling and requires explicit session-pooler authorization", () => {
