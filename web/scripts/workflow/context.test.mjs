@@ -50,6 +50,7 @@ function fixture(overrides = {}) {
     homeDirectory: path.resolve("C:/home"),
     nodeVersion: overrides.nodeVersion || "v22.23.1",
     npmVersion: overrides.npmVersion === undefined ? "10.9.8" : overrides.npmVersion,
+    platform: overrides.platform,
   })
   return { report, commands, primaryRoot, repositoryRoot }
 }
@@ -85,6 +86,7 @@ describe("workflow doctor context", () => {
     const programFiles = path.resolve("C:/Program Files")
     const report = fixture({
       toolNames: ["git"],
+      platform: "win32",
       environment: { ProgramFiles: programFiles },
       extraExists: (candidate) => candidate === path.join(programFiles, "PostgreSQL", "17", "bin", "psql.exe")
         || candidate === path.join(programFiles, "PostgreSQL", "17", "bin", "pg_dump.exe"),

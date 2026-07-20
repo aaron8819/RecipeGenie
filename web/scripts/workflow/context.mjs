@@ -49,13 +49,13 @@ function npmVersionFromEnvironment(environment) {
   return match ? match[1] : null
 }
 
-function executableCandidates(command, environment, repositoryRoot, definition) {
-  const extensions = process.platform === "win32" ? [".cmd", ".exe", ".bat", ""] : [""]
+function executableCandidates(command, environment, repositoryRoot, definition, platform) {
+  const extensions = platform === "win32" ? [".cmd", ".exe", ".bat", ""] : [""]
   const candidates = []
   if (definition.localBin) {
     for (const extension of extensions) candidates.push(path.join(repositoryRoot, "web", "node_modules", ".bin", `${command}${extension}`))
   }
-  if (process.platform === "win32" && ["psql", "pg_dump"].includes(command)) {
+  if (platform === "win32" && ["psql", "pg_dump"].includes(command)) {
     const programFiles = environment.ProgramFiles || "C:\\Program Files"
     for (let major = 18; major >= 12; major -= 1) candidates.push(path.join(programFiles, "PostgreSQL", String(major), "bin", `${command}.exe`))
   }
@@ -65,9 +65,9 @@ function executableCandidates(command, environment, repositoryRoot, definition) 
   return candidates
 }
 
-function discoverTools({ environment, repositoryRoot, exists }) {
+function discoverTools({ environment, repositoryRoot, exists, platform }) {
   return Object.fromEntries(TOOL_DEFINITIONS.map((definition) => {
-    const executable = definition.commands.flatMap((command) => executableCandidates(command, environment, repositoryRoot, definition)).find(exists)
+    const executable = definition.commands.flatMap((command) => executableCandidates(command, environment, repositoryRoot, definition, platform)).find(exists)
     return [definition.key, { label: definition.label, available: Boolean(executable) }]
   }))
 }
@@ -161,6 +161,7 @@ export function collectDoctorReport(options = {}) {
   const commandRunner = options.commandRunner || defaultCommandRunner
   const homeDirectory = options.homeDirectory || os.homedir()
   const nodeVersion = options.nodeVersion || process.version
+  const platform = options.platform || process.platform
 
   const blockers = []
   const warnings = []
@@ -197,7 +198,7 @@ export function collectDoctorReport(options = {}) {
   if (!nodeSupported) actions.push(`Run rg:doctor with repository-supported Node ${SUPPORTED_NODE_MAJOR}.`)
   if (!npmSupported) actions.push(`Run rg:doctor through repository-supported npm ${SUPPORTED_NPM_MAJOR}.`)
 
-  const tools = discoverTools({ environment, repositoryRoot, exists })
+  const tools = discoverTools({ environment, repositoryRoot, exists, platform })
   const missingTools = Object.values(tools).filter((tool) => !tool.available).map((tool) => tool.label)
   if (missingTools.length) warnings.push(`Optional tools unavailable: ${missingTools.join(", ")}.`)
 
