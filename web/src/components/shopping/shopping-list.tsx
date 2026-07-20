@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, useRef, useEffect, memo, type ReactNode } from "react"
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
 import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles } from "lucide-react"
 import {
   DndContext,
@@ -59,6 +59,7 @@ import { ShoppingCart } from "lucide-react"
 import { navigateToHomeTab } from "@/lib/home-navigation"
 import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
+import { createShoppingRowId } from "@/lib/shopping-row-identity"
 import { scrollNodeIntoPane } from "@/lib/pane-scroll"
 import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
 import { RecipeDialog } from "@/components/recipes/recipe-dialog"
@@ -88,6 +89,13 @@ import {
   ShoppingStateSection,
   SourceTag,
 } from "./shopping-list-components"
+import {
+  categoryIntentMapsEqual,
+  deriveCategoryContent,
+  isCategoryExpanded,
+  reconcileCategoryIntents,
+  type CategoryIntentByKey,
+} from "./shopping-category-intent"
 
 type ShoppingMode = "shop" | "manage"
 type AddFeedbackTone = "neutral" | "success" | "warning" | "error"
@@ -630,9 +638,7 @@ export function ShoppingListView() {
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [shoppingMode, setShoppingMode] = useState<ShoppingMode>("shop")
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
-  const [manuallyExpandedCategories, setManuallyExpandedCategories] = useState<Set<string>>(new Set())
-  const [manuallyCollapsedCategories, setManuallyCollapsedCategories] = useState<Set<string>>(new Set())
+  const [categoryIntents, setCategoryIntents] = useState<CategoryIntentByKey>(new Map())
   const [viewingRecipeId, setViewingRecipeId] = useState<string | null>(null)
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [editingItemRowId, setEditingItemRowId] = useState<string | null>(null)
@@ -651,7 +657,7 @@ export function ShoppingListView() {
   const { showSwipeHint } = useSwipeHint()
   const isManageMode = shoppingMode === "manage"
   const categorySectionRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const mobileCategoryDefaultsAppliedRef = useRef(false)
+  const previousCategoryContentRef = useRef(deriveCategoryContent([]))
 
   // Mobile UX improvements - collapsible sections and scroll-to-top FAB
   const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(true)
@@ -813,29 +819,6 @@ export function ShoppingListView() {
     })
   }, [checkOffItem])
 
-  // Toggle category collapse (separate setState calls; never call setState inside another's updater)
-  const toggleCategory = useCallback((categoryKey: string) => {
-    const isCurrentlyCollapsed = collapsedCategories.has(categoryKey)
-    setCollapsedCategories(prev => {
-      const next = new Set(prev)
-      if (next.has(categoryKey)) next.delete(categoryKey)
-      else next.add(categoryKey)
-      return next
-    })
-    setManuallyExpandedCategories(prev => {
-      const next = new Set(prev)
-      if (isCurrentlyCollapsed) next.add(categoryKey)
-      else next.delete(categoryKey)
-      return next
-    })
-    setManuallyCollapsedCategories(prev => {
-      const next = new Set(prev)
-      if (isCurrentlyCollapsed) next.delete(categoryKey)
-      else next.add(categoryKey)
-      return next
-    })
-  }, [collapsedCategories])
-
   // Toggle recipes section collapse (mobile only)
   const toggleRecipeSection = useCallback(() => {
     setRecipeSectionCollapsed(prev => !prev)
@@ -956,9 +939,42 @@ export function ShoppingListView() {
     return buildCategoryViewModel(groupedItems, orderedCategories)
   }, [groupedItems, orderedCategories])
 
+  const categoryContent = useMemo(() => deriveCategoryContent(filteredItems), [filteredItems])
+  const effectiveCategoryIntents = useMemo(
+    () => reconcileCategoryIntents(
+      categoryIntents,
+      previousCategoryContentRef.current,
+      categoryContent
+    ),
+    [categoryContent, categoryIntents]
+  )
+
+  useLayoutEffect(() => {
+    previousCategoryContentRef.current = categoryContent
+    setCategoryIntents((current) =>
+      categoryIntentMapsEqual(current, effectiveCategoryIntents)
+        ? current
+        : effectiveCategoryIntents
+    )
+  }, [categoryContent, effectiveCategoryIntents])
+
+  const setCategoryExpanded = useCallback((categoryKey: string, expanded: boolean) => {
+    setCategoryIntents((current) => {
+      const next = new Map(current)
+      next.set(categoryKey, expanded ? "expanded" : "collapsed")
+      return next
+    })
+  }, [])
+
+  const toggleCategory = useCallback((categoryKey: string, uncheckedCount: number) => {
+    const expanded = isCategoryExpanded(effectiveCategoryIntents.get(categoryKey), uncheckedCount)
+    setCategoryExpanded(categoryKey, !expanded)
+  }, [effectiveCategoryIntents, setCategoryExpanded])
+
   const shoppingProgress = useMemo(() => {
     return deriveCheckedPartition(filteredItems)
   }, [filteredItems])
+  const allItemsChecked = shoppingProgress.allChecked
 
   const activeCategoryJumpTargets = useMemo(() => {
     return categoryViewModels
@@ -977,74 +993,6 @@ export function ShoppingListView() {
     const completedCategories = categoryViewModels.filter((category) => category.uncheckedCount === 0)
     return hideCompletedItems ? activeCategories : [...activeCategories, ...completedCategories]
   }, [categoryViewModels, hideCompletedItems, isManageMode])
-
-  useEffect(() => {
-    if (isDesktop || isManageMode || mobileCategoryDefaultsAppliedRef.current) return
-    const activeCategories = categoryViewModels.filter((category) => category.uncheckedCount > 0)
-    if (activeCategories.length <= 3) return
-
-    const categoriesToCollapse = activeCategories.slice(1).map((category) => category.key)
-    setCollapsedCategories((prev) => {
-      const next = new Set(prev)
-      categoriesToCollapse.forEach((key) => next.add(key))
-      return next
-    })
-    setManuallyCollapsedCategories((prev) => {
-      const next = new Set(prev)
-      categoriesToCollapse.forEach((key) => next.add(key))
-      return next
-    })
-    mobileCategoryDefaultsAppliedRef.current = true
-  }, [categoryViewModels, isDesktop, isManageMode])
-
-  // Check if all items are checked
-  const allItemsChecked = useMemo(() => {
-    return shoppingProgress.allChecked
-  }, [shoppingProgress.allChecked])
-
-  // Auto-collapse categories when all items are checked (only if not manually expanded)
-  useEffect(() => {
-    if (allItemsChecked) {
-      const allCategoryKeys = new Set(filteredItems.map(item => item.categoryKey || "misc"))
-      setCollapsedCategories(prev => {
-        const next = new Set(prev)
-        allCategoryKeys.forEach(key => {
-          // Only auto-collapse if not manually expanded
-          if (!manuallyExpandedCategories.has(key)) {
-            next.add(key)
-          }
-        })
-        return next
-      })
-    }
-  }, [allItemsChecked, filteredItems, manuallyExpandedCategories])
-
-  // Auto-collapse when all items in a category are checked (unless manually expanded); auto-expand when items become unchecked only if it was auto-collapsed (not manually collapsed)
-  useEffect(() => {
-    const newCollapsed = new Set(collapsedCategories)
-    let hasChanges = false
-    
-    orderedCategories.forEach(categoryData => {
-      const items = groupedItems[categoryData.key]
-      if (items && items.length > 0) {
-        const allChecked = items.every(item => item.checked === true)
-        if (allChecked && !manuallyExpandedCategories.has(categoryData.key)) {
-          if (!newCollapsed.has(categoryData.key)) {
-            newCollapsed.add(categoryData.key)
-            hasChanges = true
-          }
-        } else if (!allChecked && newCollapsed.has(categoryData.key) && !manuallyCollapsedCategories.has(categoryData.key)) {
-          // Auto-expand only when it was auto-collapsed (user manual collapse is respected)
-          newCollapsed.delete(categoryData.key)
-          hasChanges = true
-        }
-      }
-    })
-    
-    if (hasChanges) {
-      setCollapsedCategories(newCollapsed)
-    }
-  }, [filteredItems, groupedItems, orderedCategories, manuallyExpandedCategories, manuallyCollapsedCategories, collapsedCategories])
 
   const allItemIds = useMemo(() => {
     return deriveSortableItemIds(filteredItems)
@@ -1129,7 +1077,7 @@ export function ShoppingListView() {
         const normalized = item.toLowerCase().trim()
         setActiveAdditions(prev => new Set(prev).add(normalized))
         try {
-          await addItem.mutateAsync({ itemName: item })
+          await addItem.mutateAsync({ itemName: item, rowId: createShoppingRowId() })
           addedItems.push(item)
         } catch (error) {
           if (isAlreadyInShoppingListError(error)) {
@@ -1274,19 +1222,7 @@ export function ShoppingListView() {
   }, [])
 
   const handleJumpToCategory = useCallback((categoryKey: string) => {
-    setCollapsedCategories((prev) => {
-      if (!prev.has(categoryKey)) return prev
-      const next = new Set(prev)
-      next.delete(categoryKey)
-      return next
-    })
-    setManuallyExpandedCategories((prev) => new Set(prev).add(categoryKey))
-    setManuallyCollapsedCategories((prev) => {
-      if (!prev.has(categoryKey)) return prev
-      const next = new Set(prev)
-      next.delete(categoryKey)
-      return next
-    })
+    setCategoryExpanded(categoryKey, true)
 
     window.requestAnimationFrame(() => {
       const categorySection = categorySectionRefs.current[categoryKey]
@@ -1297,7 +1233,7 @@ export function ShoppingListView() {
         behavior: isDesktop ? "smooth" : "auto",
       })
     })
-  }, [isDesktop])
+  }, [isDesktop, setCategoryExpanded])
 
   const handleDragStart = (event: DragStartEvent) => {
     if (!isManageMode) return
@@ -1418,7 +1354,10 @@ export function ShoppingListView() {
           dragOverCategory === categoryData.key &&
           activeItem.categoryKey !== categoryData.key
 
-        const isCollapsed = collapsedCategories.has(categoryData.key)
+        const isCollapsed = !isCategoryExpanded(
+          effectiveCategoryIntents.get(categoryData.key),
+          categoryData.uncheckedCount
+        )
 
         return (
           <div
@@ -1434,7 +1373,7 @@ export function ShoppingListView() {
               isCollapsed={isCollapsed}
               isDragTarget={!!isDragTarget}
               isBulkCheckOffPending={bulkCheckOff.isPending}
-              onToggleCategory={() => toggleCategory(categoryData.key)}
+              onToggleCategory={() => toggleCategory(categoryData.key, categoryData.uncheckedCount)}
               onBulkCheckOff={() => handleBulkCheckOff(items)}
               compact={!isManageMode}
             >

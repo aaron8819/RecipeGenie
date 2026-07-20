@@ -225,7 +225,7 @@ describe("useRemoveShoppingItem", () => {
 })
 
 describe("useAddShoppingItem", () => {
-  it("optimistically adds a new item to cache with a rowId", async () => {
+  it("uses the same client rowId for optimistic and persisted items", async () => {
     const { wrapper, queryClient } = createWrapper()
     queryClient.setQueryData(
       [...SHOPPING_KEY],
@@ -238,14 +238,19 @@ describe("useAddShoppingItem", () => {
 
     const { result } = renderHook(() => useAddShoppingItem(), { wrapper })
 
-    result.current.mutate({ itemName: "eggs" })
+    result.current.mutate({ itemName: "eggs", rowId: "row-eggs" })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     const cached = queryClient.getQueryData<ShoppingList>([...SHOPPING_KEY])
     const eggs = cached?.items.find((item) => item.item === "eggs")
     expect(cached?.items).toHaveLength(2)
-    expect(eggs?.rowId).toBeTruthy()
+    expect(eggs?.rowId).toBe("row-eggs")
+    expect(mockSupabase.update).toHaveBeenCalledWith({
+      items: expect.arrayContaining([
+        expect.objectContaining({ item: "eggs", rowId: "row-eggs" }),
+      ]),
+    })
   })
 })
 

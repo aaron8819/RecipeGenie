@@ -933,6 +933,7 @@ export function ShoppingCategorySection({
       <CardHeader
         role="button"
         tabIndex={0}
+        aria-expanded={!isCollapsed}
         className={cn(
           "flex cursor-pointer flex-row items-center justify-between border-b border-stone-100 bg-stone-50/50 transition-colors hover:bg-stone-100/50",
           compact ? "px-3 py-2.5 md:px-4 md:py-3" : "px-4 py-3 md:px-6 md:py-4"

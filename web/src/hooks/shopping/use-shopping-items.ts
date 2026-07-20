@@ -84,6 +84,13 @@ function sortItemsIfNeeded(
  * Hook to add a manual item to the shopping list
  * Implements optimistic updates for instant UI feedback
  */
+type AddShoppingItemInput = {
+  itemName: string
+  amount?: number
+  unit?: string
+  rowId: string
+}
+
 export function useAddShoppingItem() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
@@ -91,12 +98,13 @@ export function useAddShoppingItem() {
 
   return useMutation({
     scope: { id: `${SHOPPING_LIST_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
-    mutationFn: async ({ itemName, amount, unit }: { itemName: string; amount?: number; unit?: string }) => {
+    mutationFn: async ({ itemName, amount, unit, rowId }: AddShoppingItemInput) => {
       const config = await fetchShoppingConfig()
       const categoryOverrides = config.category_overrides || {}
       const newItem = createManualShoppingItem(itemName, categoryOverrides, {
         amount: amount || null,
         unit,
+        preserve: { rowId },
       })
 
       const supabase = getSupabase()
@@ -130,7 +138,7 @@ export function useAddShoppingItem() {
       if (saveError) throw saveError
       return newItem
     },
-    onMutate: async ({ itemName, amount, unit }) => {
+    onMutate: async ({ itemName, amount, unit, rowId }) => {
       const { previousData: previousList } =
         await cancelQueriesAndSnapshot<ShoppingList>(queryClient, shoppingKey)
 
@@ -139,6 +147,7 @@ export function useAddShoppingItem() {
       const optimisticItem = createManualShoppingItem(itemName, categoryOverrides, {
         amount: amount || null,
         unit,
+        preserve: { rowId },
       })
 
       setOptimisticQueryData<ShoppingList>(

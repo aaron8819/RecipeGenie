@@ -1,5 +1,6 @@
 import { test, expect, VIEWPORTS } from './fixtures'
 import type { Page } from '@playwright/test'
+import { E2E_CONFIG } from './e2e-env'
 import {
   acquireShoppingSpecLock,
   buildShoppingItem,
@@ -308,6 +309,68 @@ test.describe('Shopping List Mobile @extended', () => {
 
     await expect(rowById(page, pantryRowId)).toBeVisible()
     await expect(rowById(page, produceRowId)).toBeVisible()
+  })
+
+  test('keeps active categories visible and reopens them for newly relevant content', async ({ page }) => {
+    expect(E2E_CONFIG.target, 'Category-state writes require an explicitly non-production target').not.toBe('production')
+
+    const seed = `${Date.now()}-category-state`
+    const activeCategories = [
+      { key: 'produce', order: 1, item: `apples ${seed}` },
+      { key: 'deli', order: 2, item: `ham ${seed}` },
+      { key: 'bakery', order: 3, item: `bread ${seed}` },
+      { key: 'protein', order: 4, item: `chicken ${seed}` },
+      { key: 'pantry', order: 6, item: `rice ${seed}` },
+    ]
+
+    cleanupState = await seedShoppingState({
+      items: [
+        ...activeCategories.map(({ key, order, item }, index) => buildShoppingItem({
+          rowId: `row-category-state-${index}-${seed}`,
+          item,
+          categoryKey: key,
+          categoryOrder: order,
+        })),
+        buildShoppingItem({
+          rowId: `row-category-state-bakery-2-${seed}`,
+          item: `rolls ${seed}`,
+          categoryKey: 'bakery',
+          categoryOrder: 3,
+        }),
+      ],
+    })
+    await page.reload()
+    await ensureShoppingView(page)
+
+    const categorySection = (key: string) => page.getByTestId(`shopping-category-${key}`)
+    const categoryHeader = (key: string) => categorySection(key).locator('[role="button"][aria-expanded]').first()
+
+    for (const { key } of activeCategories) {
+      await expect(categoryHeader(key)).toHaveAttribute('aria-expanded', 'true')
+    }
+
+    await categorySection('pantry').getByRole('button', { name: 'Collapse category' }).click()
+    await expect(categoryHeader('pantry')).toHaveAttribute('aria-expanded', 'false')
+
+    const addedItemName = `black beans ${seed}`
+    const addInput = page.locator('input[placeholder="Add milk, apples, basil..."]:visible')
+    await addInput.fill(addedItemName)
+    await addInput.locator('xpath=..').getByRole('button', { name: 'Add item' }).click()
+
+    await expect(categoryHeader('pantry')).toHaveAttribute('aria-expanded', 'true')
+    await expect(categorySection('pantry').getByText(addedItemName, { exact: false })).toBeVisible()
+
+    await categorySection('bakery').getByRole('button', { name: /check all items in bakery/i }).click()
+    await expect(categoryHeader('bakery')).toHaveAttribute('aria-expanded', 'false')
+
+    await page.setViewportSize(VIEWPORTS.desktop)
+    await page.reload()
+    await ensureShoppingView(page)
+
+    for (const key of ['produce', 'deli', 'protein', 'pantry']) {
+      await expect(categoryHeader(key)).toHaveAttribute('aria-expanded', 'true')
+    }
+    await expect(categoryHeader('bakery')).toHaveAttribute('aria-expanded', 'false')
   })
 
   test('keeps the active Shopping pane scrollable after repeated section jumps and tab switches', async ({ page }) => {

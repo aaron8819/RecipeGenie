@@ -140,6 +140,20 @@ function renderShoppingList() {
   )
 }
 
+function expectCategoryExpanded(categoryKey: string, expanded: boolean) {
+  const section = screen.getByTestId(`shopping-category-${categoryKey}`)
+  const header = section.querySelector('[role="button"][aria-expanded]')
+  expect(header).toHaveAttribute("aria-expanded", String(expanded))
+}
+
+function toggleCategory(categoryKey: string) {
+  const section = screen.getByTestId(`shopping-category-${categoryKey}`)
+  const label = section.querySelector('[role="button"][aria-expanded="true"]')
+    ? "Collapse category"
+    : "Expand category"
+  fireEvent.click(within(section).getByRole("button", { name: label }))
+}
+
 function setMobileViewport() {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -647,6 +661,161 @@ afterEach(() => {
 })
 
 describe("ShoppingListView orchestration", () => {
+  it("uses identical content-derived defaults on desktop and mobile, including more than three active categories", () => {
+    currentShoppingList = makeList({
+      items: [
+        makeItem("apples", { rowId: "row-apples", categoryKey: "produce" }),
+        makeItem("ham", { rowId: "row-ham", categoryKey: "deli" }),
+        makeItem("bread", { rowId: "row-bread", categoryKey: "bakery" }),
+        makeItem("chicken", { rowId: "row-chicken", categoryKey: "protein" }),
+        makeItem("milk", { rowId: "row-milk", categoryKey: "dairy" }),
+        makeItem("completed", { rowId: "row-completed", categoryKey: "pantry", checked: true }),
+      ],
+    })
+
+    const desktop = renderShoppingList()
+    for (const key of ["produce", "deli", "bakery", "protein", "dairy"]) {
+      expectCategoryExpanded(key, true)
+    }
+    expectCategoryExpanded("pantry", false)
+    desktop.unmount()
+
+    setMobileViewport()
+    renderShoppingList()
+    for (const key of ["produce", "deli", "bakery", "protein", "dairy"]) {
+      expectCategoryExpanded(key, true)
+    }
+    expectCategoryExpanded("pantry", false)
+  })
+
+  it("preserves manual intent across tab visibility, rerenders, category reordering, and unrelated changes", () => {
+    currentShoppingList = makeList({
+      items: [
+        makeItem("apples", { rowId: "row-apples", categoryKey: "produce" }),
+        makeItem("milk", { rowId: "row-milk", categoryKey: "dairy" }),
+      ],
+    })
+    currentConfig = makeConfig({ category_order: ["produce", "dairy"] })
+
+    const view = renderShoppingList()
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", false)
+
+    act(() => {
+      currentConfig = makeConfig({ category_order: ["dairy", "produce"] })
+      updateShoppingList((list) => ({ ...list, items: [list.items[1], list.items[0]] }))
+    })
+    view.rerender(
+      <div data-home-tab-panel="shopping" data-testid="shopping-test-pane" aria-hidden="true">
+        <UndoToastProvider><ShoppingListView /></UndoToastProvider>
+      </div>
+    )
+    view.rerender(
+      <div data-home-tab-panel="shopping" data-testid="shopping-test-pane" aria-hidden="false">
+        <UndoToastProvider><ShoppingListView /></UndoToastProvider>
+      </div>
+    )
+
+    expectCategoryExpanded("produce", false)
+    act(() => {
+      updateShoppingList((list) => ({
+        ...list,
+        items: list.items.filter((candidate) => candidate.rowId !== "row-milk"),
+      }))
+    })
+    expectCategoryExpanded("produce", false)
+  })
+
+  it("reopens a manually collapsed category when a new unchecked row enters", () => {
+    currentShoppingList = makeList({ items: [makeItem("apples", { rowId: "row-apples" })] })
+    renderShoppingList()
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", false)
+
+    act(() => {
+      updateShoppingList((list) => ({
+        ...list,
+        items: [...list.items, makeItem("carrots", { rowId: "row-carrots" })],
+      }))
+    })
+
+    expectCategoryExpanded("produce", true)
+    expect(screen.getByText("carrots")).toBeInTheDocument()
+  })
+
+  it("reopens on uncheck, collapses on final completion, then honors a manual reopen", () => {
+    const completed = makeItem("apples", { rowId: "row-apples", checked: true })
+    currentShoppingList = makeList({ items: [completed] })
+    renderShoppingList()
+    expectCategoryExpanded("produce", false)
+
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", true)
+    act(() => {
+      updateShoppingList((list) => ({
+        ...list,
+        items: list.items.map((candidate) => ({ ...candidate, checked: false })),
+      }))
+    })
+    expectCategoryExpanded("produce", true)
+
+    act(() => {
+      updateShoppingList((list) => ({
+        ...list,
+        items: list.items.map((candidate) => ({ ...candidate, checked: true })),
+      }))
+    })
+    expectCategoryExpanded("produce", false)
+
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", true)
+    act(() => updateShoppingList((list) => ({ ...list })))
+    expectCategoryExpanded("produce", true)
+  })
+
+  it("deletes intent when a category empties and recomputes defaults after undo or repopulation", () => {
+    currentShoppingList = makeList({ items: [makeItem("apples", { rowId: "row-apples" })] })
+    renderShoppingList()
+    toggleCategory("produce")
+
+    act(() => setShoppingList(makeList()))
+    expect(screen.queryByTestId("shopping-category-produce")).not.toBeInTheDocument()
+
+    act(() => setShoppingList(makeList({ items: [makeItem("apples", { rowId: "row-apples" })] })))
+    expectCategoryExpanded("produce", true)
+  })
+
+  it("supports custom category defaults and keeps intent while switching Shop and Manage modes", () => {
+    currentConfig = makeConfig({
+      custom_categories: [{ id: "farmers-market", name: "Farmers Market", order: 10 }],
+    })
+    currentShoppingList = makeList({
+      items: [makeItem("local honey", { rowId: "row-honey", categoryKey: "custom_farmers-market" })],
+    })
+    renderShoppingList()
+    expectCategoryExpanded("custom_farmers-market", true)
+    toggleCategory("custom_farmers-market")
+
+    fireEvent.pointerDown(screen.getAllByRole("button", { name: "Organize" })[1])
+    fireEvent.click(screen.getByRole("menuitem", { name: "Enter Manage Mode" }))
+    expectCategoryExpanded("custom_farmers-market", false)
+
+    fireEvent.pointerDown(screen.getAllByRole("button", { name: "Organize" })[1])
+    fireEvent.click(screen.getByRole("menuitem", { name: "Exit Manage Mode" }))
+    expectCategoryExpanded("custom_farmers-market", false)
+  })
+
+  it("resets intent on remount", () => {
+    currentShoppingList = makeList({ items: [makeItem("apples", { rowId: "row-apples" })] })
+    const first = renderShoppingList()
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", false)
+    first.unmount()
+
+    renderShoppingList()
+    expectCategoryExpanded("produce", true)
+  })
+
   it("reveals quick mobile pantry correction actions with a swipe and restores the same row", () => {
     setMobileViewport()
     currentShoppingList = makeList({
@@ -1042,6 +1211,8 @@ describe("ShoppingListView orchestration", () => {
     })
 
     renderShoppingList()
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", false)
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Clear" }))
@@ -1057,6 +1228,7 @@ describe("ShoppingListView orchestration", () => {
 
     expect(clearListMutate).not.toHaveBeenCalled()
     expect(screen.getByText("garlic")).toBeInTheDocument()
+    expectCategoryExpanded("produce", true)
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
   })
@@ -1075,6 +1247,8 @@ describe("ShoppingListView orchestration", () => {
     })
 
     renderShoppingList()
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", false)
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Restore cilantro 2 bunches Excluded: cilantro" }))
@@ -1083,6 +1257,7 @@ describe("ShoppingListView orchestration", () => {
     expect(moveExcludedMutate).toHaveBeenCalledTimes(1)
     expect(screen.queryByText("Excluded")).not.toBeInTheDocument()
     expect(screen.getByText("Fresh Produce")).toBeInTheDocument()
+    expectCategoryExpanded("produce", true)
     expect(screen.getAllByText("cilantro")).toHaveLength(1)
     expect(screen.getByRole("alert")).toHaveTextContent('Restored "cilantro" to shopping list')
 
@@ -1094,7 +1269,7 @@ describe("ShoppingListView orchestration", () => {
 
   it("restores only the clicked duplicate from pantry and excluded sections", () => {
     currentShoppingList = makeList({
-      items: [],
+      items: [makeItem("apples", { rowId: "row-apples" })],
       already_have: [
         makeItem("milk", { rowId: "row-milk-cup", amount: 1, unit: "cup", sources: [{ recipeName: "Cereal" }] }),
         makeItem("milk", { rowId: "row-milk-bottle", amount: 1, unit: "bottle", sources: [{ recipeName: "Coffee" }] }),
@@ -1106,6 +1281,8 @@ describe("ShoppingListView orchestration", () => {
     })
 
     renderShoppingList()
+    toggleCategory("produce")
+    expectCategoryExpanded("produce", false)
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Restore milk 1 cup In pantry" }))
@@ -1122,7 +1299,9 @@ describe("ShoppingListView orchestration", () => {
       expect.objectContaining({ rowId: "row-salt-tsp" }),
       expect.any(Object)
     )
+    expectCategoryExpanded("produce", true)
     expect(currentShoppingList.items.map((item) => item.rowId)).toEqual([
+      "row-apples",
       "row-milk-cup",
       "row-salt-tsp",
     ])
