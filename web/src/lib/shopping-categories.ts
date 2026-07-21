@@ -6,6 +6,7 @@
 
 import type { CustomShoppingCategory } from "@/types/database"
 import { normalizeItemName } from "./shopping-list-normalization"
+import { shoppingIdentityCompatibilityKeys } from "./shopping-ingredient-canonicalization"
 
 export interface ShoppingCategory {
   order: number
@@ -224,8 +225,15 @@ export function categorizeIngredient(
 
   // First check user overrides (highest priority)
   if (userOverrides) {
-    const userCatKey = userOverrides[rawItemLower] ?? userOverrides[itemLower]
-    if (userCatKey in SHOPPING_CATEGORIES) {
+    const overrideKeys = [
+      rawItemLower,
+      itemLower,
+      ...shoppingIdentityCompatibilityKeys(itemName),
+    ]
+    const userCatKey = overrideKeys
+      .map((key) => userOverrides[key])
+      .find(Boolean)
+    if (userCatKey && userCatKey in SHOPPING_CATEGORIES) {
       const cat = SHOPPING_CATEGORIES[userCatKey]
       return [userCatKey, cat.order]
     }
@@ -297,11 +305,11 @@ export function getExcludedKeyword(
   itemName: string,
   excludedKeywords: string[]
 ): string | null {
-  const itemLower = itemName.toLowerCase().trim()
+  const itemKeys = new Set(shoppingIdentityCompatibilityKeys(itemName))
 
   for (const keyword of excludedKeywords) {
-    // Use exact match (case-insensitive) - keyword must match ingredient name exactly
-    if (itemLower === keyword.toLowerCase().trim()) {
+    const keywordKeys = shoppingIdentityCompatibilityKeys(keyword)
+    if (keywordKeys.some((key) => itemKeys.has(key))) {
       return keyword
     }
   }

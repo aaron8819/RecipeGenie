@@ -74,6 +74,10 @@ function project(
 }
 
 describe("authoritative recipe shopping contributions", () => {
+  it("uses normalization version 2 for new frozen contribution snapshots", () => {
+    expect(SHOPPING_NORMALIZATION_VERSION).toBe(2)
+  })
+
   it("projects one frozen recipe contribution", () => {
     const result = project(list(), [], [contribution("a", 1)])
 
@@ -175,6 +179,248 @@ describe("authoritative recipe shopping contributions", () => {
     expect(result.shoppingList.items[0].sources).toHaveLength(2)
   })
 
+  it("regression: merges singular and plural large eggs with both recipe sources", () => {
+    const recipeA = contribution("a", 1)
+    recipeA.items[0] = item("a", recipeA.recipeName, 1, {
+      item: "large egg",
+      unit: "count",
+    })
+    const recipeB = contribution("b", 2)
+    recipeB.items[0] = item("b", recipeB.recipeName, 2, {
+      item: "large eggs",
+      unit: "count",
+    })
+
+    const result = project(list(), [], [recipeA, recipeB])
+
+    expect(result.shoppingList.items).toEqual([
+      expect.objectContaining({
+        item: "large egg",
+        amount: 3,
+        unit: "count",
+        contributionKey: "large egg",
+        sources: [
+          expect.objectContaining({ recipeId: "a" }),
+          expect.objectContaining({ recipeId: "b" }),
+        ],
+      }),
+    ])
+  })
+
+  it("upgrades version-1 identities in memory while preserving row and presentation overrides", () => {
+    const frozenV1 = contribution("a", 1, { normalizationVersion: 1 })
+    frozenV1.items[0] = item("a", frozenV1.recipeName, 1, {
+      item: "large eggs",
+      unit: "count",
+    })
+    const freshV2 = contribution("b", 2)
+    freshV2.items[0] = item("b", freshV2.recipeName, 2, {
+      item: "large egg",
+      unit: "count",
+    })
+    const current = list({
+      items: [{
+        ...frozenV1.items[0],
+        rowId: "derived:large eggs",
+        contributionKey: "large eggs",
+        checked: true,
+        categoryKey: "custom_farm",
+        categoryOrder: 9,
+      }],
+      source_recipes: ["a"],
+      total_servings: 4,
+    })
+
+    const result = project(current, [frozenV1], [frozenV1, freshV2])
+
+    expect(result.shoppingList.items).toEqual([
+      expect.objectContaining({
+        rowId: "derived:large eggs",
+        contributionKey: "large egg",
+        item: "large eggs",
+        amount: 3,
+        checked: true,
+        categoryKey: "custom_farm",
+        categoryOrder: 9,
+      }),
+    ])
+    expect(frozenV1).toMatchObject({
+      normalizationVersion: 1,
+      items: [expect.objectContaining({ item: "large eggs" })],
+    })
+  })
+
+  it("keeps a mixed version-1/version-2 projection idempotent", () => {
+    const frozenV1 = contribution("a", 1, { normalizationVersion: 1 })
+    frozenV1.items[0] = item("a", frozenV1.recipeName, 1, {
+      item: "large eggs",
+      unit: "count",
+    })
+    const freshV2 = contribution("b", 2)
+    freshV2.items[0] = item("b", freshV2.recipeName, 2, {
+      item: "large egg",
+      unit: "count",
+    })
+    const contributions = [frozenV1, freshV2]
+    const first = project(list(), [], contributions)
+    const second = project(
+      list({ ...first.shoppingList }),
+      contributions,
+      contributions,
+      { existingOverrides: first.overrides }
+    )
+    const third = project(
+      list({ ...second.shoppingList }),
+      contributions,
+      contributions,
+      { existingOverrides: second.overrides }
+    )
+
+    expect(second.shoppingList).toEqual(first.shoppingList)
+    expect(third.shoppingList).toEqual(second.shoppingList)
+    expect(third.overrides).toEqual(second.overrides)
+    expect(frozenV1.items[0].item).toBe("large eggs")
+  })
+
+  it("projects a version-1 collapsed category row without suppressing the newly split row", () => {
+    const dairy = contribution("a", 1, { normalizationVersion: 1 })
+    dairy.items[0] = item("a", dairy.recipeName, 1, {
+      item: "eggs",
+      unit: "count",
+      categoryKey: "dairy",
+    })
+    const pantry = contribution("b", 2, { normalizationVersion: 1 })
+    pantry.items[0] = item("b", pantry.recipeName, 2, {
+      item: "egg",
+      unit: "count",
+      categoryKey: "pantry",
+    })
+    const current = list({
+      items: [{
+        ...pantry.items[0],
+        amount: 3,
+        rowId: "derived:eggs",
+        contributionKey: "eggs",
+        sources: [dairy.items[0].sources![0], pantry.items[0].sources![0]],
+      }],
+      source_recipes: ["a", "b"],
+    })
+
+    const result = project(current, [dairy, pantry], [dairy, pantry])
+
+    expect(result.shoppingList.items).toHaveLength(2)
+    expect(result.shoppingList.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contributionKey: "egg|category:pantry",
+        rowId: "derived:eggs",
+        categoryKey: "pantry",
+      }),
+      expect.objectContaining({
+        contributionKey: "egg|category:dairy",
+        rowId: "derived:egg|category:dairy",
+        categoryKey: "dairy",
+      }),
+    ]))
+  })
+
+  it("applies an unsuffixed legacy override only to its matching category", () => {
+    const dairy = contribution("a", 1)
+    dairy.items[0] = item("a", dairy.recipeName, 1, {
+      item: "egg",
+      unit: "count",
+      categoryKey: "dairy",
+    })
+    const pantry = contribution("b", 2)
+    pantry.items[0] = item("b", pantry.recipeName, 2, {
+      item: "eggs",
+      unit: "count",
+      categoryKey: "pantry",
+    })
+
+    const result = project(list(), [], [dairy, pantry], {
+      existingOverrides: {
+        eggs: {
+          rowId: "legacy-dairy-egg",
+          categoryKey: "dairy",
+          categoryOrder: 5,
+          checked: true,
+        },
+      },
+    })
+
+    expect(result.shoppingList.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        contributionKey: "egg|category:dairy",
+        rowId: "legacy-dairy-egg",
+        checked: true,
+      }),
+      expect.objectContaining({
+        contributionKey: "egg|category:pantry",
+        rowId: "derived:egg|category:pantry",
+      }),
+    ]))
+    expect(new Set(result.shoppingList.items.map((candidate) => candidate.rowId)).size).toBe(2)
+  })
+
+  it("preserves the surviving row when a category conflict collapses", () => {
+    const dairy = contribution("a", 1)
+    dairy.items[0] = item("a", dairy.recipeName, 1, {
+      item: "egg",
+      unit: "count",
+      categoryKey: "dairy",
+    })
+    const pantry = contribution("b", 2)
+    pantry.items[0] = item("b", pantry.recipeName, 2, {
+      item: "eggs",
+      unit: "count",
+      categoryKey: "pantry",
+    })
+    const initial = project(list(), [], [dairy, pantry])
+    const pantryRow = initial.shoppingList.items.find(
+      (candidate) => candidate.categoryKey === "pantry"
+    )!
+    const current = list({
+      ...initial.shoppingList,
+      items: initial.shoppingList.items.map((candidate) =>
+        candidate.rowId === pantryRow.rowId
+          ? { ...candidate, checked: true }
+          : candidate
+      ),
+    })
+
+    const result = project(current, [dairy, pantry], [pantry])
+
+    expect(result.shoppingList.items).toEqual([
+      expect.objectContaining({
+        contributionKey: "egg",
+        rowId: pantryRow.rowId,
+        checked: true,
+        categoryKey: "pantry",
+        amount: 2,
+      }),
+    ])
+  })
+
+  it("does not choose between ambiguous canonical legacy overrides", () => {
+    const eggs = contribution("a", 1)
+    eggs.items[0] = item("a", eggs.recipeName, 1, {
+      item: "large egg",
+      unit: "count",
+    })
+
+    const result = project(list(), [], [eggs], {
+      existingOverrides: {
+        "Large Egg": { rowId: "ambiguous-a", checked: true },
+        "large eggs": { rowId: "ambiguous-b", checked: true },
+      },
+    })
+
+    expect(result.shoppingList.items[0]).toMatchObject({
+      rowId: "derived:large egg",
+      checked: undefined,
+    })
+  })
+
   it("regression: removing one shared recipe subtracts only its quantity", () => {
     const recipeA = contribution("a", 1)
     const recipeB = contribution("b", 2)
@@ -235,7 +481,7 @@ describe("authoritative recipe shopping contributions", () => {
     const result = project(list(), [], [recipeA])
 
     expect(result.shoppingList.items[0].item).toBe("milk (or oat milk)")
-    expect(result.shoppingList.already_have[0].item).toBe("eggs")
+    expect(result.shoppingList.already_have[0].item).toBe("egg")
     expect(result.shoppingList.excluded[0]).toMatchObject({
       item: "salt",
       excludedBy: "salt",

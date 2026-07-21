@@ -7,6 +7,7 @@
 import type { Recipe, ShoppingItem, PantryItem } from "@/types/database"
 import { categorizeIngredient, getExcludedKeyword } from "./shopping-categories"
 import {
+  createShoppingPurchaseKey,
   normalizeItemName,
   normalizeShoppingPurchase,
   normalizeUnit,
@@ -77,6 +78,8 @@ function createSourceKey(source: NonNullable<ShoppingItem["sources"]>[number]): 
     normalizeItemName(source.originalItem || ""),
     normalizeUnit(source.originalUnit || ""),
     source.prepIntent || "",
+    source.optional ? "optional" : "required",
+    source.originalText || "",
   ].join("|")
 }
 
@@ -143,7 +146,7 @@ export function generateShoppingList(
 ): ShoppingListResult {
   // Get pantry items as a set for quick lookup
   const pantrySet = new Set(
-    pantryItems.map((p) => p.item.toLowerCase().trim())
+    pantryItems.map((p) => createShoppingPurchaseKey(p.item))
   )
 
   // Aggregate ingredients from selected recipes
@@ -158,6 +161,9 @@ export function generateShoppingList(
       sources: NonNullable<ShoppingItem["sources"]>
       additionalAmounts?: { amount: number; unit: string }[]
       alternatives?: string[]
+      identityKey: string
+      categoryKey: string
+      categoryOrder: number
       citrusPrepByRecipe?: Map<string, CitrusPrepNeeds>
       preserveExactFraction: boolean
     }
@@ -173,6 +179,7 @@ export function generateShoppingList(
         item: ingredient.item,
         amount: ingredient.amount,
         unit: ingredient.unit || "",
+        modifier: ingredient.modifier,
       })
       const itemName = purchase.purchaseName
       const amount = (purchase.purchaseQuantity || 0) * scale
@@ -189,6 +196,9 @@ export function generateShoppingList(
         originalAmount: purchase.originalQuantity,
         originalUnit: purchase.originalUnit,
         prepIntent: purchase.prepIntent,
+        preparationModifiers: purchase.canonical.preparationModifiers,
+        optional: purchase.canonical.optional,
+        originalText: ingredient.originalText,
       }
 
       // Build display name with alternatives if present (normalized to lowercase)
@@ -196,8 +206,14 @@ export function generateShoppingList(
         ? `${itemName} (or ${ingredient.alternatives.map(a => normalizeItemName(a)).join(', ')})`
         : itemName
 
-      // Use normalized item name as key (merge by item, not item+unit)
-      const key = itemName
+      const [effectiveCategoryKey, effectiveCategoryOrder] = categorizeIngredient(
+        displayItem,
+        shoppingCategory,
+        userCategoryOverrides
+      )
+
+      // Category is part of merge compatibility, but not the public purchase key.
+      const key = `${purchase.canonical.mergeKey}|category:${effectiveCategoryKey}`
 
       if (ingredientMap.has(key)) {
         const existing = ingredientMap.get(key)!
@@ -222,7 +238,6 @@ export function generateShoppingList(
           // Units are compatible, merge amounts
           existing.amount = mergeResult.amount
           existing.unit = mergeResult.unit
-          existing.additionalAmounts = undefined // Clear if we successfully merged
         } else {
           // Units are incompatible, use additionalAmounts
           existing.additionalAmounts = mergeIntoAdditionalAmounts(
@@ -258,6 +273,9 @@ export function generateShoppingList(
           shoppingCategory,
           sources: [source],
           alternatives: ingredient.alternatives?.map(a => normalizeItemName(a)),
+          identityKey: purchase.canonical.mergeKey,
+          categoryKey: effectiveCategoryKey,
+          categoryOrder: effectiveCategoryOrder,
           citrusPrepByRecipe,
           preserveExactFraction,
         })
@@ -270,22 +288,15 @@ export function generateShoppingList(
   const alreadyHave: ShoppingItem[] = []
   const excluded: ShoppingItem[] = []
 
-  for (const [primaryKey, ingredient] of ingredientMap.entries()) {
-    // Categorize the ingredient for sorting (apply user overrides)
-    const [catKey, catOrder] = categorizeIngredient(
-      ingredient.item,
-      ingredient.shoppingCategory,
-      userCategoryOverrides
-    )
-
+  for (const ingredient of ingredientMap.values()) {
     const shoppingItem: ShoppingItem = {
       item: ingredient.item, // Normalized to lowercase
       amount: ingredient.amount > 0
         ? roundShoppingQuantity(ingredient.amount, ingredient.preserveExactFraction)
         : null,
       unit: ingredient.unit, // Normalized
-      categoryKey: catKey,
-      categoryOrder: catOrder,
+      categoryKey: ingredient.categoryKey,
+      categoryOrder: ingredient.categoryOrder,
       sources: ingredient.sources,
       shoppingCategory: ingredient.shoppingCategory,
       additionalAmounts: ingredient.additionalAmounts?.map(a => ({
@@ -296,13 +307,18 @@ export function generateShoppingList(
 
     // Check pantry: match primary item key or any alternative
     const isInPantry =
-      pantrySet.has(primaryKey) ||
-      (ingredient.alternatives?.some(alt => pantrySet.has(alt)) ?? false)
+      pantrySet.has(ingredient.identityKey) ||
+      (ingredient.alternatives?.some(alt =>
+        pantrySet.has(createShoppingPurchaseKey(alt))
+      ) ?? false)
 
     if (isInPantry) {
       alreadyHave.push(shoppingItem)
     } else {
-      const matchingKeyword = getExcludedKeyword(primaryKey, excludedKeywords)
+      const matchingKeyword = getExcludedKeyword(
+        ingredient.identityKey,
+        excludedKeywords
+      )
       if (matchingKeyword) {
         excluded.push({
           ...shoppingItem,

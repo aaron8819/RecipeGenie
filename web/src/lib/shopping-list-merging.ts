@@ -25,6 +25,26 @@ export interface MergeOptions {
 
 type ShoppingItemSource = NonNullable<ShoppingItem["sources"]>[number]
 
+function isManualItem(item: ShoppingItem): boolean {
+  return Boolean(
+    item.sources?.some(
+      (source) => source.recipeName === "Manual" && !source.recipeId
+    )
+  )
+}
+
+function createMergeMapKey(
+  item: ShoppingItem,
+  position: string
+): string {
+  const identity = createShoppingPurchaseKey(item.item, item.amount, item.unit)
+  const category = item.categoryKey || ""
+  if (isManualItem(item)) {
+    return `${identity}|category:${category}|manual:${item.rowId || position}`
+  }
+  return `${identity}|category:${category}|recipe`
+}
+
 function mergeIntoAdditionalAmounts(
   existing: { amount: number; unit: string }[] | undefined,
   amount: number,
@@ -76,44 +96,47 @@ export function mergeShoppingItems(
 
   // Create a map of existing items by normalized item name
   const existingMap = new Map<string, ShoppingItem>()
-  for (const item of existing) {
-    const key = createShoppingPurchaseKey(item.item, item.amount, item.unit)
+  for (const [index, item] of existing.entries()) {
+    const itemWithCategory = ensureCategoryInfo(item, userCategoryOverrides)
+    const key = createMergeMapKey(itemWithCategory, `existing:${index}`)
     const existingItem = existingMap.get(key)
     
     if (existingItem) {
       // If multiple items with same name exist, merge them first
-      const merged = mergeTwoItems(existingItem, item, userCategoryOverrides)
+      const merged = mergeTwoItems(existingItem, itemWithCategory, userCategoryOverrides)
       existingMap.set(key, merged)
     } else {
-      existingMap.set(key, item)
+      existingMap.set(key, itemWithCategory)
     }
   }
 
   // Merge new items into existing
-  for (const newItem of newItems) {
-    const key = createShoppingPurchaseKey(newItem.item, newItem.amount, newItem.unit)
+  for (const [index, newItem] of newItems.entries()) {
+    const itemWithCategory = ensureCategoryInfo(newItem, userCategoryOverrides)
+    const key = createMergeMapKey(itemWithCategory, `new:${index}`)
     const existingItem = existingMap.get(key)
 
     if (existingItem) {
       // Merge with existing item
       const merged = mergeTwoItems(
         existingItem,
-        newItem,
+        itemWithCategory,
         userCategoryOverrides,
         preserveUserOverrides
       )
       existingMap.set(key, merged)
     } else {
       // New item, ensure it has category info
-      const itemWithCategory = ensureCategoryInfo(newItem, userCategoryOverrides)
       // Normalize unit
       const normalizedItem: ShoppingItem = {
         ...itemWithCategory,
-        item: normalizeShoppingPurchase({
-          item: itemWithCategory.item,
-          amount: itemWithCategory.amount,
-          unit: itemWithCategory.unit,
-        }).purchaseName,
+        item: isManualItem(itemWithCategory)
+          ? itemWithCategory.item
+          : normalizeShoppingPurchase({
+              item: itemWithCategory.item,
+              amount: itemWithCategory.amount,
+              unit: itemWithCategory.unit,
+            }).purchaseName,
         unit: normalizeUnit(itemWithCategory.unit),
       }
       existingMap.set(key, normalizedItem)
@@ -144,6 +167,8 @@ function createSourceKey(source: ShoppingItemSource): string {
     normalizeItemName(source.originalItem || ""),
     normalizeUnit(source.originalUnit || ""),
     source.prepIntent || "",
+    source.optional ? "optional" : "required",
+    source.originalText || "",
   ].join("|")
 }
 
@@ -223,6 +248,15 @@ function mergeTwoItems(
   }
 
   if (mergeResult) {
+    let additionalAmounts = normalized1.additionalAmounts
+    for (const additional of normalized2.additionalAmounts || []) {
+      additionalAmounts = mergeIntoAdditionalAmounts(
+        additionalAmounts,
+        additional.amount,
+        additional.unit
+      )
+    }
+
     // Units are compatible, merge amounts
     return {
       ...baseItem,
@@ -232,17 +266,28 @@ function mergeTwoItems(
       categoryKey,
       categoryOrder,
       sources: combinedSources,
-      additionalAmounts: undefined, // Clear additional amounts if we successfully merged
+      additionalAmounts:
+        additionalAmounts && additionalAmounts.length > 0
+          ? additionalAmounts
+          : undefined,
     }
   } else {
     // Units are incompatible, use additionalAmounts
-    const additionalAmounts = normalized2.amount
+    let additionalAmounts = normalized2.amount
       ? mergeIntoAdditionalAmounts(
           normalized1.additionalAmounts,
           normalized2.amount,
           normalized2.unit
         )
       : normalized1.additionalAmounts
+
+    for (const additional of normalized2.additionalAmounts || []) {
+      additionalAmounts = mergeIntoAdditionalAmounts(
+        additionalAmounts,
+        additional.amount,
+        additional.unit
+      )
+    }
 
     return {
       ...baseItem,

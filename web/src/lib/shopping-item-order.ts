@@ -1,5 +1,5 @@
 import type { ShoppingItem } from "@/types/database"
-import { createShoppingPurchaseKey, normalizeItemName } from "./shopping-list-normalization"
+import { createShoppingPurchaseKey } from "./shopping-list-normalization"
 
 export type ShoppingItemOrderPreferences = Record<string, string[]>
 
@@ -9,7 +9,7 @@ function uniqueStrings(values: unknown[]): string[] {
 
   for (const value of values) {
     if (typeof value !== "string") continue
-    const normalized = normalizeItemName(value)
+    const normalized = createShoppingPurchaseKey(value)
     if (!normalized || seen.has(normalized)) continue
     seen.add(normalized)
     result.push(normalized)

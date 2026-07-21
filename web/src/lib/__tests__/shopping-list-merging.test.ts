@@ -52,7 +52,7 @@ describe('mergeShoppingItems', () => {
 
       expect(result).toHaveLength(2)
       expect(result.map(i => i.item)).toContain('milk')
-      expect(result.map(i => i.item)).toContain('eggs')
+      expect(result.map(i => i.item)).toContain('egg')
     })
 
     it('should normalize item names before merging (case-insensitive)', () => {
@@ -161,9 +161,9 @@ describe('mergeShoppingItems', () => {
   })
 
   describe('ingredient canonicalization', () => {
-    it('should merge onion variants under a shared canonical key', () => {
+    it('should merge safe singular and plural onion variants', () => {
       const existing: ShoppingItem[] = [
-        createMockItem({ item: 'yellow onion', amount: 1, unit: '' }),
+        createMockItem({ item: 'onions', amount: 1, unit: '' }),
       ]
       const newItems: ShoppingItem[] = [
         createMockItem({ item: 'onion', amount: 2, unit: '' }),
@@ -192,7 +192,7 @@ describe('mergeShoppingItems', () => {
       expect(result[0].unit).toBe('count')
     })
 
-    it('should merge olive oil variants under a cleaner display name', () => {
+    it('should preserve extra-virgin olive oil as a distinct product', () => {
       const existing: ShoppingItem[] = [
         createMockItem({ item: 'extra virgin olive oil', amount: 2, unit: 'tbsp', categoryKey: 'pantry', categoryOrder: 6 }),
       ]
@@ -202,9 +202,10 @@ describe('mergeShoppingItems', () => {
 
       const result = mergeShoppingItems(existing, newItems)
 
-      expect(result).toHaveLength(1)
-      expect(result[0].item).toBe('olive oil')
-      expect(result[0].amount).toBe(3)
+      expect(result.map((item) => item.item)).toEqual([
+        'extra virgin olive oil',
+        'olive oil',
+      ])
     })
   })
 
@@ -268,8 +269,8 @@ describe('mergeShoppingItems', () => {
         createMockItem({
           item: 'milk',
           amount: 1,
-          categoryKey: 'produce', // Different category
-          categoryOrder: 1,
+          categoryKey: 'dairy',
+          categoryOrder: 7,
         }),
       ]
 
@@ -278,6 +279,17 @@ describe('mergeShoppingItems', () => {
       // Should keep the existing item's category
       expect(result[0].categoryKey).toBe('dairy')
       expect(result[0].categoryOrder).toBe(5)
+    })
+
+    it('does not merge different effective categories when preserving overrides', () => {
+      const result = mergeShoppingItems(
+        [createMockItem({ item: 'milk', amount: 1, categoryKey: 'dairy' })],
+        [createMockItem({ item: 'milk', amount: 1, categoryKey: 'produce' })],
+        { preserveUserOverrides: true }
+      )
+
+      expect(result).toHaveLength(2)
+      expect(result.map((item) => item.categoryKey).sort()).toEqual(['dairy', 'produce'])
     })
 
     it('should sort by category when preserveCustomOrder is false', () => {

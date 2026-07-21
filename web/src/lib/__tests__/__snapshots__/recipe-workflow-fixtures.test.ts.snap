@@ -532,7 +532,7 @@ exports[`recipe workflow fixture corpus v1 > 'ingredient-alternatives-curry' 1`]
         "additionalAmounts": undefined,
         "amount": 1,
         "excludedBy": undefined,
-        "item": "chicken thighs",
+        "item": "chicken thigh",
         "sources": [
           {
             "originalAmount": 1,
@@ -654,7 +654,7 @@ exports[`recipe workflow fixture corpus v1 > 'instruction-only-ingredients' 1`] 
         "additionalAmounts": undefined,
         "amount": 2,
         "excludedBy": undefined,
-        "item": "eggs",
+        "item": "egg",
         "sources": [
           {
             "originalAmount": 2,
@@ -820,7 +820,7 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
         "additionalAmounts": undefined,
         "amount": null,
         "excludedBy": undefined,
-        "item": "toast the bread.",
+        "item": "toast the bread",
         "sources": [
           {
             "originalAmount": null,
@@ -852,7 +852,7 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
         "additionalAmounts": undefined,
         "amount": null,
         "excludedBy": undefined,
-        "item": "spread peanut butter and top with banana.",
+        "item": "spread peanut butter and top with banana",
         "sources": [
           {
             "originalAmount": null,
@@ -1876,6 +1876,13 @@ exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
             "prepIntent": undefined,
             "recipeId": "near-duplicate-onions",
           },
+          {
+            "originalAmount": 2,
+            "originalItem": "onions",
+            "originalUnit": "count",
+            "prepIntent": undefined,
+            "recipeId": "near-duplicate-onions",
+          },
         ],
         "unit": "count",
       },
@@ -1889,7 +1896,7 @@ exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
             "originalAmount": 1,
             "originalItem": "red onion",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "prepIntent": "sliced",
             "recipeId": "near-duplicate-onions",
           },
         ],
@@ -2317,7 +2324,7 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
         "additionalAmounts": undefined,
         "amount": 2,
         "excludedBy": undefined,
-        "item": "tomatoes",
+        "item": "tomato",
         "sources": [
           {
             "originalAmount": 2,
@@ -2613,6 +2620,22 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
     "items": [
       {
         "additionalAmounts": undefined,
+        "amount": 1,
+        "excludedBy": undefined,
+        "item": "crushed tomato",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "crushed tomatoes",
+            "originalUnit": "can (28 oz)",
+            "prepIntent": undefined,
+            "recipeId": "parenthetical-preparation",
+          },
+        ],
+        "unit": "can (28 oz)",
+      },
+      {
+        "additionalAmounts": undefined,
         "amount": 3,
         "excludedBy": undefined,
         "item": "garlic",
@@ -2621,7 +2644,7 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
             "originalAmount": 3,
             "originalItem": "garlic",
             "originalUnit": "cloves",
-            "prepIntent": undefined,
+            "prepIntent": "minced",
             "recipeId": "parenthetical-preparation",
           },
         ],
@@ -2637,7 +2660,7 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
             "originalAmount": 1,
             "originalItem": "large onion",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "prepIntent": "diced",
             "recipeId": "parenthetical-preparation",
           },
         ],
@@ -2658,22 +2681,6 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
           },
         ],
         "unit": "can",
-      },
-      {
-        "additionalAmounts": undefined,
-        "amount": 1,
-        "excludedBy": undefined,
-        "item": "crushed tomatoes",
-        "sources": [
-          {
-            "originalAmount": 1,
-            "originalItem": "crushed tomatoes",
-            "originalUnit": "can (28 oz)",
-            "prepIntent": undefined,
-            "recipeId": "parenthetical-preparation",
-          },
-        ],
-        "unit": "can (28 oz)",
       },
     ],
     "scale": 1,
@@ -2909,7 +2916,7 @@ exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
         "additionalAmounts": undefined,
         "amount": 1,
         "excludedBy": undefined,
-        "item": "carrots",
+        "item": "carrot",
         "sources": [
           {
             "originalAmount": 1,
@@ -3367,7 +3374,7 @@ exports[`recipe workflow fixture corpus v1 > 'unicode-fractions-pancakes' 1`] = 
         "additionalAmounts": undefined,
         "amount": 1.5,
         "excludedBy": undefined,
-        "item": "all-purpose flour",
+        "item": "all purpose flour",
         "sources": [
           {
             "originalAmount": 1.5,
@@ -3506,7 +3513,7 @@ exports[`recipe workflow fixture corpus v1 > 'unit-variations-potatoes' 1`] = `
         "additionalAmounts": undefined,
         "amount": 2,
         "excludedBy": undefined,
-        "item": "potatoes",
+        "item": "potato",
         "sources": [
           {
             "originalAmount": 2,
@@ -3709,7 +3716,7 @@ exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
         "additionalAmounts": undefined,
         "amount": 3,
         "excludedBy": undefined,
-        "item": "tomatoes",
+        "item": "tomato",
         "sources": [
           {
             "originalAmount": 3,

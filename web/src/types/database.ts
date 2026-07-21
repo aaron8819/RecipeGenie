@@ -44,7 +44,10 @@ export type ShoppingItem = {
     originalItem?: string
     originalAmount?: number | null
     originalUnit?: string | null
+    originalText?: string
     prepIntent?: string
+    preparationModifiers?: string[]
+    optional?: boolean
   }[]
   shoppingCategory?: string
   additionalAmounts?: { amount: number; unit: string }[]

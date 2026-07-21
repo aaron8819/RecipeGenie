@@ -205,10 +205,10 @@ describe('generateShoppingList', () => {
       expect(salt?.sources).toHaveLength(1) // Same recipe, should not duplicate
     })
 
-    it('should canonicalize onion variants before merging', () => {
+    it('should canonicalize singular and plural onions before merging', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
-        ingredients: [{ item: 'Yellow Onion', amount: 1, unit: '' }],
+        ingredients: [{ item: 'Onions', amount: 1, unit: '' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
@@ -222,7 +222,7 @@ describe('generateShoppingList', () => {
       expect(result.items[0].amount).toBe(3)
     })
 
-    it('should canonicalize olive oil variants before merging', () => {
+    it('should preserve extra-virgin olive oil as a distinct product', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
         ingredients: [{ item: 'Extra Virgin Olive Oil', amount: 2, unit: 'tbsp' }],
@@ -234,9 +234,10 @@ describe('generateShoppingList', () => {
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
 
-      expect(result.items).toHaveLength(1)
-      expect(result.items[0].item).toBe('olive oil')
-      expect(result.items[0].amount).toBe(3)
+      expect(result.items.map((item) => item.item)).toEqual([
+        'extra virgin olive oil',
+        'olive oil',
+      ])
     })
 
     it('should keep garlic count forms separate when units differ', () => {
@@ -338,7 +339,8 @@ describe('generateShoppingList', () => {
       expect(itemNames).toContain('tomato paste')
       expect(itemNames).toContain('tomato')
       expect(itemNames).toContain('red onion')
-      expect(result.items.find((item) => item.item === 'onion')?.amount).toBe(2)
+      expect(itemNames).toContain('yellow onion')
+      expect(result.items.find((item) => item.item === 'onion')?.amount).toBe(1)
       expect(result.items.find((item) => item.item === 'lemon')).toMatchObject({
         amount: 1.25,
         unit: 'count',

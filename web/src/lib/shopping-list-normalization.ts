@@ -3,6 +3,11 @@
  * Ensures consistent unit representation across the system
  */
 
+import {
+  canonicalizeShoppingIngredient,
+  type CanonicalShoppingIngredient,
+} from "./shopping-ingredient-canonicalization"
+
 const SIMPLE_UNIT_MAP: Record<string, string> = {
   // Volume units
   milliliter: "ml",
@@ -82,6 +87,8 @@ const SIMPLE_UNIT_MAP: Record<string, string> = {
 const SIZED_PACKAGE_PATTERN =
   /^(can|cans|jar|jars|bottle|bottles|package|packages|pkg|pkgs|bag|bags|box|boxes)\s*\(([^)]+)\)$/
 
+// Legacy free-form normalization remains for non-shopping consumers such as
+// recipe duplicate warnings. Shopping identity uses the structured contract.
 const ITEM_CANONICAL_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\bextra[\s-]+virgin olive oil\b/g, "olive oil"],
   [/\bevoo\b/g, "olive oil"],
@@ -131,6 +138,7 @@ export type ShoppingPurchaseNormalization = {
   originalUnit: string | null
   originalQuantity: number | null
   prepIntent?: string
+  canonical: CanonicalShoppingIngredient
   confidence: "high" | "medium" | "low"
   reason: string
 }
@@ -139,6 +147,7 @@ export type ShoppingPurchaseNormalizationInput = {
   item: string
   amount?: number | null
   unit?: string | null
+  modifier?: string | null
 }
 
 function parseQuantityToken(token: string): number | null {
@@ -161,13 +170,19 @@ function createBasePurchaseNormalization(
   input: ShoppingPurchaseNormalizationInput
 ): ShoppingPurchaseNormalization {
   const originalName = input.item.trim()
+  const canonical = canonicalizeShoppingIngredient({
+    item: input.item,
+    modifier: input.modifier,
+  })
   return {
-    purchaseName: normalizeItemName(input.item),
+    purchaseName: canonical.displayName,
     purchaseUnit: normalizeUnit(input.unit || ""),
     purchaseQuantity: input.amount ?? null,
     originalName,
     originalUnit: input.unit ?? null,
     originalQuantity: input.amount ?? null,
+    prepIntent: canonical.preparationModifiers.join(", ") || undefined,
+    canonical,
     confidence: "high",
     reason: "default ingredient normalization",
   }
@@ -179,6 +194,15 @@ function normalizeWholeProduce(
   options?: { prepIntent?: string; quantity?: number | null; confidence?: "high" | "medium"; reason: string }
 ): ShoppingPurchaseNormalization {
   const quantity = options?.quantity ?? input.amount ?? (WHOLE_PRODUCE_DEFAULTS.has(purchaseName) ? 1 : null)
+  const originalCanonical = canonicalizeShoppingIngredient({
+    item: input.item,
+    modifier: input.modifier,
+  })
+  const canonicalPurchase = canonicalizeShoppingIngredient({ item: purchaseName })
+  const prepIntent =
+    options?.prepIntent ||
+    originalCanonical.preparationModifiers.join(", ") ||
+    undefined
 
   return {
     purchaseName,
@@ -187,7 +211,12 @@ function normalizeWholeProduce(
     originalName: input.item.trim(),
     originalUnit: input.unit ?? null,
     originalQuantity: input.amount ?? null,
-    prepIntent: options?.prepIntent,
+    prepIntent,
+    canonical: {
+      ...canonicalPurchase,
+      optional: originalCanonical.optional,
+      preparationModifiers: prepIntent ? [prepIntent] : [],
+    },
     confidence: options?.confidence ?? "high",
     reason: options?.reason ?? "whole produce purchase",
   }
@@ -304,6 +333,15 @@ export function normalizeItemName(item: string): string {
   return normalized.replace(/\s+/g, " ").trim()
 }
 
+function normalizeShoppingSyntax(item: string): string {
+  return item
+    .toLowerCase()
+    .trim()
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^[,\s]+|[,\s;:]+$/g, "")
+}
+
 /**
  * Separates the recipe ingredient form from the grocery purchase item.
  *
@@ -313,7 +351,11 @@ export function normalizeItemName(item: string): string {
 export function normalizeShoppingPurchase(
   input: ShoppingPurchaseNormalizationInput
 ): ShoppingPurchaseNormalization {
-  const normalizedName = normalizeItemName(input.item)
+  const canonical = canonicalizeShoppingIngredient({
+    item: input.item,
+    modifier: input.modifier,
+  })
+  const normalizedName = normalizeShoppingSyntax(input.item)
   const normalizedUnit = normalizeUnit(input.unit || "")
   const base = createBasePurchaseNormalization(input)
 
@@ -416,7 +458,7 @@ export function normalizeShoppingPurchase(
 
 export function createShoppingPurchaseKey(item: string, amount?: number | null, unit?: string | null): string {
   const normalized = normalizeShoppingPurchase({ item, amount, unit })
-  return normalized.purchaseName
+  return normalized.canonical.mergeKey
 }
 
 /**

@@ -330,6 +330,29 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByText("From Pollo Asado Tacos and Shredded Chipotle Beef")).toBeInTheDocument()
   })
 
+  it.each([
+    ["egg", 1, "egg"],
+    ["egg", 2, "eggs"],
+    ["large egg", 3, "large eggs"],
+  ])("displays %s count %s as %s", (name, amount, expectedName) => {
+    render(
+      <ShoppingItemRow
+        item={item({ item: name, amount, unit: "count" })}
+        isDesktop={true}
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.getByText(String(amount))).toBeInTheDocument()
+    expect(screen.getByText(expectedName)).toBeInTheDocument()
+  })
+
   it("pluralizes preserved package units for display", () => {
     render(
       <ShoppingItemRow

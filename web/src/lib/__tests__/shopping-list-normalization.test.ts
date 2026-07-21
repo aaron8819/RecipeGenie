@@ -205,7 +205,7 @@ describe('normalizeItemName', () => {
     expect(normalizeItemName('14oz Can')).toBe('14oz can')
   })
 
-  it('should collapse high-frequency ingredient variants to cleaner canonical names', () => {
+  it('should preserve legacy aliases for non-shopping normalization consumers', () => {
     expect(normalizeItemName('Yellow Onion')).toBe('onion')
     expect(normalizeItemName('white onions')).toBe('onion')
     expect(normalizeItemName('garlic cloves')).toBe('garlic')

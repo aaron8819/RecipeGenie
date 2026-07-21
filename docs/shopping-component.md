@@ -25,6 +25,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/hooks/shopping/shared.ts` | Shared shopping optimistic helpers and constants. |
 | `web/src/lib/shopping-list.ts` | Main aggregation pipeline for recipes into shopping items. |
 | `web/src/lib/shopping-list-normalization.ts` | Unit and ingredient-name normalization. |
+| `web/src/lib/shopping-ingredient-canonicalization.ts` | Pure, narrow purchase-identity canonicalization and controlled display pluralization. |
 | `web/src/lib/shopping-list-merging.ts` | Merge-compatible-unit logic. |
 | `web/src/lib/shopping-categories.ts` | Category lookup and excluded-keyword matching. |
 | `web/src/lib/pane-scroll.ts` | Pane-relative scrolling helper for kept-mounted home-tab panes. |
@@ -47,6 +48,14 @@ Shopping generation takes selected recipes plus pantry/config data and produces 
 - `excluded`
 
 The aggregation pipeline normalizes ingredient names and units, merges compatible amounts, subtracts pantry items, applies exact-match excluded keywords, and then categorizes the remainder.
+
+Purchase identity uses an explicit structured canonicalization result: base name,
+identity modifiers, preparation modifiers, optionality, display name, and merge
+key. Only controlled singular/plural aliases and high-confidence preparation
+terms are collapsed. Variety, size, product type, processing state, and effective
+shopping category remain identity-defining. New frozen recipe contributions use
+normalization version 2; version-1 snapshots are upgraded only in memory during
+projection so stored snapshots and existing row IDs remain unchanged.
 
 ### Pending state
 

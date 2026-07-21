@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn, toFraction } from "@/lib/utils"
 import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import type { ShoppingItem } from "@/types/database"
+import { pluralizeCanonicalShoppingName } from "@/lib/shopping-ingredient-canonicalization"
 
 const RECIPE_COLORS = [
   { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
@@ -136,15 +137,9 @@ function dedupeSources(item: ShoppingItem) {
   })
 }
 
-function pluralizePurchaseName(itemName: string): string {
-  if (itemName.endsWith("y")) return `${itemName.slice(0, -1)}ies`
-  if (itemName.endsWith("s")) return itemName
-  return `${itemName}s`
-}
-
 function getDisplayItemName(item: ShoppingItem): string {
   return item.amount && Math.abs(item.amount) !== 1 && getIngredientDisplayUnit(item.unit) === ""
-    ? pluralizePurchaseName(item.item)
+    ? pluralizeCanonicalShoppingName(item.item)
     : item.item
 }
 
