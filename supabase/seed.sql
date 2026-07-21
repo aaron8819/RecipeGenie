@@ -1,0 +1,4 @@
+-- Authenticated browser fixtures are user-scoped and are seeded after the local
+-- auth user is created by `npm run local:e2e:bootstrap`. Keeping this file
+-- present makes `supabase db reset --local` deterministic without introducing
+-- a tracked password or bypassing the normal auth-user provisioning trigger.

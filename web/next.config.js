@@ -5,6 +5,11 @@ const nextConfig = {
   // Strict mode for better development experience
   reactStrictMode: true,
 
+  // Keep local browser-inspection screenshots and mobile navigation free of
+  // the development portal that otherwise overlaps the bottom-left tab.
+  devIndicators:
+    process.env.RECIPE_GENIE_E2E_TARGET === 'local' ? false : undefined,
+
   // Explicitly set project root to avoid workspace detection issues
   outputFileTracingRoot: require('path').join(__dirname, '../'),
 

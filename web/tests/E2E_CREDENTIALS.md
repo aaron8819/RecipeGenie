@@ -11,7 +11,13 @@ RECIPE_GENIE_E2E_EMAIL=<test-account-email>
 RECIPE_GENIE_E2E_PASSWORD=<test-account-password>
 ```
 
-Run a local smoke test with `npm run test:e2e:smoke`. Local authentication accepts only port `3107` on `localhost` or `127.0.0.1`.
+Run `npm run local:e2e:bootstrap` to start/reset local Supabase, seed the
+dedicated user, and create the current worktree's ignored configuration. The
+bootstrap can reuse these two machine-local credentials from another
+registered Recipe Genie worktree without copying `.env.local`. Then run
+`npm run test:e2e:inspect`. Local authentication accepts only port `3107` on
+`localhost` or `127.0.0.1`; fixture operations require exactly the local
+Supabase API at `http://127.0.0.1:54321`.
 
 For a preview, copy the exact Recipe Genie deployment origin from authenticated Vercel deployment metadata. Set both `RECIPE_GENIE_E2E_BASE_URL` and `RECIPE_GENIE_E2E_ALLOWED_PREVIEW_ORIGIN` to that exact HTTPS origin, and set `RECIPE_GENIE_E2E_TARGET=preview`. The hostname must also use the constrained `recipe-genie-*.vercel.app` preview contract.
 
