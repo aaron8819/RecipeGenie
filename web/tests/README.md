@@ -22,6 +22,10 @@ Comprehensive Playwright test suite for Recipe Genie, covering authentication, n
 
 Tests run with an authenticated user by default. Credentials come only from the ignored `.env.e2e.local` file or an approved CI secret store. The fixture signs in through an artifact-free context, creates per-test runtime state under ignored `.playwright/auth/`, and deletes it after use. See [E2E_CREDENTIALS.md](./E2E_CREDENTIALS.md) for the complete target and credential contract.
 
+For the complete local Supabase bootstrap, deterministic fixture, worktree,
+manual browser, and inspection workflow, see
+[LOCAL_AUTH_BROWSER.md](./LOCAL_AUTH_BROWSER.md).
+
 **For tests that need unauthenticated state** (e.g., testing login form):
 ```typescript
 test.describe('My unauthenticated tests', () => {
@@ -63,6 +67,13 @@ CI runs `npm run check:no-new-test-skip` and fails on any `test.skip` without an
 ### Run tests with UI mode (recommended for development)
 ```bash
 npm run test:e2e:ui
+```
+
+### Run the authenticated local inspection harness
+
+```bash
+npm run local:e2e:bootstrap
+npm run test:e2e:inspect
 ```
 
 ### Run tests in headed mode (see browser)
@@ -155,11 +166,11 @@ await page.setViewportSize(VIEWPORTS.mobile)
 
 | Name | Width | Height |
 |------|-------|--------|
-| `mobileSmall` | 320 | 568 |
-| `mobile` | 375 | 812 |
-| `mobileLarge` | 414 | 896 |
+| local inspection small | 360 | 780 |
+| local inspection standard | 390 | 844 |
+| local inspection large | 430 | 900 |
 | `tablet` | 768 | 1024 |
-| `desktop` | 1024 | 768 |
+| local inspection desktop | 1200 | 800 |
 | `desktopLarge` | 1440 | 900 |
 
 ## CI Integration
