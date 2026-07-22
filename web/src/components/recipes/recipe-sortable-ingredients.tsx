@@ -27,7 +27,7 @@ import { GripVertical, Trash2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, toFraction } from "@/lib/utils"
-import { parseIngredientLine } from "@/lib/recipe-parser"
+import { parseIngredientAmountInput, parseIngredientLine } from "@/lib/recipe-parser"
 import {
   WHOLE_COUNT_UNIT,
   WHOLE_COUNT_UNIT_LABEL,
@@ -53,16 +53,8 @@ function getUnitOptionLabel(unit: string): string {
   return unit === WHOLE_COUNT_UNIT ? WHOLE_COUNT_UNIT_LABEL : unit
 }
 
-function parseAmountStr(str: string): number | null {
-  const trimmed = str.trim()
-  if (!trimmed) return null
-  if (trimmed.includes('/')) {
-    const [num, den] = trimmed.split('/').map((s) => parseFloat(s.trim()))
-    if (!isNaN(num) && !isNaN(den) && den !== 0) return num / den
-    return null
-  }
-  const n = parseFloat(trimmed)
-  return isNaN(n) ? null : n
+function formatAmountInput(amount: Ingredient["amount"]): string {
+  return typeof amount === "string" ? amount : toFraction(amount)
 }
 
 function getValidationMessage(issueCode: IngredientValidationIssue): string {
@@ -124,10 +116,10 @@ function SortableIngredientRow({
   }
 
   const [amountStr, setAmountStr] = useState(() =>
-    ingredient.amount != null ? toFraction(ingredient.amount) : ""
+    formatAmountInput(ingredient.amount)
   )
   useEffect(() => {
-    setAmountStr(ingredient.amount != null ? toFraction(ingredient.amount) : "")
+    setAmountStr(formatAmountInput(ingredient.amount))
   }, [ingredient.amount])
 
   const [showCustomUnit, setShowCustomUnit] = useState(
@@ -237,9 +229,9 @@ function SortableIngredientRow({
       value={amountStr}
       onChange={(e) => setAmountStr(e.target.value)}
       onBlur={() => {
-        const parsed = parseAmountStr(amountStr)
+        const parsed = parseIngredientAmountInput(amountStr)
         onIngredientChange(index, "amount", parsed)
-        setAmountStr(parsed != null ? toFraction(parsed) : "")
+        setAmountStr(formatAmountInput(parsed))
       }}
     />
   )

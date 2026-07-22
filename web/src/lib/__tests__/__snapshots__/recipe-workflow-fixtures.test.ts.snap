@@ -311,11 +311,11 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
           },
           {
             "alternatives": undefined,
-            "amount": 2,
+            "amount": "2–4",
             "item": "pods cardamom",
             "modifier": undefined,
             "originalText": "2—4 pods cardamom",
-            "unit": "2-4",
+            "unit": "count",
           },
         ],
       },
@@ -339,11 +339,11 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
       },
       {
         "alternatives": undefined,
-        "amount": 2,
+        "amount": "2–4",
         "item": "pods cardamom",
         "modifier": undefined,
         "originalText": "2—4 pods cardamom",
-        "unit": "2-4",
+        "unit": "count",
       },
     ],
     "instructionGroups": [
@@ -391,12 +391,12 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
           {
             "originalAmount": 2,
             "originalItem": "pods cardamom",
-            "originalUnit": "2-4",
+            "originalUnit": "2-4 count",
             "prepIntent": undefined,
             "recipeId": "decimal-and-dash-range",
           },
         ],
-        "unit": "2-4",
+        "unit": "2-4 count",
       },
       {
         "additionalAmounts": undefined,
@@ -2841,19 +2841,19 @@ exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
         "ingredients": [
           {
             "alternatives": undefined,
-            "amount": 1,
+            "amount": "1–2",
             "item": "olive oil",
             "modifier": undefined,
             "originalText": "1–2 tablespoons olive oil",
-            "unit": "1-2 tablespoons",
+            "unit": "tablespoons",
           },
           {
             "alternatives": undefined,
-            "amount": 2,
+            "amount": "2–3",
             "item": "cumin",
             "modifier": undefined,
             "originalText": "2-3 tsp cumin",
-            "unit": "2-3 tsp",
+            "unit": "tsp",
           },
           {
             "alternatives": undefined,
@@ -2869,19 +2869,19 @@ exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
     "ingredients": [
       {
         "alternatives": undefined,
-        "amount": 1,
+        "amount": "1–2",
         "item": "olive oil",
         "modifier": undefined,
         "originalText": "1–2 tablespoons olive oil",
-        "unit": "1-2 tablespoons",
+        "unit": "tablespoons",
       },
       {
         "alternatives": undefined,
-        "amount": 2,
+        "amount": "2–3",
         "item": "cumin",
         "modifier": undefined,
         "originalText": "2-3 tsp cumin",
-        "unit": "2-3 tsp",
+        "unit": "tsp",
       },
       {
         "alternatives": undefined,

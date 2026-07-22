@@ -1,11 +1,64 @@
 import { describe, it, expect } from 'vitest';
 import {
+  parseIngredientAmountInput,
   parseRecipeText,
   parseIngredientLine,
 } from '../recipe-parser';
 import { STRUCTURED_LAMB_RECIPE_TEXT } from './recipe-parser.fixtures';
 
 describe('parseIngredientLine', () => {
+  it.each([
+    ['½–1', '0.5–1'],
+    ['½ – 1', '0.5–1'],
+    ['1-2', '1–2'],
+    ['1 - 2', '1–2'],
+    ['¼-½', '0.25–0.5'],
+    ['1½–2', '1.5–2'],
+    ['1 1/2-2', '1.5–2'],
+    ['0.5—1.5', '0.5–1.5'],
+  ])('normalizes ingredient quantity %s to %s', (input, expected) => {
+    expect(parseIngredientAmountInput(input)).toBe(expected);
+  });
+
+  it.each([
+    ['½–1 tsp lemon zest', '0.5–1', 'tsp', 'lemon zest'],
+    ['1-2 tbsp olive oil', '1–2', 'tbsp', 'olive oil'],
+    ['1 – 2 cups flour', '1–2', 'cups', 'flour'],
+    ['¼-½ tsp salt', '0.25–0.5', 'tsp', 'salt'],
+    ['1½–2 lb chicken', '1.5–2', 'lb', 'chicken'],
+    ['1 1/2-2 cups stock', '1.5–2', 'cups', 'stock'],
+    ['0.5–1.5 tsp pepper', '0.5–1.5', 'tsp', 'pepper'],
+  ])(
+    'keeps the range in amount and the unit separate for %s',
+    (input, amount, unit, item) => {
+      expect(parseIngredientLine(input)).toMatchObject({ amount, unit, item });
+    }
+  );
+
+  it('preserves comma-delimited preparation outside the quantity fields', () => {
+    expect(parseIngredientLine('2 tbsp honey, divided')).toMatchObject({
+      amount: 2,
+      unit: 'tbsp',
+      item: 'honey',
+      modifier: 'divided',
+    });
+  });
+
+  it.each(['all-purpose flour', 'bone-in chicken thighs', 'sugar-free syrup'])(
+    'does not treat an ingredient-name hyphen as a range: %s',
+    (item) => {
+      expect(parseIngredientLine(item)).toMatchObject({ item, amount: null, unit: '' });
+    }
+  );
+
+  it('does not promote prose ranges after the ingredient name', () => {
+    expect(parseIngredientLine('2 cups stock for 1-2 servings')).toMatchObject({
+      amount: 2,
+      unit: 'cups',
+      item: 'stock for 1-2 servings',
+    });
+  });
+
   it('should populate originalText with the cleaned line', () => {
     const result = parseIngredientLine('2 cups flour');
     expect(result.originalText).toBe('2 cups flour');
@@ -343,8 +396,8 @@ describe('modifier extraction improvements', () => {
   it('should extract both parenthetical and "for X" modifiers', () => {
     const result = parseIngredientLine('1–2 tablespoons turbinado (raw) sugar, for topping');
     expect(result.item).toBe('turbinado sugar');
-    expect(result.amount).toBe(1);
-    expect(result.unit).toBe('1-2 tablespoons');
+    expect(result.amount).toBe('1–2');
+    expect(result.unit).toBe('tablespoons');
     expect(result.modifier).toBe('raw, for topping');
   });
 
@@ -406,8 +459,8 @@ describe('mixed fraction parsing (P0 fix)', () => {
 
   it('should handle multiple mixed fractions in ranges', () => {
     const result = parseIngredientLine('1½–1¾ cups flour');
-    expect(result.amount).toBe(1.5);
-    expect(result.unit).toBe('1.5-1.75 cups');
+    expect(result.amount).toBe('1.5–1.75');
+    expect(result.unit).toBe('cups');
     expect(result.item).toBe('flour');
   });
 

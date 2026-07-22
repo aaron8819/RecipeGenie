@@ -16,7 +16,7 @@ export type CustomShoppingCategory = {
 
 export type Ingredient = {
   item: string
-  amount: number | null
+  amount: number | string | null
   unit: string
   shoppingCategory?: string
   groupLabel?: string

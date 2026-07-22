@@ -5,6 +5,7 @@ import type { ShoppingItem } from "@/types/database"
 import {
   formatAdditionalAmountParts,
   formatAmountPart,
+  formatEncodedRangeAmount,
   formatShoppingItemAmount,
   ManualShoppingItemEditor,
   ShoppingCategorySection,
@@ -409,6 +410,14 @@ describe("shopping amount formatting", () => {
     expect(formatAmountPart(2, "jar")).toBe("2 jars")
     expect(formatAmountPart(3, "clove")).toBe("3 cloves")
     expect(formatAmountPart(2, "can (14 oz)")).toBe("2 cans (14 oz)")
+  })
+
+  it("renders encoded ingredient ranges without repeating the first endpoint", () => {
+    expect(formatEncodedRangeAmount(0.5, "0.5-1 tsp")).toBe("0.5–1 tsp")
+    expect(formatAmountPart(0.5, "0.5-1 tsp")).toBe("0.5–1 tsp")
+    expect(
+      formatShoppingItemAmount(item({ amount: 0.5, unit: "0.5-1 tsp" }))
+    ).toBe("0.5–1 tsp")
   })
 
   it("formats additional amounts independently from the primary amount", () => {

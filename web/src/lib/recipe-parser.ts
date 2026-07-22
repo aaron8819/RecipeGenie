@@ -856,27 +856,21 @@ export function parseIngredientLine(line: string): Ingredient {
   const amountMatch = cleaned.match(amountPattern)
 
   if (amountMatch) {
-    let amount: number | null = null
+    let amount: Ingredient["amount"] = null
     let unit = ""
 
     const amountEndIndex = amountMatch[0].length
     let remaining = cleaned.substring(amountEndIndex).trim()
 
-    amount = parseAmount(amountMatch[1])
-
     const hasRange = Boolean(amountMatch[3])
-    const originalRangeText = hasRange ? cleaned.substring(0, amountEndIndex).trim() : null
+    amount = hasRange
+      ? formatQuantityRange(parseAmount(amountMatch[1]), parseAmount(amountMatch[3]))
+      : parseAmount(amountMatch[1])
 
     const unitMatch = extractUnit(remaining)
     if (unitMatch) {
       unit = normalizeWholeCountUnit(unitMatch.unit) || unitMatch.unit
       remaining = remaining.substring(unitMatch.endIndex).trim()
-
-      if (hasRange && originalRangeText) {
-        unit = `${originalRangeText} ${unit}`.trim()
-      }
-    } else if (hasRange && originalRangeText) {
-      unit = originalRangeText
     } else if (remaining) {
       unit = WHOLE_COUNT_UNIT
     }
@@ -905,6 +899,49 @@ export function parseIngredientLine(line: string): Ingredient {
     alternatives,
     originalText,
   }
+}
+
+/**
+ * Normalize a quantity typed into an ingredient amount field.
+ * Ranges use decimal endpoints and an en dash (for example, `0.5–1`).
+ */
+export function parseIngredientAmountInput(value: string): Ingredient["amount"] {
+  const normalized = normalizeUnicode(value.trim())
+  const endpoint = String.raw`(?:\d+\s+\d+\/\d+|\d+\/\d+|\d+\.\d+|\d+)`
+  const match = normalized.match(
+    new RegExp(`^(${endpoint})(?:\\s*[-]\\s*(${endpoint}))?$`)
+  )
+
+  if (!match) {
+    return null
+  }
+
+  const start = parseAmount(match[1])
+  return match[2] ? formatQuantityRange(start, parseAmount(match[2])) : start
+}
+
+export function getIngredientQuantityRange(
+  amount: Ingredient["amount"]
+): { start: number; end: number; quantity: string } | null {
+  if (typeof amount !== "string") {
+    return null
+  }
+
+  const normalized = parseIngredientAmountInput(amount)
+  if (typeof normalized !== "string") {
+    return null
+  }
+
+  const [start, end] = normalized.split("–").map(Number)
+  return { start, end, quantity: normalized }
+}
+
+export function hasIngredientAmount(amount: Ingredient["amount"]): boolean {
+  return typeof amount === "number" ? amount > 0 : Boolean(amount?.trim())
+}
+
+function formatQuantityRange(start: number, end: number): string {
+  return `${start}–${end}`
 }
 
 function normalizeUnicode(text: string): string {
