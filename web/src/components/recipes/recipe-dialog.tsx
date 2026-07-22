@@ -32,6 +32,7 @@ import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts, useRec
 import { useRecipeImageStorage } from "@/hooks/use-recipe-image-storage"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
+import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient, RecipeInstructionGroup } from "@/types/database"
@@ -69,6 +70,14 @@ import {
   countIngredientsWithIssues,
   removeExactDuplicateIngredients,
 } from "./recipe-dialog.validation"
+import {
+  canReviewImportedRecipe,
+  getInvalidImportReviewSection,
+  isImportWorkDirty,
+  mapImportWarningToSection,
+  shouldConfirmCandidateReplacement,
+  type ImportReviewSection,
+} from "./recipe-import-review"
 
 // Lazy-loaded so @dnd-kit (~60–90 KB gzipped) is excluded from the initial bundle
 const SortableIngredientList = dynamic(
@@ -107,10 +116,7 @@ export function RecipeDialog({
   const [editTab, setEditTab] = useState<
     "details" | "ingredients" | "instructions" | "replace"
   >("details")
-  const [isWideViewport, setIsWideViewport] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false
-    return window.matchMedia("(min-width: 640px)").matches
-  })
+  const isDesktop = useIsDesktop()
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
   const [servings, setServings] = useState(4)
@@ -131,26 +137,34 @@ export function RecipeDialog({
   const wasOpenRef = useRef(false)
   const hydratedRecipeIdRef = useRef<string | null>(null)
   const pendingCreateUuidRef = useRef<string | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const submitInFlightRef = useRef(false)
+  const confirmationGuardRef = useRef(false)
+  const rawSourceRef = useRef("")
+  const importUrlRef = useRef("")
+  const [isSubmitLocked, setIsSubmitLocked] = useState(false)
   
   // Import state
-  const [importText, setImportText] = useState("")
+  const [rawSource, setRawSource] = useState("")
   const [importUrl, setImportUrl] = useState("")
   const [parseError, setParseError] = useState<string | null>(null)
   const [importStep, setImportStep] = useState<'input' | 'preview'>('input')
   const [parsedPreview, setParsedPreview] = useState<ParsedRecipe | null>(null)
-  const [livePreview, setLivePreview] = useState<ParsedRecipe | null>(null)
+  const [parsedCandidate, setParsedCandidate] = useState<ParsedRecipe | null>(null)
+  const [parsedCandidateKey, setParsedCandidateKey] = useState<string | null>(null)
+  const [isParsing, setIsParsing] = useState(false)
+  const [mobileImportPhase, setMobileImportPhase] = useState<'input' | 'review'>('input')
+  const [reviewSection, setReviewSection] = useState<ImportReviewSection>('details')
+  const [appliedDraftSnapshot, setAppliedDraftSnapshot] = useState<
+    ReturnType<typeof buildNewRecipeDialogFormValues> | null
+  >(null)
+  const [appliedRawSource, setAppliedRawSource] = useState<string | null>(null)
+  const [appliedCandidateKey, setAppliedCandidateKey] = useState<string | null>(null)
+  const [showReplacementConfirm, setShowReplacementConfirm] = useState(false)
   const importFromUrl = useImportRecipeFromUrl()
 
   const { data: allTags = [] } = useAllTags()
   const { data: tagCounts = [] } = useTagsWithCounts()
-
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 640px)")
-    const onChange = (event: MediaQueryListEvent) => setIsWideViewport(event.matches)
-    setIsWideViewport(mq.matches)
-    mq.addEventListener("change", onChange)
-    return () => mq.removeEventListener("change", onChange)
-  }, [])
 
   const applyFormValues = useCallback((formValues: ReturnType<typeof buildNewRecipeDialogFormValues>) => {
     setName(formValues.name)
@@ -168,12 +182,25 @@ export function RecipeDialog({
     setImagePreview(null)
     setMode("manual")
     setEditTab("details")
-    setImportText("")
+    setRawSource("")
+    rawSourceRef.current = ""
     setImportUrl("")
+    importUrlRef.current = ""
     setParseError(null)
     setImportStep('input')
     setParsedPreview(null)
-    setLivePreview(null)
+    setParsedCandidate(null)
+    setParsedCandidateKey(null)
+    setIsParsing(false)
+    setMobileImportPhase('input')
+    setReviewSection('details')
+    setAppliedDraftSnapshot(null)
+    setAppliedRawSource(null)
+    setAppliedCandidateKey(null)
+    setShowReplacementConfirm(false)
+    setIsSubmitLocked(false)
+    submitInFlightRef.current = false
+    confirmationGuardRef.current = false
   }, [])
 
   // Reset form when the dialog opens or the edited recipe target changes.
@@ -310,7 +337,10 @@ export function RecipeDialog({
 
   // Debounced live preview parser
   const debouncedParse = useDebouncedCallback(((text: string) => {
-    setLivePreview(parseRecipeImportPreview(text))
+    if (text !== rawSourceRef.current) return
+    setParsedCandidate(parseRecipeImportPreview(text))
+    setParsedCandidateKey(`text:${text}`)
+    setIsParsing(false)
   }) as (...args: unknown[]) => void, 300);
 
   const handleUrlImport = async () => {
@@ -324,12 +354,21 @@ export function RecipeDialog({
     setParseError(null)
     try {
       const result = await importFromUrl.mutateAsync(validation.normalizedUrl)
-      setParsedPreview(toParsedRecipeImport(result))
+      if (validateRecipeImportUrl(importUrlRef.current).normalizedUrl !== validation.normalizedUrl) {
+        return
+      }
+      const importedCandidate = toParsedRecipeImport(result)
+      if (isDesktop) {
+        setParsedPreview(importedCandidate)
+        setImportStep('preview')
+      } else {
+        setParsedCandidate(importedCandidate)
+        setParsedCandidateKey(`url:${validation.normalizedUrl}`)
+      }
       // Store the extracted image URL for later
       if (result.imageUrl) {
         setImageUrl(result.imageUrl)
       }
-      setImportStep('preview')
     } catch (err) {
       setParseError(getImportErrorMessage(err, IMPORT_URL_FAILURE_ERROR))
     }
@@ -361,6 +400,7 @@ export function RecipeDialog({
     setIngredients(formValues.ingredients)
     setInstructionGroups(formValues.instructionGroups)
     setNotes(formValues.notes)
+    return formValues
   }, [
     name,
     category,
@@ -375,9 +415,65 @@ export function RecipeDialog({
     imageUrl,
   ])
 
+  const currentDraft = {
+    name,
+    category,
+    servings,
+    prepTimeMinutes,
+    cookTimeMinutes,
+    totalTimeMinutes,
+    tags,
+    ingredients,
+    instructionGroups,
+    notes,
+    imageUrl,
+  }
+  const draftCorrected = !!appliedDraftSnapshot && isEditingRecipeDialogDirty(
+    appliedDraftSnapshot,
+    { ...currentDraft, imageReference: imagePreview ?? imageUrl }
+  )
+  const applyCandidateForReview = () => {
+    if (!parsedCandidate || !parsedCandidateKey || !canReviewImportedRecipe(parsedCandidate)) return
+    const appliedDraft = applyPreviewToCurrentForm(parsedCandidate)
+    setAppliedDraftSnapshot(appliedDraft)
+    setAppliedRawSource(rawSource)
+    setAppliedCandidateKey(parsedCandidateKey)
+    if (isDesktop) {
+      setMode('manual')
+    } else {
+      setMobileImportPhase('review')
+      setReviewSection('details')
+    }
+  }
+
+  const handleReviewCandidate = () => {
+    if (!parsedCandidate || !parsedCandidateKey || !canReviewImportedRecipe(parsedCandidate)) return
+
+    if (appliedCandidateKey === parsedCandidateKey && appliedDraftSnapshot) {
+      if (isDesktop) setMode('manual')
+      else setMobileImportPhase('review')
+      return
+    }
+
+    if (shouldConfirmCandidateReplacement({
+      appliedRawSource: appliedCandidateKey,
+      nextRawSource: parsedCandidateKey,
+      draftCorrected,
+    })) {
+      confirmationGuardRef.current = true
+      setShowReplacementConfirm(true)
+      return
+    }
+
+    applyCandidateForReview()
+  }
+
   const handleApplyPreview = () => {
     if (!parsedPreview) return
-    applyPreviewToCurrentForm(parsedPreview)
+    const appliedDraft = applyPreviewToCurrentForm(parsedPreview)
+    setAppliedDraftSnapshot(appliedDraft)
+    setAppliedRawSource(rawSource)
+    setAppliedCandidateKey(parsedCandidateKey)
 
     // Switch to manual mode to allow editing
     setMode("manual")
@@ -387,8 +483,8 @@ export function RecipeDialog({
   }
 
   const handleApplyReplacementPreview = () => {
-    if (!livePreview) return
-    applyPreviewToCurrentForm(livePreview)
+    if (!parsedCandidate) return
+    applyPreviewToCurrentForm(parsedCandidate)
     setEditTab("ingredients")
   }
 
@@ -460,10 +556,34 @@ export function RecipeDialog({
   }
 
   const handleSubmit = async () => {
+    if (submitInFlightRef.current) return
+
     // P3: Validate ingredients before submitting (only blocking issues)
     const blockingIssuesCount = countBlockingIngredientIssues(ingredients)
 
+    if (!isDesktop && mobileImportPhase === 'review' && !isEditing) {
+      const invalidSection = getInvalidImportReviewSection({
+        name,
+        category,
+        ingredients,
+        instructionGroups,
+        blockingIngredientIssues: blockingIssuesCount,
+      })
+
+      if (invalidSection) {
+        setReviewSection(invalidSection)
+        undoToast.show({
+          message: `Review the ${invalidSection} section before saving.`,
+          duration: 5000,
+        })
+        return
+      }
+    }
+
     if (blockingIssuesCount > 0) {
+      if (!isDesktop && mobileImportPhase === 'review') {
+        setReviewSection('ingredients')
+      }
       undoToast.show({
         message: `${blockingIssuesCount} ingredient(s) have critical issues. Please fix them before saving.`,
         duration: 5000
@@ -472,6 +592,8 @@ export function RecipeDialog({
       return
     }
 
+    submitInFlightRef.current = true
+    setIsSubmitLocked(true)
     try {
       let finalImageUrl = imageUrl
       const nextRecipeId = editingRecipe?.id ??
@@ -531,10 +653,13 @@ export function RecipeDialog({
     } catch (error) {
       console.error("Failed to save recipe:", error)
       undoToast.show({ message: 'Failed to save recipe. Please try again.', duration: 6000 })
+    } finally {
+      submitInFlightRef.current = false
+      setIsSubmitLocked(false)
     }
   }
 
-  const isSubmitting = createRecipe.isPending || updateRecipe.isPending || isUploadingImage
+  const isSubmitting = isSubmitLocked || createRecipe.isPending || updateRecipe.isPending || isUploadingImage
 
   // Check if there's at least one valid ingredient
   const hasValidIngredients = hasValidRecipeIngredients(ingredients)
@@ -545,7 +670,7 @@ export function RecipeDialog({
   const initialEditingFormValues = editingRecipe
     ? buildEditingRecipeDialogFormValues(editingRecipe)
     : null
-  const isDirty = isEditing
+  const hasDirtyForm = isEditing
     ? !!initialEditingFormValues && isEditingRecipeDialogDirty(initialEditingFormValues, {
         name,
         category,
@@ -573,17 +698,61 @@ export function RecipeDialog({
         notes,
         imageReference: imagePreview ?? imageUrl,
       })
+  const isDirty = hasDirtyForm || (!isEditing && isImportWorkDirty({
+    rawSource,
+    importUrl,
+    hasParsedCandidate: parsedCandidate !== null,
+    hasAppliedCandidate: appliedRawSource !== null,
+  }))
+  const isMobileImportInput = !isDesktop && !isEditing && mode === 'import' &&
+    mobileImportPhase === 'input'
+  const isMobileImportReview = !isDesktop && !isEditing && mode === 'import' &&
+    mobileImportPhase === 'review'
   const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && confirmationGuardRef.current) {
+      return
+    }
     if (!nextOpen && isDirty) {
+      confirmationGuardRef.current = true
       setShowDiscardConfirm(true)
       return
     }
     onOpenChange(nextOpen)
   }
 
+  const handleKeepEditing = () => {
+    setShowDiscardConfirm(false)
+    window.setTimeout(() => {
+      confirmationGuardRef.current = false
+      closeButtonRef.current?.focus()
+    }, 0)
+  }
+
+  const handleKeepCurrentDraft = () => {
+    setShowReplacementConfirm(false)
+    window.setTimeout(() => {
+      confirmationGuardRef.current = false
+    }, 0)
+  }
+
+  const handleConfirmationOpenChange = (
+    setOpen: (open: boolean) => void,
+    nextOpen: boolean
+  ) => {
+    setOpen(nextOpen)
+    if (!nextOpen) {
+      window.setTimeout(() => {
+        confirmationGuardRef.current = false
+      }, 0)
+    }
+  }
+
   return (
     <>
-    <AlertDialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
+    <AlertDialog
+      open={showDiscardConfirm}
+      onOpenChange={(nextOpen) => handleConfirmationOpenChange(setShowDiscardConfirm, nextOpen)}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
@@ -592,9 +761,40 @@ export function RecipeDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Keep editing</AlertDialogCancel>
-          <AlertDialogAction onClick={() => { setShowDiscardConfirm(false); onOpenChange(false) }}>
+          <AlertDialogCancel onClick={handleKeepEditing}>Keep editing</AlertDialogCancel>
+          <AlertDialogAction onClick={() => {
+            confirmationGuardRef.current = false
+            setShowDiscardConfirm(false)
+            onOpenChange(false)
+          }}>
             Discard
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog
+      open={showReplacementConfirm}
+      onOpenChange={(nextOpen) => handleConfirmationOpenChange(setShowReplacementConfirm, nextOpen)}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Replace your draft corrections?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Applying the reparsed source will replace the corrections you made in the current draft.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={handleKeepCurrentDraft}>
+            Keep current draft
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={() => {
+            setShowReplacementConfirm(false)
+            applyCandidateForReview()
+            window.setTimeout(() => {
+              confirmationGuardRef.current = false
+            }, 0)
+          }}>
+            Replace corrections
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -603,7 +803,7 @@ export function RecipeDialog({
       <DialogContent
         hideCloseButton
         className={
-          isEditing
+          isEditing || isMobileImportReview
             ? "max-w-6xl w-full sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-t-3xl rounded-b-none sm:rounded-3xl overflow-hidden bg-card h-[100dvh] max-h-[100dvh] sm:h-[90vh] sm:max-h-[90vh] flex flex-col !top-0 !translate-y-0 sm:!top-1/2 sm:!-translate-y-1/2"
             : "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92dvh] flex flex-col"
         }
@@ -617,6 +817,7 @@ export function RecipeDialog({
             </div>
             <DialogClose asChild>
               <button
+                ref={closeButtonRef}
                 type="button"
                 className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                 aria-label="Close"
@@ -627,7 +828,26 @@ export function RecipeDialog({
           </div>
         )}
 
-        {!isEditing && (
+        {isMobileImportReview && (
+          <div className="sticky top-0 z-20 flex flex-shrink-0 items-center justify-between border-b border-stone-200 bg-card/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur dark:border-zinc-800">
+            <div>
+              <h1 className="text-lg font-bold text-primary">Review imported recipe</h1>
+              <p className="text-xs text-muted-foreground">Edit each section before saving.</p>
+            </div>
+            <DialogClose asChild>
+              <button
+                ref={closeButtonRef}
+                type="button"
+                className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </DialogClose>
+          </div>
+        )}
+
+        {!isEditing && !isMobileImportReview && (
           <Tabs value={mode} onValueChange={(v) => setMode(v as "manual" | "import")} className="flex-1 min-h-0 flex flex-col">
             <div className="px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 flex justify-between items-center border-b border-stone-100 dark:border-zinc-900 flex-shrink-0 gap-2">
               <TabsList className="flex w-fit rounded-full p-1 bg-stone-100 dark:bg-zinc-900 gap-0 min-w-0">
@@ -636,7 +856,7 @@ export function RecipeDialog({
                   className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 rounded-full text-xs font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
                 >
                   <PenTool className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
-                  <span>{isWideViewport ? "Manual Entry" : "Manual"}</span>
+                  <span>{isDesktop ? "Manual Entry" : "Manual"}</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="import"
@@ -648,6 +868,7 @@ export function RecipeDialog({
               </TabsList>
               <DialogClose asChild>
                 <button
+                  ref={closeButtonRef}
                   type="button"
                   className="p-2 hover:bg-stone-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-stone-400 shrink-0"
                   aria-label="Close"
@@ -660,27 +881,39 @@ export function RecipeDialog({
               <RecipeImportSection
                 importStep={importStep}
                 importUrl={importUrl}
-                importText={importText}
+                importText={rawSource}
                 parseError={parseError}
-                livePreview={livePreview}
+                livePreview={parsedCandidate}
                 parsedPreview={parsedPreview}
                 isImportingFromUrl={importFromUrl.isPending}
+                compactMobile={!isDesktop}
+                isParsing={isParsing}
                 onImportUrlChange={(value) => {
+                  importUrlRef.current = value
                   setImportUrl(value)
                   setParseError(null)
+                  if (parsedCandidateKey?.startsWith('url:')) {
+                    setParsedCandidate(null)
+                    setParsedCandidateKey(null)
+                  }
                 }}
                 onImportTextChange={(value) => {
-                  setImportText(value)
+                  rawSourceRef.current = value
+                  setRawSource(value)
                   setParseError(null)
-                  setLivePreview(null)
-                  debouncedParse(value)
+                  setParsedCandidate(null)
+                  setParsedCandidateKey(null)
+                  setIsParsing(!!value.trim())
+                  if (value.trim()) {
+                    debouncedParse(value)
+                  } else {
+                    setIsParsing(false)
+                  }
                 }}
                 onImportUrl={handleUrlImport}
                 onApplyLivePreview={() => {
-                  if (!livePreview) return
-                  setParsedPreview(livePreview)
-                  applyPreviewToCurrentForm(livePreview)
-                  setMode("manual")
+                  if (!parsedCandidate) return
+                  handleReviewCandidate()
                 }}
                 onBackToInput={handleBackToInput}
                 onApplyPreview={handleApplyPreview}
@@ -719,7 +952,7 @@ export function RecipeDialog({
                 onBulkPasteIngredients={handleBulkPasteIngredients}
                 handleAutoFix={handleAutoFix}
                 onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                isWideViewport={isWideViewport}
+                isWideViewport={isDesktop}
                 imagePreview={imagePreview}
                 imageUrl={imageUrl}
                 onImageSelect={handleImageSelect}
@@ -727,6 +960,80 @@ export function RecipeDialog({
                 fileInputRef={fileInputRef}
               />
             </TabsContent>
+          </Tabs>
+        )}
+
+        {isMobileImportReview && (
+          <Tabs
+            value={reviewSection}
+            onValueChange={(value) => setReviewSection(value as ImportReviewSection)}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="flex-shrink-0 border-b border-stone-200 bg-card px-3 py-2 dark:border-zinc-800">
+              <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+                <TabsTrigger value="details" className="rounded-lg text-xs font-semibold">Details</TabsTrigger>
+                <TabsTrigger value="ingredients" className="rounded-lg text-xs font-semibold">Ingredients</TabsTrigger>
+                <TabsTrigger value="instructions" className="rounded-lg text-xs font-semibold">Instructions</TabsTrigger>
+              </TabsList>
+              {parsedCandidate?.warnings.length ? (
+                <div className="mt-2 flex gap-2 overflow-x-auto pb-1" aria-label="Import warnings">
+                  {parsedCandidate.warnings.map((warning, index) => (
+                    <button
+                      key={`${warning}-${index}`}
+                      type="button"
+                      onClick={() => setReviewSection(mapImportWarningToSection(warning))}
+                      className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                    >
+                      {warning}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-recipe-dialog"
+              data-testid="import-review-scroller"
+            >
+              <RecipeFormContent
+                editSection={reviewSection}
+                name={name}
+                setName={setName}
+                category={category}
+                setCategory={setCategory}
+                servings={servings}
+                setServings={setServings}
+                prepTimeMinutes={prepTimeMinutes}
+                setPrepTimeMinutes={setPrepTimeMinutes}
+                cookTimeMinutes={cookTimeMinutes}
+                setCookTimeMinutes={setCookTimeMinutes}
+                totalTimeMinutes={totalTimeMinutes}
+                setTotalTimeMinutes={setTotalTimeMinutes}
+                tags={tags}
+                setTags={setTags}
+                allTags={allTags}
+                tagCounts={tagCounts}
+                ingredients={ingredients}
+                instructionGroups={instructionGroups}
+                setInstructionGroups={setInstructionGroups}
+                notes={notes}
+                setNotes={setNotes}
+                categories={categories}
+                onAddIngredient={handleAddIngredient}
+                onRemoveIngredient={handleRemoveIngredient}
+                onIngredientChange={handleIngredientChange}
+                isEditing={true}
+                onReorderIngredients={handleReorderIngredients}
+                onBulkPasteIngredients={handleBulkPasteIngredients}
+                handleAutoFix={handleAutoFix}
+                onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                isWideViewport={false}
+                imagePreview={imagePreview}
+                imageUrl={imageUrl}
+                onImageSelect={handleImageSelect}
+                onRemoveImage={handleRemoveImage}
+                fileInputRef={fileInputRef}
+              />
+            </div>
           </Tabs>
         )}
 
@@ -786,7 +1093,7 @@ export function RecipeDialog({
                   onBulkPasteIngredients={handleBulkPasteIngredients}
                   handleAutoFix={handleAutoFix}
                   onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                  isWideViewport={isWideViewport}
+                  isWideViewport={isDesktop}
                   imagePreview={imagePreview}
                   imageUrl={imageUrl}
                   onImageSelect={handleImageSelect}
@@ -827,7 +1134,7 @@ export function RecipeDialog({
                   onBulkPasteIngredients={handleBulkPasteIngredients}
                   handleAutoFix={handleAutoFix}
                   onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                  isWideViewport={isWideViewport}
+                  isWideViewport={isDesktop}
                   imagePreview={imagePreview}
                   imageUrl={imageUrl}
                   onImageSelect={handleImageSelect}
@@ -868,7 +1175,7 @@ export function RecipeDialog({
                   onBulkPasteIngredients={handleBulkPasteIngredients}
                   handleAutoFix={handleAutoFix}
                   onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                  isWideViewport={isWideViewport}
+                  isWideViewport={isDesktop}
                   imagePreview={imagePreview}
                   imageUrl={imageUrl}
                   onImageSelect={handleImageSelect}
@@ -884,20 +1191,28 @@ export function RecipeDialog({
                   requireInstructions={false}
                   importStep="input"
                   importUrl={importUrl}
-                  importText={importText}
+                  importText={rawSource}
                   parseError={parseError}
-                  livePreview={livePreview}
+                  livePreview={parsedCandidate}
                   parsedPreview={null}
                   isImportingFromUrl={false}
                   onImportUrlChange={(value) => {
+                    importUrlRef.current = value
                     setImportUrl(value)
                     setParseError(null)
+                    if (parsedCandidateKey?.startsWith('url:')) {
+                      setParsedCandidate(null)
+                      setParsedCandidateKey(null)
+                    }
                   }}
                   onImportTextChange={(value) => {
-                    setImportText(value)
+                    rawSourceRef.current = value
+                    setRawSource(value)
                     setParseError(null)
-                    setLivePreview(null)
-                    debouncedParse(value)
+                    setParsedCandidate(null)
+                    setParsedCandidateKey(null)
+                    setIsParsing(!!value.trim())
+                    if (value.trim()) debouncedParse(value)
                   }}
                   onImportUrl={handleUrlImport}
                   onApplyLivePreview={handleApplyReplacementPreview}
@@ -909,27 +1224,60 @@ export function RecipeDialog({
           </Tabs>
         )}
 
-        <DialogFooter
+        {(isEditing || mode === 'manual' || isMobileImportInput || isMobileImportReview) && (
+          <DialogFooter
           className={
-            isEditing
+            isEditing || isMobileImportReview
               ? "sticky bottom-0 z-20 px-4 sm:px-8 py-4 sm:py-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-muted/85 dark:bg-zinc-900/85 border-t border-stone-200 dark:border-zinc-800 backdrop-blur supports-[backdrop-filter]:bg-muted/70 flex flex-col items-end flex-shrink-0"
               : "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col items-end flex-shrink-0"
           }
         >
-          <RecipeDialogActions
-            isEditing={isEditing}
-            isSubmitting={isSubmitting}
-            isUploadingImage={isUploadingImage}
-            canSubmit={!!name.trim() && !!category && hasValidIngredients && !isSubmitting && (!isEditing || !!editingRecipe)}
-            onCancel={() => handleOpenChange(false)}
-            onSubmit={handleSubmit}
-          />
-          {!hasValidIngredients && !isSubmitting && (
+          {isMobileImportInput ? (
+            <Button
+              type="button"
+              onClick={handleReviewCandidate}
+              disabled={!canReviewImportedRecipe(parsedCandidate) || isParsing}
+              className="w-full"
+              size="lg"
+            >
+              Review imported recipe
+            </Button>
+          ) : isMobileImportReview ? (
+            <div className="flex w-full gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setMobileImportPhase('input')}
+                className="flex-1"
+              >
+                Back to imported text
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!name.trim() || !category || !hasValidIngredients || isSubmitting}
+                className="flex-1"
+              >
+                {isSubmitting ? 'Saving…' : 'Save Recipe'}
+              </Button>
+            </div>
+          ) : (
+            <RecipeDialogActions
+              isEditing={isEditing}
+              isSubmitting={isSubmitting}
+              isUploadingImage={isUploadingImage}
+              canSubmit={!!name.trim() && !!category && hasValidIngredients && !isSubmitting && (!isEditing || !!editingRecipe)}
+              onCancel={() => handleOpenChange(false)}
+              onSubmit={handleSubmit}
+            />
+          )}
+          {!isMobileImportInput && !hasValidIngredients && !isSubmitting && (
             <p className="text-xs text-muted-foreground text-right mt-1">
               Add at least one ingredient to save
             </p>
           )}
-        </DialogFooter>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
     </>

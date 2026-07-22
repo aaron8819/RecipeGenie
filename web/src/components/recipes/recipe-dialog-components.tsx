@@ -232,6 +232,8 @@ type RecipeImportSectionProps = {
   showUrlImport?: boolean
   currentRecipeName?: string
   requireInstructions?: boolean
+  compactMobile?: boolean
+  isParsing?: boolean
   onImportUrlChange: (value: string) => void
   onImportTextChange: (value: string) => void
   onImportUrl: () => void
@@ -302,6 +304,8 @@ export function RecipeImportSection({
   showUrlImport = true,
   currentRecipeName,
   requireInstructions = true,
+  compactMobile = false,
+  isParsing = false,
   onImportUrlChange,
   onImportTextChange,
   onImportUrl,
@@ -329,6 +333,116 @@ export function RecipeImportSection({
   const applyLivePreviewLabel = isReplacement
     ? "Apply to Current Recipe"
     : "Apply to Form"
+
+  if (compactMobile) {
+    return (
+      <div className="space-y-4 py-4" data-testid="mobile-import-input">
+        {showUrlImport ? (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="import-url">Import from URL</Label>
+              <div className="flex gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Link className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="import-url"
+                    value={importUrl}
+                    onChange={(event) => onImportUrlChange(event.target.value)}
+                    placeholder="https://www.example.com/recipe..."
+                    className="pl-9 font-mono text-sm"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault()
+                        onImportUrl()
+                      }
+                    }}
+                  />
+                </div>
+                <Button
+                  onClick={onImportUrl}
+                  disabled={isImportingFromUrl}
+                  className="shrink-0"
+                >
+                  {isImportingFromUrl ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-label="Importing" />
+                  ) : (
+                    "Import"
+                  )}
+                </Button>
+              </div>
+            </div>
+            <div className="relative flex items-center gap-4 py-1">
+              <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+              <span className="text-xs font-medium text-muted-foreground">or paste text</span>
+              <div className="flex-1 border-t border-stone-200 dark:border-zinc-800" />
+            </div>
+          </>
+        ) : null}
+
+        <div className="space-y-2">
+          <Label htmlFor="import-text">Paste Recipe Text</Label>
+          <Textarea
+            id="import-text"
+            value={importText}
+            onChange={(event) => onImportTextChange(event.target.value)}
+            placeholder="Paste the recipe title, ingredients, and instructions"
+            className="h-[clamp(10rem,26dvh,13.75rem)] min-h-[clamp(10rem,26dvh,13.75rem)] resize-none font-mono text-sm"
+          />
+          {parseError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {parseError}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {livePreview && !isParsing
+            ? `Recipe parsed: ${livePreview.name}, ${liveIngredientCount} ingredients, ${liveInstructionCount} instructions.`
+            : ""}
+        </div>
+
+        {isParsing ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Parsing recipe…
+          </div>
+        ) : livePreview ? (
+          <section className="space-y-3 rounded-xl border border-border bg-muted/30 p-4" aria-label="Parsed recipe summary">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Parsed recipe</div>
+              <div className="font-serif text-lg font-semibold text-primary">{livePreview.name}</div>
+              {livePreview.servings ? (
+                <div className="text-xs text-muted-foreground">Serves {livePreview.servings}</div>
+              ) : null}
+            </div>
+            {livePreview.metadata ? (
+              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                {livePreview.metadata.prepTime ? <span>Prep {livePreview.metadata.prepTime}</span> : null}
+                {livePreview.metadata.cookTime ? <span>Cook {livePreview.metadata.cookTime}</span> : null}
+                {livePreview.metadata.totalTime ? <span>Total {livePreview.metadata.totalTime}</span> : null}
+              </div>
+            ) : null}
+            <div className="flex gap-4 text-sm">
+              <span>{liveIngredientCount} ingredient{liveIngredientCount === 1 ? "" : "s"}</span>
+              <span>{liveInstructionCount} instruction{liveInstructionCount === 1 ? "" : "s"}</span>
+            </div>
+            {liveWarnings.length > 0 ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide">
+                  <AlertTriangle className="h-4 w-4" /> Parsing notes
+                </div>
+                <ul className="space-y-1 text-xs">
+                  {liveWarnings.map((warning, index) => <li key={index}>- {warning}</li>)}
+                </ul>
+              </div>
+            ) : null}
+          </section>
+        ) : importText.trim() ? (
+          <p className="text-sm text-muted-foreground">Add ingredients and instructions to review this recipe.</p>
+        ) : null}
+      </div>
+    )
+  }
 
   if (importStep === "preview") {
     return (
