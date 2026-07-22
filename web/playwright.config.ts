@@ -32,7 +32,7 @@ export default defineConfig({
     { name: 'core-ci', grep: coreCiGrep, use: { ...devices['Desktop Chrome'] } },
     { name: 'extended-chromium', grep: extendedGrep, use: { ...devices['Desktop Chrome'] } },
     { name: 'smoke', grep: smokeGrep, use: { ...devices['Desktop Chrome'] } },
-    { name: 'local-inspection', testMatch: /local-browser-inspection\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    { name: 'local-inspection', testMatch: /(local-browser-inspection|mobile-import-review)\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },

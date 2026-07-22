@@ -7,9 +7,10 @@ type Diagnostic = {
 }
 
 const viewports = [
-  { name: 'mobile-360', width: 360, height: 780 },
+  { name: 'mobile-360', width: 360, height: 800 },
   { name: 'mobile-390', width: 390, height: 844 },
-  { name: 'mobile-430', width: 430, height: 900 },
+  { name: 'mobile-430', width: 430, height: 932 },
+  { name: 'mobile-reduced-height', width: 390, height: 420 },
   { name: 'desktop-1200', width: 1200, height: 800 },
 ]
 
@@ -167,8 +168,9 @@ test.describe('local authenticated browser inspection', () => {
       `${importedName}\nServes 2\n\nIngredients:\n2 slices sourdough bread\n1 cup cherry tomatoes\n\nInstructions:\n1. Toast the bread.\n2. Spoon tomatoes over top.`
     )
     await expect(dialog.getByText(importedName, { exact: true })).toBeVisible()
-    await dialog.getByRole('button', { name: /apply to form/i }).click()
-    await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+    await dialog.getByRole('button', { name: /review imported recipe/i }).click()
+    await expect(dialog.getByRole('tab', { name: /^details$/i })).toHaveAttribute('data-state', 'active')
+    await dialog.getByRole('button', { name: /^save recipe$/i }).click()
     const importedDetail = page.getByRole('dialog').last()
     await expect(importedDetail.locator('h1').filter({ hasText: importedName })).toBeVisible()
     await importedDetail.getByRole('button', { name: /edit recipe/i }).click()

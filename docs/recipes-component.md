@@ -70,6 +70,9 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - Text parsing is local and deterministic.
 - URL import remains server-side because it needs SSRF protection, rate limiting, and HTML/JSON-LD extraction.
+- Below the desktop breakpoint, pasted-text import uses a compact input phase followed by a full-height sectioned review inside the same create dialog. The raw source, latest parsed candidate, and canonical editable draft have separate ownership; returning to the source preserves draft corrections, and applying changed source requires confirmation when the draft was corrected.
+- Mobile import review reuses the Details, Ingredients, and Instructions section bodies with a sticky Back/Save footer. Desktop keeps the two-column paste preview and stacked create form.
+- Entered text or URL source, a parsed candidate, and an applied or corrected draft all count as unsaved import work. Dismissal uses the shared discard confirmation, and keeping work preserves the active phase, section, values, and focus target.
 - Import apply/save/reopen parity now preserves structured recipe times and notes directly, and preserves grouped instructions through additive `instruction_groups`.
 - Edit mode has a paste-to-replace flow that reuses the text parser and applies parsed fields to the current recipe draft. It preserves the recipe id, category, tags, and image; replaces name/servings/times when parsed; replaces ingredients only when at least one ingredient is parsed; replaces instructions only when steps are parsed; and keeps existing notes unless parsed notes are present.
 
@@ -103,6 +106,10 @@ Run from `web/`:
 ```bash
 npm run test -- --run src/lib/__tests__/recipe-parser.test.ts
 npx playwright test recipes.spec.ts --project=chromium
+npm run test:e2e:inspect
 ```
+
+The local inspection suite covers mobile import state transitions at 360x800,
+390x844, 430x932, and 390x420, plus the preserved desktop flow at 1200x800.
 
 Last updated: 2026-03-10

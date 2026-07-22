@@ -175,6 +175,37 @@ describe("RecipeImportSection", () => {
     expect(screen.getByRole("button", { name: "Apply to Form" })).toBeDisabled()
   })
 
+  it("renders the compact mobile input and parsed summary without full previews", () => {
+    render(
+      <RecipeImportSection
+        importStep="input"
+        importUrl=""
+        importText="Recipe text"
+        parseError={null}
+        livePreview={parsedRecipe({
+          metadata: { prepTime: "10 minutes", prepTimeMinutes: 10 },
+          warnings: ["One ingredient has no amount"],
+        })}
+        parsedPreview={null}
+        isImportingFromUrl={false}
+        compactMobile
+        onImportUrlChange={() => {}}
+        onImportTextChange={() => {}}
+        onImportUrl={() => {}}
+        onApplyLivePreview={() => {}}
+        onBackToInput={() => {}}
+        onApplyPreview={() => {}}
+      />
+    )
+
+    expect(screen.getByTestId("mobile-import-input")).toBeInTheDocument()
+    expect(screen.getByRole("region", { name: "Parsed recipe summary" })).toHaveTextContent("Roast Chicken")
+    expect(screen.getByText("2 ingredients")).toBeInTheDocument()
+    expect(screen.getByText("2 instructions")).toBeInTheDocument()
+    expect(screen.queryByText("Ingredients Preview")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Apply to Form" })).not.toBeInTheDocument()
+  })
+
   it("renders preview mode and forwards back/apply callbacks", () => {
     const onBackToInput = vi.fn()
     const onApplyPreview = vi.fn()
