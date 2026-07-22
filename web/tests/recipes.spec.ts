@@ -353,6 +353,66 @@ test.describe('Recipes', () => {
     await expect(page.getByRole('dialog').last().locator('h1').filter({ hasText: recipeName })).toBeVisible()
   })
 
+  test('preserves an imported ingredient quantity range through recipe and shopping views @extended', async ({ page, navigateToTab }) => {
+    const seed = `${recipeRun!.runId}-range`
+    const recipeName = `Range Recipe ${seed}`
+    const ingredient = `lemon zest ${seed}`
+
+    await openAddRecipeDialog(page)
+    const dialog = page.getByRole('dialog').first()
+    await dialog.getByRole('tab', { name: /^import$/i }).click()
+    await dialog.getByLabel('Paste Recipe Text').fill(`${recipeName}
+Serves 2
+
+Ingredients:
+½–1 tsp ${ingredient}
+
+    Instructions:
+1. Mix until ready.`)
+
+    await dialog.getByRole('button', { name: /apply to form/i }).click()
+    const amountInput = dialog.locator('input[placeholder="Amt"]').first()
+    await expect(amountInput).toHaveValue('0.5–1')
+    await amountInput.fill('0.5-1')
+    await amountInput.press('Tab')
+    await expect(amountInput).toHaveValue('0.5–1')
+
+    await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+    let detailDialog = page.getByRole('dialog').last()
+    await expect(detailDialog.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
+    await expect(detailDialog.getByText(ingredient, { exact: true })).toBeVisible()
+
+    await detailDialog.getByRole('button', { name: /start cooking/i }).click()
+    await page.getByRole('button', { name: /ingredients \(0\/1\)/i }).click()
+    await expect(page.getByText(`0.5–1 tsp ${ingredient}`, { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /exit cook mode/i }).click()
+
+    await searchRecipes(page, recipeName)
+    await page.getByText(recipeName, { exact: true }).click()
+    detailDialog = page.getByRole('dialog').last()
+    await detailDialog.getByRole('button', { name: /edit recipe/i }).click()
+    const editDialog = page.getByRole('dialog').first()
+    await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
+    await expect(editDialog.locator('input[placeholder="Amt"]').first()).toHaveValue('0.5–1')
+    await editDialog.getByRole('button', { name: /save changes/i }).click()
+    await expect(editDialog).toBeHidden({ timeout: 15000 })
+
+    if (await page.getByRole('dialog').first().isVisible().catch(() => false)) {
+      await closeDialog(page)
+    }
+    await searchRecipes(page, recipeName)
+    await page.getByText(recipeName, { exact: true }).click()
+    detailDialog = page.getByRole('dialog').last()
+    await expect(detailDialog.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
+    await addOpenRecipeToShopping(page)
+    await closeDialog(page)
+
+    await navigateToTab('shopping')
+    await expect(page.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: `From ${recipeName}` })).toBeVisible()
+    await expect(page.getByText('½ 0.5-1 tsp', { exact: true })).toHaveCount(0)
+  })
+
   test('replaces edited recipe contributions without stale or duplicate shopping rows @extended', async ({ page, navigateToTab }) => {
     const seed = `${recipeRun!.runId}-replace`
     const originalIngredient = `e2e orzo ${seed}`

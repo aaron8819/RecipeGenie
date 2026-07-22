@@ -97,9 +97,25 @@ function formatDisplayUnit(amount: number, unit: string): string {
 export function formatAmountPart(amount: number | null | undefined, unit: string): string {
   if (!amount) return ""
 
+  const rangeAmount = formatEncodedRangeAmount(amount, unit)
+  if (rangeAmount) return rangeAmount
+
   const displayAmount = toFraction(amount)
   const displayUnit = formatDisplayUnit(amount, unit)
   return `${displayAmount}${displayUnit ? ` ${displayUnit}` : ""}`
+}
+
+export function formatEncodedRangeAmount(
+  amount: number | null | undefined,
+  unit: string
+): string | null {
+  if (!amount) return null
+
+  const match = unit.trim().match(/^(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)(?:\s+(.+))?$/)
+  if (!match || Number(match[1]) !== amount) return null
+
+  const displayUnit = getIngredientDisplayUnit(match[3] || "")
+  return `${match[1]}–${match[2]}${displayUnit ? ` ${displayUnit}` : ""}`
 }
 
 export function formatAdditionalAmountParts(
@@ -145,6 +161,14 @@ function getDisplayItemName(item: ShoppingItem): string {
 
 function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]>[number]): string | null {
   if (!source.originalItem) return null
+
+  const rangeAmount = formatEncodedRangeAmount(
+    source.originalAmount,
+    source.originalUnit || ""
+  )
+  if (rangeAmount) {
+    return `${rangeAmount} ${source.originalItem}`
+  }
 
   const amount = source.originalAmount ? toFraction(source.originalAmount) : ""
   const unit = getIngredientDisplayUnit(source.originalUnit || "")

@@ -78,6 +78,7 @@ import {
   sortItemsWithinGroups,
 } from "./shopping-list.selectors"
 import {
+  formatEncodedRangeAmount,
   formatShoppingItemAmount,
   getRecipeColor,
   getRecipeColorIndex,
@@ -1190,9 +1191,14 @@ export function ShoppingListView() {
 
         lines.push(`${categoryData.name}:`)
         items.forEach((item) => {
+          const rangeAmount = formatEncodedRangeAmount(item.amount, item.unit || "")
           const amount = item.amount ? toFraction(item.amount) : ""
           const unit = item.unit || ""
-          const prefix = amount ? `${amount}${unit ? " " + unit : ""} ` : ""
+          const prefix = rangeAmount
+            ? `${rangeAmount} `
+            : amount
+              ? `${amount}${unit ? " " + unit : ""} `
+              : ""
           lines.push(`  - ${prefix}${item.item}`)
         })
         lines.push("")

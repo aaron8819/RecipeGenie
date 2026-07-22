@@ -497,6 +497,45 @@ Instructions:
     expect(applied.notes).toBe("Keep this note")
   })
 
+  it("hydrates imported quantity ranges into the Edit Recipe amount field", () => {
+    const parsed = parseRecipeImportPreview(`Honey Mustard Chicken Tenders
+
+Ingredients
+1½ lb chicken tenders
+2 tbsp olive oil, divided
+¼ cup Dijon mustard
+2 tbsp honey, divided
+1 tbsp lemon juice
+½–1 tsp lemon zest
+1 tsp garlic powder, divided
+1 tsp smoked paprika
+¾ tsp kosher salt
+½ tsp black pepper
+¾ cup panko breadcrumbs
+¼ cup grated Parmesan`)
+
+    expect(parsed).not.toBeNull()
+
+    const applied = applyParsedRecipeToFormValues(
+      buildNewRecipeDialogFormValues(["dinner"]),
+      parsed!
+    )
+
+    expect(applied.ingredients).toHaveLength(12)
+    expect(applied.ingredients[5]).toMatchObject({
+      amount: "0.5–1",
+      unit: "tsp",
+      item: "lemon zest",
+      modifier: undefined,
+    })
+    expect(applied.ingredients[3]).toMatchObject({
+      amount: 2,
+      unit: "tbsp",
+      item: "honey",
+      modifier: "divided",
+    })
+  })
+
   it("separates legacy note label lines from instructions when hydrating older recipes", () => {
     const hydrated = buildEditingRecipeDialogFormValues({
       id: "legacy-1",

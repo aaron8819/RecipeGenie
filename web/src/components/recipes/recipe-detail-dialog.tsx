@@ -436,8 +436,11 @@ export function RecipeDetailDialog({
                     <ul className="space-y-4">
                       {group.ingredients.map((ingredient, index) => {
                         const displayUnit = getIngredientDisplayUnit(ingredient.unit)
+                        const displayAmount = typeof ingredient.amount === "string"
+                          ? ingredient.amount
+                          : toFraction(ingredient.amount)
                         const quantityText = ingredient.amount != null
-                          ? `${toFraction(ingredient.amount)}${displayUnit ? ` ${displayUnit}` : ""}`
+                          ? `${displayAmount}${displayUnit ? ` ${displayUnit}` : ""}`
                           : "—"
 
                         return (

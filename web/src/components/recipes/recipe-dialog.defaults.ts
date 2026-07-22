@@ -1,4 +1,4 @@
-import type { ParsedRecipe } from "@/lib/recipe-parser"
+import { hasIngredientAmount, type ParsedRecipe } from "@/lib/recipe-parser"
 import type { Ingredient, Recipe, RecipeInsert, RecipeInstructionGroup } from "@/types/database"
 import {
   buildInstructionEditorGroups,
@@ -248,7 +248,7 @@ export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
   const normalizedUnit = normalizeIngredientUnit(ingredient.unit)
   const unit =
     normalizedUnit ||
-    (item && ingredient.amount !== null && ingredient.amount > 0
+    (item && hasIngredientAmount(ingredient.amount)
       ? WHOLE_COUNT_UNIT
       : "")
   const groupLabel = normalizeIngredientWhitespace(ingredient.groupLabel)

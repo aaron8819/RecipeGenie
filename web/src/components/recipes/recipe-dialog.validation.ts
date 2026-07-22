@@ -1,4 +1,4 @@
-import { parseIngredientLine } from "@/lib/recipe-parser"
+import { hasIngredientAmount, parseIngredientLine } from "@/lib/recipe-parser"
 import type { Ingredient } from "@/types/database"
 import { normalizeItemName, normalizeUnit } from "@/lib/shopping-list-normalization"
 import { WHOLE_COUNT_UNIT } from "@/lib/ingredient-units"
@@ -34,6 +34,7 @@ export function validateIngredient(
   ingredient: Ingredient
 ): IngredientValidationIssue[] {
   const issues: IngredientValidationIssue[] = []
+  const hasAmount = hasIngredientAmount(ingredient.amount)
 
   if (!isIngredientRowTouched(ingredient)) {
     return issues
@@ -43,13 +44,12 @@ export function validateIngredient(
     issues.push("missing-item")
   }
 
-  if (ingredient.unit && ingredient.unit.trim() && !ingredient.amount) {
+  if (ingredient.unit && ingredient.unit.trim() && !hasAmount) {
     issues.push("unit-without-amount")
   }
 
   if (
-    ingredient.amount &&
-    ingredient.amount > 0 &&
+    hasAmount &&
     !ingredient.unit?.trim() &&
     !ingredient.item?.trim()
   ) {
@@ -99,8 +99,7 @@ export function autoFixIngredients(ingredients: Ingredient[]): {
 
     if (
       fixedIngredient.item?.trim() &&
-      fixedIngredient.amount &&
-      fixedIngredient.amount > 0 &&
+      hasIngredientAmount(fixedIngredient.amount) &&
       !fixedIngredient.unit?.trim()
     ) {
       fixedIngredient = { ...fixedIngredient, unit: WHOLE_COUNT_UNIT }
@@ -108,7 +107,10 @@ export function autoFixIngredients(ingredients: Ingredient[]): {
 
     const issues = validateIngredient(fixedIngredient)
 
-    if (issues.includes("unit-without-amount") && !fixedIngredient.amount) {
+    if (
+      issues.includes("unit-without-amount") &&
+      !hasIngredientAmount(fixedIngredient.amount)
+    ) {
       return { ...fixedIngredient, amount: 1 }
     }
 

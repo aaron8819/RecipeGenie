@@ -147,8 +147,11 @@ export function CookMode({ recipe, onClose }: CookModeProps) {
             <ul className="space-y-2">
               {ingredients.map((ing, i) => {
                 const displayUnit = getIngredientDisplayUnit(ing.unit);
+                const displayAmount = typeof ing.amount === 'string'
+                  ? ing.amount
+                  : toFraction(ing.amount);
                 const quantityText = ing.amount != null
-                  ? `${toFraction(ing.amount)}${displayUnit ? ` ${displayUnit}` : ''}`
+                  ? `${displayAmount}${displayUnit ? ` ${displayUnit}` : ''}`
                   : '';
 
                 return (

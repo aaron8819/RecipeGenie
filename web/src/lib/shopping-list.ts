@@ -15,6 +15,7 @@ import {
 import type { ShoppingItemOrderPreferences } from "./shopping-item-order"
 import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
+import { getIngredientQuantityRange } from "./recipe-parser"
 
 export interface ShoppingListResult {
   items: ShoppingItem[]
@@ -175,10 +176,16 @@ export function generateShoppingList(
     totalBaseServings += recipe.servings || 4
 
     for (const ingredient of recipe.ingredients || []) {
+      const quantityRange = getIngredientQuantityRange(ingredient.amount)
       const purchase = normalizeShoppingPurchase({
         item: ingredient.item,
-        amount: ingredient.amount,
-        unit: ingredient.unit || "",
+        amount:
+          typeof ingredient.amount === "number"
+            ? ingredient.amount
+            : quantityRange?.start ?? null,
+        unit: quantityRange
+          ? `${quantityRange.quantity.replace("–", "-")} ${ingredient.unit || ""}`.trim()
+          : ingredient.unit || "",
         modifier: ingredient.modifier,
       })
       const itemName = purchase.purchaseName
