@@ -39,7 +39,7 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 
 **Key layers:**
 - `web/src/app/page.tsx` — Single-page app with tab navigation (Planner, Recipes, Pantry, Shopping)
-- `web/src/hooks/` — All data access via TanStack Query hooks (`useQuery` for reads, `useMutation` for writes). Shopping hooks in `hooks/shopping/` (barrel via `use-shopping.ts`). Key hooks: `use-recipes.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`, `use-wake-lock.ts`
+- `web/src/hooks/` — All data access via TanStack Query hooks (`useQuery` for reads, `useMutation` for writes). Shopping hooks in `hooks/shopping/` (barrel via `use-shopping.ts`). Key hooks: `use-recipes.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`
 - `web/src/lib/` — Pure business logic, no React dependencies. Core algorithms: `meal-planner.ts`, `shopping-list.ts`, `shopping-list-merging.ts`, `shopping-list-normalization.ts`, `recipe-parser.ts`, `recipe-url-parser.ts` (URL import/JSON-LD), `recipe-export.ts` (JSON/text export), `pantry-matcher.ts` (ingredient matching), `recipe-sharing.ts` (share lifecycle), `rate-limit.ts` (Upstash Redis), `url-safety.ts` (SSRF guard), `planner-utils.ts`, `planner-colors.ts`, `user-config.ts`
 - `web/src/app/api/` — Server-side API routes: `recipe-import/route.ts` (URL fetch + JSON-LD parse, rate-limited), `recipe-shares/` (create, inbox, sent, accept, decline routes)
 - `web/src/components/` — Organized by domain: `auth/`, `recipes/`, `planner/`, `pantry/`, `shopping/`, `layout/`, `ui/` (shadcn primitives)
@@ -126,7 +126,7 @@ Before starting work, match your task to a doc below and read it first.
 |---------------------|------------|
 | Planner (components, hooks, lib, day assignments) | `docs/planner-component.md` |
 | Shopping (components, hooks, merging, normalization, hook tests) | `docs/shopping-component.md` |
-| Recipes (components, hooks, parser, CRUD, tags, cook mode, URL import, sharing) | `docs/recipes-component.md` |
+| Recipes (components, hooks, parser, CRUD, tags, detail dialog, URL import, sharing) | `docs/recipes-component.md` |
 | Pantry (components, hooks, excluded keywords, What Can I Make?) | `docs/pantry-component.md` |
 | Database (schema, migrations, RLS, new tables/columns) | `supabase/SCHEMA.md` |
 | E2E tests (writing, debugging, fixtures) | `web/tests/README.md` |

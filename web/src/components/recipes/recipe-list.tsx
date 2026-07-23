@@ -811,14 +811,12 @@ export function RecipeList() {
                     onToggleFavorite={handleToggleFavorite}
                     onAddToPlan={(recipe) => setAddToPlanRecipeId(recipe.id)}
                     onAddToShoppingList={handleAddToShoppingList}
-                    onMarkAsMade={handleMarkAsMade}
                     onShare={handleShareRecipe}
                     onClick={(recipe) => setViewingRecipeId(recipe.id)}
                     onTagClick={handleTagClick}
                     lastMade={stats?.lastMade ?? null}
                     timesMade={stats?.timesMade ?? 0}
                     isAddingToShoppingList={addingToShoppingListId === recipe.id}
-                    isMarkingAsMade={markingAsMadeId === recipe.id}
                     isSharing={false}
                   />
                 </div>

@@ -8,7 +8,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
   - Manual entry, import from plain text, or import from URL (JSON-LD / HTML scraping)
   - Supports Unicode fractions, ranges, alternative ingredients ("X or Y"), and various recipe formats
   - Upload and display recipe images (JPG, PNG, WebP, max 5MB)
-  - Cook mode: step-by-step fullscreen view with wake lock
+  - Recipe detail dialog with ingredients, instructions, notes, and cooking follow-up actions
   - Export recipes as JSON or plain text
 - **Recipe Sharing**: Share recipes with other users by exact email; recipient gets an owned copy
 - **Meal Planning**: Randomly generate weekly meal plans based on your preferences
@@ -300,6 +300,6 @@ web/
 | `supabase/SCHEMA.md` | Database schema — tables, RLS policies, migrations, query examples |
 | `docs/shopping-component.md` | Shopping list component deep-dive (architecture, data flow, testing) |
 | `docs/planner-component.md` | Meal planner component deep-dive (auto-assign, date handling, templates, history) |
-| `docs/recipes-component.md` | Recipes component deep-dive (CRUD, parser, URL import, cook mode, sharing) |
+| `docs/recipes-component.md` | Recipes component deep-dive (CRUD, parser, URL import, detail dialog, sharing) |
 | `docs/pantry-component.md` | Pantry component deep-dive (items, keywords, What Can I Make?) |
 | `web/tests/README.md` | E2E testing guide (Playwright setup, fixtures, debugging) |

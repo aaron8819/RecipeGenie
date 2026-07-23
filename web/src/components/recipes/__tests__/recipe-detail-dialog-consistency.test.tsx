@@ -82,10 +82,6 @@ vi.mock("@/components/ui/alert-dialog", () => ({
   AlertDialogTitle: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
-vi.mock("../cook-mode", () => ({
-  CookMode: () => <div>Cook mode</div>,
-}))
-
 function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
   return {
     id: "recipe-1",
@@ -162,12 +158,13 @@ describe("RecipeDetailDialog cache consistency", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add to Plan" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
+    fireEvent.click(screen.getByRole("button", { name: "Mark Made" }))
     fireEvent.click(screen.getByRole("button", { name: "Share" }))
 
     expect(onAddToPlan).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
     expect(onAddToShoppingList).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
+    expect(onMarkAsMade).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
     expect(onShare).toHaveBeenCalledWith(expect.objectContaining({ id: "recipe-1" }))
-    expect(screen.queryByRole("button", { name: "Mark Made" })).not.toBeInTheDocument()
   })
 
   it("keeps minimal contexts structured without rendering unrelated action groups", () => {
@@ -188,7 +185,7 @@ describe("RecipeDetailDialog cache consistency", () => {
       </QueryClientProvider>
     )
 
-    expect(screen.getByRole("button", { name: "Start Cooking" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Start Cooking" })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Edit Recipe" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Add to Plan" })).not.toBeInTheDocument()
