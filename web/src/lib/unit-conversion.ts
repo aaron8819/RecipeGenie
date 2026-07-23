@@ -168,20 +168,6 @@ export function convertToBase(amount: number, unit: string): { value: number; fa
 }
 
 /**
- * Convert an amount from base unit to a target unit
- */
-export function convertFromBase(baseValue: number, targetUnit: string): number | null {
-  const normalized = targetUnit.toLowerCase().trim()
-  const conversion = UNIT_CONVERSIONS[normalized]
-  
-  if (!conversion) {
-    return null
-  }
-  
-  return baseValue / conversion.toBase
-}
-
-/**
  * Find the best display unit for a given base value in a family
  */
 export function getBestDisplayUnit(baseValue: number, family: UnitFamily): { unit: string; value: number } {

@@ -45,10 +45,10 @@ test.describe('My unauthenticated tests', () => {
 
 ### Run the core CI project
 ```bash
-npm run test:e2e
+npm run test:e2e:core
 ```
 
-This is an alias for `test:e2e:core`; it is not the full browser matrix.
+This is the canonical core CI command; it is not the full browser matrix.
 
 ### Run smoke tests (critical flow, Chromium-only)
 ```bash
@@ -66,7 +66,7 @@ This command lists smoke tests and fails if fewer than 5 are selected.
 
 ### Run full cross-browser matrix
 ```bash
-npm run test:e2e:full
+npm run test:e2e:matrix
 ```
 
 ### `test.skip` Policy
@@ -170,13 +170,10 @@ test('my authenticated test', async ({ page, setupAuth }) => {
 ### Sample Data
 
 ```typescript
-import { SAMPLE_RECIPE, SAMPLE_RECIPE_TEXT, TEST_USER, VIEWPORTS } from './fixtures'
+import { SAMPLE_RECIPE, TEST_USER, VIEWPORTS } from './fixtures'
 
 // Use sample recipe for tests
 await addRecipe(SAMPLE_RECIPE)
-
-// Import recipe from text
-await pasteArea.fill(SAMPLE_RECIPE_TEXT)
 
 // Set viewport
 await page.setViewportSize(VIEWPORTS.mobile)

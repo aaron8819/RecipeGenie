@@ -134,9 +134,3 @@ export function useDeclineRecipeShare() {
     },
   });
 }
-
-export const RECIPE_SHARES_KEY = {
-  sharesKey: shareKeys.all,
-  inboxKey: shareKeys.inbox,
-  sentKey: shareKeys.sent,
-};

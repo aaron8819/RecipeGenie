@@ -29,15 +29,6 @@ function sortPantryItems(items: PantryItem[]): PantryItem[] {
   return [...items].sort((a, b) => a.item.localeCompare(b.item))
 }
 
-function createOptimisticPantryItem(userId: string, item: string): PantryItem {
-  return {
-    id: `temp-${crypto.randomUUID()}`,
-    user_id: userId,
-    item,
-    created_at: new Date().toISOString(),
-  }
-}
-
 function isUniqueViolation(error: unknown): boolean {
   return !!error && typeof error === "object" && "code" in error && (error as { code?: string }).code === "23505"
 }
@@ -277,8 +268,4 @@ export function useRemovePantryItem() {
       queryClient.invalidateQueries({ queryKey: pantryKey })
     },
   })
-}
-
-export function createPendingPantryUndoItem(itemName: string, userId: string): PantryItem {
-  return createOptimisticPantryItem(userId, normalizePantryItemName(itemName))
 }
