@@ -91,17 +91,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 npm ci
 ```
 
-### 4. Migrate Existing Data (Optional)
-
-If you have existing recipes in `data/*.json` from the legacy Flask version:
-
-```bash
-npm run migrate
-```
-
-This imports your recipes, pantry, config, and history into Supabase.
-
-### 5. Run Development Server
+### 4. Run Development Server
 
 ```bash
 npm run dev
@@ -296,8 +286,7 @@ web/
 │   ├── lib/
 │   │   └── supabase/           # Supabase clients
 │   └── types/                  # TypeScript types
-├── scripts/
-│   └── migrate.ts              # JSON to Supabase migration
+├── scripts/                    # Local workflow and maintenance commands
 └── package.json
 ```
 
