@@ -151,7 +151,7 @@ v1.0.0-v2.7.1 below.
 - **Default recipe images**:
   - Database trigger `set_default_recipe_images` on `recipes` (BEFORE INSERT): when `image_url` is null/empty, sets storage path (e.g. `defaults/mac-and-cheese.webp`) for the 8 default recipe slugs; supports recipe IDs with UUID suffix (`slug-uuid`) via `regexp_replace` to match base slug
   - Migrations: `013_default_recipe_images.sql` (exact ID match + backfill), `014_default_recipe_images_uuid_suffix.sql` (ID suffix match + backfill)
-  - Script `web/scripts/upload-default-recipe-images.ts` — uploads default images from `.cursor/images` to Supabase Storage `recipe-images/defaults/`; run with `npx tsx scripts/upload-default-recipe-images.ts` (requires `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+  - Script `web/scripts/upload-default-recipe-images.ts` — uploads default images from `.cursor/images` to Supabase Storage `recipe-images/defaults/`; run with `npm run upload:default-recipe-images` (requires `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
 
 ### Changed
 

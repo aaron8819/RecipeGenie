@@ -2,7 +2,7 @@
  * Upload default recipe images to Supabase Storage (recipe-images/defaults)
  *
  * Usage:
- *   npx tsx scripts/upload-default-recipe-images.ts
+ *   npm run upload:default-recipe-images
  *
  * Required env vars:
  *   NEXT_PUBLIC_SUPABASE_URL

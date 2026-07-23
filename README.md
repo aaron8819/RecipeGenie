@@ -45,7 +45,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
    migration chain. Do not apply `001_baseline.sql` by itself.
 3. Go to **Authentication > Providers** and ensure Email auth is enabled
 4. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
-5. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npx tsx scripts/upload-default-recipe-images.ts` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
+5. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npm run upload:default-recipe-images` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
 
 ### Schema Bootstrap Strategy
 
