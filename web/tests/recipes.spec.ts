@@ -300,7 +300,7 @@ test.describe('Recipes', () => {
     const detailDialog = page.getByRole('dialog').last()
     await expect(
       detailDialog.getByRole('button', { name: /start cooking/i })
-    ).toBeVisible()
+    ).toHaveCount(0)
     await expect(
       detailDialog.getByRole('button', { name: /add to shopping list/i })
     ).toBeVisible()
@@ -315,7 +315,7 @@ test.describe('Recipes', () => {
     ).toBeVisible()
     await expect(
       detailDialog.getByRole('button', { name: /^mark made$/i })
-    ).toHaveCount(0)
+    ).toBeVisible()
     const addToShoppingButton = detailDialog.getByRole('button', { name: /add to shopping list/i })
     await addToShoppingButton.click()
     await expect(addToShoppingButton).toBeDisabled()
@@ -382,14 +382,8 @@ Ingredients:
     await expect(detailDialog.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
     await expect(detailDialog.getByText(ingredient, { exact: true })).toBeVisible()
 
-    await detailDialog.getByRole('button', { name: /start cooking/i }).click()
-    await page.getByRole('button', { name: /ingredients \(0\/1\)/i }).click()
-    await expect(page.getByText(`0.5–1 tsp ${ingredient}`, { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: /exit cook mode/i }).click()
-
-    await searchRecipes(page, recipeName)
-    await page.getByText(recipeName, { exact: true }).click()
-    detailDialog = page.getByRole('dialog').last()
+    await expect(detailDialog.getByRole('heading', { name: 'Ingredients' })).toBeVisible()
+    await expect(detailDialog.getByRole('heading', { name: 'Instructions' })).toBeVisible()
     await detailDialog.getByRole('button', { name: /edit recipe/i }).click()
     const editDialog = page.getByRole('dialog').first()
     await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()

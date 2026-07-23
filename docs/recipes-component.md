@@ -1,6 +1,6 @@
 # Recipes Domain Reference
 
-Use this doc when working on recipe CRUD, the recipe dialog, text or URL import, recipe images, tags/categories, cook mode, or recipe sharing.
+Use this doc when working on recipe CRUD, the recipe dialog, text or URL import, recipe images, tags/categories, or recipe sharing.
 
 This is a domain reference. Canonical project-wide boundaries live in [`./ARCHITECTURE_GUARDRAILS.md`](./ARCHITECTURE_GUARDRAILS.md).
 
@@ -28,7 +28,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/components/recipes/recipe-list.tsx` | Main recipe browsing, filtering, sorting, and dialog orchestration. |
 | `web/src/components/recipes/recipe-dialog.tsx` | Main create/edit orchestration for manual entry and imports. |
 | `web/src/components/recipes/recipe-dialog-components.tsx` | Presentation-only recipe dialog sections extracted from the main dialog. |
-| `web/src/components/recipes/recipe-detail-dialog.tsx` | Query-backed recipe detail, cook-mode entry point, and common follow-up actions. |
+| `web/src/components/recipes/recipe-detail-dialog.tsx` | Query-backed cooking interface and common follow-up actions. |
 | `web/src/components/recipes/share-recipe-dialog.tsx` | Share a recipe with another user. |
 | `web/src/components/recipes/shared-recipes-inbox.tsx` | Inbox and sent-share status views. |
 | `web/src/hooks/use-recipes.ts` | Recipe CRUD, categories, and tag operations. |
@@ -85,7 +85,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 ### Recipe structure compatibility
 
 - `recipe-structure.ts` is the canonical compatibility layer for recipe notes and grouped instructions.
-- When `instruction_groups` exists, render/export/cook flows should prefer it.
+- When `instruction_groups` exists, render and export flows should prefer it.
 - Older recipes that only have flat `instructions` must continue to render correctly.
 - Legacy `Notes:` label lines inside flat instructions are still supported at hydration/render time and should not be reintroduced into persisted notes-aware recipes.
 

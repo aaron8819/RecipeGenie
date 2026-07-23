@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import Image from "next/image"
-import { Heart, History, UtensilsCrossed, CalendarPlus, Loader2, ChevronRight, ShoppingCart, Check, MoreVertical, Share2 } from "lucide-react"
+import { Heart, History, UtensilsCrossed, CalendarPlus, Loader2, ChevronRight, ShoppingCart, MoreVertical, Share2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,7 +33,6 @@ interface RecipeCardProps {
   onToggleFavorite?: (recipe: Recipe) => void
   onAddToPlan?: (recipe: Recipe) => void
   onAddToShoppingList?: (recipe: Recipe) => void
-  onMarkAsMade?: (recipe: Recipe) => void
   onShare?: (recipe: Recipe) => void
   onClick?: (recipe: Recipe) => void
   onTagClick?: (tag: string) => void
@@ -41,7 +40,6 @@ interface RecipeCardProps {
   timesMade?: number
   isAddingToPlan?: boolean
   isAddingToShoppingList?: boolean
-  isMarkingAsMade?: boolean
   isSharing?: boolean
 }
 
@@ -53,7 +51,6 @@ function RecipeCard({
   onToggleFavorite,
   onAddToPlan,
   onAddToShoppingList,
-  onMarkAsMade,
   onShare,
   onClick,
   onTagClick,
@@ -61,7 +58,6 @@ function RecipeCard({
   timesMade = 0,
   isAddingToPlan = false,
   isAddingToShoppingList = false,
-  isMarkingAsMade = false,
   isSharing = false,
 }: RecipeCardProps) {
   const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
@@ -176,25 +172,6 @@ function RecipeCard({
             </p>
 
             <div className={cn("flex justify-end gap-2", isDesktopViewport && "hidden")}>
-              {onMarkAsMade && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onMarkAsMade?.(recipe)
-                  }}
-                  disabled={isMarkingAsMade}
-                  className="flex h-11 w-11 items-center justify-center rounded-lg text-primary transition-all hover:bg-slate-50 dark:hover:bg-slate-700"
-                  title="Mark as Made"
-                  aria-label="Mark as made"
-                >
-                  {isMarkingAsMade ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Check className="h-5 w-5" />
-                  )}
-                </button>
-              )}
               <button
                 type="button"
                 onClick={(e) => {
@@ -252,24 +229,6 @@ function RecipeCard({
 
         {/* Action icons — reference: check_circle, shopping_cart, calendar_today, divider, chevron_right */}
         <div className={cn("items-center gap-1 flex-shrink-0", isDesktopViewport ? "flex" : "hidden")}>
-          {onMarkAsMade && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onMarkAsMade?.(recipe)
-              }}
-              disabled={isMarkingAsMade}
-              className="p-3 text-slate-400 hover:text-primary dark:hover:text-primary hover:bg-slate-50 dark:hover:bg-slate-700 rounded-full transition-all"
-              title="Mark as Made"
-            >
-              {isMarkingAsMade ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Check className="h-5 w-5" />
-              )}
-            </button>
-          )}
           <button
             type="button"
             onClick={(e) => {
@@ -453,16 +412,6 @@ function RecipeCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                {onMarkAsMade && (
-                  <DropdownMenuItem
-                    onClick={() => onMarkAsMade?.(recipe)}
-                    disabled={isMarkingAsMade}
-                    className="text-slate-700 dark:text-slate-300"
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Mark as Made
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem
                   onClick={() => onAddToShoppingList?.(recipe)}
                   disabled={isAddingToShoppingList}
@@ -491,30 +440,8 @@ function RecipeCard({
             </DropdownMenu>
           </div>
         </div>
-        {/* Desktop: 4-button grid. Mobile: no separate action row */}
-        <div className={cn("grid grid-cols-4 gap-2", !isDesktopViewport && "hidden")}>
-          {onMarkAsMade && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                onMarkAsMade?.(recipe)
-              }}
-              disabled={isMarkingAsMade}
-              className="flex items-center justify-center gap-1.5 py-2 px-1 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 hover:border-slate-300 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:border-slate-600 dark:hover:text-slate-100 transition-colors"
-              title="Mark as Made"
-            >
-              {isMarkingAsMade ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  <Check className="h-[18px] w-[18px]" />
-                  Made
-                </>
-              )}
-            </Button>
-          )}
+        {/* Desktop: compact utility row. Mobile: actions stay in the overflow menu. */}
+        <div className={cn("grid grid-cols-3 gap-2", !isDesktopViewport && "hidden")}>
           <Button
             variant="outline"
             size="sm"

@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { Heart, Pencil, Trash2, X, History, UtensilsCrossed, ChefHat, Share2, CalendarPlus, ShoppingCart, Loader2 } from "lucide-react"
+import { Heart, Pencil, Trash2, X, History, UtensilsCrossed, Check, Share2, CalendarPlus, ShoppingCart, Loader2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -23,11 +23,10 @@ import { useRecipe, useToggleFavorite } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { formatRecipeTime, getRecipeInstructionGroups, getRecipeNotes } from "@/lib/recipe-structure"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
-import { CookMode } from "./cook-mode"
 
 interface RecipeDetailDialogProps {
   open: boolean
@@ -100,7 +99,7 @@ interface RecipeDetailHeaderProps {
   recipeImageUrl: string | null
   timesMade: number
   lastMade?: string | null
-  onStartCooking?: () => void
+  onMarkAsMade?: (recipe: Recipe) => void
   onEdit?: (recipe: Recipe) => void
   onShare?: (recipe: Recipe) => void
   onAddToPlan?: (recipe: Recipe) => void
@@ -108,6 +107,7 @@ interface RecipeDetailHeaderProps {
   onToggleFavorite: () => void
   isAddingToPlan?: boolean
   isAddingToShoppingList?: boolean
+  isMarkingAsMade?: boolean
   isSharing?: boolean
 }
 
@@ -116,7 +116,7 @@ function RecipeDetailHeader({
   recipeImageUrl,
   timesMade,
   lastMade,
-  onStartCooking,
+  onMarkAsMade,
   onEdit,
   onShare,
   onAddToPlan,
@@ -124,6 +124,7 @@ function RecipeDetailHeader({
   onToggleFavorite,
   isAddingToPlan = false,
   isAddingToShoppingList = false,
+  isMarkingAsMade = false,
   isSharing = false,
 }: RecipeDetailHeaderProps) {
   const hasTertiaryActions = !!(onShare || onAddToPlan || onAddToShoppingList)
@@ -239,10 +240,19 @@ function RecipeDetailHeader({
               />
             </Button>
 
-            {onStartCooking ? (
-              <Button onClick={onStartCooking} className={cn("gap-2.5", HEADER_PRIMARY_BUTTON_CLASS)}>
-                <ChefHat className="h-4 w-4" />
-                Start Cooking
+            {onMarkAsMade ? (
+              <Button
+                onClick={() => onMarkAsMade(recipe)}
+                disabled={isMarkingAsMade}
+                className={cn("gap-2.5", HEADER_PRIMARY_BUTTON_CLASS)}
+                aria-label="Mark Made"
+              >
+                {isMarkingAsMade ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                Mark Made
               </Button>
             ) : null}
 
@@ -347,9 +357,7 @@ export function RecipeDetailDialog({
   const { data: liveRecipe } = useRecipe(open ? resolvedRecipeId : null)
   const recipe = liveRecipe ?? initialRecipe
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [isCookMode, setIsCookMode] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
-  const cookModeRecipeRef = useRef<Recipe | null>(null)
 
   const recipeImageUrl = recipe ? getRecipeImageUrl(recipe.image_url) : null
   const ingredientGroups = recipe ? groupIngredientsByLabel(recipe) : []
@@ -372,18 +380,6 @@ export function RecipeDetailDialog({
   }
 
   if (!recipe) {
-    // Render cook mode even when dialog recipe is null (dialog was closed to enter cook mode)
-    if (isCookMode && cookModeRecipeRef.current) {
-      return (
-        <CookMode
-          recipe={cookModeRecipeRef.current}
-          onClose={() => {
-            setIsCookMode(false)
-            cookModeRecipeRef.current = null
-          }}
-        />
-      )
-    }
     return null
   }
 
@@ -400,11 +396,7 @@ export function RecipeDetailDialog({
             recipeImageUrl={recipeImageUrl}
             timesMade={timesMade}
             lastMade={lastMade}
-            onStartCooking={instructionGroups.some((group) => group.steps.length > 0) ? () => {
-              cookModeRecipeRef.current = recipe
-              onOpenChange(false)
-              setIsCookMode(true)
-            } : undefined}
+            onMarkAsMade={onMarkAsMade}
             onEdit={onEdit}
             onShare={onShare}
             onAddToPlan={onAddToPlan}
@@ -414,6 +406,7 @@ export function RecipeDetailDialog({
             }
             isAddingToPlan={isAddingToPlan}
             isAddingToShoppingList={isAddingToShoppingList}
+            isMarkingAsMade={isMarkingAsMade}
             isSharing={isSharing}
           />
           {/* Ingredients | Instructions - 2-col grid */}
