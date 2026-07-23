@@ -1,23 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-
-/**
- * Debounce a value by delaying updates until delay period passes
- */
-export function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
+import { useEffect, useCallback, useRef } from 'react';
 
 /**
  * Create a debounced callback function

@@ -112,7 +112,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Testing
 
 - **Unit tests (Vitest):** `npm run test` or `npm run test:watch`. Tests live in `src/hooks/__tests__/`, `src/lib/__tests__/`, and similar.
-- **E2E tests (Playwright):** `npm run test:e2e` runs the core CI project and
+- **E2E tests (Playwright):** `npm run test:e2e:core` runs the core CI project and
   starts its configured web server. For the guarded local authenticated
   workflow, run `npm run local:e2e:bootstrap` and then
   `npm run test:e2e:inspect`; it uses the ignored `.env.e2e.local` contract and

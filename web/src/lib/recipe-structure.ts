@@ -59,34 +59,6 @@ export function buildInstructionEditorGroups(
   )
 }
 
-export function buildInstructionEditorText(
-  instructions: string[],
-  instructionGroups?: RecipeInstructionGroup[] | null
-): string {
-  return buildInstructionEditorGroups(instructions, instructionGroups)
-    .flatMap((group) => [
-      ...(group.label ? [`${group.label}:`] : []),
-      ...group.steps,
-    ])
-    .join("\n")
-}
-
-export function parseInstructionEditorText(text: string): {
-  instructions: string[]
-  instructionGroups?: RecipeInstructionGroup[]
-} {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-
-  const parsed = parseInstructionLines(lines)
-  return {
-    instructions: parsed.instructions,
-    instructionGroups: parsed.hasStructuralGrouping ? parsed.instructionGroups : undefined,
-  }
-}
-
 export function normalizeInstructionGroupsForEditor(
   groups?: RecipeInstructionGroup[] | null
 ): RecipeInstructionGroup[] {

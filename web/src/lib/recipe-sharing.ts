@@ -16,10 +16,3 @@ export function buildRecipeShareSnapshot(recipe: Recipe): RecipeShareSnapshot {
     instruction_groups: recipe.instruction_groups ?? null,
   };
 }
-
-export function getShareErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return 'Unable to complete recipe sharing request.';
-}

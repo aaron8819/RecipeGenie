@@ -286,7 +286,7 @@ v1.0.0-v2.7.1 below.
 
 - **Playwright E2E testing**:
   - `playwright.config.ts` with global setup for authenticated state
-  - Scripts: `test:e2e`, `test:e2e:ui`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:report`, `test:e2e:codegen`
+  - Scripts: `test:e2e:core`, `test:e2e:ui`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:report`, `test:e2e:codegen`
   - Dev dependency: `@playwright/test`
   - Tests live in `web/tests/` (gitignored; add tests as needed)
   - Reuses auth state from `playwright/.auth/user.json` (gitignored)
@@ -305,7 +305,7 @@ v1.0.0-v2.7.1 below.
 
 ### Technical Notes
 
-- Run E2E: `npm run test:e2e` (requires dev server; use global setup for auth)
+- Run E2E: `npm run test:e2e:core` (requires dev server; use global setup for auth)
 - Run unit tests: `npm run test` or `npm run test:watch`
 
 ---

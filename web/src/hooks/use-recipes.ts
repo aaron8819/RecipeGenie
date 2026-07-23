@@ -633,14 +633,6 @@ export function useTagsWithCounts() {
 }
 
 /**
- * Hook to check if a category has recipes assigned to it
- */
-export function useCategoryHasRecipes(categoryName: string | null) {
-  const { data: recipes } = useRecipes({ category: categoryName || undefined })
-  return (recipes?.length || 0) > 0
-}
-
-/**
  * Hook to update recipe categories
  */
 export function useUpdateCategories() {

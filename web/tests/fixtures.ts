@@ -37,27 +37,6 @@ export const SAMPLE_RECIPE = {
 }
 
 /**
- * Sample imported recipe text for parser testing
- */
-export const SAMPLE_RECIPE_TEXT = `
-Honey Garlic Salmon (Serves 4)
-
-Ingredients:
-4 salmon fillets
-3 tbsp honey
-2 cloves garlic, minced
-1/4 cup soy sauce
-1 tbsp olive oil
-
-Instructions:
-1. Preheat oven to 400F
-2. Mix honey, garlic, and soy sauce
-3. Place salmon in baking dish
-4. Pour sauce over salmon
-5. Bake for 15-20 minutes
-`
-
-/**
  * Viewport sizes for responsive testing
  */
 export const VIEWPORTS = {
@@ -417,8 +396,3 @@ export async function measureTouchTarget(locator: Locator): Promise<{ width: num
   }
   return { width: box.width, height: box.height }
 }
-
-/**
- * Minimum touch target size (44x44px per WCAG)
- */
-export const MIN_TOUCH_TARGET = 44

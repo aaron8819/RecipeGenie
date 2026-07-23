@@ -25,8 +25,8 @@ npm run test                   # Vitest unit tests
 npm run test -- --run path/to/file.test.ts  # Run single test file
 npm run test:watch             # Watch mode
 npm run test:coverage          # Coverage report
-npm run test:e2e               # Playwright core-ci project
-npm run test:e2e:full          # Full desktop/mobile browser matrix
+npm run test:e2e:core          # Playwright core-ci project
+npm run test:e2e:matrix        # Full desktop/mobile browser matrix
 npm run local:e2e:bootstrap    # Guarded local Supabase + auth fixture
 npm run test:e2e:inspect       # Local authenticated inspection project
 npm run test:e2e:headed        # E2E in headed mode
@@ -111,7 +111,7 @@ Patterns established during the 2026-02-27 performance audit. Treat these as har
 - Tests for navigation, auth, recipes, planner, pantry, shopping, responsive
   behavior, accessibility, sharing authorization, and focused local inspection
 - Creates isolated authenticated state per test and removes it afterward
-- `test:e2e` runs `core-ci`; `test:e2e:full` runs the full desktop/mobile matrix
+- `test:e2e:core` runs `core-ci`; `test:e2e:matrix` runs the full desktop/mobile matrix
 
 ## Gotchas
 

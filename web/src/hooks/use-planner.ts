@@ -226,30 +226,6 @@ export function useWeeklyPlanRecipes(recipeIds: string[]) {
 }
 
 /**
- * Hook to fetch recipe history
- */
-export function useRecipeHistory() {
-  const { user } = useAuthContext()
-  const ownerUserId = principalId(user?.id)
-
-  return useQuery({
-    queryKey: getRecipeHistoryQueryKey(ownerUserId),
-    queryFn: async () => {
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from("recipe_history")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("date_made", { ascending: false })
-
-      if (error) throw error
-      return (data || []).map(mapRecipeHistoryRow)
-    },
-    enabled: !!user,
-  })
-}
-
-/**
  * Hook to fetch only recent recipe history used for planner recency behavior.
  */
 export function useRecentRecipeHistory() {
