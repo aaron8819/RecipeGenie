@@ -25,13 +25,19 @@ npm run test                   # Vitest unit tests
 npm run test -- --run path/to/file.test.ts  # Run single test file
 npm run test:watch             # Watch mode
 npm run test:coverage          # Coverage report
-npm run test:e2e               # Playwright E2E (starts dev server automatically)
-npm run test:e2e -- --project chromium  # Single browser
+npm run test:e2e               # Playwright core-ci project
+npm run test:e2e:full          # Full desktop/mobile browser matrix
+npm run local:e2e:bootstrap    # Guarded local Supabase + auth fixture
+npm run test:e2e:inspect       # Local authenticated inspection project
 npm run test:e2e:headed        # E2E in headed mode
 npm run test:e2e:debug         # E2E with debugger
 ```
 
-E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `TEST_USER_PASSWORD` env vars. Global setup authenticates once; auth state is reused via `playwright/.auth/user.json`.
+E2E configuration is authoritative in `web/tests/README.md` and
+`web/tests/E2E_CREDENTIALS.md`. The normal local workflow uses the guarded
+`local:e2e:bootstrap` command, an ignored `.env.e2e.local`, and per-test auth
+state under ignored `.playwright/auth/`; it does not use a tracked or shared
+global auth-state file.
 
 ## Architecture
 
@@ -47,7 +53,10 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 - `web/src/lib/supabase/client.ts` — Singleton Supabase client; `admin.ts` — service-role client (server only)
 - `web/src/lib/auth-context.tsx` — Auth state provider (React Context, the one exception to "no Context API")
 
-**Supabase tables** (all scoped by `user_id` via RLS `auth.uid() = user_id`): `recipes`, `user_config`, `weekly_plans`, `pantry_items`, `recipe_history`, `shopping_list`, `recipe_shares`, `plan_templates`. Schema details in `supabase/SCHEMA.md`.
+**Supabase tables** (all scoped by owner identity and RLS):
+`recipes`, `user_config`, `weekly_plans`, `pantry_items`, `recipe_history`,
+`shopping_list`, `shopping_recipe_contributions`, `recipe_shares`, and
+`plan_templates`. Schema details in `supabase/SCHEMA.md`.
 
 **Query key convention:** `['entity', userId, ...params]` — e.g., `['recipes', userId]`, `['planner', userId, weekDate]`
 
@@ -73,7 +82,8 @@ E2E tests require `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, and `T
 - **Types:** `interface` for object shapes, `type` for unions/intersections
 - **Styling:** Tailwind utilities + `cn()` helper for conditional classes. Design system: Outfit/Playfair fonts, sage/terracotta palette. Use CVA for component variants
 - **Path alias:** `@/*` maps to `web/src/*`
-- **Supabase type workaround:** Use `@ts-expect-error` for known Supabase TypeScript inference issues where update params infer as `never`
+- **Type suppression policy:** Do not add `@ts-expect-error`; the enforced
+  baseline is zero. Fix or narrow Supabase types explicitly.
 - **Commits:** Conventional commits — `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
 
 ## Performance Conventions
@@ -98,24 +108,32 @@ Patterns established during the 2026-02-27 performance audit. Treat these as har
 - `web/src/hooks/__tests__/` — Hook mutation tests (optimistic updates, rollback); see `docs/shopping-component.md` for the `renderHook` + QueryClient + Supabase mock pattern
 
 **E2E tests** (Playwright, `web/tests/`):
-- Tests for navigation, auth, recipes, planner, pantry, shopping list, responsive, accessibility, visual design
-- Uses global setup with shared auth state
-- Runs against all browsers + mobile viewports (Chromium, Firefox, WebKit, Pixel 5, iPhone 12, iPhone SE, iPad)
+- Tests for navigation, auth, recipes, planner, pantry, shopping, responsive
+  behavior, accessibility, sharing authorization, and focused local inspection
+- Creates isolated authenticated state per test and removes it afterward
+- `test:e2e` runs `core-ci`; `test:e2e:full` runs the full desktop/mobile matrix
 
 ## Gotchas
 
-- **Supabase types**: `.update()` and `.insert()` may infer params as `never` — use `@ts-expect-error` with explanatory comment
+- **Supabase types**: `.update()` and `.insert()` can infer params too narrowly;
+  use generated types or a narrow typed adapter. The repository permits zero
+  `@ts-expect-error` directives.
 - **Dates**: Always use `toLocalNoonISOString()` from `planner-utils.ts` for `date_made` to avoid UTC boundary shifts
 - **RLS**: Every new table needs an explicit RLS policy — test in Supabase SQL Editor first
 - **Shopping merging**: Uses ES module imports only, not `require()` — dynamic require breaks at runtime
-- **E2E env vars**: Tests need `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TEST_USER_EMAIL`, `TEST_USER_PASSWORD`
+- **E2E configuration**: Use the `RECIPE_GENIE_E2E_*` target/credential
+  contract plus `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY`; see `web/tests/E2E_CREDENTIALS.md`.
 - **CSP nonces**: Middleware sets `x-nonce` header; root layout MUST call `headers()` to trigger Next.js 15 automatic nonce application to inline scripts
 - **User config fetch**: PGRST116 (not found) is expected for new users — `resolveUserConfig()` returns defaults
 - **Shopping per-item pending**: Never use `mutation.isPending` to disable all items in a list — track pending state per-item with a `Set<string>` of item keys; only disable the specific item being mutated
 - **Shopping pantry alternatives**: Pantry matching checks both primary item name AND `alternatives[]`; exclusion keyword matching only checks the primary name (alternatives cannot trigger exclusion)
 - **ingredientMap display strings**: `ingredientMap` stores `item` as the display string (e.g., "yogurt (or sour cream)"). Use `.entries()` to get the primary key for pantry/exclusion matching — never call `normalizeItemName()` on `ingredient.item` for these checks
 - **Undo toast pattern**: For pantry/planner destructive actions — delete immediately, undo re-inserts. For shopping list items — deferring delete to `onExpire` loses the action if the page is refreshed (component unmounts, timer cleared, `onExpire` never fires). Use immediate-delete for shopping too
-- **Rate limiting**: `lib/rate-limit.ts` uses `@upstash/ratelimit` with Upstash Redis. Requires `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` env vars in production. Graceful fail-open in dev (missing env vars → no-op limiter)
+- **Rate limiting**: `lib/rate-limit.ts` uses `@upstash/ratelimit` with Upstash
+  Redis. It reads `KV_REST_API_URL` and `KV_REST_API_TOKEN`, fails closed in
+  production when they are absent, and degrades to a no-op limiter in
+  development.
 - **Admin client**: `lib/supabase/admin.ts` uses `SUPABASE_SERVICE_ROLE_KEY` — server-only. Never import in client components. Used for cross-user identity lookup (recipient email resolution in recipe shares)
 
 ## Doc Router — Read Before You Act

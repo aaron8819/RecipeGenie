@@ -1,5 +1,13 @@
 # Recipe identity migration
 
+> **Historical rollout record.** This document preserves staged design,
+> redacted audit evidence, deployment gates, and decisions as they existed
+> during the UUID migration. It is not the current schema or operational
+> authority. See [`supabase/SCHEMA.md`](../supabase/SCHEMA.md) for the active
+> migration chain and compatibility behavior, and
+> [`decisions.md`](../decisions.md#adr-023-uuid-authoritative-recipe-identity-with-compatibility-mirrors)
+> for the durable identity decision.
+
 Classification: recipe identity migration + reference rewrite + compatibility contracts.
 
 This document records the pre-implementation inventory, the redacted production impact audit performed on 2026-07-16, and the staged rollout contract. Production was read only. Migration 007 is Stage 1 only.

@@ -2,7 +2,7 @@
 
 > **When to read:** You're making a major architectural decision, proposing a refactor, or need context on why something was built a certain way.
 
-*Last updated: 2026-03-07 (v2.15.1)*
+*Last updated: 2026-07-23*
 
 This document captures key architectural and design decisions for Recipe Genie, including rationale and tradeoffs.
 
@@ -500,50 +500,20 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 ## ADR-016: Supabase TypeScript Type Inference Workarounds
 
-**Status:** Accepted (2026-01-24)
+**Status:** Superseded (2026-07-12)
 
 **Context:** During TypeScript compilation, Supabase client operations (`.update()`, `.insert()`) were incorrectly inferring parameter types as `never` in certain contexts, causing build failures. This occurred despite the database types being correctly defined and the operations working correctly at runtime.
 
-**Decision:** Use `@ts-expect-error` comments with explanatory notes to suppress TypeScript errors for Supabase operations where type inference fails, while maintaining type safety through explicit type assertions for query results.
+**Current decision:** The repository permits zero `@ts-expect-error`
+directives. Use generated database types, narrow typed adapters, or explicit
+result shaping instead. `npm run check:no-new-ts-expect-error` enforces the
+zero baseline and is part of `npm run verify`.
 
-**Rationale:**
-- The errors are false positives from TypeScript's type inference system, not actual runtime issues
-- All operations are type-safe at runtime due to Supabase's runtime validation
-- Explicit type assertions for query results (`data as Type | null`) provide type safety where needed
-- `@ts-expect-error` is more explicit than `@ts-ignore` and will fail if the error is actually fixed
-- This is a known limitation with Supabase's TypeScript integration in complex query chains
-
-**Implementation:**
-- Added `@ts-expect-error` comments before all `.update()` and `.insert()` calls that trigger type errors
-- Each comment includes: `// @ts-expect-error - TypeScript incorrectly infers update parameter type as 'never'`
-- Added explicit type assertions for Supabase query results:
-  - `const typedList = currentList as { items?: ShoppingItem[] } | null`
-  - `const typedConfig = config as { excluded_keywords?: string[] } | null`
-
-**Tradeoffs:**
-- (+) Build completes successfully
-- (+) Runtime type safety maintained through explicit assertions
-- (+) `@ts-expect-error` will fail if the underlying issue is fixed (better than `@ts-ignore`)
-- (-) Suppresses legitimate type checking for these operations
-- (-) Requires maintenance if Supabase types change
-- (-) May hide actual type errors if code changes
-
-**Risks:**
-- Future Supabase updates may change type inference behavior
-- **Mitigation**: `@ts-expect-error` will fail if the error is resolved, alerting us to remove the workaround
-- Type assertions may become incorrect if database schema changes
-- **Mitigation**: Database types are generated from schema, so changes will be reflected in types
-
-**Alternatives Considered:**
-- Using `as any` type assertions - rejected as too permissive and loses all type safety
-- Disabling TypeScript strict mode - rejected as it would reduce type safety across the entire codebase
-- Waiting for Supabase to fix the issue - rejected as it blocks development and deployment
-- Using different query patterns - rejected as current patterns are idiomatic and correct
-
-**Future Considerations:**
-- Monitor Supabase TypeScript library updates for fixes to type inference
-- Consider contributing to Supabase TypeScript definitions if a better solution is found
-- If Supabase fixes the issue, remove `@ts-expect-error` comments and verify build still passes
+**Historical context:** The accepted 2026-01-24 workaround used explanatory
+`@ts-expect-error` comments around affected Supabase operations. That approach
+unblocked builds but suppressed legitimate checking and became unnecessary
+after the generated-type and query-boundary cleanup. It is retained here only
+to explain older changelog entries and must not be used as current guidance.
 
 ---
 
@@ -725,7 +695,10 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 **Implementation:**
 - **CSP nonces**: `middleware.ts` generates a nonce per request, sets it on `x-nonce` request header and in the `Content-Security-Policy` response header. Root layout calls `headers()` to trigger Next.js 15's automatic nonce injection onto inline scripts. Both parts are required — nonce on request headers only, or layout headers() call only, each silently breaks the other.
-- **Rate limiting**: `lib/rate-limit.ts` wraps `@upstash/ratelimit`. `/api/recipe-import` enforces 10 requests/minute per IP. Graceful fail-open when `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are absent (dev mode). Fail-closed in production.
+- **Rate limiting**: `lib/rate-limit.ts` wraps `@upstash/ratelimit`.
+  `/api/recipe-import` enforces 10 requests/minute per IP. The implementation
+  reads `KV_REST_API_URL` / `KV_REST_API_TOKEN`, degrades gracefully when they
+  are absent in development, and fails closed in production.
 - **SSRF guard**: `lib/url-safety.ts` resolves the import URL's hostname to IP addresses and rejects private ranges (127.x, 10.x, 172.16–31.x, 192.168.x, ::1) before any fetch is made.
 
 **Tradeoffs:**
@@ -773,3 +746,37 @@ This document captures key architectural and design decisions for Recipe Genie, 
 
 **Future Considerations:**
 - If shopping data ever moves from JSON arrays to first-class relational rows, preserve `rowId` semantics or perform an explicit migration plan
+
+---
+
+## ADR-023: UUID-Authoritative Recipe Identity with Compatibility Mirrors
+
+**Status:** Accepted (2026-07-23; records migrations 007-013)
+
+**Context:** Recipe names and mutable text aliases were unsafe as application
+identity. The staged UUID migration had to preserve historical evidence and a
+compatible storage shape while active callers moved to opaque identity.
+
+**Decision:** `recipes.recipe_uuid` is the canonical identity exposed to the
+application. Active recipe creation, lookup, mutation, deletion, planner,
+template, sharing, history, and shopping commands are UUID-authoritative.
+`recipes.id` and the text reference arrays/JSON fields remain as derived or
+validated compatibility mirrors; unresolved historical evidence may retain a
+text alias with nullable UUID linkage. Migration 013 is the current active tip.
+
+Stage 3 physical-key promotion and removal of compatibility columns, helpers,
+and counters is not complete. It requires a separate reviewed migration and
+rollout; current documentation must not describe those objects as removed.
+
+**Evidence and ownership:**
+
+- `supabase/migrations/007_add_recipe_uuid_identity.sql` through
+  `013_allow_uuid_shopping_contribution_replacement.sql` define the staged
+  database contract.
+- `web/src/types/database.generated.ts` records the current persisted shape.
+- `web/src/lib/recipe-identity.ts` maps UUID persistence fields to application
+  identity and retains aliases only as compatibility metadata.
+- `supabase/SCHEMA.md` owns the current schema, migration chain, compatibility
+  behavior, and operational runbook.
+- `docs/recipe-identity-migration.md` is historical design, audit, and rollout
+  context rather than current operational authority.
