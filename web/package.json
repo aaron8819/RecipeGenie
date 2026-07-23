@@ -48,6 +48,7 @@
     "rg:doctor": "node scripts/workflow/doctor.mjs",
     "rg:release:status": "node scripts/workflow/release-status.mjs",
     "audit:data": "node scripts/audit-data.mjs",
+    "upload:default-recipe-images": "tsx scripts/upload-default-recipe-images.ts",
     "db:preflight": "node scripts/db-preflight.mjs",
     "db:types:regen:tmp": "node scripts/generate-db-types.mjs src/types/database.generated.tmp.ts --local --schema public",
     "db:types:check": "npm run db:types:regen:tmp && node -e \"const fs=require('fs');const norm=(s)=>s.replace(/\\r\\n/g,'\\n');const expectedPath='src/types/database.generated.ts';const actualPath='src/types/database.generated.tmp.ts';const expected=norm(fs.readFileSync(expectedPath,'utf8'));const actual=norm(fs.readFileSync(actualPath,'utf8'));if(expected!==actual){console.error('Schema/type drift detected between '+expectedPath+' and '+actualPath+'.');process.exitCode=1;}else{console.log('Schema/type drift check passed: generated types match baseline.');}fs.unlinkSync(actualPath);if(process.exitCode)process.exit(process.exitCode);\"",
@@ -68,7 +69,6 @@
     "@radix-ui/react-select": "^2.3.2",
     "@radix-ui/react-slot": "^1.3.0",
     "@radix-ui/react-tabs": "^1.1.16",
-    "@radix-ui/react-toast": "^1.2.18",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.110.0",
     "@tanstack/react-query": "^5.101.2",
@@ -89,7 +89,6 @@
     "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20.19.43",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.0",
@@ -105,7 +104,7 @@
     "postgres": "^3.4.7",
     "supabase": "^2.109.0",
     "tailwindcss": "^3.4.4",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.23.1",
     "typescript": "^5.4.0",
     "vitest": "^4.1.9"
   }
