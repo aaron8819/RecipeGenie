@@ -53,9 +53,7 @@
     "db:types:check": "npm run db:types:regen:tmp && node -e \"const fs=require('fs');const norm=(s)=>s.replace(/\\r\\n/g,'\\n');const expectedPath='src/types/database.generated.ts';const actualPath='src/types/database.generated.tmp.ts';const expected=norm(fs.readFileSync(expectedPath,'utf8'));const actual=norm(fs.readFileSync(actualPath,'utf8'));if(expected!==actual){console.error('Schema/type drift detected between '+expectedPath+' and '+actualPath+'.');process.exitCode=1;}else{console.log('Schema/type drift check passed: generated types match baseline.');}fs.unlinkSync(actualPath);if(process.exitCode)process.exit(process.exitCode);\"",
     "db:types:regen": "node scripts/generate-db-types.mjs src/types/database.generated.ts --local --schema public",
     "db:types:regen:linked": "node scripts/generate-db-types.mjs src/types/database.generated.ts --linked --schema public",
-    "db:types:regen:remote": "node scripts/generate-db-types.mjs src/types/database.generated.ts --project-id eyaoahwzixqetjgfghsh --schema public",
-    "migrate": "npx tsx scripts/migrate.ts",
-    "create-test-account": "npx tsx scripts/create-test-account.ts"
+    "db:types:regen:remote": "node scripts/generate-db-types.mjs src/types/database.generated.ts --project-id eyaoahwzixqetjgfghsh --schema public"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

@@ -47,6 +47,10 @@ This document captures key architectural and design decisions for Recipe Genie, 
 - `weekly-plans.json` - Saved weekly meal plans
 - `shopping-list.json` - Current shopping list state
 
+**Current disposition:** These tracked files are inactive legacy archival
+material. The supported application, migration, backup, and local E2E
+workflows do not read them.
+
 **Rationale:**
 - Human-readable format allows manual editing
 - No database setup required for end users
