@@ -40,17 +40,23 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 ### 1. Create Supabase Project
 
 1. Go to [supabase.com](https://supabase.com) and create a new project
-2. Once created, go to **SQL Editor** in the dashboard
-3. Apply the canonical baseline migration: `supabase/migrations/001_baseline.sql`
-4. Go to **Authentication > Providers** and ensure Email auth is enabled
-5. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
-6. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npx tsx scripts/upload-default-recipe-images.ts` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
+2. Follow the migration workflow in
+   [`supabase/SCHEMA.md`](supabase/SCHEMA.md) to apply the complete tracked
+   migration chain. Do not apply `001_baseline.sql` by itself.
+3. Go to **Authentication > Providers** and ensure Email auth is enabled
+4. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
+5. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npx tsx scripts/upload-default-recipe-images.ts` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
 
 ### Schema Bootstrap Strategy
 
-- Canonical bootstrap is baseline-first via `supabase/migrations/001_baseline.sql`.
-- Historical `012+` migration files are retained as legacy records (the earlier `001-011` history is incomplete in version control and is intentionally not reconstructed).
-- New schema changes must be added as incremental migrations after the baseline.
+- Canonical bootstrap is baseline-first and applies every tracked file in
+  `supabase/migrations/`, currently `001_baseline.sql` through
+  `013_allow_uuid_shopping_contribution_replacement.sql`.
+- Pre-baseline incremental migrations are retained under
+  `supabase/migrations/archive/2026-03-09-pre-028-squash/` for historical
+  context only.
+- New schema changes must be added after the current active tip; migration
+  history must not be rewritten.
 - The operational migration runbook, preflight checklist, drift detection guidance, and baseline-squash repair procedure live in `supabase/SCHEMA.md`.
 
 For local Supabase CLI workflows, use:
@@ -66,15 +72,17 @@ This should rebuild from the baseline-forward migration chain deterministically.
 
 ```bash
 cd web
-cp .env.local.example .env.local
+cp .env.example .env.local
 ```
 
-Edit `.env.local` with your Supabase credentials (found in Project Settings > API):
+Edit the ignored `.env.local` copy with your Supabase credentials (found in
+Project Settings > API). Keep `SUPABASE_SERVICE_ROLE_KEY` server-only and omit
+it unless a server-side administrative workflow requires it.
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here  # For migration only
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 ```
 
 ### 3. Install Dependencies
@@ -104,7 +112,12 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## Testing
 
 - **Unit tests (Vitest):** `npm run test` or `npm run test:watch`. Tests live in `src/hooks/__tests__/`, `src/lib/__tests__/`, and similar.
-- **E2E tests (Playwright):** `npm run test:e2e`. Requires the dev server (`npm run dev`). Optional: run global setup once to persist auth state for authenticated E2E tests (`playwright/.auth/`). Other scripts: `test:e2e:ui`, `test:e2e:headed`, `test:e2e:debug`, `test:e2e:report`, `test:e2e:codegen`.
+- **E2E tests (Playwright):** `npm run test:e2e` runs the core CI project and
+  starts its configured web server. For the guarded local authenticated
+  workflow, run `npm run local:e2e:bootstrap` and then
+  `npm run test:e2e:inspect`; it uses the ignored `.env.e2e.local` contract and
+  creates isolated per-test state under `.playwright/auth/`. See
+  [`web/tests/README.md`](web/tests/README.md).
 
 ## Supabase Types Baseline
 
@@ -156,6 +169,8 @@ Ensure your code is in a GitHub repository.
 3. Add environment variables:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` (server-only recipe-sharing administration)
+   - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (production rate limiting)
 
 ### 3. Configure Auth Redirect URLs
 
@@ -288,18 +303,17 @@ web/
 
 ## Documentation
 
-| File | Purpose |
-|------|---------|
-| `docs/DOCS_INDEX.md` | Canonical doc map: which docs are canonical, secondary, or historical |
-| `docs/project_overview.md` | Canonical architecture overview (layers, domains, ownership) |
-| `docs/ARCHITECTURE_GUARDRAILS.md` | Canonical contributor guardrails and current refactor stopping point |
-| `docs/developer-workflow.md` | Read-only workflow doctor, operational capability discovery, and risk tiers |
-| `CLAUDE.md` | Claude Code context — commands, conventions, architecture quick-ref |
-| `changelog.md` | Recent version history (v2.8+); `changelog-archive.md` for older |
-| `decisions.md` | Architectural Decision Records (ADRs 001–019) |
-| `supabase/SCHEMA.md` | Database schema — tables, RLS policies, migrations, query examples |
-| `docs/shopping-component.md` | Shopping list component deep-dive (architecture, data flow, testing) |
-| `docs/planner-component.md` | Meal planner component deep-dive (auto-assign, date handling, templates, history) |
-| `docs/recipes-component.md` | Recipes component deep-dive (CRUD, parser, URL import, detail dialog, sharing) |
-| `docs/pantry-component.md` | Pantry component deep-dive (items, keywords, What Can I Make?) |
-| `web/tests/README.md` | E2E testing guide (Playwright setup, fixtures, debugging) |
+[`docs/DOCS_INDEX.md`](docs/DOCS_INDEX.md) is the complete documentation map.
+Ownership is intentionally split:
+
+| File | Authority |
+|------|-----------|
+| `AGENTS.md` | Codex operating policy, authorization boundaries, and required handoff workflow |
+| `CLAUDE.md` | Technical agent quick reference and routing; subordinate to `AGENTS.md` for Codex |
+| `README.md` | Human onboarding, local setup, feature overview, and links to specialist guidance |
+| `docs/project_overview.md` | Current architecture layers and ownership boundaries |
+| `supabase/SCHEMA.md` | Current database schema, active migration chain, compatibility state, and migration runbook |
+| `decisions.md` | Durable architectural decisions and clearly labeled superseded decisions |
+| `docs/*-component.md` | Feature-specific behavior, boundaries, and focused verification |
+| `web/tests/README.md` | Playwright/E2E commands, target guards, fixtures, and authentication-state lifecycle |
+| `changelog.md` | Complete release history |

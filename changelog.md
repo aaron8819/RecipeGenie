@@ -4,7 +4,8 @@
 
 All notable changes to Recipe Genie are documented here.
 
-For older entries (v1.0.0 – v2.7.1), see `changelog-archive.md`.
+This file contains the complete tracked release history, including
+v1.0.0-v2.7.1 below.
 
 ## Table of Contents
 
@@ -654,4 +655,5 @@ For older entries (v1.0.0 – v2.7.1), see `changelog-archive.md`.
 
 ---
 
-*For older entries (v1.0.0 – v2.7.1), see `changelog-archive.md`.*
+*Earlier entries are retained in this file; there is no separate changelog
+archive.*

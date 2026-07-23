@@ -94,10 +94,12 @@ Primary persistent tables:
 - `recipe_history`
 - `weekly_plans`
 - `shopping_list`
+- `shopping_recipe_contributions`
 - `recipe_shares`
 - `plan_templates`
 
-All user data is isolated with Supabase Auth and RLS. Schema details and RPCs are documented in [`supabase/SCHEMA.md`](supabase/SCHEMA.md).
+All user data is isolated with Supabase Auth and RLS. Schema details and RPCs
+are documented in [`supabase/SCHEMA.md`](../supabase/SCHEMA.md).
 
 ## Current Refactor Status
 
@@ -114,6 +116,6 @@ The recent architecture cleanup wave is complete for now.
 - Update this file when architecture ownership or boundaries change.
 - Update [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTURE_GUARDRAILS.md) when project-wide guardrails change.
 - Update the relevant domain doc in `docs/` when a domain workflow changes materially.
-- Record durable architecture decisions in [`decisions.md`](decisions.md).
+- Record durable architecture decisions in [`decisions.md`](../decisions.md).
 
-Last updated: 2026-03-11
+Last updated: 2026-07-23

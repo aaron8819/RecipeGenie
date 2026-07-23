@@ -2,9 +2,10 @@
 
 > **When to read:** You're writing, debugging, or modifying E2E tests, or setting up Playwright fixtures and auth.
 
-*Last updated: 2026-02-26 (v2.15.0)*
+*Last updated: 2026-07-23*
 
-Comprehensive Playwright test suite for Recipe Genie, covering authentication, navigation, recipes, meal planning, shopping lists, pantry management, responsive design, accessibility, and visual design.
+This is the authoritative Playwright guide for Recipe Genie: commands, target
+guards, fixtures, and authentication-state lifecycle.
 
 ## Prerequisites
 
@@ -13,14 +14,20 @@ Comprehensive Playwright test suite for Recipe Genie, covering authentication, n
    npx playwright install
    ```
 
-2. **Ensure the dev server is running (or let Playwright start it):**
-   ```bash
-   npm run dev
-   ```
+2. **Prepare an approved target:** for normal authenticated development, use
+   the guarded local bootstrap below. Playwright starts the configured web
+   server for project commands; do not substitute a production target.
 
 ## Authentication Setup
 
-Tests run with an authenticated user by default. Credentials come only from the ignored `.env.e2e.local` file or an approved CI secret store. The fixture signs in through an artifact-free context, creates per-test runtime state under ignored `.playwright/auth/`, and deletes it after use. See [E2E_CREDENTIALS.md](./E2E_CREDENTIALS.md) for the complete target and credential contract.
+Tests run with an authenticated user by default. Credentials come only from
+the ignored `.env.e2e.local` file or an approved CI secret store. The current
+contract uses `RECIPE_GENIE_E2E_*`, `NEXT_PUBLIC_SUPABASE_URL`, and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`. The fixture signs in through an artifact-free
+context, creates per-test runtime state under ignored `.playwright/auth/`, and
+deletes it after use. See
+[E2E_CREDENTIALS.md](./E2E_CREDENTIALS.md) for the complete target and
+credential contract.
 
 For the complete local Supabase bootstrap, deterministic fixture, worktree,
 manual browser, and inspection workflow, see
@@ -36,10 +43,12 @@ test.describe('My unauthenticated tests', () => {
 
 ## Running Tests
 
-### Run all tests
+### Run the core CI project
 ```bash
 npm run test:e2e
 ```
+
+This is an alias for `test:e2e:core`; it is not the full browser matrix.
 
 ### Run smoke tests (critical flow, Chromium-only)
 ```bash
@@ -75,6 +84,13 @@ npm run test:e2e:ui
 npm run local:e2e:bootstrap
 npm run test:e2e:inspect
 ```
+
+The bootstrap is loopback-only. It verifies the runtime and Docker, starts or
+resets local Supabase, applies every tracked migration, recreates the synthetic
+local user and fixtures, verifies sign-in, and writes the current worktree's
+ignored `.env.e2e.local`. It has no linked or remote fallback. Use
+`npm run local:e2e:reset` to restore fixtures and
+`npm run local:e2e:status` for a non-secret readiness check.
 
 ### Run tests in headed mode (see browser)
 ```bash
@@ -123,7 +139,11 @@ npm run test:e2e:codegen
 | `pantry.spec.ts` | Add/delete items, excluded keywords, clear all |
 | `responsive.spec.ts` | Mobile (375px, 390px, 414px), tablet (768px), desktop (1024px, 1440px) |
 | `accessibility.spec.ts` | WCAG 2.1 AA, axe-core checks, keyboard nav, focus indicators |
-| `visual-design.spec.ts` | Stitch theme, fonts, colors, border radius, made recipe styling |
+| `recipe-sharing-authorization.spec.ts` | Share authorization and cross-user access boundaries |
+| `smoke-critical-flow.spec.ts` | Explicitly tagged critical-path smoke coverage |
+| `shopping-mode-smoke.spec.ts` | Focused shopping-mode smoke coverage |
+| `local-browser-inspection.spec.ts` | Guarded local authenticated viewport and diagnostics inspection |
+| `mobile-import-review.spec.ts` | Mobile import review and recipe-dialog reliability |
 
 ## Test Fixtures
 
