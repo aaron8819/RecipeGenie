@@ -1,5 +1,12 @@
 #!/usr/bin/env node
-import { option, parseArgs, printCheckResults, runChecks, withReadOnlyDatabase } from "./operational/runtime.mjs"
+import {
+  option,
+  parseArgs,
+  printCheckResults,
+  runChecks,
+  validateProductionTarget,
+  withReadOnlyDatabase,
+} from "./operational/runtime.mjs"
 import { createApplicationChecks, createDatabaseChecks } from "./operational/production-checks.mjs"
 
 async function main() {
@@ -9,13 +16,15 @@ async function main() {
     return
   }
 
-  const appUrl = option(args, "app-url", "RG_PRODUCTION_URL", { required: true })
-  const expectedSha = option(args, "expected-sha", "RG_EXPECTED_GIT_SHA", { required: true })
+  const rawAppUrl = option(args, "app-url", "RG_PRODUCTION_URL", { required: true })
+  const rawExpectedSha = option(args, "expected-sha", "RG_EXPECTED_GIT_SHA", { required: true })
   const expectedProjectRef = option(args, "expected-project-ref", "RG_EXPECTED_SUPABASE_PROJECT_REF", { required: true })
   const databaseUrl = option(args, "database-url", "RG_DATABASE_URL", { required: true })
   const allowSessionPooler = args["allow-session-pooler"] === true
-  if (!/^https:\/\//i.test(appUrl)) throw new Error("production application URL must use HTTPS")
-  if (!/^[0-9a-f]{7,64}$/i.test(expectedSha)) throw new Error("expected Git SHA is invalid")
+  const { appUrl, expectedSha } = validateProductionTarget({
+    appUrl: rawAppUrl,
+    expectedSha: rawExpectedSha,
+  })
   if (!/^[a-z]{20}$/.test(expectedProjectRef)) throw new Error("expected Supabase project reference is invalid")
 
   const application = createApplicationChecks({ appUrl, expectedSha, expectedProjectRef, databaseUrl })

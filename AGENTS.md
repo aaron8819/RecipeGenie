@@ -14,15 +14,20 @@ hard blocker.
 
 ## Startup
 
-1. Read applicable `SKILL.md` instructions when available. Do not guess a path
+1. Understand the task request and attachments sufficiently to determine what
+   guidance, skills, and local memory apply.
+2. Read the applicable repository policy.
+3. Read applicable `SKILL.md` instructions when available. Do not guess a path
    or block startup when a skill is unavailable.
-2. Read `.Codex/napkin.md` when present and silently apply relevant lessons.
-   It is ignored, machine-local working memory and is not authoritative policy.
-3. Read the task request and attachments.
-4. Read the applicable repository guidance and inspect repository state.
+4. Read only task-relevant lessons from `.Codex/napkin.md` when present. It is
+   ignored, machine-local working memory and is not authoritative policy.
+5. Read routed specialist documentation that applies to the task.
+6. Inspect repository state.
 
-Keep routine startup silent. A harmless read-only ordering mistake is not a
-safety incident; read the missing guidance and continue.
+These steps supplement and do not override higher-level runtime instructions.
+Keep routine startup silent except for notices required by the active runtime
+or applicable skill instructions. A harmless read-only ordering mistake is not
+a safety incident; read the missing guidance and continue.
 
 ## Workflow selection
 
@@ -80,9 +85,13 @@ Codex may run local checks and explicitly requested read-only remote checks.
 Stop before any commit, push, merge, deployment, redeployment, rollback, alias
 reassignment, environment change, Supabase link change, migration application
 or repair, database repair, backup creation, restore execution, production data
-write, or other production change. Proceed only after explicit user
-authorization for that specific action; approval of an earlier stage does not
-authorize a later one.
+write, or other production change. One user message may authorize multiple
+stages when it explicitly names them. For example, a request to implement,
+commit, push, and open a draft PR authorizes those four stages without repeated
+approval; any unmentioned later stage remains unauthorized. Production writes,
+migrations, restores, destructive actions, and other materially risky
+operations remain separately protected unless the user explicitly includes
+them.
 
 Current repository-specific migration and backup runbooks remain authoritative
 until Phase 3 orchestration exists. Do not invent or pre-document migration,

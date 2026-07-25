@@ -7,6 +7,7 @@ import {
   parseArgs,
   parsePublicManifest,
   runChecks,
+  validateProductionTarget,
 } from "./runtime.mjs"
 
 describe("operational runtime", () => {
@@ -34,6 +35,13 @@ describe("operational runtime", () => {
       expectedLatestMigration: "012_enforce_uuid_active_recipe_writes",
       expectedSupabaseProjectRef: "eyaoahwzixqetjgfghsh",
     }).applicationVersion).toBe("0.1.0")
+    expect(() => parsePublicManifest({
+      gitSha: "732d599",
+      buildTimestamp: null,
+      applicationVersion: "0.1.0",
+      expectedLatestMigration: "012_enforce_uuid_active_recipe_writes",
+      expectedSupabaseProjectRef: "eyaoahwzixqetjgfghsh",
+    })).toThrow(/Git SHA/)
   })
 
   it("matches direct and pooler Supabase database identities", () => {
@@ -54,6 +62,27 @@ describe("operational runtime", () => {
     expect(() => assertDatabaseEndpointPolicy(transaction)).toThrow(/transaction pooler/)
     expect(() => assertDatabaseEndpointPolicy(session)).toThrow(/explicit/)
     expect(assertDatabaseEndpointPolicy(session, { allowSessionPooler: true })).toBe("session-pooler")
+  })
+
+  it("accepts only a full Git SHA and a credential-free HTTPS application origin", () => {
+    expect(validateProductionTarget({
+      appUrl: "https://recipes.example.com",
+      expectedSha: "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+    })).toEqual({
+      appUrl: "https://recipes.example.com",
+      expectedSha: "abcdef0123456789abcdef0123456789abcdef01",
+    })
+  })
+
+  it.each([
+    { appUrl: "http://recipes.example.com", expectedSha: "a".repeat(40) },
+    { appUrl: "https://user:password@recipes.example.com", expectedSha: "a".repeat(40) },
+    { appUrl: "https://recipes.example.com/path", expectedSha: "a".repeat(40) },
+    { appUrl: "https://recipes.example.com?query=1", expectedSha: "a".repeat(40) },
+    { appUrl: "https://recipes.example.com#fragment", expectedSha: "a".repeat(40) },
+    { appUrl: "https://recipes.example.com", expectedSha: "a".repeat(7) },
+  ])("rejects an unsafe or incomplete production target: %o", (target) => {
+    expect(() => validateProductionTarget(target)).toThrow()
   })
 
   it("records named PASS, FAIL, and SKIP checks deterministically", async () => {

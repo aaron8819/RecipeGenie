@@ -19,8 +19,12 @@ local low-risk code changes unless environment capability matters. The report
 replaces separate checks for repository identity, Git/worktree state, runtime
 policy, local tool availability, environment-input presence, approved and
 linked Supabase identity, database endpoint type, and operational capability
-readiness. `POSSIBLE` means the required local evidence is present, not that
-remote authorization or health was probed.
+readiness. Runtime policy is derived from `web/.nvmrc` and the
+`packageManager` field in `web/package.json`, and exact installed versions must
+match those pins. GitHub and Vercel readiness are evaluated independently by
+pairing each provider's CLI with its own local credential evidence.
+`POSSIBLE` means the required local evidence is present, not that remote
+authentication, authorization, or health was probed.
 
 ## Local verification
 

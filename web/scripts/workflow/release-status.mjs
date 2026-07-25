@@ -1,6 +1,10 @@
 import { spawnSync } from "node:child_process"
 import { pathToFileURL } from "node:url"
-import { parsePublicManifest } from "../operational/runtime.mjs"
+import {
+  isFullGitSha,
+  parsePublicManifest,
+  validateProductionTarget,
+} from "../operational/runtime.mjs"
 import { collectDoctorReport } from "./context.mjs"
 import {
   ENVIRONMENT_INPUTS,
@@ -9,7 +13,6 @@ import {
 } from "./policy.mjs"
 import { assertSafeOutput, assertSecretSafe } from "./state.mjs"
 
-const SHA_PATTERN = /^[0-9a-f]{40}$/i
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 const BRANCH_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
 const PROJECT_REF_PATTERN = /^[a-z0-9]{20}$/
@@ -26,15 +29,6 @@ function defaultCommandRunner(command, args, cwd) {
   }
 }
 
-function safeProductionUrl(value) {
-  const parsed = new URL(value)
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") {
-    throw new Error("production URL is unsafe")
-  }
-  assertSecretSafe(value, "production URL")
-  return parsed.origin
-}
-
 function isSafeBranch(value) {
   if (!BRANCH_PATTERN.test(value || "")) return false
   try {
@@ -48,13 +42,17 @@ function isSafeBranch(value) {
 function validateInputs(input) {
   if (!REPOSITORY_PATTERN.test(input.repository || "")) throw new Error("repository must use owner/repo format")
   if (input.branch && !BRANCH_PATTERN.test(input.branch)) throw new Error("branch is invalid")
-  if (!SHA_PATTERN.test(input.expectedSha || "")) throw new Error("expected SHA must contain 40 hexadecimal characters")
   if (!PROJECT_REF_PATTERN.test(input.expectedProjectRef || "")) throw new Error("expected project reference is invalid")
+  const target = validateProductionTarget({
+    appUrl: input.productionUrl,
+    expectedSha: input.expectedSha,
+  })
   assertSecretSafe(input.repository, "repository")
   assertSecretSafe(input.branch || "", "branch")
-  assertSecretSafe(input.expectedSha, "expected SHA")
+  assertSecretSafe(target.expectedSha, "expected SHA")
   assertSecretSafe(input.expectedProjectRef, "expected project reference")
-  return { ...input, expectedSha: input.expectedSha.toLowerCase(), productionUrl: safeProductionUrl(input.productionUrl) }
+  assertSecretSafe(target.appUrl, "production URL")
+  return { ...input, expectedSha: target.expectedSha, productionUrl: target.appUrl }
 }
 
 function check(name, status, authority, detail) {
@@ -91,9 +89,19 @@ function contextChecks(context) {
     results.push(check("repository-context", "PASS", "AUTHORITATIVE", "Recipe Genie repository identity and Git availability confirmed."))
   }
   if (!context.runtime?.nodeSupported || !context.runtime?.npmSupported) {
-    results.push(check("supported-runtime", "FAIL", "AUTHORITATIVE", "Repository requires supported Node 22 and npm 10 runtimes."))
+    results.push(check(
+      "supported-runtime",
+      "FAIL",
+      "AUTHORITATIVE",
+      `Repository requires Node ${context.runtime?.expectedNode || "from web/.nvmrc"} and npm ${context.runtime?.expectedNpm || "from packageManager"}.`,
+    ))
   } else {
-    results.push(check("supported-runtime", "PASS", "AUTHORITATIVE", "Node 22 and npm 10 runtime policy confirmed."))
+    results.push(check(
+      "supported-runtime",
+      "PASS",
+      "AUTHORITATIVE",
+      `Node ${context.runtime?.expectedNode || "pin"} and npm ${context.runtime?.expectedNpm || "pin"} runtime policy confirmed.`,
+    ))
   }
   return results
 }
@@ -155,7 +163,6 @@ async function readManifest(fetchImpl, productionUrl, timeoutSignal) {
       buildTimestamp: value?.buildTimestamp ?? null,
       applicationVersion: value?.applicationVersion ?? "0.0.0",
     })
-    if (manifest.gitSha && !SHA_PATTERN.test(manifest.gitSha)) throw new Error("manifest Git SHA is not full length")
     return manifest
   } catch {
     throw new Error("Production manifest structure is invalid.")
@@ -171,7 +178,7 @@ function chooseNextAction(report) {
     return "Resolve the repository or configuration identity blocker before release work."
   }
   if (report.status === "ACTION_REQUIRED") {
-    if (report.checks.some((item) => item.name === "supported-runtime" && item.status === "FAIL")) return "Run this command with repository-supported Node 22 and npm 10."
+    if (report.checks.some((item) => item.name === "supported-runtime" && item.status === "FAIL")) return "Run this command with the repository-pinned Node and npm runtimes."
     if (report.checks.some((item) => item.name === "exact-sha-ci" && item.status === "FAIL")) return "Wait for or fix the exact-SHA GitHub checks, then run this command again."
     if (report.checks.some((item) => item.name === "deployed-sha" && item.status === "FAIL")) return "Deploy the expected SHA to the production URL, then run this command again."
     return "Restore a valid production /api/version response, then run this command again."
@@ -256,7 +263,7 @@ export async function collectReleaseStatus(rawInput, options = {}) {
       try {
         const ref = githubApi(commandRunner, cwd, `repos/${input.repository}/git/ref/heads/${encodeURIComponent(branch)}`)
         const headSha = ref?.object?.sha?.toLowerCase()
-        if (!SHA_PATTERN.test(headSha || "")) throw new Error("invalid branch evidence")
+        if (!isFullGitSha(headSha)) throw new Error("invalid branch evidence")
         if (headSha !== input.expectedSha && !input.historical) {
           report.checks.push(check("branch-head", "FAIL", "AUTHORITATIVE", "Selected branch head does not match the explicitly expected SHA."))
           report.status = "BLOCKED"
