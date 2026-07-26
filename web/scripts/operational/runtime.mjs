@@ -1,5 +1,38 @@
 const READ_ONLY_PREFIX = /^(select|with|show)\b/i
 const WRITE_KEYWORD = /\b(insert|update|delete|merge|alter|drop|create|truncate|grant|revoke|copy|call|do|vacuum|refresh|reindex|cluster)\b/i
+const FULL_GIT_SHA_PATTERN = /^[0-9a-f]{40}$/i
+
+export function isFullGitSha(value) {
+  return FULL_GIT_SHA_PATTERN.test(value || "")
+}
+
+export function validateProductionTarget({ appUrl, expectedSha }) {
+  if (!isFullGitSha(expectedSha)) {
+    throw new Error("expected Git SHA must contain 40 hexadecimal characters")
+  }
+
+  let parsed
+  try {
+    parsed = new URL(appUrl)
+  } catch {
+    throw new Error("production application URL must be an HTTPS origin")
+  }
+  if (
+    parsed.protocol !== "https:"
+    || parsed.username
+    || parsed.password
+    || parsed.pathname !== "/"
+    || parsed.search
+    || parsed.hash
+  ) {
+    throw new Error("production application URL must be an HTTPS origin without credentials, path, query, or fragment")
+  }
+
+  return {
+    appUrl: parsed.origin,
+    expectedSha: expectedSha.toLowerCase(),
+  }
+}
 
 export function parseArgs(argv) {
   const values = {}
@@ -133,7 +166,7 @@ export function parsePublicManifest(value) {
   for (const field of required) {
     if (typeof value[field] !== "string" || !value[field]) throw new Error(`manifest ${field} is missing`)
   }
-  if (value.gitSha !== null && !/^[0-9a-f]{7,64}$/i.test(value.gitSha)) {
+  if (value.gitSha !== null && !isFullGitSha(value.gitSha)) {
     throw new Error("manifest Git SHA is invalid")
   }
   if (value.buildTimestamp !== null && Number.isNaN(Date.parse(value.buildTimestamp))) {

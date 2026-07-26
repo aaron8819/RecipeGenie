@@ -326,7 +326,7 @@ describe("release status", () => {
     const { report } = await fixture()
     expect(() => renderReleaseStatusText(report, [secret])).not.toThrow()
     expect(renderReleaseStatusJson(report, [secret])).not.toContain(secret)
-    await expect(fixture({ input: { productionUrl: "https://user:password@example.invalid" } })).rejects.toThrow(/unsafe/i)
+    await expect(fixture({ input: { productionUrl: "https://user:password@example.invalid" } })).rejects.toThrow(/credentials|origin/i)
 
     const unavailable = await fixture({ externalSecret: secret, commandFailure: (endpoint) => endpoint.endsWith("/check-runs") })
     expect(renderReleaseStatusText(unavailable.report)).not.toContain(secret)
@@ -340,9 +340,13 @@ describe("release status", () => {
   it.each([
     { repository: "ghp_abcdefghijklmnopqrstuvwxyz123456/repo" },
     { branch: "ghp_abcdefghijklmnopqrstuvwxyz123456" },
+    { expectedSha: "abcdef0" },
     { expectedSha: "ghp_abcdefghijklmnopqrstuvwxyz123456" },
     { expectedProjectRef: "ghp_secret_fixture_12" },
+    { productionUrl: "http://recipe-genie.example" },
     { productionUrl: "https://example.invalid/private-path" },
+    { productionUrl: "https://example.invalid?unsafe=true" },
+    { productionUrl: "https://example.invalid#unsafe" },
   ])("rejects secret-bearing or unsafe malformed input without creating report output", async (input) => {
     await expect(fixture({ input })).rejects.toThrow()
   })

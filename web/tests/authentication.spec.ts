@@ -30,6 +30,21 @@ test.describe('Authentication', () => {
   })
 
   test.describe('Authenticated session', () => {
+    test('recognizes the authenticated shell at desktop and mobile widths @extended', async ({
+      page,
+      setupAuth,
+    }) => {
+      for (const viewport of [
+        { width: 1024, height: 768 },
+        { width: 375, height: 812 },
+      ]) {
+        await page.setViewportSize(viewport)
+        await setupAuth()
+        await assertRecipeGenieAppShell(page)
+        await expect(page.getByRole('button', { name: 'Go to Planner', exact: true })).toBeVisible()
+      }
+    })
+
     test('accepts isolated runtime authentication state @extended', async ({ page, setupAuth }) => {
       await setupAuth()
       await assertRecipeGenieAppShell(page)

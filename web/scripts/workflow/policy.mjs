@@ -1,7 +1,5 @@
 export const RECIPE_GENIE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 export const RECIPE_GENIE_PACKAGE_NAME = "recipe-genie"
-export const SUPPORTED_NODE_MAJOR = 22
-export const SUPPORTED_NPM_MAJOR = 10
 
 export const WORKTREE_PARENT_SEGMENTS = [".worktrees", "recipe-genie"]
 export const WORKTREE_BRANCH_PREFIX = "codex/"

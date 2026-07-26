@@ -7,8 +7,6 @@ import {
   ENVIRONMENT_INPUTS,
   RECIPE_GENIE_PACKAGE_NAME,
   RECIPE_GENIE_PROJECT_REF,
-  SUPPORTED_NODE_MAJOR,
-  SUPPORTED_NPM_MAJOR,
   TOOL_DEFINITIONS,
   WORKFLOW_TIERS,
   WORKTREE_BRANCH_PREFIX,
@@ -39,9 +37,9 @@ function parseWorktreePaths(output) {
   return output.split(/\r?\n/).filter((line) => line.startsWith("worktree ")).map((line) => line.slice(9))
 }
 
-function parseMajor(version) {
-  const match = String(version || "").match(/^(?:v)?(\d+)/)
-  return match ? Number(match[1]) : null
+function normalizeExactVersion(version) {
+  const match = String(version || "").trim().match(/^v?(\d+\.\d+\.\d+)$/)
+  return match ? match[1] : null
 }
 
 function npmVersionFromEnvironment(environment) {
@@ -72,13 +70,118 @@ function discoverTools({ environment, repositoryRoot, exists, platform }) {
   }))
 }
 
-function credentialFileChecks(homeDirectory, exists) {
-  const definitions = [
-    ["Supabase CLI credential file", path.join(homeDirectory, ".supabase", "access-token")],
-    ["GitHub CLI credential file", path.join(homeDirectory, ".config", "gh", "hosts.yml")],
-    ["Vercel CLI credential file", path.join(homeDirectory, "AppData", "Roaming", "com.vercel.cli", "Data", "auth.json")],
+function configuredPath(environment, name) {
+  const value = environment[name]
+  return typeof value === "string" && value.length > 0 ? value : null
+}
+
+function githubCredentialPath(homeDirectory, environment, platform) {
+  const configOverride = configuredPath(environment, "GH_CONFIG_DIR")
+  if (configOverride) return path.join(configOverride, "hosts.yml")
+
+  const xdgConfigHome = configuredPath(environment, "XDG_CONFIG_HOME")
+  if (xdgConfigHome) return path.join(xdgConfigHome, "gh", "hosts.yml")
+
+  const appData = configuredPath(environment, "APPDATA")
+  if (platform === "win32" && appData) {
+    return path.join(appData, "GitHub CLI", "hosts.yml")
+  }
+
+  return path.join(homeDirectory, ".config", "gh", "hosts.yml")
+}
+
+function platformPathDelimiter(platform) {
+  return platform === "win32" ? ";" : ":"
+}
+
+// Mirrors @vercel/cli-config's pinned xdg-app-paths dataDirs() behavior.
+function vercelDataDirectories(name, homeDirectory, environment, platform) {
+  const xdgDataHome = configuredPath(environment, "XDG_DATA_HOME")
+  let primaryDirectory
+
+  if (xdgDataHome) {
+    primaryDirectory = path.join(xdgDataHome, name)
+  } else if (platform === "win32") {
+    const appData = configuredPath(environment, "APPDATA")
+      || path.join(homeDirectory, "AppData", "Roaming")
+    primaryDirectory = path.join(appData, name, "Data")
+  } else if (platform === "darwin") {
+    primaryDirectory = path.join(
+      homeDirectory,
+      "Library",
+      "Application Support",
+      name,
+    )
+  } else {
+    primaryDirectory = path.join(homeDirectory, ".local", "share", name)
+  }
+
+  const sharedDirectories = configuredPath(environment, "XDG_DATA_DIRS")
+    ?.split(platformPathDelimiter(platform))
+    .map((directory) => path.join(directory, name)) || []
+  return [primaryDirectory, ...sharedDirectories]
+}
+
+function vercelCredentialPath(
+  homeDirectory,
+  environment,
+  platform,
+  isDirectory,
+) {
+  const currentDirectories = vercelDataDirectories(
+    "com.vercel.cli",
+    homeDirectory,
+    environment,
+    platform,
+  )
+  const legacyDirectories = vercelDataDirectories(
+    "now",
+    homeDirectory,
+    environment,
+    platform,
+  )
+  const candidates = [
+    ...currentDirectories,
+    path.join(homeDirectory, ".now"),
+    ...legacyDirectories,
   ]
-  return definitions.map(([name, filePath]) => ({ name, present: exists(filePath) }))
+  const selectedDirectory = candidates.find(isDirectory)
+    || currentDirectories[0]
+  return path.join(selectedDirectory, "auth.json")
+}
+
+function defaultIsDirectory(candidate) {
+  try {
+    return fs.lstatSync(candidate).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+function credentialFileChecks(
+  homeDirectory,
+  environment,
+  exists,
+  platform,
+  isDirectory,
+) {
+  const definitions = [
+    ["supabase", "Supabase CLI credential file", [path.join(homeDirectory, ".supabase", "access-token")]],
+    ["github", "GitHub CLI credential file", [githubCredentialPath(homeDirectory, environment, platform)]],
+    ["vercel", "Vercel CLI credential file", [
+      vercelCredentialPath(
+        homeDirectory,
+        environment,
+        platform,
+        isDirectory,
+      ),
+    ]],
+  ]
+  return definitions.map(([provider, name, candidates]) => ({
+    provider,
+    name,
+    present: candidates.some(exists),
+  }))
 }
 
 function classifyEndpoint(databaseUrl, expectedProjectRef) {
@@ -99,12 +202,25 @@ function capability(possible, reasons, tier) {
   return { possible, tier, reasons: [...new Set(reasons)] }
 }
 
-function buildCapabilities({ tools, nodeSupported, npmSupported, repositoryValid, identityValid, endpoint, databaseEndpointsValid, inputs, linkedProject }) {
+function buildCapabilities({
+  tools,
+  nodeSupported,
+  npmSupported,
+  expectedNodeVersion,
+  expectedNpmVersion,
+  repositoryValid,
+  identityValid,
+  endpoint,
+  databaseEndpointsValid,
+  inputs,
+  linkedProject,
+  providers,
+}) {
   const localReasons = []
   if (!repositoryValid) localReasons.push("repository identity is invalid")
   if (!tools.git.available) localReasons.push("Git is unavailable")
-  if (!nodeSupported) localReasons.push("Node 22 is required")
-  if (!npmSupported) localReasons.push("npm 10 is required")
+  if (!nodeSupported) localReasons.push(`Node ${expectedNodeVersion || "pin is unreadable"} is required`)
+  if (!npmSupported) localReasons.push(`npm ${expectedNpmVersion || "pin is unreadable"} is required`)
 
   const productionIdentityReasons = []
   if (!identityValid) productionIdentityReasons.push("project identity is contradictory")
@@ -136,8 +252,9 @@ function buildCapabilities({ tools, nodeSupported, npmSupported, repositoryValid
   if (!tools.supabase.available) migrationReasons.push("Supabase CLI is unavailable")
 
   const inspectionReasons = []
-  if (!tools.gh.available && !tools.vercel.available) inspectionReasons.push("GitHub CLI and Vercel CLI are unavailable")
-  if (!inputs.GH_TOKEN && !inputs.GITHUB_TOKEN && !inputs.VERCEL_TOKEN) inspectionReasons.push("explicit deployment credential is absent")
+  if (!providers.github.localReady && !providers.vercel.localReady) {
+    inspectionReasons.push("no provider has paired local tool and credential evidence")
+  }
 
   const modificationReasons = [...inspectionReasons]
   if (!tools.git.available) modificationReasons.push("Git is unavailable")
@@ -157,6 +274,7 @@ export function collectDoctorReport(options = {}) {
   const cwd = path.resolve(options.cwd || process.cwd())
   const environment = options.environment || process.env
   const exists = options.exists || fs.existsSync
+  const isDirectory = options.isDirectory || defaultIsDirectory
   const readText = options.readText || ((filePath) => fs.readFileSync(filePath, "utf8"))
   const commandRunner = options.commandRunner || defaultCommandRunner
   const homeDirectory = options.homeDirectory || os.homedir()
@@ -168,6 +286,7 @@ export function collectDoctorReport(options = {}) {
   const actions = []
   const repositoryRoot = runGit(commandRunner, cwd, ["rev-parse", "--show-toplevel"])
   const packagePath = path.join(repositoryRoot, "web", "package.json")
+  const nodePinPath = path.join(repositoryRoot, "web", ".nvmrc")
   let packageJson = null
   try {
     packageJson = JSON.parse(readText(packagePath))
@@ -176,6 +295,20 @@ export function collectDoctorReport(options = {}) {
   }
   const repositoryValid = packageJson?.name === RECIPE_GENIE_PACKAGE_NAME && exists(path.join(repositoryRoot, "supabase", "migrations", "001_baseline.sql"))
   if (!repositoryValid) blockers.push("Checkout does not match the Recipe Genie repository identity.")
+  const expectedNodeVersion = (() => {
+    try {
+      return normalizeExactVersion(readText(nodePinPath))
+    } catch {
+      return null
+    }
+  })()
+  const expectedNpmVersion = normalizeExactVersion(
+    typeof packageJson?.packageManager === "string"
+      ? packageJson.packageManager.match(/^npm@(.+)$/)?.[1]
+      : null,
+  )
+  if (!expectedNodeVersion) blockers.push("Repository Node pin in web/.nvmrc is missing or invalid.")
+  if (!expectedNpmVersion) blockers.push("Repository npm pin in web/package.json packageManager is missing or invalid.")
 
   const gitSha = runGit(commandRunner, repositoryRoot, ["rev-parse", "HEAD"])
   const branch = runGit(commandRunner, repositoryRoot, ["branch", "--show-current"]) || "(detached)"
@@ -190,13 +323,17 @@ export function collectDoctorReport(options = {}) {
   if (!branchCompliant) blockers.push("Worktree branch violates the codex/ branch convention.")
   if (isPrimary) warnings.push("Doctor is running in the primary checkout; implementation work belongs in an isolated worktree.")
 
-  const nodeMajor = parseMajor(nodeVersion)
   const npmVersion = options.npmVersion ?? npmVersionFromEnvironment(environment)
-  const npmMajor = parseMajor(npmVersion)
-  const nodeSupported = nodeMajor === SUPPORTED_NODE_MAJOR
-  const npmSupported = npmMajor === SUPPORTED_NPM_MAJOR
-  if (!nodeSupported) actions.push(`Run rg:doctor with repository-supported Node ${SUPPORTED_NODE_MAJOR}.`)
-  if (!npmSupported) actions.push(`Run rg:doctor through repository-supported npm ${SUPPORTED_NPM_MAJOR}.`)
+  const actualNodeVersion = normalizeExactVersion(nodeVersion)
+  const actualNpmVersion = normalizeExactVersion(npmVersion)
+  const nodeSupported = Boolean(expectedNodeVersion && actualNodeVersion === expectedNodeVersion)
+  const npmSupported = Boolean(expectedNpmVersion && actualNpmVersion === expectedNpmVersion)
+  if (!nodeSupported && expectedNodeVersion) {
+    actions.push(`Run rg:doctor with Node ${expectedNodeVersion}; actual is ${actualNodeVersion || "unknown"}.`)
+  }
+  if (!npmSupported && expectedNpmVersion) {
+    actions.push(`Run rg:doctor through npm ${expectedNpmVersion}; actual is ${actualNpmVersion || "unknown"}.`)
+  }
 
   const tools = discoverTools({ environment, repositoryRoot, exists, platform })
   const missingTools = Object.values(tools).filter((tool) => !tool.available).map((tool) => tool.label)
@@ -236,8 +373,45 @@ export function collectDoctorReport(options = {}) {
   }
   if (endpointChecks.some((candidate) => candidate.type === "transaction-pooler")) blockers.push("Transaction-pooler database endpoints are prohibited for these workflows.")
 
-  const credentialFiles = credentialFileChecks(homeDirectory, exists)
-  const capabilities = buildCapabilities({ tools, nodeSupported, npmSupported, repositoryValid, identityValid, endpoint, databaseEndpointsValid, inputs: inputPresence, linkedProject })
+  const credentialFiles = credentialFileChecks(
+    homeDirectory,
+    environment,
+    exists,
+    platform,
+    isDirectory,
+  )
+  const credentialPresent = (provider) => credentialFiles.find((item) => item.provider === provider)?.present === true
+  const providers = {
+    github: {
+      label: "GitHub",
+      toolAvailable: tools.gh.available,
+      credentialEvidence: inputPresence.GH_TOKEN || inputPresence.GITHUB_TOKEN || credentialPresent("github"),
+      authentication: "not remotely verified",
+    },
+    vercel: {
+      label: "Vercel",
+      toolAvailable: tools.vercel.available,
+      credentialEvidence: inputPresence.VERCEL_TOKEN || credentialPresent("vercel"),
+      authentication: "not remotely verified",
+    },
+  }
+  for (const provider of Object.values(providers)) {
+    provider.localReady = provider.toolAvailable && provider.credentialEvidence
+  }
+  const capabilities = buildCapabilities({
+    tools,
+    nodeSupported,
+    npmSupported,
+    expectedNodeVersion,
+    expectedNpmVersion,
+    repositoryValid,
+    identityValid,
+    endpoint,
+    databaseEndpointsValid,
+    inputs: inputPresence,
+    linkedProject,
+    providers,
+  })
   for (const [name, details] of Object.entries(capabilities)) {
     if (!details.possible) warnings.push(`${name} unavailable: ${details.reasons.join("; ")}.`)
   }
@@ -255,10 +429,18 @@ export function collectDoctorReport(options = {}) {
     status,
     repository: { root: repositoryRoot, identity: repositoryValid ? RECIPE_GENIE_PACKAGE_NAME : "invalid" },
     git: { sha: gitSha, branch, dirty, worktree: isPrimary ? "primary" : "linked", pathCompliant, branchCompliant },
-    runtime: { node: nodeVersion, nodeSupported, npm: npmVersion || "unknown", npmSupported },
+    runtime: {
+      node: nodeVersion,
+      expectedNode: expectedNodeVersion || "invalid",
+      nodeSupported,
+      npm: npmVersion || "unknown",
+      expectedNpm: expectedNpmVersion || "invalid",
+      npmSupported,
+    },
     tools,
     inputs: ENVIRONMENT_INPUTS.map((input) => ({ name: input.name, purpose: input.purpose, present: inputPresence[input.name], secret: input.secret })),
     credentialFiles,
+    providers,
     project: { expected: RECIPE_GENIE_PROJECT_REF, explicitPresent: explicitRefs.length > 0, identityValid, linked: linkedProject },
     database: endpoint,
     tiers: WORKFLOW_TIERS,
@@ -281,12 +463,14 @@ export function renderDoctorReport(report) {
     `Identity: ${report.repository.identity}`,
     `Git: ${report.git.sha} | ${report.git.branch} | dirty=${yesNo(report.git.dirty)} | ${report.git.worktree}`,
     `Worktree conventions: path=${yesNo(report.git.pathCompliant)} branch=${yesNo(report.git.branchCompliant)}`,
-    `Runtime: Node ${report.runtime.node} (${report.runtime.nodeSupported ? "supported" : "unsupported"}); npm ${report.runtime.npm} (${report.runtime.npmSupported ? "supported" : "unsupported"})`,
+    `Runtime: Node actual=${report.runtime.node} expected=${report.runtime.expectedNode} (${report.runtime.nodeSupported ? "MATCH" : "MISMATCH"}); npm actual=${report.runtime.npm} expected=${report.runtime.expectedNpm} (${report.runtime.npmSupported ? "MATCH" : "MISMATCH"})`,
     "Tools:",
     ...Object.values(report.tools).map((tool) => `- ${tool.label}: ${tool.available ? "AVAILABLE" : "MISSING"}`),
     "Inputs (presence only):",
     ...report.inputs.map((input) => `- ${input.name}: ${input.present ? "PRESENT" : "ABSENT"}${input.secret ? " (value hidden)" : ""}`),
     ...report.credentialFiles.map((input) => `- ${input.name}: ${input.present ? "PRESENT" : "ABSENT"} (contents not read)`),
+    "Provider readiness (local evidence only):",
+    ...Object.values(report.providers).map((provider) => `- ${provider.label}: ${provider.localReady ? "READY" : "UNAVAILABLE"} (tool=${provider.toolAvailable ? "PRESENT" : "ABSENT"}; credential evidence=${provider.credentialEvidence ? "PRESENT" : "ABSENT"}; authentication ${provider.authentication})`),
     `Expected Supabase project: ${report.project.expected}`,
     `Local Supabase link: ${report.project.linked.present ? (report.project.linked.matchesExpected ? "MATCH" : "MISMATCH") : "ABSENT"}`,
     `Database endpoint: ${report.database.configured ? report.database.type : "NOT CONFIGURED"}`,
