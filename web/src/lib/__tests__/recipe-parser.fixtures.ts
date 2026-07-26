@@ -61,6 +61,7 @@ export const MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT = `# Sesame Chicken
 - ¼ cup low-sodium soy sauce
 - ¼ cup honey
 - 1 tbsp toasted sesame oil
+- ½–1 tsp red pepper flakes
 
 ## Instructions
 
@@ -91,6 +92,7 @@ export const MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT = `# Sesame Chicken
 13. Remove the skillet from the heat.
 
 14. **Rest the chicken** for two minutes.
+    Keep the skillet uncovered so the coating stays crisp.
 
 15. Spoon the chicken over rice.
 

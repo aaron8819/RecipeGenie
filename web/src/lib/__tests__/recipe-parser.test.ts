@@ -177,9 +177,9 @@ describe('parseRecipeText', () => {
     ]);
     expect(result.ingredientGroups?.map((group) => group.ingredients.length)).toEqual([
       3,
-      3,
+      4,
     ]);
-    expect(result.ingredients).toHaveLength(6);
+    expect(result.ingredients).toHaveLength(7);
     expect(result.ingredients[0]).toMatchObject({
       amount: 1.5,
       unit: 'lb',
@@ -190,12 +190,19 @@ describe('parseRecipeText', () => {
     });
     expect(result.ingredients[1].originalText).toBe('¾ tsp kosher salt');
     expect(result.ingredients[2].originalText).toBe('⅜ tsp black pepper');
+    expect(result.ingredients[6]).toMatchObject({
+      amount: '0.5–1',
+      unit: 'tsp',
+      item: 'red pepper flakes',
+      groupLabel: 'Sesame Sauce',
+      originalText: '½–1 tsp red pepper flakes',
+    });
     expect(result.instructionGroups?.[0].steps).toHaveLength(16);
     expect(result.instructionGroups?.[0].steps[9]).toBe(
       'Stir until every piece is coated.'
     );
     expect(result.instructionGroups?.[0].steps[13]).toBe(
-      'Rest the chicken for two minutes.'
+      'Rest the chicken for two minutes. Keep the skillet uncovered so the coating stays crisp.'
     );
     expect(result.instructionGroups?.[0].steps[15]).toBe(
       'Garnish with sesame seeds and serve.'

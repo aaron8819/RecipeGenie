@@ -473,7 +473,7 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: 25,
       totalTimeMinutes: 45,
     })
-    expect(applied.ingredients).toHaveLength(6)
+    expect(applied.ingredients).toHaveLength(7)
     expect(applied.ingredients[0].groupLabel).toBe("Chicken")
     expect(applied.ingredients[3].groupLabel).toBe("Sesame Sauce")
     expect(applied.instructionGroups[0]?.steps).toHaveLength(16)
@@ -517,11 +517,12 @@ describe("recipe dialog defaults helpers", () => {
       tags: ["preserved"],
       imageUrl: "https://example.com/preserved.jpg",
     })
-    expect(applied.ingredients).toHaveLength(6)
+    expect(applied.ingredients).toHaveLength(7)
     expect(applied.ingredients.map((ingredient) => ingredient.groupLabel)).toEqual([
       "Chicken",
       "Chicken",
       "Chicken",
+      "Sesame Sauce",
       "Sesame Sauce",
       "Sesame Sauce",
       "Sesame Sauce",
