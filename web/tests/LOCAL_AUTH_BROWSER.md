@@ -64,6 +64,20 @@ include viewport metrics, screenshots, console/page/network diagnostics,
 horizontal overflow, scroll-screen count, visible actions, and a 390x420
 focused-input scenario. The covered widths are 360, 390, 430, and 1200 pixels.
 
+For the focused full recipe-import persistence workflow, run:
+
+```powershell
+npm run verify:recipe-import
+```
+
+Unlike `local:e2e:bootstrap`, this command does not reset the database or
+recreate the local user. It can generate the current worktree's ignored config,
+start or initialize loopback-local services, and reuse a valid local auth
+fixture. It reports that a new local volume may apply tracked migrations.
+The browser scenarios own and clean their disposable recipe rows. If the local
+user fixture is missing, the command stops and reports that an explicitly
+authorized `npm run local:e2e:bootstrap` reset is required.
+
 ## Fixture state
 
 The bootstrap recreates one dedicated local auth user and seeds only synthetic

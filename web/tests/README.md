@@ -2,7 +2,7 @@
 
 > **When to read:** You're writing, debugging, or modifying E2E tests, or setting up Playwright fixtures and auth.
 
-*Last updated: 2026-07-23*
+*Last updated: 2026-07-26*
 
 This is the authoritative Playwright guide for Recipe Genie: commands, target
 guards, fixtures, and authentication-state lifecycle.
@@ -92,6 +92,47 @@ ignored `.env.e2e.local`. It has no linked or remote fallback. Use
 `npm run local:e2e:reset` to restore fixtures and
 `npm run local:e2e:status` for a non-secret readiness check.
 
+### Verify the full recipe import workflow
+
+```bash
+npm run verify:recipe-import
+```
+
+Use this explicit higher-confidence command for recipe parser, import dialog,
+recipe persistence, or replacement-flow changes. It drives the actual desktop
+UI through two loopback-only authenticated scenarios:
+
+- create Sesame Chicken from the canonical Markdown fixture, review the parsed
+  warning and preview, save, refresh/reopen, and assert stored recipe structure;
+- seed a deterministic recipe through an authenticated local client, replace it
+  through the current edit/import UI, refresh/reopen, and assert both replaced
+  content and preserved identity/metadata.
+
+The verifier confirms the Recipe Genie worktree identity, rejects inherited
+shared or production-like Supabase configuration, reuses running local
+Supabase, and generates or refreshes the current worktree's ignored
+`.env.e2e.local` when that can be done without changing data. If local Supabase
+is unavailable, it starts or initializes the loopback-only services without a
+reset and reports that a new local volume may apply tracked migrations. It
+never runs `supabase db reset --local`, applies a linked migration, or uses a
+remote fallback.
+
+The browser scenarios create only disposable rows owned by the dedicated local
+E2E user and remove them after each scenario. A missing or invalid local auth
+fixture produces one explicit action to authorize and run
+`npm run local:e2e:bootstrap`; the verifier does not cross that destructive
+reset boundary itself. Cleanup failures fail the command.
+
+Failure screenshots, video, trace, diagnostics, and the HTML report remain in
+the ignored `test-results/` and `playwright-report/` paths. The console summary
+reports browser console errors/warnings, page errors, failed requests, 5xx
+responses, external runtime targets, scenario assertions, and cleanup.
+
+Keep `npm run verify` as the fast local quality baseline. Parser unit tests
+prove deterministic parsing rules; `verify:recipe-import` separately proves
+the browser dialog, authenticated application mutations, stored local data,
+replacement preservation, and reopen behavior.
+
 ### Run tests in headed mode (see browser)
 ```bash
 npm run test:e2e:headed
@@ -144,6 +185,7 @@ npm run test:e2e:codegen
 | `shopping-mode-smoke.spec.ts` | Focused shopping-mode smoke coverage |
 | `local-browser-inspection.spec.ts` | Guarded local authenticated viewport and diagnostics inspection |
 | `mobile-import-review.spec.ts` | Mobile import review and recipe-dialog reliability |
+| `recipe-import-browser.spec.ts` | Canonical Markdown create/replace persistence and preservation |
 
 ## Test Fixtures
 

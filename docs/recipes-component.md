@@ -114,11 +114,20 @@ Run from `web/`:
 
 ```bash
 npm run test -- --run src/lib/__tests__/recipe-parser.test.ts
+npm run test -- --run src/components/recipes/__tests__/recipe-dialog-helpers.test.ts
+npm run verify:recipe-import
 npx playwright test recipes.spec.ts --project=chromium
 npm run test:e2e:inspect
 ```
 
+Use `verify:recipe-import` when parser, import-dialog, recipe persistence, or
+paste-to-replace behavior changes. Parser and dialog unit tests validate the
+form-boundary contract; the focused verifier additionally exercises the real
+authenticated browser mutations, persisted local rows, refresh/reopen path,
+replacement preservation, diagnostics, and cleanup. It is intentionally not
+part of the fast general `npm run verify` command.
+
 The local inspection suite covers mobile import state transitions at 360x800,
 390x844, 430x932, and 390x420, plus the preserved desktop flow at 1200x800.
 
-Last updated: 2026-03-10
+Last updated: 2026-07-26

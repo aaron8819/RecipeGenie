@@ -32,6 +32,7 @@
     "local:e2e:dev": "node scripts/local-e2e-dev.mjs",
     "test:e2e:inspect": "playwright test --project=local-inspection",
     "test:e2e:inspect:headed": "playwright test --project=local-inspection --headed",
+    "verify:recipe-import": "node scripts/verify-recipe-import.mjs",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
