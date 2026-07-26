@@ -69,6 +69,15 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 ### Imports
 
 - Text parsing is local and deterministic.
+- Text parsing accepts the existing plain-text formats plus section-aware
+  Markdown: one `#` title, complete bold metadata lines for servings and recipe
+  times, `##` ingredients/instructions/notes sections, `###` ingredient group
+  labels, ingredient and note bullets, and numbered instruction steps.
+- Markdown ingredient groups are persisted through each ingredient's
+  `groupLabel`; Markdown notes use the existing first-class notes array. Because
+  the recipe schema stores one integer serving count, a Markdown servings range
+  is shown losslessly in preview and saved using its lower bound with a parser
+  warning.
 - URL import remains server-side because it needs SSRF protection, rate limiting, and HTML/JSON-LD extraction.
 - Below the desktop breakpoint, pasted-text import uses a compact input phase followed by a full-height sectioned review inside the same create dialog. The raw source, latest parsed candidate, and canonical editable draft have separate ownership; returning to the source preserves draft corrections, and applying changed source requires confirmation when the draft was corrected.
 - Mobile import review reuses the Details, Ingredients, and Instructions section bodies with a sticky Back/Save footer. Desktop keeps the two-column paste preview and stacked create form.

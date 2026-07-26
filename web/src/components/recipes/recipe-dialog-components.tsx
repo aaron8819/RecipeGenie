@@ -478,12 +478,14 @@ export function RecipeImportSection({
             <div className="font-medium">{parsedPreview?.name || "-"}</div>
           </div>
 
-          {parsedPreview?.servings ? (
+          {parsedPreview?.metadata?.servingsText || parsedPreview?.servings ? (
             <div>
               <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
                 Servings
               </div>
-              <div>{parsedPreview.servings}</div>
+              <div>
+                {parsedPreview.metadata?.servingsText || parsedPreview.servings}
+              </div>
             </div>
           ) : null}
 
