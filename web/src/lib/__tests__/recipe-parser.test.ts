@@ -4,7 +4,10 @@ import {
   parseRecipeText,
   parseIngredientLine,
 } from '../recipe-parser';
-import { STRUCTURED_LAMB_RECIPE_TEXT } from './recipe-parser.fixtures';
+import {
+  MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT,
+  STRUCTURED_LAMB_RECIPE_TEXT,
+} from './recipe-parser.fixtures';
 
 describe('parseIngredientLine', () => {
   it.each([
@@ -154,6 +157,140 @@ describe('parseIngredientLine', () => {
 });
 
 describe('parseRecipeText', () => {
+  it('parses a complete ChatGPT-style Markdown recipe section by section', () => {
+    const result = parseRecipeText(MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT);
+
+    expect(result.name).toBe('Sesame Chicken');
+    expect(result.servings).toBe(4);
+    expect(result.metadata).toEqual({
+      servingsText: '4–5',
+      prepTime: '20 minutes',
+      prepTimeMinutes: 20,
+      cookTime: '25 minutes',
+      cookTimeMinutes: 25,
+      totalTime: '45 minutes',
+      totalTimeMinutes: 45,
+    });
+    expect(result.ingredientGroups?.map((group) => group.label)).toEqual([
+      'Chicken',
+      'Sesame Sauce',
+    ]);
+    expect(result.ingredientGroups?.map((group) => group.ingredients.length)).toEqual([
+      3,
+      3,
+    ]);
+    expect(result.ingredients).toHaveLength(6);
+    expect(result.ingredients[0]).toMatchObject({
+      amount: 1.5,
+      unit: 'lb',
+      item: 'boneless, skinless chicken thighs',
+      groupLabel: 'Chicken',
+      originalText:
+        '1½ lb boneless, skinless chicken thighs, cut into 1-inch pieces',
+    });
+    expect(result.ingredients[1].originalText).toBe('¾ tsp kosher salt');
+    expect(result.ingredients[2].originalText).toBe('⅜ tsp black pepper');
+    expect(result.instructionGroups?.[0].steps).toHaveLength(16);
+    expect(result.instructionGroups?.[0].steps[9]).toBe(
+      'Stir until every piece is coated.'
+    );
+    expect(result.instructionGroups?.[0].steps[13]).toBe(
+      'Rest the chicken for two minutes.'
+    );
+    expect(result.instructionGroups?.[0].steps[15]).toBe(
+      'Garnish with sesame seeds and serve.'
+    );
+    expect(result.notes).toEqual([
+      'Keep the frying oil close to 350°F.',
+      'Sauce the chicken immediately before serving.',
+    ]);
+    expect(result.warnings).toContain(
+      'Servings range "4–5" will be saved as 4 because Recipe Genie stores one serving count.'
+    );
+  });
+
+  it('accepts case-insensitive Markdown sections without groups or optional fields', () => {
+    const result = parseRecipeText(`# Tomato Toast
+
+## INGREDIENTS
+- 2 slices bread
+* 1 tomato
+
+## directions
+1. Toast the bread.
+
+3. Top with tomato.`);
+
+    expect(result.name).toBe('Tomato Toast');
+    expect(result.metadata).toBeUndefined();
+    expect(result.ingredientGroups).toHaveLength(1);
+    expect(result.ingredientGroups?.[0].label).toBeUndefined();
+    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+      'bread',
+      'tomato',
+    ]);
+    expect(result.instructionGroups?.[0].steps).toEqual([
+      'Toast the bread.',
+      'Top with tomato.',
+    ]);
+    expect(result.notes).toBeUndefined();
+  });
+
+  it('keeps multiline instructions together and does not treat bold prose as metadata', () => {
+    const result = parseRecipeText(`# Brothy Beans
+
+**Servings:** 6
+
+## Ingredients
+* 2 cans white beans
+
+## Instructions
+1. Add the beans to the pot.
+   **Important:** Keep all of their liquid.
+2. Simmer for ten minutes.`);
+
+    expect(result.servings).toBe(6);
+    expect(result.instructionGroups?.[0].steps).toEqual([
+      'Add the beans to the pot. Important: Keep all of their liquid.',
+      'Simmer for ten minutes.',
+    ]);
+    expect(result.metadata).toEqual({ servingsText: '6' });
+  });
+
+  it('warns clearly and does not import unsupported or malformed Markdown sections', () => {
+    const result = parseRecipeText(`## Ingredients
+### Empty Group
+
+## Nutrition
+* 400 calories
+
+## Instructions`);
+
+    expect(result.name).toBe('Untitled Recipe');
+    expect(result.ingredients).toEqual([]);
+    expect(result.instructions).toEqual([]);
+    expect(result.ingredientGroups).toBeUndefined();
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      'Unsupported Markdown section "Nutrition" was not imported.',
+      'No recipe name found - using "Untitled Recipe"',
+      'No ingredients found - add an "Ingredients" section',
+      'No instructions found - add a "Directions" or "Instructions" section',
+    ]));
+  });
+
+  it('gives a level-one Markdown title precedence over legacy title fields', () => {
+    const result = parseRecipeText(`# Preferred Title
+Title: Legacy Title
+
+## Ingredients
+* 1 cup rice
+
+## Instructions
+1. Cook it.`);
+
+    expect(result.name).toBe('Preferred Title');
+  });
+
   it('should populate originalText on all parsed ingredients', () => {
     const text = `Chicken Stir Fry
 

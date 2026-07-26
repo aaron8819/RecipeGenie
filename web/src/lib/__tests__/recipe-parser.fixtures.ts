@@ -40,3 +40,63 @@ Notes:
 - Lamb shoulder chops are flavorful but slightly tougher than loin chops, so slicing along the natural seam after cooking improves tenderness.
 - Best served medium-rare to medium (130\u2013140\u00B0F).
 - Pairs well with crispy potatoes, Greek salad, or roasted vegetables.`
+
+export const MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT = `# Sesame Chicken
+
+**Servings:** 4–5
+**Prep Time:** 20 minutes
+**Cook Time:** 25 minutes
+**Total Time:** 45 minutes
+
+## Ingredients
+
+### Chicken
+
+* 1½ lb boneless, skinless chicken thighs, cut into 1-inch pieces
+* ¾ tsp kosher salt
+* ⅜ tsp black pepper
+
+### Sesame Sauce
+
+- ¼ cup low-sodium soy sauce
+- ¼ cup honey
+- 1 tbsp toasted sesame oil
+
+## Instructions
+
+1. Cook the rice according to package directions.
+
+2. Season the chicken with kosher salt and black pepper.
+
+3. Whisk the soy sauce, honey, and sesame oil together.
+
+4. Heat a large skillet over medium-high heat.
+
+5. Add the chicken in a single layer.
+
+6. Brown the first side without moving the pieces.
+
+7. Turn the chicken and cook the second side.
+
+8. Reduce the heat to medium.
+
+9. Pour the sauce into the skillet.
+
+10. Stir until every piece is coated.
+
+11. Simmer until the sauce thickens.
+
+12. Check that the chicken is cooked through.
+
+13. Remove the skillet from the heat.
+
+14. **Rest the chicken** for two minutes.
+
+15. Spoon the chicken over rice.
+
+20. Garnish with sesame seeds and serve.
+
+## Notes
+
+* Keep the frying oil close to 350°F.
+- Sauce the chicken immediately before serving.`

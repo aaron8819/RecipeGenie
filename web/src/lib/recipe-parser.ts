@@ -17,7 +17,13 @@ interface SectionBlock {
   lines: RecipeLine[]
 }
 
+interface MarkdownHeading {
+  level: number
+  label: string
+}
+
 export interface ParsedRecipeMetadata {
+  servingsText?: string
   prepTime?: string
   prepTimeMinutes?: number
   cookTime?: string
@@ -72,12 +78,25 @@ export function parseRecipeText(text: string): ParsedRecipe {
     }
   }
 
-  const { prelude, sections } = splitIntoSections(lines)
+  const { prelude, sections, ignoredMarkdownSections } = splitIntoSections(lines)
   const preludeMetadata = extractPreludeMetadata(prelude)
 
   let name = inferRecipeName(preludeMetadata.titleLine, preludeMetadata.remainingLines)
   let servings = preludeMetadata.servings
   const metadata = buildRecipeMetadata(preludeMetadata)
+
+  for (const section of ignoredMarkdownSections) {
+    warnings.push(`Unsupported Markdown section "${section}" was not imported.`)
+  }
+
+  if (
+    preludeMetadata.servingsText &&
+    isServingRange(preludeMetadata.servingsText)
+  ) {
+    warnings.push(
+      `Servings range "${preludeMetadata.servingsText}" will be saved as ${servings} because Recipe Genie stores one serving count.`
+    )
+  }
 
   if (!servings) {
     const servingsFromName = extractServingsFromText(name)
@@ -175,15 +194,43 @@ function toRecipeLines(text: string): RecipeLine[] {
 function splitIntoSections(lines: RecipeLine[]): {
   prelude: RecipeLine[]
   sections: SectionBlock[]
+  ignoredMarkdownSections: string[]
 } {
   const prelude: RecipeLine[] = []
   const sections: SectionBlock[] = []
+  const ignoredMarkdownSections: string[] = []
   let currentSection: SectionBlock | null = null
+  let ignoringMarkdownSection = false
 
   for (const line of lines) {
+    const heading = parseMarkdownHeading(line.trimmed)
     const kind = parseTopLevelSectionKind(line.trimmed)
 
+    if (heading && heading.level <= 2) {
+      if (currentSection) {
+        sections.push(currentSection)
+        currentSection = null
+      }
+
+      if (heading.level === 2 && kind) {
+        ignoringMarkdownSection = false
+        currentSection = {
+          kind,
+          header: line.trimmed,
+          lines: [],
+        }
+      } else if (heading.level === 2) {
+        ignoringMarkdownSection = true
+        ignoredMarkdownSections.push(heading.label)
+      } else if (sections.length === 0) {
+        ignoringMarkdownSection = false
+        prelude.push(line)
+      }
+      continue
+    }
+
     if (kind) {
+      ignoringMarkdownSection = false
       if (currentSection) {
         sections.push(currentSection)
       }
@@ -198,7 +245,7 @@ function splitIntoSections(lines: RecipeLine[]): {
 
     if (currentSection) {
       currentSection.lines.push(line)
-    } else {
+    } else if (!ignoringMarkdownSection) {
       prelude.push(line)
     }
   }
@@ -207,11 +254,16 @@ function splitIntoSections(lines: RecipeLine[]): {
     sections.push(currentSection)
   }
 
-  return { prelude, sections }
+  return { prelude, sections, ignoredMarkdownSections }
 }
 
 function parseTopLevelSectionKind(line: string): SectionKind | null {
-  const normalized = normalizeHeaderLabel(line)
+  const heading = parseMarkdownHeading(line)
+  if (heading && heading.level !== 2) {
+    return null
+  }
+
+  const normalized = normalizeHeaderLabel(heading?.label || line)
   if (!normalized) return null
 
   if (/^(?:ingredients?|what (?:you(?:['’]?ll| will)? )?need)$/.test(normalized)) {
@@ -236,10 +288,28 @@ function normalizeHeaderLabel(line: string): string {
     .trim()
 }
 
+function parseMarkdownHeading(line: string): MarkdownHeading | null {
+  const match = line.match(/^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/)
+  if (!match) {
+    return null
+  }
+
+  const label = stripMarkdownInlineSyntax(match[2]).trim()
+  if (!label) {
+    return null
+  }
+
+  return {
+    level: match[1].length,
+    label,
+  }
+}
+
 function extractPreludeMetadata(lines: RecipeLine[]): {
   titleLine?: string
   remainingLines: RecipeLine[]
   servings?: number
+  servingsText?: string
   prepTime?: string
   prepTimeMinutes?: number
   cookTime?: string
@@ -251,6 +321,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
   const metadata: {
     titleLine?: string
     servings?: number
+    servingsText?: string
     prepTime?: string
     prepTimeMinutes?: number
     cookTime?: string
@@ -258,6 +329,14 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
     totalTime?: string
     totalTimeMinutes?: number
   } = {}
+
+  const markdownTitle = lines
+    .map((line) => parseMarkdownHeading(line.trimmed))
+    .find((heading) => heading?.level === 1)
+
+  if (markdownTitle) {
+    metadata.titleLine = markdownTitle.label
+  }
 
   for (const line of lines) {
     const trimmed = line.trimmed
@@ -267,9 +346,31 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
       continue
     }
 
+    const heading = parseMarkdownHeading(trimmed)
+    if (heading) {
+      if (heading.level !== 1) {
+        remainingLines.push(line)
+      }
+      continue
+    }
+
+    const boldAttribute = parseBoldAttributeLine(trimmed)
+    if (boldAttribute) {
+      const attributeHandled = applyPreludeAttribute(
+        metadata,
+        boldAttribute.label,
+        boldAttribute.value
+      )
+      if (attributeHandled) {
+        continue
+      }
+    }
+
     const titleMatch = trimmed.match(/^(?:title|recipe|name)\s*:\s*(.+)$/i)
     if (titleMatch) {
-      metadata.titleLine = titleMatch[1].trim()
+      if (!markdownTitle) {
+        metadata.titleLine = stripMarkdownInlineSyntax(titleMatch[1]).trim()
+      }
       continue
     }
 
@@ -277,27 +378,28 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
       /^(?:servings?|serves|yield|makes?)\s*:?\s*(.+)$/i
     )
     if (servingsMatch) {
-      metadata.servings = extractServingsFromText(servingsMatch[1])
+      const value = stripMarkdownInlineSyntax(servingsMatch[1]).trim()
+      metadata.servings = extractServingsFromText(value)
       continue
     }
 
     const prepTimeMatch = trimmed.match(/^prep(?:aration)?\s*time\s*:\s*(.+)$/i)
     if (prepTimeMatch) {
-      metadata.prepTime = prepTimeMatch[1].trim()
+      metadata.prepTime = stripMarkdownInlineSyntax(prepTimeMatch[1]).trim()
       metadata.prepTimeMinutes = parseDurationToMinutes(metadata.prepTime)
       continue
     }
 
     const cookTimeMatch = trimmed.match(/^cook(?:ing)?\s*time\s*:\s*(.+)$/i)
     if (cookTimeMatch) {
-      metadata.cookTime = cookTimeMatch[1].trim()
+      metadata.cookTime = stripMarkdownInlineSyntax(cookTimeMatch[1]).trim()
       metadata.cookTimeMinutes = parseDurationToMinutes(metadata.cookTime)
       continue
     }
 
     const totalTimeMatch = trimmed.match(/^total\s*time\s*:\s*(.+)$/i)
     if (totalTimeMatch) {
-      metadata.totalTime = totalTimeMatch[1].trim()
+      metadata.totalTime = stripMarkdownInlineSyntax(totalTimeMatch[1]).trim()
       metadata.totalTimeMinutes = parseDurationToMinutes(metadata.totalTime)
       continue
     }
@@ -309,6 +411,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
     titleLine: metadata.titleLine,
     remainingLines,
     servings: metadata.servings,
+    servingsText: metadata.servingsText,
     prepTime: metadata.prepTime,
     prepTimeMinutes: metadata.prepTimeMinutes,
     cookTime: metadata.cookTime,
@@ -318,7 +421,67 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
   }
 }
 
+function parseBoldAttributeLine(
+  line: string
+): { label: string; value: string } | null {
+  const match =
+    line.match(/^\*\*\s*([^*:\n]+?)\s*:\s*\*\*\s*(.+)$/) ||
+    line.match(/^\*\*\s*([^*\n]+?)\s*\*\*\s*:\s*(.+)$/)
+
+  if (!match) {
+    return null
+  }
+
+  const label = match[1].trim()
+  const value = stripMarkdownInlineSyntax(match[2]).trim()
+  return label && value ? { label, value } : null
+}
+
+function applyPreludeAttribute(
+  metadata: {
+    servings?: number
+    servingsText?: string
+    prepTime?: string
+    prepTimeMinutes?: number
+    cookTime?: string
+    cookTimeMinutes?: number
+    totalTime?: string
+    totalTimeMinutes?: number
+  },
+  label: string,
+  value: string
+): boolean {
+  const normalizedLabel = label.toLowerCase().replace(/\s+/g, " ").trim()
+
+  if (/^(?:servings?|serves|yield|makes?)$/.test(normalizedLabel)) {
+    metadata.servings = extractServingsFromText(value)
+    metadata.servingsText = value
+    return true
+  }
+
+  if (/^prep(?:aration)? time$/.test(normalizedLabel)) {
+    metadata.prepTime = value
+    metadata.prepTimeMinutes = parseDurationToMinutes(value)
+    return true
+  }
+
+  if (/^cook(?:ing)? time$/.test(normalizedLabel)) {
+    metadata.cookTime = value
+    metadata.cookTimeMinutes = parseDurationToMinutes(value)
+    return true
+  }
+
+  if (/^total time$/.test(normalizedLabel)) {
+    metadata.totalTime = value
+    metadata.totalTimeMinutes = parseDurationToMinutes(value)
+    return true
+  }
+
+  return false
+}
+
 function buildRecipeMetadata(metadata: {
+  servingsText?: string
   prepTime?: string
   prepTimeMinutes?: number
   cookTime?: string
@@ -326,11 +489,14 @@ function buildRecipeMetadata(metadata: {
   totalTime?: string
   totalTimeMinutes?: number
 }): ParsedRecipeMetadata | undefined {
-  if (!hasTimeMetadata(metadata)) {
+  if (!hasRecipeMetadata(metadata)) {
     return undefined
   }
 
   return {
+    ...(metadata.servingsText
+      ? { servingsText: metadata.servingsText }
+      : {}),
     prepTime: metadata.prepTime,
     prepTimeMinutes: metadata.prepTimeMinutes,
     cookTime: metadata.cookTime,
@@ -340,12 +506,18 @@ function buildRecipeMetadata(metadata: {
   }
 }
 
-function hasTimeMetadata(metadata: {
+function hasRecipeMetadata(metadata: {
+  servingsText?: string
   prepTime?: string
   cookTime?: string
   totalTime?: string
 }): boolean {
-  return Boolean(metadata.prepTime || metadata.cookTime || metadata.totalTime)
+  return Boolean(
+    metadata.servingsText ||
+    metadata.prepTime ||
+    metadata.cookTime ||
+    metadata.totalTime
+  )
 }
 
 function inferRecipeName(titleLine: string | undefined, remainingPreludeLines: RecipeLine[]): string {
@@ -358,7 +530,9 @@ function inferRecipeName(titleLine: string | undefined, remainingPreludeLines: R
 }
 
 function cleanDetectedTitle(value: string): string {
-  return value.replace(/^(?:title|recipe|name)\s*:\s*/i, "").trim()
+  return stripMarkdownInlineSyntax(
+    value.replace(/^(?:title|recipe|name)\s*:\s*/i, "")
+  ).trim()
 }
 
 function stripServingsFromTitle(value: string): string {
@@ -386,6 +560,10 @@ function extractServingsFromText(value: string): number | undefined {
 
   const servings = parseFloat(servingsContextMatch[1])
   return Number.isFinite(servings) ? Math.round(servings) : undefined
+}
+
+function isServingRange(value: string): boolean {
+  return /\d+(?:\.\d+)?\s*[\u2013\u2014-]\s*\d+(?:\.\d+)?/.test(value)
 }
 
 function parseDurationToMinutes(value: string): number | undefined {
@@ -442,6 +620,18 @@ function parseIngredientSection(lines: RecipeLine[]): ParsedIngredientGroup[] {
 
   for (const line of lines) {
     if (!line.trimmed) {
+      continue
+    }
+
+    const heading = parseMarkdownHeading(line.trimmed)
+    if (heading) {
+      if (heading.level === 3) {
+        pushCurrentGroup()
+        currentGroup = {
+          label: heading.label,
+          ingredients: [],
+        }
+      }
       continue
     }
 
@@ -505,6 +695,10 @@ function parseInstructionSection(lines: RecipeLine[]): ParsedInstructionGroup[] 
       continue
     }
 
+    if (parseMarkdownHeading(trimmed)) {
+      continue
+    }
+
     if (isSubsectionLabel(trimmed)) {
       pushCurrentGroup()
       currentGroup = {
@@ -520,7 +714,8 @@ function parseInstructionSection(lines: RecipeLine[]): ParsedInstructionGroup[] 
       continue
     }
 
-    pendingStep = pendingStep ? `${pendingStep} ${trimmed}` : trimmed
+    const content = stripMarkdownInlineSyntax(trimmed)
+    pendingStep = pendingStep ? `${pendingStep} ${content}` : content
   }
 
   pushCurrentGroup()
@@ -532,6 +727,10 @@ function parseNotesSection(lines: RecipeLine[]): string[] {
 
   for (const line of lines) {
     if (!line.trimmed) {
+      continue
+    }
+
+    if (parseMarkdownHeading(line.trimmed)) {
       continue
     }
 
@@ -613,7 +812,15 @@ function isInstructionStepStart(line: string): boolean {
 }
 
 function stripInstructionMarker(line: string): string {
-  return line.replace(/^\s*(?:\d+[\.\)]|[-*\u2022])\s+/, "").trim()
+  return stripMarkdownInlineSyntax(
+    line.replace(/^\s*(?:\d+[\.\)]|[-*\u2022])\s+/, "")
+  ).trim()
+}
+
+function stripMarkdownInlineSyntax(value: string): string {
+  return value
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
 }
 
 function parseLegacyRecipeText(
@@ -842,6 +1049,7 @@ export function parseIngredientLine(line: string): Ingredient {
 
   // Remove list markers at the start, but preserve numbered amounts.
   cleaned = cleaned.replace(/^[\-\*\u2022\.]\s+/, "").trim()
+  cleaned = stripMarkdownInlineSyntax(cleaned)
 
   const originalText = cleaned
 

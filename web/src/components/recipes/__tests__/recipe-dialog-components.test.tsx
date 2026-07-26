@@ -217,7 +217,27 @@ describe("RecipeImportSection", () => {
         importText=""
         parseError={null}
         livePreview={null}
-        parsedPreview={parsedRecipe({ warnings: ["Trim ingredient spacing"] })}
+        parsedPreview={parsedRecipe({
+          metadata: {
+            servingsText: "4–5",
+            prepTime: "20 minutes",
+            prepTimeMinutes: 20,
+            cookTime: "25 minutes",
+            cookTimeMinutes: 25,
+            totalTime: "45 minutes",
+            totalTimeMinutes: 45,
+          },
+          ingredients: [{ item: "chicken", amount: 1, unit: "lb" }],
+          ingredientGroups: [
+            {
+              label: "Chicken",
+              ingredients: [{ item: "chicken", amount: 1, unit: "lb" }],
+            },
+          ],
+          instructionGroups: [{ steps: ["Prep", "Cook"] }],
+          notes: ["Keep the oil at 350°F."],
+          warnings: ["Trim ingredient spacing"],
+        })}
         isImportingFromUrl={false}
         onImportUrlChange={() => {}}
         onImportTextChange={() => {}}
@@ -229,6 +249,16 @@ describe("RecipeImportSection", () => {
     )
 
     expect(screen.getByText("Roast Chicken")).toBeInTheDocument()
+    expect(screen.getByText("4–5")).toBeInTheDocument()
+    expect(screen.getByText("20 minutes")).toBeInTheDocument()
+    expect(screen.getByText("25 minutes")).toBeInTheDocument()
+    expect(screen.getByText("45 minutes")).toBeInTheDocument()
+    expect(screen.getByText("Chicken")).toBeInTheDocument()
+    expect(screen.getByText("Ingredients (1)")).toBeInTheDocument()
+    expect(screen.getByText("Instructions (2 steps)")).toBeInTheDocument()
+    expect(screen.getByText("Notes (1)").parentElement).toHaveTextContent(
+      "Keep the oil at 350°F."
+    )
     fireEvent.click(screen.getByRole("button", { name: /back to edit/i }))
     fireEvent.click(screen.getByRole("button", { name: /apply & edit recipe/i }))
     expect(onBackToInput).toHaveBeenCalledTimes(1)

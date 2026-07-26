@@ -27,7 +27,10 @@ import {
   toParsedRecipeImport,
   validateRecipeImportUrl,
 } from "../recipe-import.parser"
-import { STRUCTURED_LAMB_RECIPE_TEXT } from "@/lib/__tests__/recipe-parser.fixtures"
+import {
+  MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT,
+  STRUCTURED_LAMB_RECIPE_TEXT,
+} from "@/lib/__tests__/recipe-parser.fixtures"
 
 describe("recipe dialog validation helpers", () => {
   it("ignores untouched blank rows and validates inconsistent amount/unit pairs", () => {
@@ -448,6 +451,86 @@ describe("recipe dialog defaults helpers", () => {
     expect(hydrated.instructionGroups).toHaveLength(2)
     expect(hydrated.instructionGroups[1]?.label).toBe("Pan Sauce")
     expect(hydrated.instructionGroups[1]?.steps[0]).toBe("Lower heat to medium.")
+  })
+
+  it("creates a canonical form and submission from Markdown import output", () => {
+    const preview = parseRecipeImportPreview(
+      MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT
+    )
+
+    expect(preview).not.toBeNull()
+
+    const applied = applyParsedRecipeToFormValues(
+      buildNewRecipeDialogFormValues(["dinner"]),
+      preview!
+    )
+    const submission = buildRecipeSubmissionData(applied)
+
+    expect(applied).toMatchObject({
+      name: "Sesame Chicken",
+      servings: 4,
+      prepTimeMinutes: 20,
+      cookTimeMinutes: 25,
+      totalTimeMinutes: 45,
+    })
+    expect(applied.ingredients).toHaveLength(6)
+    expect(applied.ingredients[0].groupLabel).toBe("Chicken")
+    expect(applied.ingredients[3].groupLabel).toBe("Sesame Sauce")
+    expect(applied.instructionGroups[0]?.steps).toHaveLength(16)
+    expect(applied.notes).toContain("350°F")
+    expect(submission.instruction_groups?.[0].steps).toHaveLength(16)
+    expect(submission.notes).toEqual([
+      "Keep the frying oil close to 350°F.",
+      "Sauce the chicken immediately before serving.",
+    ])
+  })
+
+  it("replaces all supported parsed fields from the same Markdown contract", () => {
+    const current = {
+      name: "Old Recipe",
+      category: "favorites",
+      servings: 2,
+      prepTimeMinutes: 5,
+      cookTimeMinutes: 10,
+      totalTimeMinutes: 15,
+      tags: ["preserved"],
+      ingredients: [{ item: "old ingredient", amount: 1, unit: "cup" }],
+      instructionGroups: [{ steps: ["Old step"] }],
+      notes: "Old note",
+      imageUrl: "https://example.com/preserved.jpg",
+    }
+    const preview = parseRecipeImportPreview(
+      MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT
+    )
+
+    expect(preview).not.toBeNull()
+
+    const applied = applyParsedRecipeToFormValues(current, preview!)
+
+    expect(applied).toMatchObject({
+      name: "Sesame Chicken",
+      category: "favorites",
+      servings: 4,
+      prepTimeMinutes: 20,
+      cookTimeMinutes: 25,
+      totalTimeMinutes: 45,
+      tags: ["preserved"],
+      imageUrl: "https://example.com/preserved.jpg",
+    })
+    expect(applied.ingredients).toHaveLength(6)
+    expect(applied.ingredients.map((ingredient) => ingredient.groupLabel)).toEqual([
+      "Chicken",
+      "Chicken",
+      "Chicken",
+      "Sesame Sauce",
+      "Sesame Sauce",
+      "Sesame Sauce",
+    ])
+    expect(applied.instructionGroups[0]?.steps).toHaveLength(16)
+    expect(applied.notes).toBe(
+      "Keep the frying oil close to 350°F.\n" +
+      "Sauce the chicken immediately before serving."
+    )
   })
 
   it("applies pasted replacement text without changing preserved recipe identity fields", () => {
