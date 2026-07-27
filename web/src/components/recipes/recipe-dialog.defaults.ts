@@ -72,6 +72,10 @@ export interface RecipeDialogFormValues {
   imageUrl: string | null
 }
 
+interface ApplyParsedRecipeOptions {
+  applyCategory?: boolean
+}
+
 export function buildEditingRecipeDialogFormValues(
   recipe: Recipe
 ): RecipeDialogFormValues {
@@ -113,11 +117,16 @@ export function buildNewRecipeDialogFormValues(
 
 export function applyParsedRecipeToFormValues(
   values: RecipeDialogFormValues,
-  parsedRecipe: ParsedRecipe
+  parsedRecipe: ParsedRecipe,
+  options: ApplyParsedRecipeOptions = {}
 ): RecipeDialogFormValues {
   return {
     ...values,
     name: parsedRecipe.name || values.name,
+    category:
+      options.applyCategory && parsedRecipe.category
+        ? parsedRecipe.category
+        : values.category,
     servings: parsedRecipe.servings || values.servings,
     prepTimeMinutes: parsedRecipe.metadata?.prepTimeMinutes ?? values.prepTimeMinutes,
     cookTimeMinutes: parsedRecipe.metadata?.cookTimeMinutes ?? values.cookTimeMinutes,

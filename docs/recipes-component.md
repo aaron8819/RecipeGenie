@@ -69,11 +69,14 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 ### Imports
 
 - Text parsing is local and deterministic.
-- Text parsing accepts the existing plain-text formats plus section-aware
-  Markdown: one `#` title, complete bold metadata lines for servings and recipe
-  times, `##` ingredients/instructions/notes sections, `###` ingredient group
-  labels, ingredient and note bullets, and numbered instruction steps.
-- Markdown ingredient groups are persisted through each ingredient's
+- Text parsing accepts the existing plain-text formats plus conventional,
+  section-aware Markdown. Markdown title markers are removed; category,
+  servings, and recipe times are read from the preamble; ingredients,
+  instructions, and notes headings are case-insensitive at any heading level;
+  and nested ingredient headings become group labels.
+- Imported categories are normalized to the existing category model for new
+  recipes. Paste-to-replace continues to preserve the current recipe category.
+  Markdown ingredient groups are persisted through each ingredient's
   `groupLabel`; Markdown notes use the existing first-class notes array. Because
   the recipe schema stores one integer serving count, a Markdown servings range
   is shown losslessly in preview and saved using its lower bound with a parser
@@ -130,4 +133,4 @@ part of the fast general `npm run verify` command.
 The local inspection suite covers mobile import state transitions at 360x800,
 390x844, 430x932, and 390x420, plus the preserved desktop flow at 1200x800.
 
-Last updated: 2026-07-26
+Last updated: 2026-07-27

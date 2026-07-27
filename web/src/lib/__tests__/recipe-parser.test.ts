@@ -6,6 +6,7 @@ import {
 } from '../recipe-parser';
 import {
   MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT,
+  MARKDOWN_TACO_SALAD_RECIPE_TEXT,
   STRUCTURED_LAMB_RECIPE_TEXT,
 } from './recipe-parser.fixtures';
 
@@ -157,6 +158,51 @@ describe('parseIngredientLine', () => {
 });
 
 describe('parseRecipeText', () => {
+  it('parses the conventional Taco Salad Markdown fixture without structural leakage', () => {
+    const result = parseRecipeText(MARKDOWN_TACO_SALAD_RECIPE_TEXT);
+
+    expect(result.name).toBe('Taco Salad');
+    expect(result.category).toBe('beef');
+    expect(result.servings).toBe(4);
+    expect(result.metadata).toEqual({
+      prepTime: '15 minutes',
+      prepTimeMinutes: 15,
+      cookTime: '10 minutes',
+      cookTimeMinutes: 10,
+      totalTime: '25 minutes',
+      totalTimeMinutes: 25,
+    });
+    expect(result.ingredientGroups?.map((group) => group.label)).toEqual([
+      'Taco Meat',
+      'Salad',
+      'Cilantro-Lime Yogurt Dressing',
+    ]);
+    expect(result.ingredientGroups?.map((group) => group.ingredients.length)).toEqual([
+      8,
+      11,
+      11,
+    ]);
+    expect(result.ingredients).toHaveLength(30);
+    expect(result.instructions).toHaveLength(11);
+    expect(result.instructionGroups?.[0].steps).toHaveLength(11);
+    expect(result.notes).toHaveLength(4);
+
+    const content = [
+      ...result.ingredients.map((ingredient) => ingredient.originalText),
+      ...result.instructions,
+      ...(result.notes || []),
+    ];
+    expect(content).not.toEqual(expect.arrayContaining([
+      '# Taco Salad',
+      'Category: Beef',
+      '## Ingredients',
+      '### Taco Meat',
+      '## Instructions',
+      '## Notes',
+    ]));
+    expect(result.warnings).toEqual([]);
+  });
+
   it('parses a complete ChatGPT-style Markdown recipe section by section', () => {
     const result = parseRecipeText(MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT);
 
@@ -241,6 +287,97 @@ describe('parseRecipeText', () => {
       'Top with tomato.',
     ]);
     expect(result.notes).toBeUndefined();
+  });
+
+  it('recognizes major sections at different Markdown heading levels', () => {
+    const result = parseRecipeText(`### Layered Toast
+
+#### ingredients
+##### Spread
+- 1 tbsp butter
+
+###### INSTRUCTIONS
+1. Spread the butter.
+
+#### NoTeS
+An ordinary note paragraph.`);
+
+    expect(result.name).toBe('Layered Toast');
+    expect(result.ingredientGroups?.[0]).toMatchObject({
+      label: 'Spread',
+    });
+    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+      'butter',
+    ]);
+    expect(result.instructions).toEqual(['Spread the butter.']);
+    expect(result.notes).toEqual(['An ordinary note paragraph.']);
+  });
+
+  it('parses note bullets and multiline paragraphs without importing headings', () => {
+    const result = parseRecipeText(`# Toast
+
+## Ingredients
+- 1 slice bread
+
+## Instructions
+1. Toast it.
+
+## Notes
+- Serve warm.
+
+This is an ordinary note
+that wraps across lines.
+
+### Storage
+Keep refrigerated.`);
+
+    expect(result.notes).toEqual([
+      'Serve warm.',
+      'This is an ordinary note that wraps across lines.',
+      'Keep refrigerated.',
+    ]);
+  });
+
+  it('limits metadata parsing to the preamble and excludes later metadata lines', () => {
+    const result = parseRecipeText(`# Soup
+Category: Beef
+Servings: 4
+
+## Ingredients
+- 1 cup broth
+Category: Chicken
+Servings: 12
+Yield 20
+
+## Instructions
+1. Simmer.
+Total Time: 99 minutes
+
+## Notes
+Cook Time: 45 minutes
+Serve warm.`);
+
+    expect(result.category).toBe('beef');
+    expect(result.servings).toBe(4);
+    expect(result.metadata).toBeUndefined();
+    expect(result.ingredients).toHaveLength(1);
+    expect(result.instructions).toEqual(['Simmer.']);
+    expect(result.notes).toEqual(['Serve warm.']);
+  });
+
+  it('does not treat bullets outside the Ingredients section as ingredients', () => {
+    const result = parseRecipeText(`# Broth
+- Preamble bullet
+
+## Instructions
+1. Simmer.
+
+## Notes
+- Note bullet.`);
+
+    expect(result.ingredients).toEqual([]);
+    expect(result.instructions).toEqual(['Simmer.']);
+    expect(result.notes).toEqual(['Note bullet.']);
   });
 
   it('keeps multiline instructions together and does not treat bold prose as metadata', () => {

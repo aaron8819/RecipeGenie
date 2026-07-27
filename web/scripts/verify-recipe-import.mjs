@@ -295,7 +295,7 @@ async function main() {
 
   console.log('\nSTATUS: COMPLETE')
   console.log('Environment target validation: PASS')
-  console.log('Browser scenarios: PASS (create and replace)')
+  console.log('Browser scenarios: PASS (Markdown create/replace and legacy import)')
   console.log('Cleanup: PASS (disposable recipe rows removed)')
 }
 
