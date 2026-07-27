@@ -24,7 +24,12 @@ import type { Recipe } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
 import { useState } from "react"
-import { formatRecipeTime, getRecipeInstructionGroups, getRecipeNotes } from "@/lib/recipe-structure"
+import {
+  formatRecipeTime,
+  getRecipeIngredientGroups,
+  getRecipeInstructionGroups,
+  getRecipeNotes,
+} from "@/lib/recipe-structure"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 
@@ -45,41 +50,6 @@ interface RecipeDetailDialogProps {
   isAddingToShoppingList?: boolean
   isMarkingAsMade?: boolean
   isSharing?: boolean
-}
-
-function groupIngredientsByLabel(recipe: Recipe): Array<{
-  label?: string
-  ingredients: Recipe["ingredients"]
-}> {
-  const groups: Array<{ label?: string; ingredients: Recipe["ingredients"] }> = []
-  let currentLabel: string | undefined
-  let currentIngredients: Recipe["ingredients"] = []
-
-  const flushGroup = () => {
-    if (currentIngredients.length === 0) {
-      return
-    }
-
-    groups.push({
-      label: currentLabel,
-      ingredients: currentIngredients,
-    })
-  }
-
-  for (const ingredient of recipe.ingredients || []) {
-    const ingredientLabel = ingredient.groupLabel || undefined
-
-    if (ingredientLabel !== currentLabel) {
-      flushGroup()
-      currentLabel = ingredientLabel
-      currentIngredients = []
-    }
-
-    currentIngredients.push(ingredient)
-  }
-
-  flushGroup()
-  return groups
 }
 
 const HEADER_PRIMARY_BUTTON_CLASS =
@@ -360,7 +330,11 @@ export function RecipeDetailDialog({
   const [isDeleting, setIsDeleting] = useState(false)
 
   const recipeImageUrl = recipe ? getRecipeImageUrl(recipe.image_url) : null
-  const ingredientGroups = recipe ? groupIngredientsByLabel(recipe) : []
+  const ingredientGroups = getRecipeIngredientGroups(recipe?.ingredients)
+  const ingredientCount = ingredientGroups.reduce(
+    (count, group) => count + group.ingredients.length,
+    0
+  )
   const instructionGroups = recipe ? getRecipeInstructionGroups(recipe) : []
   const notes = recipe ? getRecipeNotes(recipe) : []
 
@@ -411,59 +385,78 @@ export function RecipeDetailDialog({
           />
           {/* Ingredients | Instructions - 2-col grid */}
           <div className="px-4 sm:px-8 pb-12 grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12">
-            <div className="md:col-span-4">
+            <section
+              aria-labelledby="recipe-ingredients-heading"
+              className="min-w-0 md:col-span-4"
+            >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-primary dark:text-stone-200">Ingredients</h2>
+                <h2
+                  id="recipe-ingredients-heading"
+                  className="text-xl font-bold text-primary dark:text-stone-200"
+                >
+                  Ingredients{" "}
+                  <span className="text-sm font-medium text-stone-500 dark:text-stone-400">
+                    ({ingredientCount})
+                  </span>
+                </h2>
                 <span className="text-stone-500 dark:text-stone-400 text-sm">
                   {recipe.servings} {recipe.servings === 1 ? "serving" : "servings"}
                 </span>
               </div>
-              <div className="space-y-6">
-                {ingredientGroups.map((group, groupIndex) => (
-                  <div key={`${group.label || "main"}-${groupIndex}`}>
-                    {group.label ? (
-                      <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                        {group.label}
-                      </h3>
-                    ) : null}
-                    <ul className="space-y-4">
-                      {group.ingredients.map((ingredient, index) => {
-                        const displayUnit = getIngredientDisplayUnit(ingredient.unit)
-                        const displayAmount = typeof ingredient.amount === "string"
-                          ? ingredient.amount
-                          : toFraction(ingredient.amount)
-                        const quantityText = ingredient.amount != null
-                          ? `${displayAmount}${displayUnit ? ` ${displayUnit}` : ""}`
-                          : "—"
+              {ingredientGroups.length > 0 ? (
+                <div className="space-y-7">
+                  {ingredientGroups.map((group, groupIndex) => (
+                    <section
+                      key={`${group.label || "main"}-${groupIndex}`}
+                      data-ingredient-group={group.label || ""}
+                      className="min-w-0"
+                    >
+                      {group.label ? (
+                        <h3 className="mb-3 min-w-0 break-words text-sm font-semibold leading-5 text-primary dark:text-stone-300">
+                          {group.label}
+                        </h3>
+                      ) : null}
+                      <ul className="space-y-4">
+                        {group.ingredients.map((ingredient, index) => {
+                          const displayUnit = getIngredientDisplayUnit(ingredient.unit)
+                          const displayAmount = typeof ingredient.amount === "string"
+                            ? ingredient.amount
+                            : toFraction(ingredient.amount)
+                          const quantityText = ingredient.amount != null
+                            ? `${displayAmount}${displayUnit ? ` ${displayUnit}` : ""}`
+                            : "—"
 
-                        return (
-                          <li
-                            key={index}
-                            className="grid grid-cols-[minmax(3.75rem,auto)_1fr] items-start gap-x-3 text-stone-700 dark:text-stone-300"
-                          >
-                            <span className="pt-0.5 text-right text-sm font-normal tabular-nums text-stone-500 dark:text-stone-400">
-                              {quantityText}
-                            </span>
-                            <span className="min-w-0 text-sm font-semibold leading-6 text-stone-900 dark:text-stone-100">
-                              {ingredient.item}
-                              {ingredient.alternatives && ingredient.alternatives.length > 0 && (
-                                <span className="font-normal text-stone-600 dark:text-stone-400">
-                                  {" or "}
-                                  {ingredient.alternatives.join(" or ")}
-                                </span>
-                              )}
-                              {ingredient.modifier && (
-                                <span className="font-normal text-stone-500 dark:text-stone-400">, {ingredient.modifier}</span>
-                              )}
-                            </span>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </div>
+                          return (
+                            <li
+                              key={`${groupIndex}-${index}`}
+                              className="grid grid-cols-[minmax(3.75rem,auto)_1fr] items-start gap-x-3 text-stone-700 dark:text-stone-300"
+                            >
+                              <span className="pt-0.5 text-right text-sm font-normal tabular-nums text-stone-500 dark:text-stone-400">
+                                {quantityText}
+                              </span>
+                              <span className="min-w-0 text-sm font-semibold leading-6 text-stone-900 dark:text-stone-100">
+                                {ingredient.item}
+                                {ingredient.alternatives && ingredient.alternatives.length > 0 && (
+                                  <span className="font-normal text-stone-600 dark:text-stone-400">
+                                    {" or "}
+                                    {ingredient.alternatives.join(" or ")}
+                                  </span>
+                                )}
+                                {ingredient.modifier && (
+                                  <span className="font-normal text-stone-500 dark:text-stone-400">, {ingredient.modifier}</span>
+                                )}
+                              </span>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No ingredients available.</p>
+              )}
+            </section>
             <div className="md:col-span-8">
               <h2 className="text-xl font-bold text-primary dark:text-stone-200 mb-6">Instructions</h2>
               {instructionGroups.length > 0 ? (

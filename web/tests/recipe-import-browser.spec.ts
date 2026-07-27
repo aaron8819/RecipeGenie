@@ -230,6 +230,23 @@ async function assertImportedDetail(detail: Locator) {
   await expect(detail.getByText('Prep 15 min', { exact: true })).toBeVisible()
   await expect(detail.getByText('Cook 10 min', { exact: true })).toBeVisible()
   await expect(detail.getByText('Total 25 min', { exact: true })).toBeVisible()
+  const ingredientsHeading = detail.getByRole('heading', {
+    name: 'Ingredients (30)',
+    exact: true,
+  })
+  const ingredientsSection = ingredientsHeading.locator('xpath=ancestor::section[1]')
+  const ingredientGroups = ingredientsSection.locator('[data-ingredient-group]')
+  await expect(ingredientGroups).toHaveCount(3)
+  await expect(ingredientGroups.nth(0)).toHaveAttribute('data-ingredient-group', 'Taco Meat')
+  await expect(ingredientGroups.nth(1)).toHaveAttribute('data-ingredient-group', 'Salad')
+  await expect(ingredientGroups.nth(2)).toHaveAttribute(
+    'data-ingredient-group',
+    'Cilantro-Lime Yogurt Dressing'
+  )
+  await expect(ingredientGroups.nth(0).getByRole('listitem')).toHaveCount(8)
+  await expect(ingredientGroups.nth(1).getByRole('listitem')).toHaveCount(11)
+  await expect(ingredientGroups.nth(2).getByRole('listitem')).toHaveCount(11)
+  await expect(ingredientsSection.getByRole('listitem')).toHaveCount(30)
   await expect(detail.getByRole('heading', { name: 'Taco Meat', exact: true })).toBeVisible()
   await expect(detail.getByRole('heading', { name: 'Salad', exact: true })).toBeVisible()
   await expect(
@@ -428,6 +445,16 @@ test.describe('local recipe import browser verification', () => {
       const detail = page.getByRole('dialog').last()
       await expect(detail.locator('h1')).toHaveText(fixture.name)
       await expect(detail.getByRole('button', { name: 'Remove from favorites' })).toBeVisible()
+      const legacyIngredientsHeading = detail.getByRole('heading', {
+        name: 'Ingredients (1)',
+        exact: true,
+      })
+      const legacyIngredientsSection =
+        legacyIngredientsHeading.locator('xpath=ancestor::section[1]')
+      await expect(legacyIngredientsSection.getByRole('listitem')).toHaveCount(1)
+      await expect(legacyIngredientsSection.getByRole('heading', { level: 3 })).toHaveCount(0)
+      await expect(legacyIngredientsSection.getByText('old ingredient', { exact: true }))
+        .toBeVisible()
       await detail.getByRole('button', { name: /edit recipe/i }).click()
 
       const editDialog = page.getByRole('dialog').first()

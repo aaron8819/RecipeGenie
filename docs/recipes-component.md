@@ -10,6 +10,10 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - `recipe-dialog.tsx` still owns form/dialog orchestration, import parsing flow, and submit sequencing.
 - `recipe-list.tsx` still owns recipe browsing orchestration, including search/filter state, mobile-vs-desktop toolbar structure, and modal coordination.
 - Recipe persistence now has first-class support for `prep_time_minutes`, `cook_time_minutes`, `total_time_minutes`, and `notes`, plus additive `instruction_groups` persistence.
+- Ingredient `groupLabel` metadata is preserved in the existing `ingredients`
+  JSON payload. The final detail view groups only non-empty ingredients by
+  consecutive stored labels, preserving both group and ingredient order while
+  legacy unlabeled recipes render as one ordinary list.
 - Legacy flat `instructions` remains persisted for compatibility and the current textarea-based edit model.
 - The recipe detail dialog is query-backed and action-complete for common follow-up actions:
   - favorite toggle
@@ -98,7 +102,8 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 ### Recipe structure compatibility
 
-- `recipe-structure.ts` is the canonical compatibility layer for recipe notes and grouped instructions.
+- `recipe-structure.ts` is the canonical compatibility layer for ingredient
+  groups, recipe notes, and grouped instructions.
 - When `instruction_groups` exists, render and export flows should prefer it.
 - Older recipes that only have flat `instructions` must continue to render correctly.
 - Legacy `Notes:` label lines inside flat instructions are still supported at hydration/render time and should not be reintroduced into persisted notes-aware recipes.
