@@ -1,97 +1,33 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { Locator, Page, TestInfo } from '@playwright/test'
 import type { Database } from '../src/types/database.generated'
-import { MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT } from '../src/lib/__tests__/recipe-parser.fixtures'
+import {
+  MARKDOWN_TACO_SALAD_RECIPE_TEXT,
+  STRUCTURED_LAMB_RECIPE_TEXT,
+} from '../src/lib/__tests__/recipe-parser.fixtures'
+import { parseRecipeText } from '../src/lib/recipe-parser'
+import { normalizeRecipeIngredientsForSubmission } from '../src/components/recipes/recipe-dialog.defaults'
 import { E2E_CONFIG } from './e2e-env'
 import { expect, test } from './fixtures'
 
-const IMPORTED_TITLE = 'Sesame Chicken'
+const IMPORTED_TITLE = 'Taco Salad'
 const REPLACEMENT_RECIPE_UUID = '90000000-0000-4000-8000-000000000901'
 const REPLACEMENT_CREATED_AT = '2024-01-02T03:04:05.000Z'
-const SERVINGS_WARNING =
-  'Servings range "4–5" will be saved as 4 because Recipe Genie stores one serving count.'
-const MULTILINE_INSTRUCTION =
-  'Rest the chicken for two minutes. Keep the skillet uncovered so the coating stays crisp.'
-const EXPECTED_INGREDIENTS = [
-  {
-    amount: 1.5,
-    unit: 'lb',
-    item: 'boneless, skinless chicken thighs',
-    groupLabel: 'Chicken',
-    originalText: '1½ lb boneless, skinless chicken thighs, cut into 1-inch pieces',
-    displayText: 'boneless, skinless chicken thighs, cut into 1-inch pieces',
-  },
-  {
-    amount: 0.75,
-    unit: 'tsp',
-    item: 'kosher salt',
-    groupLabel: 'Chicken',
-    originalText: '¾ tsp kosher salt',
-    displayText: 'kosher salt',
-  },
-  {
-    amount: 0.375,
-    unit: 'tsp',
-    item: 'black pepper',
-    groupLabel: 'Chicken',
-    originalText: '⅜ tsp black pepper',
-    displayText: 'black pepper',
-  },
-  {
-    amount: 0.25,
-    unit: 'cup',
-    item: 'low-sodium soy sauce',
-    groupLabel: 'Sesame Sauce',
-    originalText: '¼ cup low-sodium soy sauce',
-    displayText: 'low-sodium soy sauce',
-  },
-  {
-    amount: 0.25,
-    unit: 'cup',
-    item: 'honey',
-    groupLabel: 'Sesame Sauce',
-    originalText: '¼ cup honey',
-    displayText: 'honey',
-  },
-  {
-    amount: 1,
-    unit: 'tbsp',
-    item: 'toasted sesame oil',
-    groupLabel: 'Sesame Sauce',
-    originalText: '1 tbsp toasted sesame oil',
-    displayText: 'toasted sesame oil',
-  },
-  {
-    amount: '0.5–1',
-    unit: 'tsp',
-    item: 'red pepper flakes',
-    groupLabel: 'Sesame Sauce',
-    originalText: '½–1 tsp red pepper flakes',
-    displayText: 'red pepper flakes',
-  },
-]
-const EXPECTED_INSTRUCTIONS = [
-  'Cook the rice according to package directions.',
-  'Season the chicken with kosher salt and black pepper.',
-  'Whisk the soy sauce, honey, and sesame oil together.',
-  'Heat a large skillet over medium-high heat.',
-  'Add the chicken in a single layer.',
-  'Brown the first side without moving the pieces.',
-  'Turn the chicken and cook the second side.',
-  'Reduce the heat to medium.',
-  'Pour the sauce into the skillet.',
-  'Stir until every piece is coated.',
-  'Simmer until the sauce thickens.',
-  'Check that the chicken is cooked through.',
-  'Remove the skillet from the heat.',
-  MULTILINE_INSTRUCTION,
-  'Spoon the chicken over rice.',
-  'Garnish with sesame seeds and serve.',
-]
-const EXPECTED_NOTES = [
-  'Keep the frying oil close to 350°F.',
-  'Sauce the chicken immediately before serving.',
-]
+const EXPECTED_PARSED_RECIPE = parseRecipeText(
+  MARKDOWN_TACO_SALAD_RECIPE_TEXT
+)
+const EXPECTED_INGREDIENTS = JSON.parse(
+  JSON.stringify(
+    normalizeRecipeIngredientsForSubmission(EXPECTED_PARSED_RECIPE.ingredients)
+  )
+) as RecipeRow['ingredients']
+const EXPECTED_INSTRUCTIONS = EXPECTED_PARSED_RECIPE.instructions
+const EXPECTED_NOTES = EXPECTED_PARSED_RECIPE.notes || []
+const LEGACY_PARSED_RECIPE = parseRecipeText(STRUCTURED_LAMB_RECIPE_TEXT)
+const LEGACY_TITLE = LEGACY_PARSED_RECIPE.name
+const LEGACY_INSTRUCTIONS =
+  LEGACY_PARSED_RECIPE.instructionGroups?.flatMap((group) => group.steps) || []
+const LEGACY_NOTES = LEGACY_PARSED_RECIPE.notes || []
 
 type RecipeRow = Database['public']['Tables']['recipes']['Row']
 
@@ -246,18 +182,31 @@ async function removePriorImportedTitle(client: SupabaseClient<Database>) {
   )
 }
 
+async function removePriorLegacyFixture(client: SupabaseClient<Database>) {
+  const { data, error } = await client
+    .from('recipes')
+    .select('*')
+    .eq('name', LEGACY_TITLE)
+  if (error) throw new Error(`Prior legacy recipe lookup failed: ${error.message}`)
+  await deleteRecipes(
+    client,
+    data
+      .filter((row) =>
+        JSON.stringify(row.instructions) === JSON.stringify(LEGACY_INSTRUCTIONS) &&
+        JSON.stringify(row.notes) === JSON.stringify(LEGACY_NOTES)
+      )
+      .map((row) => row.recipe_uuid)
+  )
+}
+
 function assertImportedRow(row: RecipeRow) {
   expect(row.name).toBe(IMPORTED_TITLE)
   expect(row.servings).toBe(4)
-  expect(row.prep_time_minutes).toBe(20)
-  expect(row.cook_time_minutes).toBe(25)
-  expect(row.total_time_minutes).toBe(45)
-  expect(row.ingredients).toHaveLength(7)
-  expect(row.ingredients).toEqual(
-    EXPECTED_INGREDIENTS.map(({ displayText: _displayText, ...ingredient }) =>
-      expect.objectContaining(ingredient)
-    )
-  )
+  expect(row.prep_time_minutes).toBe(15)
+  expect(row.cook_time_minutes).toBe(10)
+  expect(row.total_time_minutes).toBe(25)
+  expect(row.ingredients).toHaveLength(30)
+  expect(row.ingredients).toEqual(EXPECTED_INGREDIENTS)
   expect(row.instructions).toEqual(EXPECTED_INSTRUCTIONS)
   expect(row.notes).toEqual(EXPECTED_NOTES)
   expect(row.instruction_groups).toEqual([
@@ -278,21 +227,33 @@ async function openImportedRecipe(page: Page) {
 
 async function assertImportedDetail(detail: Locator) {
   await expect(detail.getByText('4 servings', { exact: true })).toBeVisible()
-  await expect(detail.getByText('Prep 20 min', { exact: true })).toBeVisible()
-  await expect(detail.getByText('Cook 25 min', { exact: true })).toBeVisible()
-  await expect(detail.getByText('Total 45 min', { exact: true })).toBeVisible()
-  await expect(detail.getByRole('heading', { name: 'Chicken', exact: true })).toBeVisible()
-  await expect(detail.getByRole('heading', { name: 'Sesame Sauce', exact: true })).toBeVisible()
-  for (const ingredient of EXPECTED_INGREDIENTS) {
-    await expect(
-      detail.getByText(ingredient.displayText, { exact: true })
-    ).toBeVisible()
-  }
+  await expect(detail.getByText('Prep 15 min', { exact: true })).toBeVisible()
+  await expect(detail.getByText('Cook 10 min', { exact: true })).toBeVisible()
+  await expect(detail.getByText('Total 25 min', { exact: true })).toBeVisible()
+  await expect(detail.getByRole('heading', { name: 'Taco Meat', exact: true })).toBeVisible()
+  await expect(detail.getByRole('heading', { name: 'Salad', exact: true })).toBeVisible()
+  await expect(
+    detail.getByRole('heading', {
+      name: 'Cilantro-Lime Yogurt Dressing',
+      exact: true,
+    })
+  ).toBeVisible()
+  await expect(
+    detail.getByText('lean ground beef or ground turkey', { exact: true })
+  ).toBeVisible()
+  await expect(
+    detail.getByText(
+      'chopped romaine, shredded iceberg, arugula, or other greens',
+      { exact: true }
+    )
+  ).toBeVisible()
+  await expect(detail.getByText('plain Greek yogurt', { exact: true })).toBeVisible()
   for (const instruction of EXPECTED_INSTRUCTIONS) {
     await expect(detail.getByText(instruction, { exact: true })).toBeVisible()
   }
-  await expect(detail.getByText(EXPECTED_NOTES[0], { exact: true })).toBeVisible()
-  await expect(detail.getByText(EXPECTED_NOTES[1], { exact: true })).toBeVisible()
+  for (const note of EXPECTED_NOTES) {
+    await expect(detail.getByText(note, { exact: true })).toBeVisible()
+  }
 }
 
 async function finishScenario({
@@ -337,14 +298,16 @@ async function finishScenario({
 async function reviewMarkdownImport(dialog: Locator) {
   await dialog.getByRole('tab', { name: /^import$/i }).click()
   await dialog.getByLabel('Paste Recipe Text').fill(
-    MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT
+    MARKDOWN_TACO_SALAD_RECIPE_TEXT
   )
   await expect(dialog.getByText(IMPORTED_TITLE, { exact: true })).toBeVisible()
-  await expect(dialog.getByText(SERVINGS_WARNING, { exact: true })).toBeVisible()
+  await expect(dialog.getByText('Category beef', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('30', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('11', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Ingredients Preview', { exact: true })).toBeVisible()
   await expect(dialog.getByText('Instructions Preview', { exact: true })).toBeVisible()
-  await expect(dialog.getByText('Chicken', { exact: true }).first()).toBeVisible()
-  await expect(dialog.getByText('Sesame Sauce', { exact: true }).first()).toBeVisible()
+  await expect(dialog.getByText('Taco Meat', { exact: true }).first()).toBeVisible()
+  await expect(dialog.getByText('Salad', { exact: true }).first()).toBeVisible()
 }
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -375,6 +338,7 @@ test.describe('local recipe import browser verification', () => {
 
       await dialog.getByRole('button', { name: /^apply to form$/i }).click()
       await expect(dialog.locator('#name-add')).toHaveValue(IMPORTED_TITLE)
+      await expect(dialog.getByRole('combobox').first()).toHaveText(/beef/i)
       await expect(dialog.locator('#servings-add')).toHaveValue('4')
 
       const createResponse = page.waitForResponse((response) =>
@@ -393,6 +357,7 @@ test.describe('local recipe import browser verification', () => {
       const row = rows[0]
       cleanupIds.add(row.recipe_uuid)
       assertImportedRow(row)
+      expect(row.category).toBe('beef')
       console.log('[recipe-import] create assertions: PASS')
 
       let detail = page.getByRole('dialog').last()
@@ -469,10 +434,10 @@ test.describe('local recipe import browser verification', () => {
       await expect(editDialog.locator('h1')).toHaveText('Edit Recipe')
       await editDialog.getByRole('tab', { name: /^replace$/i }).click()
       await editDialog.getByLabel('Paste Updated Recipe Text').fill(
-        MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT
+        MARKDOWN_TACO_SALAD_RECIPE_TEXT
       )
       await expect(editDialog.getByText(IMPORTED_TITLE, { exact: true })).toBeVisible()
-      await expect(editDialog.getByText(SERVINGS_WARNING, { exact: true })).toBeVisible()
+      await expect(editDialog.getByText('Category beef', { exact: true })).toBeVisible()
       await expect(
         editDialog.getByText('Replace current recipe draft', { exact: true })
       ).toBeVisible()
@@ -529,6 +494,73 @@ test.describe('local recipe import browser verification', () => {
         cleanup: () => deleteRecipes(client, cleanupIds),
         diagnostics,
         label: 'replacement',
+        testInfo,
+      })
+    }
+  })
+
+  test('previews and imports a representative legacy plain-text recipe', async ({
+    page,
+    setupAuth,
+    navigateToTab,
+  }, testInfo) => {
+    expect(E2E_CONFIG.target).toBe('local')
+    const diagnostics = createDiagnostics(page)
+    const { client } = await authenticatedClient()
+    const cleanupIds = new Set<string>()
+
+    try {
+      await removePriorLegacyFixture(client)
+      await setupAuth()
+      await navigateToTab('recipes')
+
+      await page.getByRole('button', { name: /add recipe/i }).first().click()
+      const dialog = page.getByRole('dialog').first()
+      await dialog.getByRole('tab', { name: /^import$/i }).click()
+      await dialog.getByLabel('Paste Recipe Text').fill(
+        STRUCTURED_LAMB_RECIPE_TEXT
+      )
+      await expect(dialog.getByText(LEGACY_TITLE, { exact: true })).toBeVisible()
+      await expect(dialog.getByText('10', { exact: true })).toBeVisible()
+      await expect(dialog.getByText('13', { exact: true })).toBeVisible()
+      await expect(dialog.getByText('Pan Sauce', { exact: true }).first()).toBeVisible()
+
+      await dialog.getByRole('button', { name: /^apply to form$/i }).click()
+      await expect(dialog.locator('#name-add')).toHaveValue(LEGACY_TITLE)
+      const createResponse = page.waitForResponse((response) =>
+        response.request().method() === 'POST' &&
+        response.url().includes('/rest/v1/recipes')
+      )
+      await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+      expect((await createResponse).ok()).toBe(true)
+
+      const { data: rows, error } = await client
+        .from('recipes')
+        .select('*')
+        .eq('name', LEGACY_TITLE)
+      if (error) throw error
+      expect(rows).toHaveLength(1)
+      const row = rows[0]
+      cleanupIds.add(row.recipe_uuid)
+      expect(row.ingredients).toHaveLength(10)
+      expect(row.instructions).toEqual(LEGACY_INSTRUCTIONS)
+      expect(row.notes).toEqual(LEGACY_NOTES)
+
+      const detail = page.getByRole('dialog').last()
+      await expect(detail.locator('h1')).toHaveText(LEGACY_TITLE)
+      await expect(
+        detail.getByText(LEGACY_NOTES[0], { exact: true })
+      ).toBeVisible()
+      console.log('[recipe-import] legacy preview/import assertions: PASS')
+    } finally {
+      await finishScenario({
+        client,
+        cleanup: async () => {
+          await deleteRecipes(client, cleanupIds)
+          await removePriorLegacyFixture(client)
+        },
+        diagnostics,
+        label: 'legacy',
         testInfo,
       })
     }

@@ -29,6 +29,7 @@ import {
 } from "../recipe-import.parser"
 import {
   MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT,
+  MARKDOWN_TACO_SALAD_RECIPE_TEXT,
   STRUCTURED_LAMB_RECIPE_TEXT,
 } from "@/lib/__tests__/recipe-parser.fixtures"
 
@@ -483,6 +484,89 @@ describe("recipe dialog defaults helpers", () => {
       "Keep the frying oil close to 350°F.",
       "Sauce the chicken immediately before serving.",
     ])
+  })
+
+  it("uses the same Taco Salad parse result for preview, import, and replacement", () => {
+    const preview = parseRecipeImportPreview(MARKDOWN_TACO_SALAD_RECIPE_TEXT)
+    const imported = parseRecipeImportText(MARKDOWN_TACO_SALAD_RECIPE_TEXT)
+
+    expect(preview).not.toBeNull()
+    expect(imported.error).toBeNull()
+    expect(imported.parsedRecipe).toEqual(preview)
+
+    const created = applyParsedRecipeToFormValues(
+      buildNewRecipeDialogFormValues(["chicken", "beef"]),
+      preview!,
+      { applyCategory: true, categories: ["chicken", "beef"] }
+    )
+    expect(created).toMatchObject({
+      name: "Taco Salad",
+      category: "beef",
+      servings: 4,
+      prepTimeMinutes: 15,
+      cookTimeMinutes: 10,
+      totalTimeMinutes: 25,
+    })
+    expect(created.ingredients).toHaveLength(30)
+    expect(created.instructionGroups[0]?.steps).toHaveLength(11)
+    expect(created.notes.split("\n")).toHaveLength(4)
+
+    const current = {
+      ...buildNewRecipeDialogFormValues(["lamb"]),
+      name: "Protected Recipe",
+      category: "lamb",
+      tags: ["preserve-me"],
+      imageUrl: "https://example.com/preserved.jpg",
+    }
+    const replaced = applyParsedRecipeToFormValues(current, preview!)
+
+    expect(replaced).toMatchObject({
+      name: "Taco Salad",
+      category: "lamb",
+      tags: ["preserve-me"],
+      imageUrl: "https://example.com/preserved.jpg",
+    })
+    expect(replaced.ingredients).toEqual(created.ingredients)
+    expect(replaced.instructionGroups).toEqual(created.instructionGroups)
+    expect(replaced.notes).toBe(created.notes)
+  })
+
+  it("matches imported categories case-insensitively and retains the fallback for unknown values", () => {
+    const values = buildNewRecipeDialogFormValues(["Chicken", "Dinner Favorites"])
+
+    expect(
+      applyParsedRecipeToFormValues(
+        values,
+        {
+          name: "Roast Chicken",
+          category: "chicken",
+          ingredients: [],
+          instructions: [],
+          warnings: [],
+        },
+        {
+          applyCategory: true,
+          categories: ["Chicken", "Dinner Favorites"],
+        }
+      ).category
+    ).toBe("Chicken")
+
+    expect(
+      applyParsedRecipeToFormValues(
+        values,
+        {
+          name: "Fish Tacos",
+          category: "seafood",
+          ingredients: [],
+          instructions: [],
+          warnings: [],
+        },
+        {
+          applyCategory: true,
+          categories: ["Chicken", "Dinner Favorites"],
+        }
+      ).category
+    ).toBe("Chicken")
   })
 
   it("replaces all supported parsed fields from the same Markdown contract", () => {

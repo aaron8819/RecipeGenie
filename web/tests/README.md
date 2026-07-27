@@ -100,13 +100,15 @@ npm run verify:recipe-import
 
 Use this explicit higher-confidence command for recipe parser, import dialog,
 recipe persistence, or replacement-flow changes. It drives the actual desktop
-UI through two loopback-only authenticated scenarios:
+UI through three loopback-only authenticated scenarios:
 
-- create Sesame Chicken from the canonical Markdown fixture, review the parsed
-  warning and preview, save, refresh/reopen, and assert stored recipe structure;
+- create Taco Salad from the conventional Markdown regression fixture, review
+  parsed metadata/counts/groups, save, refresh/reopen, and assert stored recipe
+  structure;
 - seed a deterministic recipe through an authenticated local client, replace it
   through the current edit/import UI, refresh/reopen, and assert both replaced
-  content and preserved identity/metadata.
+  content and preserved identity/metadata;
+- preview and import the representative structured legacy plain-text fixture.
 
 The verifier confirms the Recipe Genie worktree identity, rejects inherited
 shared or production-like Supabase configuration, reuses running local

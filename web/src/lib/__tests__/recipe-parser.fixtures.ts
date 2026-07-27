@@ -102,3 +102,83 @@ export const MARKDOWN_SESAME_CHICKEN_RECIPE_TEXT = `# Sesame Chicken
 
 * Keep the frying oil close to 350°F.
 - Sauce the chicken immediately before serving.`
+
+export const MARKDOWN_TACO_SALAD_RECIPE_TEXT = `# Taco Salad
+
+Category: Beef
+Servings: 4
+Prep Time: 15 minutes
+Cook Time: 10 minutes
+Total Time: 25 minutes
+
+## Ingredients
+
+### Taco Meat
+
+- 1 lb lean ground beef or ground turkey
+- 1 tsp chili powder
+- 1 tsp ground cumin
+- 1/2 tsp smoked paprika
+- 1/2 tsp garlic powder
+- 1/2 tsp onion powder
+- 1/2 tsp kosher salt
+- 1/4 cup water
+
+### Salad
+
+- 6 cups chopped romaine, shredded iceberg, arugula, or other greens
+- 1 cup grape tomatoes, halved
+- 1 cup corn
+- 1/4 cup diced red or white onion
+- 1 avocado, diced
+- 1/2 cup shredded Mexican-blend or sharp cheddar cheese
+- 1/4 cup sliced black olives
+- 1/4 cup sliced pepperoncini
+- 1/4 cup chopped cilantro
+- Lime wedges, for serving
+- Crushed tortilla chips, optional
+
+### Cilantro-Lime Yogurt Dressing
+
+- 1/2 cup plain Greek yogurt
+- 1 tbsp fresh lime juice, plus more to taste
+- 1 tbsp olive oil
+- 1 small garlic clove, finely grated
+- 2 tbsp chopped cilantro
+- 1 tsp ground cumin
+- 1/2 tsp chili powder
+- 1/4 tsp smoked paprika
+- 1/2 tsp kosher salt
+- 1/4 tsp black pepper
+- 1–2 tbsp water, as needed
+
+## Instructions
+
+1. Heat a large skillet over medium-high heat.
+
+2. Add the ground beef or turkey. Cook, breaking it into small pieces, until browned and fully cooked, about 6–8 minutes. Drain excess fat if needed.
+
+3. Add the chili powder, cumin, smoked paprika, garlic powder, onion powder, salt, and water.
+
+4. Stir until evenly combined and simmer for 2–3 minutes, until the water has mostly evaporated and the meat is coated with the seasoning. Transfer the meat to a plate.
+
+5. Add the corn to the same skillet and cook for 2–3 minutes, stirring occasionally, until heated through and lightly charred.
+
+6. Make the dressing by whisking together the Greek yogurt, lime juice, olive oil, garlic, cilantro, cumin, chili powder, smoked paprika, salt, and black pepper.
+
+7. Whisk in water 1 tablespoon at a time until the dressing reaches a pourable consistency. Taste and add more lime juice if needed.
+
+8. Divide the greens among four bowls.
+
+9. Top with the taco meat, charred corn, tomatoes, onion, avocado, cheese, black olives, and pepperoncini.
+
+10. Drizzle with the cilantro-lime yogurt dressing.
+
+11. Finish with chopped cilantro, a squeeze of lime, and crushed tortilla chips if desired.
+
+## Notes
+
+- Shredded iceberg provides a classic taco-salad texture. Romaine is sturdier, while arugula gives the salad a more peppery flavor.
+- Pepperoncini contribute substantial acidity. Taste the assembled salad before adding more lime.
+- For meal prep, store the meat, salad ingredients, dressing, avocado, and tortilla chips separately.
+- The meat can be served warm or allowed to cool slightly before assembling the salad.`

@@ -389,10 +389,12 @@ export function RecipeDialog({
         notes,
         imageUrl,
       },
-      preview
+      preview,
+      { applyCategory: !isEditing, categories }
     )
 
     setName(formValues.name)
+    setCategory(formValues.category)
     setServings(formValues.servings)
     setPrepTimeMinutes(formValues.prepTimeMinutes)
     setCookTimeMinutes(formValues.cookTimeMinutes)
@@ -413,6 +415,8 @@ export function RecipeDialog({
     instructionGroups,
     notes,
     imageUrl,
+    isEditing,
+    categories,
   ])
 
   const currentDraft = {

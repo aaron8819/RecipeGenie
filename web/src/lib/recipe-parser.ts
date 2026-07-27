@@ -14,6 +14,7 @@ interface RecipeLine {
 interface SectionBlock {
   kind: SectionKind
   header: string
+  headingLevel?: number
   lines: RecipeLine[]
 }
 
@@ -44,6 +45,7 @@ export interface ParsedInstructionGroup {
 
 export interface ParsedRecipe {
   name: string
+  category?: string
   ingredients: Ingredient[]
   instructions: string[]
   servings?: number
@@ -78,10 +80,16 @@ export function parseRecipeText(text: string): ParsedRecipe {
     }
   }
 
-  const { prelude, sections, ignoredMarkdownSections } = splitIntoSections(lines)
+  const {
+    prelude,
+    sections,
+    ignoredMarkdownSections,
+    hasMarkdownSections,
+  } = splitIntoSections(lines)
   const preludeMetadata = extractPreludeMetadata(prelude)
 
   let name = inferRecipeName(preludeMetadata.titleLine, preludeMetadata.remainingLines)
+  const category = preludeMetadata.category
   let servings = preludeMetadata.servings
   const metadata = buildRecipeMetadata(preludeMetadata)
 
@@ -106,9 +114,9 @@ export function parseRecipeText(text: string): ParsedRecipe {
     }
   }
 
-  const ingredientsSection = sections.find((section) => section.kind === "ingredients")
-  const instructionsSection = sections.find((section) => section.kind === "instructions")
-  const notesSection = sections.find((section) => section.kind === "notes")
+  const ingredientsSections = sections.filter((section) => section.kind === "ingredients")
+  const instructionsSections = sections.filter((section) => section.kind === "instructions")
+  const notesSections = sections.filter((section) => section.kind === "notes")
 
   let ingredientGroups: ParsedIngredientGroup[] = []
   let instructionGroups: ParsedInstructionGroup[] = []
@@ -127,19 +135,29 @@ export function parseRecipeText(text: string): ParsedRecipe {
     instructionGroups = fallback.instructionGroups
     notes = fallback.notes
   } else {
-    ingredientGroups = ingredientsSection
-      ? parseIngredientSection(ingredientsSection.lines)
-      : parseIngredientSection(inferPreludeIngredientLines(preludeMetadata.remainingLines, name))
+    ingredientGroups = ingredientsSections.length > 0
+      ? ingredientsSections.flatMap((section) =>
+          parseIngredientSection(section.lines)
+        )
+      : hasMarkdownSections
+        ? []
+        : parseIngredientSection(
+            inferPreludeIngredientLines(preludeMetadata.remainingLines, name)
+          )
 
-    instructionGroups = instructionsSection
-      ? parseInstructionSection(instructionsSection.lines)
-      : []
+    instructionGroups = instructionsSections.flatMap((section) =>
+      parseInstructionSection(section.lines)
+    )
 
-    notes = notesSection ? parseNotesSection(notesSection.lines) : []
+    notes = notesSections.flatMap((section) => parseNotesSection(section.lines))
   }
 
   const ingredients = flattenIngredientGroups(ingredientGroups)
-  const instructions = flattenInstructionGroupsForCurrentModel(instructionGroups, notes)
+  const instructions = flattenInstructionGroupsForCurrentModel(
+    instructionGroups,
+    notes,
+    !hasMarkdownSections
+  )
 
   if (!name || name === "Untitled Recipe") {
     warnings.push('No recipe name found - using "Untitled Recipe"')
@@ -148,7 +166,9 @@ export function parseRecipeText(text: string): ParsedRecipe {
   if (ingredients.length === 0) {
     warnings.push('No ingredients found - add an "Ingredients" section')
   } else {
-    const noAmountIngredients = ingredients.filter(shouldWarnMissingIngredientAmount)
+    const noAmountIngredients = ingredients.filter((ingredient) =>
+      shouldWarnMissingIngredientAmount(ingredient, hasMarkdownSections)
+    )
     if (noAmountIngredients.length === 1) {
       warnings.push(`"${noAmountIngredients[0].item}" has no amount`)
     } else if (noAmountIngredients.length > 1 && noAmountIngredients.length <= 3) {
@@ -162,12 +182,13 @@ export function parseRecipeText(text: string): ParsedRecipe {
     }
   }
 
-  if (instructionGroups.length === 0 && notes.length === 0) {
+  if (instructionGroups.length === 0) {
     warnings.push('No instructions found - add a "Directions" or "Instructions" section')
   }
 
   return {
     name: name || "Untitled Recipe",
+    category,
     ingredients,
     instructions,
     servings,
@@ -195,36 +216,56 @@ function splitIntoSections(lines: RecipeLine[]): {
   prelude: RecipeLine[]
   sections: SectionBlock[]
   ignoredMarkdownSections: string[]
+  hasMarkdownSections: boolean
 } {
   const prelude: RecipeLine[] = []
   const sections: SectionBlock[] = []
   const ignoredMarkdownSections: string[] = []
   let currentSection: SectionBlock | null = null
   let ignoringMarkdownSection = false
+  let hasMarkdownSections = false
 
   for (const line of lines) {
     const heading = parseMarkdownHeading(line.trimmed)
     const kind = parseTopLevelSectionKind(line.trimmed)
 
-    if (heading && heading.level <= 2) {
+    if (heading && kind) {
+      if (currentSection) {
+        sections.push(currentSection)
+      }
+
+      ignoringMarkdownSection = false
+      hasMarkdownSections = true
+      currentSection = {
+        kind,
+        header: line.trimmed,
+        headingLevel: heading.level,
+        lines: [],
+      }
+      continue
+    }
+
+    if (heading) {
+      if (
+        currentSection &&
+        currentSection.headingLevel !== undefined &&
+        heading.level > currentSection.headingLevel
+      ) {
+        currentSection.lines.push(line)
+        continue
+      }
+
       if (currentSection) {
         sections.push(currentSection)
         currentSection = null
       }
 
-      if (heading.level === 2 && kind) {
-        ignoringMarkdownSection = false
-        currentSection = {
-          kind,
-          header: line.trimmed,
-          lines: [],
-        }
-      } else if (heading.level === 2) {
-        ignoringMarkdownSection = true
-        ignoredMarkdownSections.push(heading.label)
-      } else if (sections.length === 0) {
+      if (sections.length === 0) {
         ignoringMarkdownSection = false
         prelude.push(line)
+      } else {
+        ignoringMarkdownSection = true
+        ignoredMarkdownSections.push(heading.label)
       }
       continue
     }
@@ -254,15 +295,16 @@ function splitIntoSections(lines: RecipeLine[]): {
     sections.push(currentSection)
   }
 
-  return { prelude, sections, ignoredMarkdownSections }
+  return {
+    prelude,
+    sections,
+    ignoredMarkdownSections,
+    hasMarkdownSections,
+  }
 }
 
 function parseTopLevelSectionKind(line: string): SectionKind | null {
   const heading = parseMarkdownHeading(line)
-  if (heading && heading.level !== 2) {
-    return null
-  }
-
   const normalized = normalizeHeaderLabel(heading?.label || line)
   if (!normalized) return null
 
@@ -308,6 +350,7 @@ function parseMarkdownHeading(line: string): MarkdownHeading | null {
 function extractPreludeMetadata(lines: RecipeLine[]): {
   titleLine?: string
   remainingLines: RecipeLine[]
+  category?: string
   servings?: number
   servingsText?: string
   prepTime?: string
@@ -320,6 +363,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
   const remainingLines: RecipeLine[] = []
   const metadata: {
     titleLine?: string
+    category?: string
     servings?: number
     servingsText?: string
     prepTime?: string
@@ -332,7 +376,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
 
   const markdownTitle = lines
     .map((line) => parseMarkdownHeading(line.trimmed))
-    .find((heading) => heading?.level === 1)
+    .find((heading) => heading !== null)
 
   if (markdownTitle) {
     metadata.titleLine = markdownTitle.label
@@ -348,9 +392,6 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
 
     const heading = parseMarkdownHeading(trimmed)
     if (heading) {
-      if (heading.level !== 1) {
-        remainingLines.push(line)
-      }
       continue
     }
 
@@ -374,12 +415,21 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
       continue
     }
 
+    const categoryMatch = trimmed.match(/^category\s*:\s*(.+)$/i)
+    if (categoryMatch) {
+      metadata.category = normalizeRecipeCategory(categoryMatch[1])
+      continue
+    }
+
     const servingsMatch = trimmed.match(
       /^(?:servings?|serves|yield|makes?)\s*:?\s*(.+)$/i
     )
     if (servingsMatch) {
       const value = stripMarkdownInlineSyntax(servingsMatch[1]).trim()
       metadata.servings = extractServingsFromText(value)
+      if (isServingRange(value)) {
+        metadata.servingsText = value
+      }
       continue
     }
 
@@ -410,6 +460,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
   return {
     titleLine: metadata.titleLine,
     remainingLines,
+    category: metadata.category,
     servings: metadata.servings,
     servingsText: metadata.servingsText,
     prepTime: metadata.prepTime,
@@ -439,6 +490,7 @@ function parseBoldAttributeLine(
 
 function applyPreludeAttribute(
   metadata: {
+    category?: string
     servings?: number
     servingsText?: string
     prepTime?: string
@@ -452,6 +504,11 @@ function applyPreludeAttribute(
   value: string
 ): boolean {
   const normalizedLabel = label.toLowerCase().replace(/\s+/g, " ").trim()
+
+  if (normalizedLabel === "category") {
+    metadata.category = normalizeRecipeCategory(value)
+    return true
+  }
 
   if (/^(?:servings?|serves|yield|makes?)$/.test(normalizedLabel)) {
     metadata.servings = extractServingsFromText(value)
@@ -530,6 +587,11 @@ function inferRecipeName(titleLine: string | undefined, remainingPreludeLines: R
 }
 
 function cleanDetectedTitle(value: string): string {
+  const heading = parseMarkdownHeading(value.trim())
+  if (heading) {
+    return heading.label
+  }
+
   return stripMarkdownInlineSyntax(
     value.replace(/^(?:title|recipe|name)\s*:\s*/i, "")
   ).trim()
@@ -609,6 +671,7 @@ function inferPreludeIngredientLines(lines: RecipeLine[], name: string): RecipeL
 function parseIngredientSection(lines: RecipeLine[]): ParsedIngredientGroup[] {
   const groups: ParsedIngredientGroup[] = []
   let currentGroup: ParsedIngredientGroup = { ingredients: [] }
+  let pendingMarkdownItem: string | null = null
 
   const pushCurrentGroup = () => {
     if (currentGroup.ingredients.length === 0) {
@@ -618,35 +681,10 @@ function parseIngredientSection(lines: RecipeLine[]): ParsedIngredientGroup[] {
     groups.push(currentGroup)
   }
 
-  for (const line of lines) {
-    if (!line.trimmed) {
-      continue
-    }
-
-    const heading = parseMarkdownHeading(line.trimmed)
-    if (heading) {
-      if (heading.level === 3) {
-        pushCurrentGroup()
-        currentGroup = {
-          label: heading.label,
-          ingredients: [],
-        }
-      }
-      continue
-    }
-
-    if (isSubsectionLabel(line.trimmed)) {
-      pushCurrentGroup()
-      currentGroup = {
-        label: stripTrailingColon(line.trimmed),
-        ingredients: [],
-      }
-      continue
-    }
-
-    const ingredient = parseIngredientLine(line.trimmed)
+  const addIngredient = (value: string) => {
+    const ingredient = parseIngredientLine(value)
     if (!ingredient.item) {
-      continue
+      return
     }
 
     currentGroup.ingredients.push(
@@ -659,6 +697,63 @@ function parseIngredientSection(lines: RecipeLine[]): ParsedIngredientGroup[] {
     )
   }
 
+  const flushPendingMarkdownItem = () => {
+    if (!pendingMarkdownItem) {
+      return
+    }
+
+    addIngredient(pendingMarkdownItem)
+    pendingMarkdownItem = null
+  }
+
+  for (const line of lines) {
+    if (!line.trimmed) {
+      flushPendingMarkdownItem()
+      continue
+    }
+
+    const heading = parseMarkdownHeading(line.trimmed)
+    if (heading) {
+      flushPendingMarkdownItem()
+      pushCurrentGroup()
+      currentGroup = {
+        label: heading.label,
+        ingredients: [],
+      }
+      continue
+    }
+
+    if (isRecipeMetadataLine(line.trimmed)) {
+      flushPendingMarkdownItem()
+      continue
+    }
+
+    if (isSubsectionLabel(line.trimmed)) {
+      flushPendingMarkdownItem()
+      pushCurrentGroup()
+      currentGroup = {
+        label: stripTrailingColon(line.trimmed),
+        ingredients: [],
+      }
+      continue
+    }
+
+    if (isBulletItem(line.trimmed)) {
+      flushPendingMarkdownItem()
+      pendingMarkdownItem = line.trimmed
+      continue
+    }
+
+    if (pendingMarkdownItem && /^\s+/.test(line.raw)) {
+      pendingMarkdownItem = `${pendingMarkdownItem} ${line.trimmed}`
+      continue
+    }
+
+    flushPendingMarkdownItem()
+    addIngredient(line.trimmed)
+  }
+
+  flushPendingMarkdownItem()
   pushCurrentGroup()
   return groups
 }
@@ -695,7 +790,17 @@ function parseInstructionSection(lines: RecipeLine[]): ParsedInstructionGroup[] 
       continue
     }
 
-    if (parseMarkdownHeading(trimmed)) {
+    const heading = parseMarkdownHeading(trimmed)
+    if (heading) {
+      pushCurrentGroup()
+      currentGroup = {
+        label: heading.label,
+        steps: [],
+      }
+      continue
+    }
+
+    if (isRecipeMetadataLine(trimmed)) {
       continue
     }
 
@@ -724,19 +829,46 @@ function parseInstructionSection(lines: RecipeLine[]): ParsedInstructionGroup[] 
 
 function parseNotesSection(lines: RecipeLine[]): string[] {
   const notes: string[] = []
+  let pendingParagraph: string | null = null
+
+  const flushPendingParagraph = () => {
+    if (!pendingParagraph) {
+      return
+    }
+
+    notes.push(pendingParagraph)
+    pendingParagraph = null
+  }
 
   for (const line of lines) {
     if (!line.trimmed) {
+      flushPendingParagraph()
       continue
     }
 
     if (parseMarkdownHeading(line.trimmed)) {
+      flushPendingParagraph()
       continue
     }
 
-    notes.push(stripInstructionMarker(line.trimmed))
+    if (isRecipeMetadataLine(line.trimmed)) {
+      flushPendingParagraph()
+      continue
+    }
+
+    if (isBulletItem(line.trimmed)) {
+      flushPendingParagraph()
+      pendingParagraph = stripInstructionMarker(line.trimmed)
+      continue
+    }
+
+    const content = stripMarkdownInlineSyntax(line.trimmed)
+    pendingParagraph = pendingParagraph
+      ? `${pendingParagraph} ${content}`
+      : content
   }
 
+  flushPendingParagraph()
   return notes
 }
 
@@ -746,8 +878,13 @@ function flattenIngredientGroups(groups: ParsedIngredientGroup[]): Ingredient[] 
 
 function flattenInstructionGroupsForCurrentModel(
   groups: ParsedInstructionGroup[],
-  notes: string[]
+  notes: string[],
+  includeStructureFallback: boolean
 ): string[] {
+  if (!includeStructureFallback) {
+    return groups.flatMap((group) => group.steps)
+  }
+
   const flattened: string[] = []
 
   for (const group of groups) {
@@ -766,7 +903,10 @@ function flattenInstructionGroupsForCurrentModel(
   return flattened
 }
 
-function shouldWarnMissingIngredientAmount(ingredient: Ingredient): boolean {
+function shouldWarnMissingIngredientAmount(
+  ingredient: Ingredient,
+  allowOptionalWithoutAmount = false
+): boolean {
   if (!ingredient.item.trim()) {
     return false
   }
@@ -776,7 +916,15 @@ function shouldWarnMissingIngredientAmount(ingredient: Ingredient): boolean {
   }
 
   const modifier = ingredient.modifier?.toLowerCase().trim()
-  if (modifier && /^(to taste|as needed)$/.test(modifier)) {
+  if (modifier && /^(?:to taste|as needed)$/.test(modifier)) {
+    return false
+  }
+
+  if (
+    allowOptionalWithoutAmount &&
+    modifier &&
+    /^(?:optional|for serving|for garnish)$/.test(modifier)
+  ) {
     return false
   }
 
@@ -808,12 +956,41 @@ function stripTrailingColon(line: string): string {
 }
 
 function isInstructionStepStart(line: string): boolean {
-  return /^\s*(?:\d+[\.\)]|[-*\u2022])\s+/.test(line)
+  return /^\s*(?:\d+[\.\)]|[-*+\u2022])\s+/.test(line)
+}
+
+function isBulletItem(line: string): boolean {
+  return /^\s*[-*+\u2022]\s+/.test(line)
+}
+
+function isRecipeMetadataLine(line: string): boolean {
+  const boldAttribute = parseBoldAttributeLine(line)
+  if (boldAttribute) {
+    return isRecipeMetadataLabel(boldAttribute.label)
+  }
+
+  return (
+    /^(?:category|servings?|prep(?:aration)?\s*time|cook(?:ing)?\s*time|total\s*time)\s*:/i.test(
+      line
+    ) ||
+    /^(?:serves|yield|makes?)\s*:?\s*\d/i.test(line)
+  )
+}
+
+function isRecipeMetadataLabel(label: string): boolean {
+  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim()
+  return /^(?:category|servings?|serves|yield|makes?|prep(?:aration)? time|cook(?:ing)? time|total time)$/.test(
+    normalized
+  )
+}
+
+function normalizeRecipeCategory(value: string): string {
+  return stripMarkdownInlineSyntax(value).replace(/\s+/g, " ").trim().toLowerCase()
 }
 
 function stripInstructionMarker(line: string): string {
   return stripMarkdownInlineSyntax(
-    line.replace(/^\s*(?:\d+[\.\)]|[-*\u2022])\s+/, "")
+    line.replace(/^\s*(?:\d+[\.\)]|[-*+\u2022])\s+/, "")
   ).trim()
 }
 
@@ -1048,7 +1225,7 @@ export function parseIngredientLine(line: string): Ingredient {
   let cleaned = line.trim()
 
   // Remove list markers at the start, but preserve numbered amounts.
-  cleaned = cleaned.replace(/^[\-\*\u2022\.]\s+/, "").trim()
+  cleaned = cleaned.replace(/^[\-*+\u2022.]\s+/, "").trim()
   cleaned = stripMarkdownInlineSyntax(cleaned)
 
   const originalText = cleaned

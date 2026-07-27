@@ -414,6 +414,11 @@ export function RecipeImportSection({
               {livePreview.servings ? (
                 <div className="text-xs text-muted-foreground">Serves {livePreview.servings}</div>
               ) : null}
+              {livePreview.category ? (
+                <div className="text-xs text-muted-foreground">
+                  Category {livePreview.category}
+                </div>
+              ) : null}
             </div>
             {livePreview.metadata ? (
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -486,6 +491,15 @@ export function RecipeImportSection({
               <div>
                 {parsedPreview.metadata?.servingsText || parsedPreview.servings}
               </div>
+            </div>
+          ) : null}
+
+          {parsedPreview?.category ? (
+            <div>
+              <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
+                Category
+              </div>
+              <div>{parsedPreview.category}</div>
             </div>
           ) : null}
 
@@ -722,6 +736,11 @@ Instructions:
               {livePreview.servings ? (
                 <div className="mt-1 text-sm text-muted-foreground">
                   Serves {livePreview.servings}
+                </div>
+              ) : null}
+              {livePreview.category ? (
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Category {livePreview.category}
                 </div>
               ) : null}
               {livePreview.metadata ? (
