@@ -12,8 +12,10 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Recipe persistence now has first-class support for `prep_time_minutes`, `cook_time_minutes`, `total_time_minutes`, and `notes`, plus additive `instruction_groups` persistence.
 - Ingredient `groupLabel` metadata is preserved in the existing `ingredients`
   JSON payload. The final detail view groups only non-empty ingredients by
-  consecutive stored labels, preserving both group and ingredient order while
-  legacy unlabeled recipes render as one ordinary list.
+  normalized stored labels. First appearance determines group order, and
+  ingredient order remains stable within each group. Unlabeled ingredients use
+  one headingless group at their first appearance, while legacy recipes with
+  only unlabeled ingredients render as one ordinary list.
 - Legacy flat `instructions` remains persisted for compatibility and the current textarea-based edit model.
 - The recipe detail dialog is query-backed and action-complete for common follow-up actions:
   - favorite toggle

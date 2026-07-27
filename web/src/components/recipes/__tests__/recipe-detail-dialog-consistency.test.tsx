@@ -340,6 +340,49 @@ describe("RecipeDetailDialog cache consistency", () => {
     expect(within(ingredientsSection!).getAllByRole("listitem")).toHaveLength(2)
   })
 
+  it("renders each normalized label once in first-appearance order", () => {
+    renderRecipeDetail(makeRecipe({
+      ingredients: [
+        { item: "tomatoes", amount: 2, unit: "cups", groupLabel: " Sauce " },
+        { item: "salt", amount: 1, unit: "tsp" },
+        { item: "onion", amount: 1, unit: "count", groupLabel: "Salad" },
+        { item: "garlic", amount: 2, unit: "count", groupLabel: "Sauce" },
+        { item: "pepper", amount: null, unit: "", groupLabel: "   " },
+        { item: "lime", amount: 1, unit: "count", groupLabel: "SAUCE" },
+      ],
+    }))
+
+    const ingredientsSection = screen
+      .getByRole("heading", { level: 2, name: "Ingredients (6)" })
+      .closest("section")
+    expect(ingredientsSection).not.toBeNull()
+
+    const groupSections = Array.from(
+      ingredientsSection!.querySelectorAll<HTMLElement>("[data-ingredient-group]")
+    )
+    expect(groupSections.map((section) => section.dataset.ingredientGroup)).toEqual([
+      "Sauce",
+      "",
+      "Salad",
+      "SAUCE",
+    ])
+    expect(
+      groupSections.map((section) =>
+        within(section).getAllByRole("listitem").map((item) => item.textContent)
+      )
+    ).toEqual([
+      [expect.stringContaining("tomatoes"), expect.stringContaining("garlic")],
+      [expect.stringContaining("salt"), expect.stringContaining("pepper")],
+      [expect.stringContaining("onion")],
+      [expect.stringContaining("lime")],
+    ])
+
+    expect(
+      within(ingredientsSection!).getAllByRole("heading", { level: 3 })
+        .map((heading) => heading.textContent)
+    ).toEqual(["Sauce", "Salad", "SAUCE"])
+  })
+
   it("keeps legacy ungrouped ingredients as one ordinary ordered list", () => {
     renderRecipeDetail(makeRecipe({
       ingredients: [

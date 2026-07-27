@@ -11,7 +11,7 @@ export function getRecipeIngredientGroups(
   ingredients?: Ingredient[] | null
 ): RecipeIngredientGroup[] {
   const groups: RecipeIngredientGroup[] = []
-  let currentGroup: RecipeIngredientGroup | null = null
+  const groupIndexes = new Map<string | undefined, number>()
 
   for (const ingredient of ingredients ?? []) {
     if (!ingredient.item.trim()) {
@@ -19,15 +19,18 @@ export function getRecipeIngredientGroups(
     }
 
     const label = ingredient.groupLabel?.trim() || undefined
-    if (!currentGroup || currentGroup.label !== label) {
-      currentGroup = {
+    let groupIndex = groupIndexes.get(label)
+
+    if (groupIndex === undefined) {
+      groupIndex = groups.length
+      groupIndexes.set(label, groupIndex)
+      groups.push({
         label,
         ingredients: [],
-      }
-      groups.push(currentGroup)
+      })
     }
 
-    currentGroup.ingredients.push(ingredient)
+    groups[groupIndex].ingredients.push(ingredient)
   }
 
   return groups
