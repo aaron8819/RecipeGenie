@@ -390,7 +390,7 @@ export function RecipeDialog({
         imageUrl,
       },
       preview,
-      { applyCategory: !isEditing }
+      { applyCategory: !isEditing, categories }
     )
 
     setName(formValues.name)
@@ -416,6 +416,7 @@ export function RecipeDialog({
     notes,
     imageUrl,
     isEditing,
+    categories,
   ])
 
   const currentDraft = {

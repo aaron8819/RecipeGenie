@@ -338,6 +338,95 @@ Keep refrigerated.`);
     ]);
   });
 
+  it('combines multiline Markdown list items and accepts plus markers', () => {
+    const result = parseRecipeText(`# Chicken Soup
+
+## Ingredients
++ 1 lb chicken,
+  cut into bite-size pieces
++ 1 tsp salt
+
+## Instructions
++ Simmer gently
+  until the chicken is cooked through.
+
+## Notes
++ Refrigerate promptly
+  for up to three days.`);
+
+    expect(result.ingredients).toHaveLength(2);
+    expect(result.ingredients[0]).toMatchObject({
+      item: 'chicken, cut into bite-size pieces',
+      amount: 1,
+      unit: 'lb',
+      originalText: '1 lb chicken, cut into bite-size pieces',
+    });
+    expect(result.instructions).toEqual([
+      'Simmer gently until the chicken is cooked through.',
+    ]);
+    expect(result.notes).toEqual([
+      'Refrigerate promptly for up to three days.',
+    ]);
+  });
+
+  it('combines repeated sections instead of selecting only the first', () => {
+    const result = parseRecipeText(`# Toast
+
+## Ingredients
+
+## Ingredients
+- 1 slice bread
+
+## Instructions
+
+## Instructions
+1. Toast the bread.
+
+## Notes
+
+## Notes
+- Serve warm.`);
+
+    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+      'bread',
+    ]);
+    expect(result.instructions).toEqual(['Toast the bread.']);
+    expect(result.notes).toEqual(['Serve warm.']);
+  });
+
+  it('preserves and warns about an unbolded servings range', () => {
+    const result = parseRecipeText(`# Cake
+Servings: 4–6
+
+## Ingredients
+- 1 cup flour
+
+## Instructions
+1. Bake.`);
+
+    expect(result.servings).toBe(4);
+    expect(result.metadata).toEqual({ servingsText: '4–6' });
+    expect(result.warnings).toContain(
+      'Servings range "4–6" will be saved as 4 because Recipe Genie stores one serving count.'
+    );
+  });
+
+  it('warns when notes are present but instructions are missing', () => {
+    const result = parseRecipeText(`# Tea
+
+## Ingredients
+- 1 cup water
+
+## Notes
+- Serve hot.`);
+
+    expect(result.instructions).toEqual([]);
+    expect(result.notes).toEqual(['Serve hot.']);
+    expect(result.warnings).toContain(
+      'No instructions found - add a "Directions" or "Instructions" section'
+    );
+  });
+
   it('limits metadata parsing to the preamble and excludes later metadata lines', () => {
     const result = parseRecipeText(`# Soup
 Category: Beef

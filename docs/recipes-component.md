@@ -75,7 +75,9 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   instructions, and notes headings are case-insensitive at any heading level;
   and nested ingredient headings become group labels.
 - Imported categories are normalized to the existing category model for new
-  recipes. Paste-to-replace continues to preserve the current recipe category.
+  recipes with a case-insensitive match; unknown categories retain the new
+  recipe form's existing fallback. Paste-to-replace continues to preserve the
+  current recipe category.
   Markdown ingredient groups are persisted through each ingredient's
   `groupLabel`; Markdown notes use the existing first-class notes array. Because
   the recipe schema stores one integer serving count, a Markdown servings range

@@ -497,7 +497,7 @@ describe("recipe dialog defaults helpers", () => {
     const created = applyParsedRecipeToFormValues(
       buildNewRecipeDialogFormValues(["chicken", "beef"]),
       preview!,
-      { applyCategory: true }
+      { applyCategory: true, categories: ["chicken", "beef"] }
     )
     expect(created).toMatchObject({
       name: "Taco Salad",
@@ -529,6 +529,44 @@ describe("recipe dialog defaults helpers", () => {
     expect(replaced.ingredients).toEqual(created.ingredients)
     expect(replaced.instructionGroups).toEqual(created.instructionGroups)
     expect(replaced.notes).toBe(created.notes)
+  })
+
+  it("matches imported categories case-insensitively and retains the fallback for unknown values", () => {
+    const values = buildNewRecipeDialogFormValues(["Chicken", "Dinner Favorites"])
+
+    expect(
+      applyParsedRecipeToFormValues(
+        values,
+        {
+          name: "Roast Chicken",
+          category: "chicken",
+          ingredients: [],
+          instructions: [],
+          warnings: [],
+        },
+        {
+          applyCategory: true,
+          categories: ["Chicken", "Dinner Favorites"],
+        }
+      ).category
+    ).toBe("Chicken")
+
+    expect(
+      applyParsedRecipeToFormValues(
+        values,
+        {
+          name: "Fish Tacos",
+          category: "seafood",
+          ingredients: [],
+          instructions: [],
+          warnings: [],
+        },
+        {
+          applyCategory: true,
+          categories: ["Chicken", "Dinner Favorites"],
+        }
+      ).category
+    ).toBe("Chicken")
   })
 
   it("replaces all supported parsed fields from the same Markdown contract", () => {

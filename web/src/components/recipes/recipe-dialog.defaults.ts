@@ -74,6 +74,7 @@ export interface RecipeDialogFormValues {
 
 interface ApplyParsedRecipeOptions {
   applyCategory?: boolean
+  categories?: readonly string[]
 }
 
 export function buildEditingRecipeDialogFormValues(
@@ -120,13 +121,17 @@ export function applyParsedRecipeToFormValues(
   parsedRecipe: ParsedRecipe,
   options: ApplyParsedRecipeOptions = {}
 ): RecipeDialogFormValues {
+  const parsedCategory = options.applyCategory && parsedRecipe.category
+    ? options.categories?.find(
+        (category) =>
+          category.trim().toLowerCase() === parsedRecipe.category?.trim().toLowerCase()
+      )
+    : undefined
+
   return {
     ...values,
     name: parsedRecipe.name || values.name,
-    category:
-      options.applyCategory && parsedRecipe.category
-        ? parsedRecipe.category
-        : values.category,
+    category: parsedCategory || values.category,
     servings: parsedRecipe.servings || values.servings,
     prepTimeMinutes: parsedRecipe.metadata?.prepTimeMinutes ?? values.prepTimeMinutes,
     cookTimeMinutes: parsedRecipe.metadata?.cookTimeMinutes ?? values.cookTimeMinutes,
