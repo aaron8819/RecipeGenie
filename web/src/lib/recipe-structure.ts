@@ -1,6 +1,40 @@
-import type { Recipe, RecipeInstructionGroup } from "@/types/database"
+import type { Ingredient, Recipe, RecipeInstructionGroup } from "@/types/database"
 
 type RecipeWithStructure = Pick<Recipe, "instructions" | "notes" | "instruction_groups">
+
+export interface RecipeIngredientGroup {
+  label?: string
+  ingredients: Ingredient[]
+}
+
+export function getRecipeIngredientGroups(
+  ingredients?: Ingredient[] | null
+): RecipeIngredientGroup[] {
+  const groups: RecipeIngredientGroup[] = []
+  const groupIndexes = new Map<string | undefined, number>()
+
+  for (const ingredient of ingredients ?? []) {
+    if (!ingredient.item.trim()) {
+      continue
+    }
+
+    const label = ingredient.groupLabel?.trim() || undefined
+    let groupIndex = groupIndexes.get(label)
+
+    if (groupIndex === undefined) {
+      groupIndex = groups.length
+      groupIndexes.set(label, groupIndex)
+      groups.push({
+        label,
+        ingredients: [],
+      })
+    }
+
+    groups[groupIndex].ingredients.push(ingredient)
+  }
+
+  return groups
+}
 
 export function createEmptyInstructionGroup(): RecipeInstructionGroup {
   return {

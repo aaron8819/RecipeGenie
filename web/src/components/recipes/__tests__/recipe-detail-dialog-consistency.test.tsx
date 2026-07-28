@@ -1,10 +1,16 @@
 import React from "react"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 import { RecipeDetailDialog } from "../recipe-detail-dialog"
+import {
+  applyParsedRecipeToFormValues,
+  buildRecipeSubmissionData,
+} from "../recipe-dialog.defaults"
 import type { Recipe } from "@/types/database"
 import { recipeKeys } from "@/lib/query-keys"
+import { MARKDOWN_TACO_SALAD_RECIPE_TEXT } from "@/lib/__tests__/recipe-parser.fixtures"
+import { parseRecipeText } from "@/lib/recipe-parser"
 
 globalThis.React = React
 
@@ -103,6 +109,23 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
     updated_at: "2026-03-01T00:00:00.000Z",
     ...overrides,
   }
+}
+
+function renderRecipeDetail(recipe: Recipe) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RecipeDetailDialog
+        open={true}
+        onOpenChange={() => {}}
+        recipeId={recipe.id}
+        recipe={recipe}
+      />
+    </QueryClientProvider>
+  )
 }
 
 describe("RecipeDetailDialog cache consistency", () => {
@@ -222,6 +245,170 @@ describe("RecipeDetailDialog cache consistency", () => {
     expect(screen.getByText("1 cup")).toBeInTheDocument()
     expect(screen.queryByText("1 count")).not.toBeInTheDocument()
   })
+
+  it("renders submitted and rehydrated Taco Salad ingredients in stored group order", () => {
+    const parsed = parseRecipeText(MARKDOWN_TACO_SALAD_RECIPE_TEXT)
+    const applied = applyParsedRecipeToFormValues(
+      {
+        name: "",
+        category: "dinner",
+        servings: 4,
+        prepTimeMinutes: null,
+        cookTimeMinutes: null,
+        totalTimeMinutes: null,
+        tags: [],
+        ingredients: [{ item: "", amount: null, unit: "" }],
+        instructionGroups: [{ steps: [""] }],
+        notes: "",
+        imageUrl: null,
+      },
+      parsed
+    )
+    const submitted = buildRecipeSubmissionData(applied)
+    const persistedIngredients = JSON.parse(
+      JSON.stringify(submitted.ingredients)
+    ) as Recipe["ingredients"]
+
+    renderRecipeDetail(makeRecipe({
+      name: "Taco Salad",
+      ingredients: persistedIngredients,
+      instructions: submitted.instructions,
+      instruction_groups: submitted.instruction_groups,
+      notes: submitted.notes,
+    }))
+
+    const ingredientsHeading = screen.getByRole("heading", {
+      level: 2,
+      name: "Ingredients (30)",
+    })
+    const ingredientsSection = ingredientsHeading.closest("section")
+    expect(ingredientsSection).not.toBeNull()
+
+    const groupHeadings = within(ingredientsSection!).getAllByRole("heading", {
+      level: 3,
+    })
+    expect(groupHeadings.map((heading) => heading.textContent)).toEqual([
+      "Taco Meat",
+      "Salad",
+      "Cilantro-Lime Yogurt Dressing",
+    ])
+    expect(groupHeadings.every((heading) => heading.closest("li") === null)).toBe(true)
+
+    const groupSections = Array.from(
+      ingredientsSection!.querySelectorAll<HTMLElement>("[data-ingredient-group]")
+    )
+    expect(groupSections.map((section) => section.dataset.ingredientGroup)).toEqual([
+      "Taco Meat",
+      "Salad",
+      "Cilantro-Lime Yogurt Dressing",
+    ])
+    expect(
+      groupSections.map((section) => within(section).getAllByRole("listitem").length)
+    ).toEqual([8, 11, 11])
+    expect(within(ingredientsSection!).getAllByRole("listitem")).toHaveLength(30)
+
+    const expectedGroups = parsed.ingredientGroups ?? []
+    groupSections.forEach((section, groupIndex) => {
+      const items = within(section).getAllByRole("listitem")
+      expectedGroups[groupIndex].ingredients.forEach((ingredient, ingredientIndex) => {
+        expect(items[ingredientIndex]).toHaveTextContent(ingredient.item)
+      })
+    })
+  })
+
+  it("omits empty groups and lets long labels wrap without uppercase styling", () => {
+    const longLabel =
+      "A very long roasted tomato, caramelized onion, and fresh herb topping"
+
+    renderRecipeDetail(makeRecipe({
+      ingredients: [
+        { item: "   ", amount: null, unit: "", groupLabel: "Empty Group" },
+        { item: "tomatoes", amount: 2, unit: "cups", groupLabel: longLabel },
+        { item: "salt", amount: 1, unit: "tsp", groupLabel: "   " },
+      ],
+    }))
+
+    expect(screen.queryByRole("heading", { name: "Empty Group" })).not.toBeInTheDocument()
+    const longHeading = screen.getByRole("heading", { name: longLabel })
+    expect(longHeading).toHaveClass("break-words")
+    expect(longHeading).not.toHaveClass("uppercase")
+
+    const ingredientsSection = screen
+      .getByRole("heading", { level: 2, name: "Ingredients (2)" })
+      .closest("section")
+    expect(ingredientsSection).not.toBeNull()
+    expect(within(ingredientsSection!).getAllByRole("listitem")).toHaveLength(2)
+  })
+
+  it("renders each normalized label once in first-appearance order", () => {
+    renderRecipeDetail(makeRecipe({
+      ingredients: [
+        { item: "tomatoes", amount: 2, unit: "cups", groupLabel: " Sauce " },
+        { item: "salt", amount: 1, unit: "tsp" },
+        { item: "onion", amount: 1, unit: "count", groupLabel: "Salad" },
+        { item: "garlic", amount: 2, unit: "count", groupLabel: "Sauce" },
+        { item: "pepper", amount: null, unit: "", groupLabel: "   " },
+        { item: "lime", amount: 1, unit: "count", groupLabel: "SAUCE" },
+      ],
+    }))
+
+    const ingredientsSection = screen
+      .getByRole("heading", { level: 2, name: "Ingredients (6)" })
+      .closest("section")
+    expect(ingredientsSection).not.toBeNull()
+
+    const groupSections = Array.from(
+      ingredientsSection!.querySelectorAll<HTMLElement>("[data-ingredient-group]")
+    )
+    expect(groupSections.map((section) => section.dataset.ingredientGroup)).toEqual([
+      "Sauce",
+      "",
+      "Salad",
+      "SAUCE",
+    ])
+    expect(
+      groupSections.map((section) =>
+        within(section).getAllByRole("listitem").map((item) => item.textContent)
+      )
+    ).toEqual([
+      [expect.stringContaining("tomatoes"), expect.stringContaining("garlic")],
+      [expect.stringContaining("salt"), expect.stringContaining("pepper")],
+      [expect.stringContaining("onion")],
+      [expect.stringContaining("lime")],
+    ])
+
+    expect(
+      within(ingredientsSection!).getAllByRole("heading", { level: 3 })
+        .map((heading) => heading.textContent)
+    ).toEqual(["Sauce", "Salad", "SAUCE"])
+  })
+
+  it("keeps legacy ungrouped ingredients as one ordinary ordered list", () => {
+    renderRecipeDetail(makeRecipe({
+      ingredients: [
+        { item: "onion", amount: 1, unit: "count" },
+        { item: "olive oil", amount: 2, unit: "tbsp" },
+        { item: "salt", amount: null, unit: "" },
+      ],
+    }))
+
+    const ingredientsSection = screen
+      .getByRole("heading", { level: 2, name: "Ingredients (3)" })
+      .closest("section")
+    expect(ingredientsSection).not.toBeNull()
+    expect(
+      within(ingredientsSection!).queryByRole("heading", { level: 3 })
+    ).not.toBeInTheDocument()
+
+    const items = within(ingredientsSection!).getAllByRole("listitem")
+    expect(items).toHaveLength(3)
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("onion"),
+      expect.stringContaining("olive oil"),
+      expect.stringContaining("salt"),
+    ])
+  })
+
   it("renders persisted times, notes, and grouped instructions without legacy note duplication", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
