@@ -5,6 +5,7 @@ export function buildRecipeShareSnapshot(recipe: Recipe): RecipeShareSnapshot {
     name: recipe.name,
     category: recipe.category,
     servings: recipe.servings,
+    yield_metadata: recipe.yield_metadata ?? null,
     tags: recipe.tags ?? [],
     ingredients: recipe.ingredients ?? [],
     instructions: recipe.instructions ?? [],

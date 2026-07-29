@@ -196,7 +196,8 @@ describe("recipe contribution command route", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         recipeIds: [RECIPE_B],
-        scale: 1,
+        scale: 0.75,
+        scaleV1: { numerator: "3", denominator: "4" },
         idempotencyKey: "concurrent-add-b",
       }),
     })
@@ -216,7 +217,20 @@ describe("recipe contribution command route", () => {
       RECIPE_B,
       RECIPE_C,
     ])
-    expect(writeCalls[1][1].p_projection.items[0].amount).toBe(7)
-    expect(result.shopping_list.items[0].amount).toBe(7)
+    expect(writeCalls[1][1].p_projection.items[0].amount).toBe(6.5)
+    expect(result.shopping_list.items[0].amount).toBe(6.5)
+    const recipeBContribution = writeCalls[1][1].p_contributions[0].snapshot
+    expect(recipeBContribution.exactScaleV1).toEqual({
+      numerator: "3",
+      denominator: "4",
+    })
+    expect(recipeBContribution.items[0].sources[0]).toMatchObject({
+      exactScaleV1: { numerator: "3", denominator: "4" },
+      exactQuantityV1: {
+        version: 1,
+        kind: "exact",
+        value: { numerator: "3", denominator: "2" },
+      },
+    })
   })
 })

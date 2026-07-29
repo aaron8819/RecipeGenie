@@ -34,6 +34,7 @@ import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
+import { parseQuantityV1 } from "@/lib/recipe-quantity"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient, RecipeInstructionGroup } from "@/types/database"
 import { createRecipeUuid } from "@/lib/recipe-identity"
@@ -120,6 +121,7 @@ export function RecipeDialog({
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
   const [servings, setServings] = useState(4)
+  const [yieldText, setYieldText] = useState("4 servings")
   const [prepTimeMinutes, setPrepTimeMinutes] = useState<number | null>(null)
   const [cookTimeMinutes, setCookTimeMinutes] = useState<number | null>(null)
   const [totalTimeMinutes, setTotalTimeMinutes] = useState<number | null>(null)
@@ -170,6 +172,7 @@ export function RecipeDialog({
     setName(formValues.name)
     setCategory(formValues.category)
     setServings(formValues.servings)
+    setYieldText(formValues.yieldText ?? `${formValues.servings} servings`)
     setPrepTimeMinutes(formValues.prepTimeMinutes)
     setCookTimeMinutes(formValues.cookTimeMinutes)
     setTotalTimeMinutes(formValues.totalTimeMinutes)
@@ -234,6 +237,7 @@ export function RecipeDialog({
           name,
           defaultCategory: categories[0] || "",
           category,
+          yieldText,
           tags,
           prepTimeMinutes,
           cookTimeMinutes,
@@ -259,6 +263,7 @@ export function RecipeDialog({
     applyFormValues,
     name,
     category,
+    yieldText,
     tags,
     prepTimeMinutes,
     cookTimeMinutes,
@@ -283,9 +288,28 @@ export function RecipeDialog({
     field: keyof Ingredient,
     value: string | number | null
   ) => {
-    const newIngredients = [...ingredients]
-    newIngredients[index] = { ...newIngredients[index], [field]: value }
-    setIngredients(newIngredients)
+    setIngredients((current) => {
+      const next = [...current]
+      const ingredient = { ...next[index], [field]: value }
+      if (field === "amount") {
+        const quantity =
+          value == null ? null : parseQuantityV1(String(value), "authored")
+        ingredient.quantityV1 =
+          quantity && quantity.kind !== "unparsed" ? quantity : undefined
+        if (ingredient.packageV1 && ingredient.quantityV1) {
+          ingredient.packageV1 = {
+            ...ingredient.packageV1,
+            count: ingredient.quantityV1,
+          }
+        }
+      }
+      if (field === "unit") {
+        ingredient.authoredUnit = String(value || "")
+        ingredient.packageV1 = undefined
+      }
+      next[index] = ingredient
+      return next
+    })
   }
 
   const handleReorderIngredients = useCallback((event: DragEndEvent) => {
@@ -380,6 +404,7 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        yieldText,
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
@@ -396,6 +421,7 @@ export function RecipeDialog({
     setName(formValues.name)
     setCategory(formValues.category)
     setServings(formValues.servings)
+    setYieldText(formValues.yieldText ?? `${formValues.servings} servings`)
     setPrepTimeMinutes(formValues.prepTimeMinutes)
     setCookTimeMinutes(formValues.cookTimeMinutes)
     setTotalTimeMinutes(formValues.totalTimeMinutes)
@@ -407,6 +433,7 @@ export function RecipeDialog({
     name,
     category,
     servings,
+    yieldText,
     prepTimeMinutes,
     cookTimeMinutes,
     totalTimeMinutes,
@@ -423,6 +450,7 @@ export function RecipeDialog({
     name,
     category,
     servings,
+    yieldText,
     prepTimeMinutes,
     cookTimeMinutes,
     totalTimeMinutes,
@@ -631,6 +659,7 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        yieldText,
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
@@ -679,6 +708,7 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        yieldText,
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
@@ -693,6 +723,7 @@ export function RecipeDialog({
         name,
         defaultCategory: categories[0] || "",
         category,
+        yieldText,
         tags,
         prepTimeMinutes,
         cookTimeMinutes,
@@ -932,6 +963,8 @@ export function RecipeDialog({
                 setCategory={setCategory}
                 servings={servings}
                 setServings={setServings}
+                yieldText={yieldText}
+                setYieldText={setYieldText}
                 prepTimeMinutes={prepTimeMinutes}
                 setPrepTimeMinutes={setPrepTimeMinutes}
                 cookTimeMinutes={cookTimeMinutes}
@@ -1006,6 +1039,8 @@ export function RecipeDialog({
                 setCategory={setCategory}
                 servings={servings}
                 setServings={setServings}
+                yieldText={yieldText}
+                setYieldText={setYieldText}
                 prepTimeMinutes={prepTimeMinutes}
                 setPrepTimeMinutes={setPrepTimeMinutes}
                 cookTimeMinutes={cookTimeMinutes}
@@ -1073,6 +1108,8 @@ export function RecipeDialog({
                   setCategory={setCategory}
                   servings={servings}
                   setServings={setServings}
+                  yieldText={yieldText}
+                  setYieldText={setYieldText}
                   prepTimeMinutes={prepTimeMinutes}
                   setPrepTimeMinutes={setPrepTimeMinutes}
                   cookTimeMinutes={cookTimeMinutes}
@@ -1114,6 +1151,8 @@ export function RecipeDialog({
                   setCategory={setCategory}
                   servings={servings}
                   setServings={setServings}
+                  yieldText={yieldText}
+                  setYieldText={setYieldText}
                   prepTimeMinutes={prepTimeMinutes}
                   setPrepTimeMinutes={setPrepTimeMinutes}
                   cookTimeMinutes={cookTimeMinutes}
@@ -1155,6 +1194,8 @@ export function RecipeDialog({
                   setCategory={setCategory}
                   servings={servings}
                   setServings={setServings}
+                  yieldText={yieldText}
+                  setYieldText={setYieldText}
                   prepTimeMinutes={prepTimeMinutes}
                   setPrepTimeMinutes={setPrepTimeMinutes}
                   cookTimeMinutes={cookTimeMinutes}
@@ -1296,6 +1337,8 @@ interface RecipeFormContentProps {
   setCategory: (category: string) => void
   servings: number
   setServings: (servings: number) => void
+  yieldText: string
+  setYieldText: (yieldText: string) => void
   prepTimeMinutes: number | null
   setPrepTimeMinutes: (value: number | null) => void
   cookTimeMinutes: number | null
@@ -1346,6 +1389,8 @@ function RecipeFormContent({
   setCategory,
   servings,
   setServings,
+  yieldText,
+  setYieldText,
   prepTimeMinutes,
   setPrepTimeMinutes,
   cookTimeMinutes,
@@ -1414,6 +1459,8 @@ function RecipeFormContent({
                 onCategoryChange={setCategory}
                 servings={servings}
                 onServingsChange={setServings}
+                yieldText={yieldText}
+                onYieldTextChange={setYieldText}
                 prepTimeMinutes={prepTimeMinutes}
                 onPrepTimeMinutesChange={setPrepTimeMinutes}
                 cookTimeMinutes={cookTimeMinutes}
@@ -1501,6 +1548,8 @@ function RecipeFormContent({
           onCategoryChange={setCategory}
           servings={servings}
           onServingsChange={setServings}
+          yieldText={yieldText}
+          onYieldTextChange={setYieldText}
           prepTimeMinutes={prepTimeMinutes}
           onPrepTimeMinutesChange={setPrepTimeMinutes}
           cookTimeMinutes={cookTimeMinutes}

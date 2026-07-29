@@ -3,6 +3,13 @@ import {
   WHOLE_COUNT_UNIT,
   normalizeWholeCountUnit,
 } from "@/lib/ingredient-units"
+import {
+  parseIngredientQuantityPrefix,
+  parseQuantityV1,
+  parseYieldMetadata,
+  quantityToLegacyAmount,
+} from "@/lib/recipe-quantity"
+import type { YieldMetadataV1 } from "@/types/database"
 
 type SectionKind = "ingredients" | "instructions" | "notes"
 
@@ -49,6 +56,7 @@ export interface ParsedRecipe {
   ingredients: Ingredient[]
   instructions: string[]
   servings?: number
+  yieldMetadata?: YieldMetadataV1
   notes?: string[]
   metadata?: ParsedRecipeMetadata
   ingredientGroups?: ParsedIngredientGroup[]
@@ -95,15 +103,6 @@ export function parseRecipeText(text: string): ParsedRecipe {
 
   for (const section of ignoredMarkdownSections) {
     warnings.push(`Unsupported Markdown section "${section}" was not imported.`)
-  }
-
-  if (
-    preludeMetadata.servingsText &&
-    isServingRange(preludeMetadata.servingsText)
-  ) {
-    warnings.push(
-      `Servings range "${preludeMetadata.servingsText}" will be saved as ${servings} because Recipe Genie stores one serving count.`
-    )
   }
 
   if (!servings) {
@@ -180,6 +179,18 @@ export function parseRecipeText(text: string): ParsedRecipe {
     } else if (noAmountIngredients.length > 3) {
       warnings.push(`${noAmountIngredients.length} ingredients have no amounts`)
     }
+    const unparsedQuantities = ingredients.filter(
+      (ingredient) => ingredient.quantityV1?.kind === "unparsed"
+    )
+    if (unparsedQuantities.length > 0) {
+      warnings.push(
+        `${unparsedQuantities.length} ingredient ${
+          unparsedQuantities.length === 1 ? "quantity was" : "quantities were"
+        } preserved unchanged because ${
+          unparsedQuantities.length === 1 ? "it was" : "they were"
+        } not fully understood.`
+      )
+    }
   }
 
   if (instructionGroups.length === 0) {
@@ -192,6 +203,12 @@ export function parseRecipeText(text: string): ParsedRecipe {
     ingredients,
     instructions,
     servings,
+    yieldMetadata:
+      preludeMetadata.servingsText && servings
+        ? parseYieldMetadata(preludeMetadata.servingsText, servings) ?? undefined
+        : servings
+          ? parseYieldMetadata(`${servings} servings`, servings) ?? undefined
+          : undefined,
     notes: notes.length > 0 ? notes : undefined,
     metadata,
     ingredientGroups: ingredientGroups.length > 0 ? ingredientGroups : undefined,
@@ -427,9 +444,10 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
     if (servingsMatch) {
       const value = stripMarkdownInlineSyntax(servingsMatch[1]).trim()
       metadata.servings = extractServingsFromText(value)
-      if (isServingRange(value)) {
-        metadata.servingsText = value
-      }
+      metadata.servingsText =
+        isServingRange(value) || !/^\d+$/.test(value)
+          ? value
+          : undefined
       continue
     }
 
@@ -1234,39 +1252,35 @@ export function parseIngredientLine(line: string): Ingredient {
     return { item: "", amount: null, unit: "" }
   }
 
-  cleaned = normalizeUnicode(cleaned)
+  const structured = parseIngredientQuantityPrefix(cleaned)
 
-  const amountPattern =
-    /^(\d+\s+\d+\/\d+|\d+\/\d+|\d+\.\d+|\d+)(\s*[\u2013\u2014-]\s*(\d+\s+\d+\/\d+|\d+\/\d+|\d+\.\d+|\d+))?(?=\s|$|[a-z])/i
-  const amountMatch = cleaned.match(amountPattern)
-
-  if (amountMatch) {
-    let amount: Ingredient["amount"] = null
-    let unit = ""
-
-    const amountEndIndex = amountMatch[0].length
-    let remaining = cleaned.substring(amountEndIndex).trim()
-
-    const hasRange = Boolean(amountMatch[3])
-    amount = hasRange
-      ? formatQuantityRange(parseAmount(amountMatch[1]), parseAmount(amountMatch[3]))
-      : parseAmount(amountMatch[1])
-
-    const unitMatch = extractUnit(remaining)
-    if (unitMatch) {
-      unit = normalizeWholeCountUnit(unitMatch.unit) || unitMatch.unit
-      remaining = remaining.substring(unitMatch.endIndex).trim()
-    } else if (remaining) {
-      unit = WHOLE_COUNT_UNIT
+  if (structured) {
+    if (structured.confidence !== "high") {
+      return {
+        item: structured.rest || cleaned,
+        amount: structured.quantityV1.authored || null,
+        unit: "",
+        quantityV1: structured.quantityV1,
+        originalText,
+      }
     }
 
-    const { item: baseItem, modifier } = extractModifier(remaining)
+    const { item: baseItem, modifier } = extractModifier(
+      normalizeUnicode(structured.rest)
+    )
     const { item: finalItem, alternatives } = extractAlternatives(baseItem)
 
     return {
       item: finalItem || cleaned,
-      amount,
-      unit,
+      amount: quantityToLegacyAmount(structured.quantityV1),
+      unit:
+        normalizeWholeCountUnit(structured.authoredUnit) ||
+        structured.authoredUnit ||
+        structured.unit ||
+        (structured.rest ? WHOLE_COUNT_UNIT : ""),
+      quantityV1: structured.quantityV1,
+      authoredUnit: structured.authoredUnit || undefined,
+      packageV1: structured.packageV1,
       modifier: modifier || undefined,
       alternatives,
       originalText,
@@ -1291,18 +1305,17 @@ export function parseIngredientLine(line: string): Ingredient {
  * Ranges use decimal endpoints and an en dash (for example, `0.5–1`).
  */
 export function parseIngredientAmountInput(value: string): Ingredient["amount"] {
-  const normalized = normalizeUnicode(value.trim())
-  const endpoint = String.raw`(?:\d+\s+\d+\/\d+|\d+\/\d+|\d+\.\d+|\d+)`
-  const match = normalized.match(
-    new RegExp(`^(${endpoint})(?:\\s*[-]\\s*(${endpoint}))?$`)
-  )
+  const quantity = parseQuantityV1(value)
+  return quantity.kind === "exact" || quantity.kind === "range"
+    ? quantityToLegacyAmount(quantity)
+    : null
+}
 
-  if (!match) {
-    return null
-  }
-
-  const start = parseAmount(match[1])
-  return match[2] ? formatQuantityRange(start, parseAmount(match[2])) : start
+export function parseIngredientAmountLexeme(value: string): string | null {
+  const quantity = parseQuantityV1(value)
+  return quantity.kind === "exact" || quantity.kind === "range"
+    ? value.trim()
+    : null
 }
 
 export function getIngredientQuantityRange(

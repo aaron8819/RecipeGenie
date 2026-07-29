@@ -12,6 +12,14 @@ import {
   WHOLE_COUNT_UNIT,
   normalizeWholeCountUnit,
 } from "@/lib/ingredient-units"
+import {
+  getAuthoredYieldText,
+  isValidQuantityV1,
+  parseQuantityV1,
+  parseYieldMetadata,
+  quantityToLegacyAmount,
+  resolveIngredientQuantity,
+} from "@/lib/recipe-quantity"
 
 export const DEFAULT_RECIPE_SERVINGS = 4
 
@@ -62,6 +70,7 @@ export interface RecipeDialogFormValues {
   name: string
   category: string
   servings: number
+  yieldText?: string
   prepTimeMinutes: number | null
   cookTimeMinutes: number | null
   totalTimeMinutes: number | null
@@ -84,6 +93,7 @@ export function buildEditingRecipeDialogFormValues(
     name: recipe.name,
     category: recipe.category,
     servings: recipe.servings,
+    yieldText: getAuthoredYieldText(recipe.yield_metadata, recipe.servings),
     prepTimeMinutes: recipe.prep_time_minutes ?? null,
     cookTimeMinutes: recipe.cook_time_minutes ?? null,
     totalTimeMinutes: recipe.total_time_minutes ?? null,
@@ -105,6 +115,7 @@ export function buildNewRecipeDialogFormValues(
     name: "",
     category: categories[0] || "",
     servings: DEFAULT_RECIPE_SERVINGS,
+    yieldText: `${DEFAULT_RECIPE_SERVINGS} servings`,
     prepTimeMinutes: null,
     cookTimeMinutes: null,
     totalTimeMinutes: null,
@@ -133,6 +144,10 @@ export function applyParsedRecipeToFormValues(
     name: parsedRecipe.name || values.name,
     category: parsedCategory || values.category,
     servings: parsedRecipe.servings || values.servings,
+    yieldText:
+      parsedRecipe.yieldMetadata?.authoredText ||
+      parsedRecipe.metadata?.servingsText ||
+      values.yieldText || `${values.servings} servings`,
     prepTimeMinutes: parsedRecipe.metadata?.prepTimeMinutes ?? values.prepTimeMinutes,
     cookTimeMinutes: parsedRecipe.metadata?.cookTimeMinutes ?? values.cookTimeMinutes,
     totalTimeMinutes: parsedRecipe.metadata?.totalTimeMinutes ?? values.totalTimeMinutes,
@@ -170,6 +185,12 @@ export function buildRecipeSubmissionData(
     name: values.name.trim(),
     category: values.category,
     servings: values.servings,
+    yield_metadata:
+      parseYieldMetadata(
+        values.yieldText || `${values.servings} servings`,
+        values.servings
+      ) ||
+      parseYieldMetadata(`${values.servings} servings`, values.servings),
     prep_time_minutes: values.prepTimeMinutes,
     cook_time_minutes: values.cookTimeMinutes,
     total_time_minutes: values.totalTimeMinutes,
@@ -190,6 +211,7 @@ export function isNewRecipeDialogDirty(values: {
   name: string
   defaultCategory: string
   category: string
+  yieldText?: string
   tags: string[]
   prepTimeMinutes: number | null
   cookTimeMinutes: number | null
@@ -202,6 +224,8 @@ export function isNewRecipeDialogDirty(values: {
   return (
     values.name.trim() !== "" ||
     values.category !== values.defaultCategory ||
+    (values.yieldText || `${DEFAULT_RECIPE_SERVINGS} servings`).trim() !==
+      `${DEFAULT_RECIPE_SERVINGS} servings` ||
     values.tags.length > 0 ||
     values.prepTimeMinutes !== null ||
     values.cookTimeMinutes !== null ||
@@ -221,6 +245,9 @@ export function isEditingRecipeDialogDirty(
     name: initialValues.name,
     category: initialValues.category,
     servings: initialValues.servings,
+    yieldText:
+      initialValues.yieldText ||
+      `${initialValues.servings} servings`,
     prepTimeMinutes: initialValues.prepTimeMinutes,
     cookTimeMinutes: initialValues.cookTimeMinutes,
     totalTimeMinutes: initialValues.totalTimeMinutes,
@@ -233,6 +260,9 @@ export function isEditingRecipeDialogDirty(
     name: currentValues.name,
     category: currentValues.category,
     servings: currentValues.servings,
+    yieldText:
+      currentValues.yieldText ||
+      `${currentValues.servings} servings`,
     prepTimeMinutes: currentValues.prepTimeMinutes,
     cookTimeMinutes: currentValues.cookTimeMinutes,
     totalTimeMinutes: currentValues.totalTimeMinutes,
@@ -271,10 +301,35 @@ export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
     ?.map((alternative) => normalizeIngredientWhitespace(alternative))
     .filter(Boolean)
 
+  const manuallyAuthoredQuantity =
+    typeof ingredient.amount === "string"
+      ? parseQuantityV1(ingredient.amount)
+      : null
+  const resolved = resolveIngredientQuantity(ingredient)
+  const quantityV1 =
+    manuallyAuthoredQuantity &&
+    manuallyAuthoredQuantity.kind !== "unparsed"
+      ? manuallyAuthoredQuantity
+      : isValidQuantityV1(ingredient.quantityV1)
+        ? ingredient.quantityV1
+        : resolved.quantity ?? undefined
+
   return {
     ...ingredient,
     item,
     unit,
+    amount:
+      quantityV1 &&
+      manuallyAuthoredQuantity &&
+      manuallyAuthoredQuantity.kind !== "unparsed"
+        ? quantityToLegacyAmount(quantityV1)
+        : ingredient.amount,
+    quantityV1,
+    authoredUnit:
+      normalizeIngredientWhitespace(ingredient.authoredUnit) ||
+      normalizeIngredientWhitespace(ingredient.unit) ||
+      undefined,
+    packageV1: ingredient.packageV1 ?? resolved.packageV1,
     groupLabel: groupLabel || undefined,
     modifier: modifier || undefined,
     alternatives: alternatives && alternatives.length > 0 ? alternatives : undefined,

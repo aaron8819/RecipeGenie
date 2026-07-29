@@ -1,12 +1,19 @@
 import * as cheerio from 'cheerio';
 import { parseIngredientLine } from './recipe-parser';
-import type { Ingredient } from '@/types/database';
+import {
+  isValidQuantityV1,
+  isValidYieldMetadata,
+  parseYieldMetadata,
+  rationalToNumber,
+} from './recipe-quantity';
+import type { Ingredient, YieldMetadataV1 } from '@/types/database';
 
 export interface ExtractedRecipe {
   name: string;
   ingredients: Ingredient[];
   instructions: string[];
   servings?: number;
+  yieldMetadata?: YieldMetadataV1;
   imageUrl?: string;
   warnings: string[];
 }
@@ -64,9 +71,9 @@ export function extractRecipeFromHtml(
   if (!name) warnings.push('No recipe name found');
 
   // Extract ingredients
-  const ingredients = parseRecipeIngredients(
-    recipe.recipeIngredient
-  );
+  const ingredients = parseStructuredRecipeIngredients(
+    recipe.recipeGenieData
+  ) || parseRecipeIngredients(recipe.recipeIngredient);
   if (ingredients.length === 0) {
     warnings.push('No ingredients found');
   }
@@ -80,7 +87,24 @@ export function extractRecipeFromHtml(
   }
 
   // Extract servings
-  const servings = parseServings(recipe.recipeYield);
+  const structuredYield =
+    recipe.recipeGenieData &&
+    typeof recipe.recipeGenieData === 'object' &&
+    isValidYieldMetadata(recipe.recipeGenieData.yieldMetadata)
+      ? recipe.recipeGenieData.yieldMetadata
+      : undefined;
+  const parsedYield = structuredYield
+    ? {
+        servings: Math.max(
+          1,
+          Math.round(rationalToNumber(structuredYield.scalingBasis) || 1)
+        ),
+        yieldMetadata: structuredYield,
+      }
+    : parseYield(recipe.recipeYield);
+  if (recipe.recipeYield && !parsedYield.yieldMetadata) {
+    warnings.push('Recipe yield was preserved for review because it could not be fully parsed');
+  }
 
   // Extract image
   const imageUrl = parseImage(recipe.image);
@@ -89,7 +113,8 @@ export function extractRecipeFromHtml(
     name,
     ingredients,
     instructions,
-    servings,
+    servings: parsedYield.servings,
+    yieldMetadata: parsedYield.yieldMetadata,
     imageUrl,
     warnings,
   };
@@ -225,17 +250,50 @@ function parseRecipeInstructions(
 /**
  * Parse recipeYield into a number.
  */
-function parseServings(raw: unknown): number | undefined {
-  if (!raw) return undefined;
+function parseYield(raw: unknown): {
+  servings?: number;
+  yieldMetadata?: YieldMetadataV1;
+} {
+  if (!raw) return {};
 
   const text = Array.isArray(raw) ? raw[0] : raw;
   if (typeof text !== 'string' && typeof text !== 'number') {
-    return undefined;
+    return {};
   }
 
-  const str = String(text);
-  const match = str.match(/(\d+)/);
-  return match ? parseInt(match[1], 10) : undefined;
+  const authoredText =
+    typeof text === 'number' ? `${text} servings` : String(text).trim();
+  const yieldMetadata = parseYieldMetadata(authoredText);
+  const basis = yieldMetadata
+    ? rationalToNumber(yieldMetadata.scalingBasis)
+    : null;
+  return {
+    servings:
+      basis && Number.isFinite(basis) ? Math.max(1, Math.round(basis)) : undefined,
+    yieldMetadata: yieldMetadata ?? undefined,
+  };
+}
+
+function parseStructuredRecipeIngredients(
+  raw: unknown
+): Ingredient[] | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const ingredients = (raw as { ingredients?: unknown }).ingredients;
+  if (!Array.isArray(ingredients)) return null;
+
+  const parsed = ingredients.filter((value): value is Ingredient => {
+    if (!value || typeof value !== 'object') return false;
+    const ingredient = value as Partial<Ingredient>;
+    return (
+      typeof ingredient.item === 'string' &&
+      (typeof ingredient.amount === 'string' ||
+        typeof ingredient.amount === 'number' ||
+        ingredient.amount === null) &&
+      typeof ingredient.unit === 'string' &&
+      (!ingredient.quantityV1 || isValidQuantityV1(ingredient.quantityV1))
+    );
+  });
+  return parsed.length === ingredients.length ? parsed : null;
 }
 
 /**

@@ -257,8 +257,14 @@ describe('parseRecipeText', () => {
       'Keep the frying oil close to 350°F.',
       'Sauce the chicken immediately before serving.',
     ]);
-    expect(result.warnings).toContain(
-      'Servings range "4–5" will be saved as 4 because Recipe Genie stores one serving count.'
+    expect(result.yieldMetadata).toMatchObject({
+      authoredText: '4–5',
+      kind: 'servings',
+      scalingBasis: { numerator: '4', denominator: '1' },
+      range: { startLexeme: '4', endLexeme: '5', separator: '–' },
+    });
+    expect(result.warnings).not.toContain(
+      expect.stringContaining('will be saved as')
     );
   });
 
@@ -394,7 +400,7 @@ Keep refrigerated.`);
     expect(result.notes).toEqual(['Serve warm.']);
   });
 
-  it('preserves and warns about an unbolded servings range', () => {
+  it('preserves an unbolded servings range with an exact lower-endpoint basis', () => {
     const result = parseRecipeText(`# Cake
 Servings: 4–6
 
@@ -406,8 +412,13 @@ Servings: 4–6
 
     expect(result.servings).toBe(4);
     expect(result.metadata).toEqual({ servingsText: '4–6' });
-    expect(result.warnings).toContain(
-      'Servings range "4–6" will be saved as 4 because Recipe Genie stores one serving count.'
+    expect(result.yieldMetadata).toMatchObject({
+      authoredText: '4–6',
+      scalingBasis: { numerator: '4', denominator: '1' },
+      range: { startLexeme: '4', endLexeme: '6', separator: '–' },
+    });
+    expect(result.warnings).not.toContain(
+      expect.stringContaining('will be saved as')
     );
   });
 

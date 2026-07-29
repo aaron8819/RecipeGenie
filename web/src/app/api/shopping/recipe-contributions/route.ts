@@ -10,7 +10,12 @@ import {
   type ShoppingContributionOverrides,
 } from "@/lib/shopping-contributions"
 import { normalizeShoppingItemOrderPreferences } from "@/lib/shopping-item-order"
-import type { PantryItem, Recipe, ShoppingList } from "@/types/database"
+import type {
+  PantryItem,
+  RationalV1,
+  Recipe,
+  ShoppingList,
+} from "@/types/database"
 import {
   isRecipeUuid,
   mapRecipeRows,
@@ -18,6 +23,7 @@ import {
   mapShoppingListRow,
   type RecipeRow,
 } from "@/lib/recipe-identity"
+import { rationalToNumber } from "@/lib/recipe-quantity"
 
 const MAX_COMMAND_RETRIES = 4
 const MAX_RECIPES_PER_COMMAND = 100
@@ -25,6 +31,7 @@ const MAX_RECIPES_PER_COMMAND = 100
 type CommandBody = {
   recipeIds?: string[]
   scale?: number
+  scaleV1?: RationalV1
   idempotencyKey?: string
   clearAll?: boolean
 }
@@ -37,6 +44,7 @@ type StoredContribution = {
   snapshot: {
     recipeName: string
     items: ShoppingContributionItem[]
+    exactScaleV1?: RationalV1
   }
 }
 
@@ -57,7 +65,13 @@ function parseBody(body: CommandBody) {
   const recipeIds = [...new Set((body.recipeIds || []).map((id) => id.trim()))]
     .filter(Boolean)
     .sort()
-  const scale = body.scale ?? 1
+  const exactScale = body.scaleV1
+    ? rationalToNumber(body.scaleV1)
+    : null
+  if (body.scaleV1 && exactScale == null) {
+    throw new Error("Exact scale must be a valid rational")
+  }
+  const scale = exactScale ?? body.scale ?? 1
   const idempotencyKey = body.idempotencyKey?.trim() || ""
 
   if (recipeIds.length > MAX_RECIPES_PER_COMMAND) {
@@ -69,6 +83,13 @@ function parseBody(body: CommandBody) {
   if (!Number.isFinite(scale) || scale <= 0 || scale > 100) {
     throw new Error("Scale must be greater than zero")
   }
+  if (
+    exactScale != null &&
+    body.scale != null &&
+    Math.abs(exactScale - body.scale) > 1e-12
+  ) {
+    throw new Error("Numeric and exact scales must agree")
+  }
   if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
     throw new Error("A valid idempotency key is required")
   }
@@ -76,6 +97,7 @@ function parseBody(body: CommandBody) {
   return {
     recipeIds,
     scale,
+    scaleV1: body.scaleV1,
     idempotencyKey,
     clearAll: Boolean(body.clearAll),
   }
@@ -87,6 +109,7 @@ function storedToDomain(row: StoredContribution): RecipeShoppingContribution {
     recipeName: row.snapshot.recipeName,
     servings: row.servings,
     scale: row.scale,
+    scaleV1: row.snapshot.exactScaleV1,
     normalizationVersion: row.normalization_version,
     items: mapShoppingItems(row.snapshot.items),
   }
@@ -100,7 +123,8 @@ function buildContribution(
     category_overrides?: Record<string, string> | null
     shopping_item_order?: unknown
   },
-  scale: number
+  scale: number,
+  scaleV1?: RationalV1
 ): RecipeShoppingContribution {
   const result = generateShoppingList(
     [recipe],
@@ -108,7 +132,8 @@ function buildContribution(
     config.excluded_keywords || [],
     scale,
     config.category_overrides || null,
-    normalizeShoppingItemOrderPreferences(config.shopping_item_order)
+    normalizeShoppingItemOrderPreferences(config.shopping_item_order),
+    scaleV1
   )
   const withBucket = (
     bucket: ShoppingContributionItem["bucket"],
@@ -121,6 +146,7 @@ function buildContribution(
     recipeName: recipe.name,
     servings: result.totalServings,
     scale,
+    scaleV1,
     normalizationVersion: SHOPPING_NORMALIZATION_VERSION,
     items: [
       ...withBucket("items", result.items),
@@ -217,7 +243,15 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
       }
 
       const replacements = mapRecipeRows(recipes as RecipeRow[] | null)
-        .map((recipe) => buildContribution(recipe, pantryItems, config, input.scale))
+        .map((recipe) =>
+          buildContribution(
+            recipe,
+            pantryItems,
+            config,
+            input.scale,
+            input.scaleV1
+          )
+        )
         .sort((left, right) => left.recipeId.localeCompare(right.recipeId))
       const replacementIds = new Set(replacements.map((item) => item.recipeId))
       nextContributions = [
@@ -234,6 +268,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         snapshot: {
           recipeName: contribution.recipeName,
           items: contribution.items,
+          exactScaleV1: contribution.scaleV1,
         },
       }))
     } else {

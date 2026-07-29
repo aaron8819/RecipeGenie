@@ -137,4 +137,51 @@ describe('recipesToSchemaOrg', () => {
     expect(result[0].cookTime).toBe('PT25M');
     expect(result[0].totalTime).toBe('PT35M');
   });
+
+  it('preserves structured quantities and authored yield without trusting stale text', () => {
+    const ingredient = {
+      item: 'flour',
+      amount: 2,
+      unit: 'cup',
+      originalText: '9 cups stale flour',
+      authoredUnit: 'cups',
+      quantityV1: {
+        version: 1 as const,
+        kind: 'exact' as const,
+        value: { numerator: '2', denominator: '1' },
+        authored: '2',
+        lexeme: '2',
+        source: 'authored' as const,
+      },
+    };
+    const yieldMetadata = {
+      version: 1 as const,
+      authoredText: '4–5 servings',
+      kind: 'servings' as const,
+      scalingBasis: { numerator: '4', denominator: '1' },
+      range: {
+        start: { numerator: '4', denominator: '1' },
+        end: { numerator: '5', denominator: '1' },
+        startLexeme: '4',
+        endLexeme: '5',
+        separator: '–' as const,
+      },
+    };
+
+    const result = recipesToSchemaOrg([
+      makeRecipe({
+        ingredients: [ingredient],
+        yield_metadata: yieldMetadata,
+      }),
+    ])[0];
+
+    expect(result.recipeYield).toBe('4–5 servings');
+    expect(result.recipeIngredient).toEqual(['2 cups flour']);
+    expect(result.recipeGenieData).toEqual({
+      version: 1,
+      servings: 4,
+      yieldMetadata,
+      ingredients: [ingredient],
+    });
+  });
 });

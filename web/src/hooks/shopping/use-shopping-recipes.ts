@@ -9,6 +9,7 @@ import {
   type RecipeContributionCommandResult,
 } from "@/lib/shopping-contribution-client"
 import { SHOPPING_LIST_WRITE_SCOPE_ID } from "./shared"
+import type { RationalV1 } from "@/types/database"
 
 export type RecipeContributionIdentity = {
   recipeId: string
@@ -57,15 +58,18 @@ export function useAddToShoppingList() {
     mutationFn: async ({
       recipeIds,
       scale = 1,
+      scaleV1,
       idempotencyKey = crypto.randomUUID(),
     }: {
       recipeIds: string[]
       scale?: number
+      scaleV1?: RationalV1
       idempotencyKey?: string
     }) => {
       const result = await runRecipeContributionCommand("POST", {
         recipeIds,
         scale,
+        scaleV1,
         idempotencyKey,
       })
       return {

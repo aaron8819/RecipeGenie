@@ -935,6 +935,8 @@ type RecipeMetadataSectionProps = {
   onCategoryChange: (value: string) => void
   servings: number
   onServingsChange: (value: number) => void
+  yieldText?: string
+  onYieldTextChange?: (value: string) => void
   prepTimeMinutes: number | null
   onPrepTimeMinutesChange: (value: number | null) => void
   cookTimeMinutes: number | null
@@ -957,6 +959,8 @@ export function RecipeMetadataSection({
   onCategoryChange,
   servings,
   onServingsChange,
+  yieldText = `${servings} servings`,
+  onYieldTextChange,
   prepTimeMinutes,
   onPrepTimeMinutesChange,
   cookTimeMinutes,
@@ -1024,6 +1028,18 @@ export function RecipeMetadataSection({
             className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary focus:border-primary py-3"
           />
         </div>
+        <div>
+          <Label htmlFor="yield-text-edit" className="block text-sm font-semibold text-primary mb-2">
+            Yield display
+          </Label>
+          <Input
+            id="yield-text-edit"
+            value={yieldText}
+            onChange={(event) => onYieldTextChange?.(event.target.value)}
+            placeholder="e.g. 4–5 servings or 12 cookies"
+            className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3"
+          />
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Label className="block text-sm font-semibold text-primary mb-2">
@@ -1044,7 +1060,7 @@ export function RecipeMetadataSection({
           </div>
           <div>
             <Label htmlFor={servingsInputId} className="block text-sm font-semibold text-primary mb-2">
-              Servings
+              Scaling basis
             </Label>
             <Input
               id={servingsInputId}
@@ -1138,7 +1154,7 @@ export function RecipeMetadataSection({
           </Select>
         </div>
         <div className="space-y-2">
-          <label htmlFor={servingsInputId} className={addLabelClass}>Servings</label>
+          <label htmlFor={servingsInputId} className={addLabelClass}>Scaling basis</label>
           <Input
             id={servingsInputId}
             type="number"
@@ -1153,6 +1169,16 @@ export function RecipeMetadataSection({
             className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
           />
         </div>
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="yield-text-add" className={addLabelClass}>Yield display</label>
+        <Input
+          id="yield-text-add"
+          value={yieldText}
+          onChange={(event) => onYieldTextChange?.(event.target.value)}
+          placeholder="e.g. 4–5 servings or 12 cookies"
+          className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm"
+        />
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="space-y-2">

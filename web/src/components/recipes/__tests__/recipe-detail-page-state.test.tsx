@@ -13,6 +13,7 @@ const router = {
   replace: vi.fn(),
 }
 const favoriteMutateAsync = vi.fn()
+const addShoppingMutateAsync = vi.fn()
 const refetch = vi.fn()
 const showToast = vi.fn()
 const originToken = "11111111-1111-4111-8111-111111111111"
@@ -77,7 +78,10 @@ vi.mock("@/hooks/use-planner", () => ({
 }))
 
 vi.mock("@/hooks/use-shopping", () => ({
-  useAddToShoppingList: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useAddToShoppingList: () => ({
+    mutateAsync: addShoppingMutateAsync,
+    isPending: false,
+  }),
 }))
 
 vi.mock("@/hooks/use-undo-toast", () => ({
@@ -207,6 +211,48 @@ describe("RecipeDetailPage states", () => {
       })
     })
     expect(screen.getByText("Edit recipe dialog")).toBeInTheDocument()
+  })
+
+  it("adds the currently selected yield to shopping with an exact scale", async () => {
+    recipeResult = {
+      data: {
+        ...makeRecipe(),
+        yield_metadata: {
+          version: 1,
+          authoredText: "4–5 servings",
+          kind: "servings",
+          range: {
+            start: { numerator: "4", denominator: "1" },
+            end: { numerator: "5", denominator: "1" },
+            startLexeme: "4",
+            endLexeme: "5",
+            separator: "–",
+          },
+          scalingBasis: { numerator: "4", denominator: "1" },
+        },
+      },
+      error: null,
+      isError: false,
+      isLoading: false,
+      isSuccess: true,
+    }
+    addShoppingMutateAsync.mockResolvedValueOnce({
+      added: 1,
+      merged: 0,
+      outcome: "applied",
+    })
+
+    render(<RecipeDetailPage recipeId="recipe-1" />)
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
+
+    await waitFor(() => {
+      expect(addShoppingMutateAsync).toHaveBeenCalledWith({
+        recipeIds: ["recipe-1"],
+        scale: 1.25,
+        scaleV1: { numerator: "5", denominator: "4" },
+      })
+    })
   })
 
   it.each([

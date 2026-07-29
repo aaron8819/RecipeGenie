@@ -1,4 +1,4 @@
-import type { ShoppingItem, ShoppingList } from "@/types/database"
+import type { RationalV1, ShoppingItem, ShoppingList } from "@/types/database"
 import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeShoppingItems } from "./shopping-list-merging"
 import { createShoppingPurchaseKey } from "./shopping-list-normalization"
@@ -17,6 +17,7 @@ export type RecipeShoppingContribution = {
   recipeName: string
   servings: number
   scale: number
+  scaleV1?: RationalV1
   normalizationVersion: number
   items: ShoppingContributionItem[]
 }

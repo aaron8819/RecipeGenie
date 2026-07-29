@@ -27,7 +27,7 @@ import { GripVertical, Trash2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, toFraction } from "@/lib/utils"
-import { parseIngredientAmountInput, parseIngredientLine } from "@/lib/recipe-parser"
+import { parseIngredientAmountLexeme, parseIngredientLine } from "@/lib/recipe-parser"
 import {
   WHOLE_COUNT_UNIT,
   WHOLE_COUNT_UNIT_LABEL,
@@ -229,9 +229,9 @@ function SortableIngredientRow({
       value={amountStr}
       onChange={(e) => setAmountStr(e.target.value)}
       onBlur={() => {
-        const parsed = parseIngredientAmountInput(amountStr)
+        const parsed = parseIngredientAmountLexeme(amountStr)
         onIngredientChange(index, "amount", parsed)
-        setAmountStr(formatAmountInput(parsed))
+        setAmountStr(parsed ?? "")
       }}
     />
   )

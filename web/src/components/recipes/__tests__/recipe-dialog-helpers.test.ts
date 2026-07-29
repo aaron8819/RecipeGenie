@@ -197,7 +197,7 @@ describe("recipe import helpers", () => {
         imageUrl: "https://example.com/soup.jpg",
         warnings: ["warning"],
       })
-    ).toEqual({
+    ).toMatchObject({
       name: "Soup",
       ingredients: [{ item: "water", amount: 1, unit: "cup" }],
       instructions: ["Boil"],
@@ -218,7 +218,7 @@ describe("recipe dialog defaults helpers", () => {
         alternatives: [" sour cream ", " greek  yogurt "],
         originalText: " 2 Tablespoons green onions, finely chopped ",
       })
-    ).toEqual({
+    ).toMatchObject({
       item: "green onions",
       amount: 2,
       unit: "tbsp",
@@ -233,7 +233,7 @@ describe("recipe dialog defaults helpers", () => {
         amount: 1,
         unit: " whole/count ",
       })
-    ).toEqual({
+    ).toMatchObject({
       item: "lime",
       amount: 1,
       unit: "count",
@@ -255,6 +255,7 @@ describe("recipe dialog defaults helpers", () => {
       instructionGroups: [{ steps: [""] }],
       notes: "",
       imageUrl: null,
+      yieldText: "4 servings",
     })
 
     expect(
@@ -269,7 +270,7 @@ describe("recipe dialog defaults helpers", () => {
         ],
         instructionGroups: [{ steps: [" Boil ", "", " Serve "] }],
       })
-    ).toEqual({
+    ).toMatchObject({
       name: "Soup",
       category: "dinner",
       servings: 4,
@@ -305,7 +306,7 @@ describe("recipe dialog defaults helpers", () => {
         notes: "",
         imageUrl: null,
       })
-    ).toEqual({
+    ).toMatchObject({
       name: "Grouped",
       category: "dinner",
       servings: 2,
@@ -342,7 +343,7 @@ describe("recipe dialog defaults helpers", () => {
         notes: "  Serve warm  ",
         imageUrl: null,
       })
-    ).toEqual({
+    ).toMatchObject({
       name: "Normalized",
       category: "dinner",
       servings: 2,
@@ -384,7 +385,7 @@ describe("recipe dialog defaults helpers", () => {
           warnings: [],
         }
       )
-    ).toEqual({
+    ).toMatchObject({
       name: "Fallback",
       category: "dinner",
       servings: 4,

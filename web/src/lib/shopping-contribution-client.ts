@@ -1,6 +1,6 @@
 "use client"
 
-import type { ShoppingList } from "@/types/database"
+import type { RationalV1, ShoppingList } from "@/types/database"
 
 export type RecipeContributionCommandResult = {
   outcome: "applied" | "deduplicated"
@@ -14,6 +14,7 @@ export async function runRecipeContributionCommand(
   body: {
     recipeIds: string[]
     scale?: number
+    scaleV1?: RationalV1
     clearAll?: boolean
     idempotencyKey: string
   }

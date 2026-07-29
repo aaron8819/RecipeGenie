@@ -345,7 +345,7 @@ describe("RecipeMetadataSection", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g. Grandma's Roast Chicken"), {
       target: { value: "Pasta" },
     })
-    fireEvent.change(screen.getByLabelText("Servings"), {
+    fireEvent.change(screen.getByLabelText("Scaling basis"), {
       target: { value: "101" },
     })
 

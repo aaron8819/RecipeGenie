@@ -4,7 +4,12 @@
  * Refactored with unit normalization and unified merging
  */
 
-import type { Recipe, ShoppingItem, PantryItem } from "@/types/database"
+import type {
+  PantryItem,
+  RationalV1,
+  Recipe,
+  ShoppingItem,
+} from "@/types/database"
 import { categorizeIngredient, getExcludedKeyword } from "./shopping-categories"
 import {
   createShoppingPurchaseKey,
@@ -16,6 +21,10 @@ import type { ShoppingItemOrderPreferences } from "./shopping-item-order"
 import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { getIngredientQuantityRange } from "./recipe-parser"
+import {
+  resolveIngredientQuantity,
+  scaleQuantityV1,
+} from "./recipe-quantity"
 
 export interface ShoppingListResult {
   items: ShoppingItem[]
@@ -143,7 +152,8 @@ export function generateShoppingList(
   excludedKeywords: string[],
   scale: number = 1.0,
   userCategoryOverrides?: Record<string, string> | null,
-  shoppingItemOrder?: ShoppingItemOrderPreferences | null
+  shoppingItemOrder?: ShoppingItemOrderPreferences | null,
+  exactScaleV1?: RationalV1
 ): ShoppingListResult {
   // Get pantry items as a set for quick lookup
   const pantrySet = new Set(
@@ -206,6 +216,15 @@ export function generateShoppingList(
         preparationModifiers: purchase.canonical.preparationModifiers,
         optional: purchase.canonical.optional,
         originalText: ingredient.originalText,
+        exactScaleV1,
+        exactQuantityV1: exactScaleV1
+          ? (() => {
+              const resolved = resolveIngredientQuantity(ingredient)
+              return resolved.quantity
+                ? scaleQuantityV1(resolved.quantity, exactScaleV1)
+                : undefined
+            })()
+          : undefined,
       }
 
       // Build display name with alternatives if present (normalized to lowercase)

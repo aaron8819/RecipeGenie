@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "013_allow_uuid_shopping_contribution_replacement"
+export const EXPECTED_LATEST_MIGRATION = "014_add_recipe_yield_metadata"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {
