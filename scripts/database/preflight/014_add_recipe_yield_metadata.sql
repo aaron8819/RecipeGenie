@@ -64,6 +64,82 @@ begin
   ) then
     raise exception 'pending recipe-share snapshots are incompatible with migration 014 validation';
   end if;
+
+  if exists (
+    select 1
+    from public.recipe_shares as share
+    cross join lateral jsonb_array_elements(
+      case
+        when jsonb_typeof(share.source_recipe_snapshot->'ingredients') = 'array'
+          then share.source_recipe_snapshot->'ingredients'
+        else '[]'::jsonb
+      end
+    ) as ingredient
+    where share.status = 'pending'
+      and (
+        (
+          ingredient ? 'quantityV1'
+          and (
+            jsonb_typeof(ingredient->'quantityV1') <> 'object'
+            or jsonb_typeof(ingredient->'quantityV1'->'version') <> 'number'
+            or ingredient->'quantityV1'->>'version' <> '1'
+            or jsonb_typeof(ingredient->'quantityV1'->'kind') <> 'string'
+            or ingredient->'quantityV1'->>'kind'
+              not in ('exact','range','qualitative','unparsed')
+            or jsonb_typeof(ingredient->'quantityV1'->'authored') <> 'string'
+            or length(ingredient->'quantityV1'->>'authored') > 128
+            or jsonb_typeof(ingredient->'quantityV1'->'source') <> 'string'
+            or ingredient->'quantityV1'->>'source'
+              not in ('authored','original-text','legacy-synthesized')
+          )
+        )
+        or (
+          ingredient ? 'packageV1'
+          and (
+            jsonb_typeof(ingredient->'packageV1') <> 'object'
+            or jsonb_typeof(ingredient->'packageV1'->'version') <> 'number'
+            or ingredient->'packageV1'->>'version' <> '1'
+            or jsonb_typeof(ingredient->'packageV1'->'count') <> 'object'
+            or jsonb_typeof(ingredient->'packageV1'->'size') <> 'object'
+            or jsonb_typeof(ingredient->'packageV1'->'size'->'value') <> 'object'
+            or jsonb_typeof(ingredient->'packageV1'->'size'->'lexeme') <> 'string'
+            or jsonb_typeof(ingredient->'packageV1'->'size'->'unit') <> 'string'
+            or jsonb_typeof(
+              ingredient->'packageV1'->'size'->'authoredUnit'
+            ) <> 'string'
+            or jsonb_typeof(ingredient->'packageV1'->'type') <> 'string'
+            or jsonb_typeof(ingredient->'packageV1'->'authoredType') <> 'string'
+          )
+        )
+      )
+  ) or exists (
+    select 1
+    from public.recipe_shares as share
+    where share.status = 'pending'
+      and jsonb_typeof(share.source_recipe_snapshot->'yield_metadata') = 'object'
+      and (
+        jsonb_typeof(
+          share.source_recipe_snapshot->'yield_metadata'->'version'
+        ) <> 'number'
+        or share.source_recipe_snapshot->'yield_metadata'->>'version' <> '1'
+        or jsonb_typeof(
+          share.source_recipe_snapshot->'yield_metadata'->'authoredText'
+        ) <> 'string'
+        or length(
+          share.source_recipe_snapshot->'yield_metadata'->>'authoredText'
+        ) > 256
+        or jsonb_typeof(
+          share.source_recipe_snapshot->'yield_metadata'->'kind'
+        ) <> 'string'
+        or share.source_recipe_snapshot->'yield_metadata'->>'kind'
+          not in ('servings','portions','items','other')
+        or jsonb_typeof(
+          share.source_recipe_snapshot->'yield_metadata'->'scalingBasis'
+        ) <> 'object'
+      )
+  ) then
+    raise exception 'pending recipe-share structured metadata is incompatible with migration 014 validation';
+  end if;
 end
 $migration_014_preflight$;
 

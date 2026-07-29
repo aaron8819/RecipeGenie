@@ -78,7 +78,9 @@ Archived files are not replacement migrations and are not part of that chain.
 - Migration 013 preserves UUID authority when an existing shopping
   contribution is replaced without rewriting its unchanged identity pair.
 - Migration 014 adds versioned authored-yield metadata and hardens shared
-  snapshot acceptance while preserving the numeric servings projection.
+  snapshot acceptance with private, non-executable structured quantity,
+  package, rational, unit, and yield validators while preserving the numeric
+  servings projection.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -694,7 +696,7 @@ The repository now uses a baseline-first bootstrap strategy:
 11. **011_fix_uuid_made_state_date_contract.sql** - Replaced the defective UUID/text made-state RPC with the canonical UUID/date command and retained the authenticated legacy overload.
 12. **012_enforce_uuid_active_recipe_writes.sql** - Required UUID authority for active recipe writes, derived compatibility mirrors, and added UUID-coordinated recipe deletion.
 13. **013_allow_uuid_shopping_contribution_replacement.sql** - Preserved UUID authority for content-only replacement of an existing contribution identity pair.
-14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and safe shared-snapshot acceptance.
+14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and deep, atomic shared-snapshot validation for exact quantities, ranges, packages, units, and yield metadata.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
@@ -846,7 +848,7 @@ Common drift signals:
 
 Concrete examples of when to stop and investigate:
 
-- The repository's tracked `001`-`013` chain and remote ledger do not align
+- The repository's tracked `001`-`014` chain and remote ledger do not align
   row-for-row after accounting for the documented baseline squash.
 - A teammate added a migration locally and you have not pulled it yet.
 - You are linked to the wrong Supabase project or environment.

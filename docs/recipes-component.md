@@ -156,6 +156,14 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Export keeps broad schema.org compatibility and includes a Recipe Genie
   extension so a Recipe Genie export/import round trip retains structured
   quantities and yield metadata.
+- URL import consumes structured Recipe Genie extension fields only when the
+  envelope is a non-array object with numeric `version: 1`. Missing, malformed,
+  or unsupported versions are ignored as a whole; import falls back to
+  standard schema.org fields without partially trusting extension data.
+- Edit hydration presents a valid structured quantity's authored text in the
+  amount control. Saving continues to emit the normalized legacy amount/unit
+  projection alongside unchanged authored metadata, while a deliberate amount
+  edit rebuilds the affected quantity and invalidates stale original text.
 
 ### Recipe structure compatibility
 

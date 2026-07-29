@@ -71,9 +71,14 @@ export function extractRecipeFromHtml(
   if (!name) warnings.push('No recipe name found');
 
   // Extract ingredients
-  const ingredients = parseStructuredRecipeIngredients(
-    recipe.recipeGenieData
-  ) || parseRecipeIngredients(recipe.recipeIngredient);
+  const recipeGenieData = supportedRecipeGenieData(recipe.recipeGenieData);
+  if (recipe.recipeGenieData !== undefined && !recipeGenieData) {
+    warnings.push(
+      'Unsupported Recipe Genie extension ignored; standard recipe data used'
+    );
+  }
+  const ingredients = parseStructuredRecipeIngredients(recipeGenieData)
+    || parseRecipeIngredients(recipe.recipeIngredient);
   if (ingredients.length === 0) {
     warnings.push('No ingredients found');
   }
@@ -88,10 +93,9 @@ export function extractRecipeFromHtml(
 
   // Extract servings
   const structuredYield =
-    recipe.recipeGenieData &&
-    typeof recipe.recipeGenieData === 'object' &&
-    isValidYieldMetadata(recipe.recipeGenieData.yieldMetadata)
-      ? recipe.recipeGenieData.yieldMetadata
+    recipeGenieData &&
+    isValidYieldMetadata(recipeGenieData.yieldMetadata)
+      ? recipeGenieData.yieldMetadata
       : undefined;
   const parsedYield = structuredYield
     ? {
@@ -280,6 +284,20 @@ function parseStructuredRecipeIngredients(
   if (!raw || typeof raw !== 'object') return null;
   const ingredients = (raw as { ingredients?: unknown }).ingredients;
   return normalizeIngredients(ingredients, "persist");
+}
+
+function supportedRecipeGenieData(
+  value: unknown
+): Record<string, unknown> | null {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    (value as Record<string, unknown>).version !== 1
+  ) {
+    return null;
+  }
+  return value as Record<string, unknown>;
 }
 
 /**

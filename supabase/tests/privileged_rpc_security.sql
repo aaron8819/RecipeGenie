@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(41);
+select extensions.plan(50);
 
 insert into auth.users (id, email)
 values
@@ -72,6 +72,56 @@ values
     array['malformed-share-source'],
     '[]'::jsonb,
     '{}'::text[]
+  ),
+  (
+    'b-contradictory-quantity',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Contradictory Quantity Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
+  ),
+  (
+    'b-contradictory-package',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Contradictory Package Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
+  ),
+  (
+    'b-oversized-rational',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Oversized Rational Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
+  ),
+  (
+    'b-malformed-package',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Malformed Package Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
+  ),
+  (
+    'b-contradictory-yield',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Contradictory Yield Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
   );
 
 insert into public.recipe_history (user_id, recipe_id, date_made)
@@ -97,7 +147,34 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-owned',
-    '{"name":"Shared for A","category":"security-test","servings":2,"tags":["shared"],"ingredients":[],"instructions":[]}'::jsonb
+    '{
+      "name":"Shared for A",
+      "category":"security-test",
+      "servings":2,
+      "tags":["shared"],
+      "ingredients":[{
+        "item":"sugar",
+        "amount":0.5,
+        "unit":"cup",
+        "authoredUnit":"cups",
+        "quantityV1":{
+          "version":1,
+          "kind":"exact",
+          "authored":"0.50",
+          "source":"authored",
+          "value":{"numerator":"1","denominator":"2"},
+          "lexeme":"0.50"
+        }
+      }],
+      "instructions":[],
+      "yield_metadata":{
+        "version":1,
+        "authoredText":"2 servings",
+        "kind":"servings",
+        "scalingBasis":{"numerator":"2","denominator":"1"},
+        "value":{"numerator":"2","denominator":"1"}
+      }
+    }'::jsonb
   ),
   (
     'b2000000-0000-0000-0000-000000000002',
@@ -114,9 +191,81 @@ values
     'security-b@example.test',
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
-    'b-malformed-source',
+    'b-contradictory-quantity',
     '{"name":"Malformed for A","category":"security-test","servings":"many","tags":{},"ingredients":[],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000004',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-contradictory-package',
+    '{"name":"Contradictory quantity","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"sugar","amount":1,"unit":"cup","authoredUnit":"cup","quantityV1":{"version":1,"kind":"exact","authored":"9","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"9"}}],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000005',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-oversized-rational',
+    '{"name":"Contradictory package","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"tomatoes","amount":1,"unit":"(14 oz) can","authoredUnit":"(14 oz) can","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"packageV1":{"version":1,"count":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"size":{"value":{"numerator":"14","denominator":"1"},"lexeme":"999","unit":"oz","authoredUnit":"oz"},"type":"can","authoredType":"can"}}],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000006',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-malformed-package',
+    '{"name":"Oversized rational","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"sugar","amount":1,"unit":"cup","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1000000000000","denominator":"1"},"lexeme":"1"}}],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000007',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-malformed-source',
+    '{"name":"Malformed package","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"tomatoes","amount":1,"unit":"can","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"packageV1":{"version":1,"count":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"size":{},"type":"can","authoredType":"can"}}],"instructions":[]}'::jsonb
   );
+
+set local role authenticated;
+select set_config(
+  'request.jwt.claim.sub',
+  '20000000-0000-0000-0000-000000000002',
+  true
+);
+
+select extensions.lives_ok(
+  $$
+    insert into public.recipe_shares (
+      id,
+      sender_user_id,
+      sender_email,
+      recipient_user_id,
+      recipient_email,
+      source_recipe_id,
+      source_recipe_uuid,
+      source_recipe_snapshot
+    )
+    select
+      'a1000000-0000-0000-0000-000000000008',
+      auth.uid(),
+      'security-b@example.test',
+      '10000000-0000-0000-0000-000000000001',
+      'security-a@example.test',
+      id,
+      recipe_uuid,
+      '{"name":"Contradictory yield","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[],"yield_metadata":{"version":1,"authoredText":"9 servings","kind":"servings","scalingBasis":{"numerator":"2","denominator":"1"},"value":{"numerator":"2","denominator":"1"}}}'::jsonb
+    from public.recipes
+    where id = 'b-contradictory-yield'
+  $$,
+  'an authenticated sender can directly insert a share snapshot permitted by RLS'
+);
+
+reset role;
 
 create temporary table user_b_recipe_before as
 select to_jsonb(recipe) as row_data
@@ -172,9 +321,92 @@ select extensions.throws_ok(
   'malformed shared JSON is rejected without leaking a cast or iterator error'
 );
 
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000004') $$,
+  'P0001',
+  'Invalid recipe snapshot',
+  'contradictory authored quantity metadata cannot cross the share boundary'
+);
+
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000005') $$,
+  'P0001',
+  'Invalid recipe snapshot',
+  'contradictory package-size metadata cannot cross the share boundary'
+);
+
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000006') $$,
+  'P0001',
+  'Invalid recipe snapshot',
+  'oversized structured rationals cannot cross the share boundary'
+);
+
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000007') $$,
+  'P0001',
+  'Invalid recipe snapshot',
+  'malformed nested package metadata cannot cross the share boundary'
+);
+
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000008') $$,
+  'P0001',
+  'Invalid recipe snapshot',
+  'a directly inserted contradictory yield cannot cross the privileged RPC'
+);
+
 select extensions.ok(
   public.accept_recipe_share('a1000000-0000-0000-0000-000000000001') is not null,
   'User A can accept a share addressed to User A'
+);
+
+select extensions.ok(
+  (
+    select ingredients #>> '{0,quantityV1,authored}' = '0.50'
+      and ingredients #>> '{0,quantityV1,value,numerator}' = '1'
+      and yield_metadata->>'authoredText' = '2 servings'
+    from public.recipes
+    where recipe_uuid = (
+      select accepted_recipe_uuid
+      from public.recipe_shares
+      where id = 'a1000000-0000-0000-0000-000000000001'
+    )
+  ),
+  'valid structured ingredient and yield metadata is preserved atomically'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.recipe_shares
+    where id in (
+      'a1000000-0000-0000-0000-000000000004',
+      'a1000000-0000-0000-0000-000000000005',
+      'a1000000-0000-0000-0000-000000000006',
+      'a1000000-0000-0000-0000-000000000007',
+      'a1000000-0000-0000-0000-000000000008'
+    )
+      and status = 'pending'
+  ),
+  5::bigint,
+  'rejected share acceptance leaves every malformed share pending'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.recipes
+    where name in (
+      'Contradictory quantity',
+      'Contradictory package',
+      'Oversized rational',
+      'Malformed package',
+      'Contradictory yield'
+    )
+  ),
+  0::bigint,
+  'rejected share acceptance persists no partial recipient recipe'
 );
 
 select extensions.lives_ok(

@@ -10,11 +10,13 @@ import {
   multiplyRationals,
   normalizePackageV1,
   normalizeQuantityV1,
+  normalizeRationalV1,
   normalizeScaleRatioV1,
   normalizeYieldMetadataV1,
   parseQuantityV1,
   parseRationalLexeme,
   parseYieldMetadata,
+  RECIPE_QUANTITY_LIMITS,
   rationalFromIntegers,
   resolveIngredientQuantity,
 } from "@/lib/recipe-quantity"
@@ -131,10 +133,132 @@ describe("exact recipe quantities", () => {
     expect(parseRationalLexeme("99999999")).not.toBeNull()
   })
 
+  it("accepts values at trust-boundary limits and rejects the next value", () => {
+    expect(
+      normalizeRationalV1({
+        numerator: RECIPE_QUANTITY_LIMITS.rationalComponent.toString(),
+        denominator: RECIPE_QUANTITY_LIMITS.rationalComponent.toString(),
+      })
+    ).toEqual({ numerator: "1", denominator: "1" })
+    expect(
+      normalizeRationalV1({
+        numerator: (
+          RECIPE_QUANTITY_LIMITS.rationalComponent + 1n
+        ).toString(),
+        denominator: "1",
+      })
+    ).toBeNull()
+    expect(
+      normalizeRationalV1({
+        numerator: RECIPE_QUANTITY_LIMITS.rationalValue.toString(),
+        denominator: "1",
+      })
+    ).toEqual({
+      numerator: RECIPE_QUANTITY_LIMITS.rationalValue.toString(),
+      denominator: "1",
+    })
+    expect(
+      normalizeRationalV1({
+        numerator: (
+          RECIPE_QUANTITY_LIMITS.rationalValue + 1n
+        ).toString(),
+        denominator: "1",
+      })
+    ).toBeNull()
+
+    const authoredAtLimit = {
+      version: 1,
+      kind: "unparsed",
+      authored: "x".repeat(
+        RECIPE_QUANTITY_LIMITS.authoredQuantityLength
+      ),
+      source: "authored",
+      reason: "x".repeat(RECIPE_QUANTITY_LIMITS.reasonLength),
+    }
+    expect(normalizeQuantityV1(authoredAtLimit)).toEqual(authoredAtLimit)
+    expect(
+      normalizeQuantityV1({
+        ...authoredAtLimit,
+        authored: `${authoredAtLimit.authored}x`,
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...authoredAtLimit,
+        reason: `${authoredAtLimit.reason}x`,
+      })
+    ).toBeNull()
+
+    expect(parseYieldMetadata("10000 servings")).not.toBeNull()
+    expect(parseYieldMetadata("10001 servings")).toBeNull()
+    const yieldAtLimit = {
+      ...parseYieldMetadata("1 item"),
+      authoredText: `1 ${"x".repeat(
+        RECIPE_QUANTITY_LIMITS.authoredYieldLength - 2
+      )}`,
+      kind: "other",
+    }
+    expect(normalizeYieldMetadataV1(yieldAtLimit)).toEqual(yieldAtLimit)
+    expect(
+      normalizeYieldMetadataV1({
+        ...yieldAtLimit,
+        authoredText: `${yieldAtLimit.authoredText}x`,
+      })
+    ).toBeNull()
+  })
+
+  it("requires authored quantities, lexemes, and rationals to agree exactly", () => {
+    const decimal = parseQuantityV1("0.50")
+    expect(normalizeQuantityV1(decimal)).toEqual(decimal)
+    expect(
+      normalizeQuantityV1({
+        ...parseQuantityV1("1"),
+        authored: "9",
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...parseQuantityV1("1"),
+        lexeme: "9",
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...decimal,
+        value: { numerator: "9", denominator: "1" },
+      })
+    ).toBeNull()
+
+    const range = parseQuantityV1("about 1/2–1½")
+    expect(
+      normalizeQuantityV1({
+        ...range,
+        end: { numerator: "9", denominator: "1" },
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...range,
+        endLexeme: "9",
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...range,
+        separator: "-",
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...range,
+        qualifier: "around",
+      })
+    ).toBeNull()
+  })
+
   it("rejects partial package, yield, and scale metadata", () => {
     expect(normalizePackageV1({})).toBeNull()
-    expect(
-      normalizePackageV1({
+    const packageMetadata = {
         version: 1,
         count: parseQuantityV1("1"),
         size: {
@@ -145,8 +269,26 @@ describe("exact recipe quantities", () => {
         },
         type: "can",
         authoredType: "can",
+      }
+    expect(normalizePackageV1(packageMetadata)).not.toBeNull()
+    expect(
+      normalizePackageV1({
+        ...packageMetadata,
+        size: { ...packageMetadata.size, lexeme: "999" },
       })
-    ).not.toBeNull()
+    ).toBeNull()
+    expect(
+      normalizePackageV1({
+        ...packageMetadata,
+        size: { ...packageMetadata.size, authoredUnit: "lb" },
+      })
+    ).toBeNull()
+    expect(
+      normalizePackageV1({
+        ...packageMetadata,
+        size: { ...packageMetadata.size, unit: "ounces" },
+      })
+    ).toBeNull()
     expect(normalizeScaleRatioV1({ numerator: "0", denominator: "1" })).toBeNull()
     expect(
       normalizeScaleRatioV1({ numerator: "101", denominator: "1" })
@@ -191,6 +333,10 @@ describe("recipe quantity formatting", () => {
     ["about 1 (14 oz) can tomatoes", 4, 3, "about ¾ of a 14 oz can"],
     ["2 (14 oz) cans tomatoes", 4, 6, "3 14 oz cans"],
     ["1–2 (14 oz) cans tomatoes", 4, 6, "1½–3 14 oz cans"],
+    ["1–2 (14 oz) cans tomatoes", 4, 1, "¼–½ of a 14 oz can"],
+    ["1–3 (14 oz) cans tomatoes", 4, 2, "½–1½ of a 14 oz can"],
+    ["2–4 (14 oz) cans tomatoes", 4, 8, "4–8 14 oz cans"],
+    ["2–2 (14 oz) cans tomatoes", 4, 2, "1–1 14 oz can"],
   ])("formats %s from %s→%s", (line, basis, selected, expected) => {
     expect(format(line, basis, selected)).toBe(expected)
   })
@@ -323,5 +469,31 @@ describe("yield metadata", () => {
       numerator: "5",
       denominator: "1",
     })
+  })
+
+  it("rejects authored yield metadata that contradicts its exact values", () => {
+    const exact = parseYieldMetadata("12 cookies")
+    const range = parseYieldMetadata("4–5 servings")
+    expect(
+      normalizeYieldMetadataV1({
+        ...exact,
+        authoredText: "9 cookies",
+      })
+    ).toBeNull()
+    expect(
+      normalizeYieldMetadataV1({
+        ...range,
+        range: {
+          ...range?.range,
+          end: { numerator: "9", denominator: "1" },
+        },
+      })
+    ).toBeNull()
+    expect(
+      normalizeYieldMetadataV1({
+        ...range,
+        kind: "items",
+      })
+    ).toBeNull()
   })
 })

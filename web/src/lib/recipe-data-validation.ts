@@ -11,6 +11,8 @@ import {
   normalizeQuantityV1,
   normalizeScaleRatioV1,
   normalizeYieldMetadataV1,
+  normalizeRecipeUnit,
+  quantityMatchesLegacy,
   resolveIngredientQuantity,
   formatStructuredRecipeQuantity,
 } from "./recipe-quantity"
@@ -157,8 +159,8 @@ export function normalizeIngredient(
         )
   if (mode === "persist" && alternatives === null) return null
 
-  const quantity = normalizeQuantityV1(value.quantityV1)
-  const packageV1 = normalizePackageV1(value.packageV1)
+  let quantity = normalizeQuantityV1(value.quantityV1)
+  let packageV1 = normalizePackageV1(value.packageV1)
   if (
     mode === "persist" &&
     ((value.quantityV1 !== undefined && !quantity) ||
@@ -166,13 +168,29 @@ export function normalizeIngredient(
   ) {
     return null
   }
+  const legacyQuantityMismatch =
+    quantity ? !quantityMatchesLegacy(quantity, amount) : false
+  const authoredUnitMismatch =
+    quantity && authoredUnit
+      ? normalizeRecipeUnit(authoredUnit) !== normalizeRecipeUnit(unit)
+      : false
+  if (
+    mode === "persist" &&
+    (legacyQuantityMismatch || authoredUnitMismatch)
+  ) {
+    return null
+  }
+  if (legacyQuantityMismatch || authoredUnitMismatch) {
+    quantity = null
+    packageV1 = null
+  }
 
   const normalized: Ingredient = {
     item,
     amount,
     unit,
     ...(quantity ? { quantityV1: quantity } : {}),
-    ...(authoredUnit ? { authoredUnit } : {}),
+    ...(authoredUnit && !authoredUnitMismatch ? { authoredUnit } : {}),
     ...(packageV1 ? { packageV1 } : {}),
     ...(shoppingCategory ? { shoppingCategory } : {}),
     ...(groupLabel ? { groupLabel } : {}),

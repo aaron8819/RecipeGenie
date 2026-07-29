@@ -292,7 +292,10 @@ export function normalizeIngredientUnit(unit?: string | null): string {
   return normalizeWholeCountUnit(normalized) || UNIT_NORMALIZATION_MAP[normalized] || normalized
 }
 
-export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
+export function normalizeRecipeIngredient(
+  ingredient: Ingredient,
+  preserveAuthoredAmount = false
+): Ingredient {
   const safeIngredient =
     normalizeIngredient(ingredient, "hydrate") || EMPTY_RECIPE_INGREDIENT
   const item = normalizeIngredientWhitespace(safeIngredient.item)
@@ -328,11 +331,11 @@ export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
     item,
     unit,
     amount:
-      !structuredQuantity &&
       quantityV1 &&
-      manuallyAuthoredQuantity &&
-      manuallyAuthoredQuantity.kind !== "unparsed"
-        ? quantityToLegacyAmount(quantityV1)
+      (quantityV1.kind === "exact" || quantityV1.kind === "range")
+        ? preserveAuthoredAmount
+          ? quantityV1.authored
+          : quantityToLegacyAmount(quantityV1)
         : safeIngredient.amount,
     quantityV1,
     authoredUnit:
@@ -352,7 +355,7 @@ export function normalizeRecipeIngredientsForEditing(
   ingredients: Ingredient[]
 ): Ingredient[] {
   return (normalizeIngredients(ingredients, "hydrate") || [])
-    .map((ingredient) => normalizeRecipeIngredient(ingredient))
+    .map((ingredient) => normalizeRecipeIngredient(ingredient, true))
 }
 
 export function normalizeRecipeIngredientsForSubmission(

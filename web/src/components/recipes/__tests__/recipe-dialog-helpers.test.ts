@@ -393,7 +393,7 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: null,
       totalTimeMinutes: null,
       tags: [],
-      ingredients: [{ item: "Bread", amount: 1, unit: "slice" }],
+      ingredients: [{ item: "Bread", amount: "1", unit: "slice" }],
       instructionGroups: [{ steps: ["Cook"] }],
       notes: "",
       imageUrl: null,
@@ -692,13 +692,13 @@ Ingredients
 
     expect(applied.ingredients).toHaveLength(12)
     expect(applied.ingredients[5]).toMatchObject({
-      amount: "0.5–1",
+      amount: "½–1",
       unit: "tsp",
       item: "lemon zest",
       modifier: undefined,
     })
     expect(applied.ingredients[3]).toMatchObject({
-      amount: 2,
+      amount: "2",
       unit: "tbsp",
       item: "honey",
       modifier: "divided",

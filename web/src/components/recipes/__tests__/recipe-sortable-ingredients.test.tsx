@@ -2,6 +2,7 @@ import React from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { SortableIngredientList } from "../recipe-sortable-ingredients"
+import { parseIngredientLine } from "@/lib/recipe-parser"
 
 describe("SortableIngredientList", () => {
   it("parses a full ingredient line entered into the ingredient field", () => {
@@ -126,6 +127,32 @@ describe("SortableIngredientList", () => {
         }),
       })
     )
+  })
+
+  it("keeps an authored decimal in the controlled amount input", () => {
+    const onIngredientChange = vi.fn()
+    const ingredient = {
+      ...parseIngredientLine("0.50 cup sugar"),
+      amount: "0.50",
+    }
+
+    render(
+      <SortableIngredientList
+        ingredients={[ingredient]}
+        editDocumentLayout
+        onReorderIngredients={() => {}}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={() => {}}
+        onIngredientChange={onIngredientChange}
+        onIngredientParsed={() => {}}
+      />
+    )
+
+    const amount = screen.getByPlaceholderText("Amt")
+    expect(amount).toHaveValue("0.50")
+    fireEvent.change(amount, { target: { value: "1 1/2" } })
+    fireEvent.blur(amount)
+    expect(onIngredientChange).toHaveBeenCalledWith(0, "amount", "1 1/2")
   })
 
   it("routes multi-line paste through the bulk paste handler", () => {

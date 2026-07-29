@@ -14,6 +14,54 @@ describe("structured recipe data boundaries", () => {
     expect(requireIngredientsForPersistence([ingredient])).toEqual([ingredient])
   })
 
+  it("rejects contradictory quantity and unit projections at persistence", () => {
+    const ingredient = parseIngredientLine("0.50 cup sugar")
+    expect(
+      normalizeIngredients(
+        [{ ...ingredient, amount: 9 }],
+        "persist"
+      )
+    ).toBeNull()
+    expect(
+      normalizeIngredients(
+        [{ ...ingredient, unit: "tbsp" }],
+        "persist"
+      )
+    ).toBeNull()
+    expect(
+      normalizeIngredients(
+        [{
+          ...ingredient,
+          quantityV1: {
+            ...ingredient.quantityV1!,
+            value: { numerator: "1", denominator: "2" },
+            authored: "9",
+          },
+        }],
+        "persist"
+      )
+    ).toBeNull()
+  })
+
+  it("uses bounded legacy data instead of contradictory hydrated metadata", () => {
+    const ingredient = parseIngredientLine("1 cup sugar")
+    expect(
+      normalizeIngredients([{
+        ...ingredient,
+        amount: 9,
+        originalText: "1 cup stale sugar",
+      }])
+    ).toEqual([
+      {
+        item: "sugar",
+        amount: 9,
+        unit: "cup",
+        authoredUnit: "cup",
+        originalText: "1 cup stale sugar",
+      },
+    ])
+  })
+
   it("rejects malformed structured ingredient metadata on persistence", () => {
     const ingredient = parseIngredientLine("1 (14 oz) can tomatoes")
     expect(

@@ -197,4 +197,98 @@ describe('extractRecipeFromHtml', () => {
     expect(result.imageUrl)
       .toBe('https://example.com/a.jpg');
   });
+
+  it.each([
+    ['unsupported', 99],
+    ['missing', undefined],
+    ['string', '1'],
+    ['null', null],
+    ['array', [1]],
+    ['negative', -1],
+    ['oversized', 999999999999999],
+  ])('ignores %s Recipe Genie extension versions', (_label, version) => {
+    const extension = JSON.stringify({
+      ...(version === undefined ? {} : { version }),
+      ingredients: [
+        {
+          item: 'poisoned structured value',
+          amount: 9,
+          unit: 'cup',
+        },
+      ],
+      yieldMetadata: {
+        version: 1,
+        authoredText: '99 servings',
+        kind: 'servings',
+        scalingBasis: { numerator: '99', denominator: '1' },
+        value: { numerator: '99', denominator: '1' },
+      },
+    });
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      '@type': 'Recipe',
+      name: 'Fallback Recipe',
+      recipeIngredient: ['1 cup flour'],
+      recipeYield: '4 servings',
+      recipeInstructions: ['Mix.'],
+      recipeGenieData: JSON.parse(extension),
+    })}</script>`;
+
+    const result = extractRecipeFromHtml(html);
+
+    expect(result.ingredients[0]).toMatchObject({
+      item: 'flour',
+      amount: 1,
+      unit: 'cup',
+    });
+    expect(result.servings).toBe(4);
+    expect(result.warnings).toContain(
+      'Unsupported Recipe Genie extension ignored; standard recipe data used'
+    );
+  });
+
+  it('consumes supported Recipe Genie extension version 1 atomically', () => {
+    const structured = {
+      version: 1,
+      ingredients: [
+        {
+          item: 'sugar',
+          amount: 0.5,
+          unit: 'cup',
+          authoredUnit: 'cup',
+          quantityV1: {
+            version: 1,
+            kind: 'exact',
+            authored: '0.50',
+            source: 'authored',
+            value: { numerator: '1', denominator: '2' },
+            lexeme: '0.50',
+          },
+        },
+      ],
+      yieldMetadata: {
+        version: 1,
+        authoredText: '4 servings',
+        kind: 'servings',
+        scalingBasis: { numerator: '4', denominator: '1' },
+        value: { numerator: '4', denominator: '1' },
+      },
+    };
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      '@type': 'Recipe',
+      name: 'Structured Recipe',
+      recipeIngredient: ['9 cups fallback'],
+      recipeYield: '9 servings',
+      recipeInstructions: ['Mix.'],
+      recipeGenieData: structured,
+    })}</script>`;
+
+    const result = extractRecipeFromHtml(html);
+
+    expect(result.ingredients[0].quantityV1).toMatchObject({
+      authored: '0.50',
+      value: { numerator: '1', denominator: '2' },
+    });
+    expect(result.servings).toBe(4);
+    expect(result.warnings).toEqual([]);
+  });
 });

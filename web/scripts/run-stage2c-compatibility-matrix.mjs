@@ -98,4 +98,4 @@ try {
   }
 }
 
-console.log("Stage 2C compatibility matrix passed for migrations 011 and 012.")
+console.log("Stage 2C compatibility matrix passed for migration 011 and latest migration 014.")

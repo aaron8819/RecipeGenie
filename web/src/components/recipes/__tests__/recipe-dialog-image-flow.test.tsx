@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeDialog } from "../recipe-dialog"
 import type { Ingredient, Recipe } from "@/types/database"
 import { parseIngredientLine } from "@/lib/recipe-parser"
+import { parseIngredientAmountLexeme } from "@/lib/recipe-parser"
 
 globalThis.React = React
 
@@ -45,15 +46,27 @@ vi.mock("next/dynamic", () => ({
       return (
         <div>
           {ingredients.map((ingredient, index) => (
-            <input
-              key={index}
-              aria-label={`Ingredient ${index + 1}`}
-              value={ingredient.item}
-              onChange={(event) => onIngredientChange(index, "item", event.target.value)}
-              onBlur={(event) =>
-                onIngredientParsed(index, parseIngredientLine(event.target.value))
-              }
-            />
+            <React.Fragment key={index}>
+              <input
+                aria-label={`Ingredient ${index + 1}`}
+                value={ingredient.item}
+                onChange={(event) => onIngredientChange(index, "item", event.target.value)}
+                onBlur={(event) =>
+                  onIngredientParsed(index, parseIngredientLine(event.target.value))
+                }
+              />
+              <input
+                aria-label={`Amount ${index + 1}`}
+                defaultValue={ingredient.amount ?? ""}
+                onBlur={(event) =>
+                  onIngredientChange(
+                    index,
+                    "amount",
+                    parseIngredientAmountLexeme(event.currentTarget.value)
+                  )
+                }
+              />
+            </React.Fragment>
           ))}
         </div>
       )
@@ -474,6 +487,74 @@ describe("RecipeDialog image orchestration", () => {
               }),
             }),
           ],
+        })
+      )
+    })
+  })
+
+  it("preserves authored amount text through hydrate, save, reopen, edit, and resave", async () => {
+    const ingredient = parseIngredientLine("0.50 cup sugar")
+    const recipe = recipeFixture({
+      id: "authored-amount",
+      ingredients: [ingredient],
+    })
+    const first = renderEditDialog(recipe)
+
+    expect(screen.getByLabelText("Amount 1")).toHaveValue("0.50")
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+    await waitFor(() => {
+      expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updates: expect.objectContaining({
+            ingredients: [
+              expect.objectContaining({
+                amount: 0.5,
+                quantityV1: expect.objectContaining({
+                  authored: "0.50",
+                  lexeme: "0.50",
+                  value: { numerator: "1", denominator: "2" },
+                }),
+              }),
+            ],
+          }),
+        })
+      )
+    })
+
+    const persisted = (
+      updateRecipeMutateAsync.mock.calls.at(-1)?.[0] as {
+        updates: Partial<Recipe>
+      }
+    ).updates
+    first.unmount()
+    renderEditDialog(recipeFixture({
+      id: "authored-amount",
+      ...persisted,
+    }))
+
+    const reopenedAmount = screen.getByLabelText("Amount 1")
+    expect(reopenedAmount).toHaveValue("0.50")
+    fireEvent.change(reopenedAmount, { target: { value: "1/2" } })
+    fireEvent.blur(reopenedAmount, { target: { value: "1/2" } })
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+    await waitFor(() => {
+      expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updates: expect.objectContaining({
+            ingredients: [
+              expect.objectContaining({
+                amount: 0.5,
+                originalText: undefined,
+                quantityV1: expect.objectContaining({
+                  authored: "1/2",
+                  lexeme: "1/2",
+                  value: { numerator: "1", denominator: "2" },
+                }),
+              }),
+            ],
+          }),
         })
       )
     })

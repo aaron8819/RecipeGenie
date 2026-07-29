@@ -115,6 +115,8 @@ const UNIT_ALIASES: Record<string, string> = {
   "whole items": "count",
 }
 
+const CANONICAL_UNITS = new Set(Object.values(UNIT_ALIASES))
+
 const SORTED_UNIT_ALIASES = Object.keys(UNIT_ALIASES).sort(
   (left, right) => right.length - left.length
 )
@@ -582,9 +584,21 @@ export function normalizeQuantityV1(value: unknown): QuantityV1 | null {
       value.lexeme,
       RECIPE_QUANTITY_LIMITS.lexemeLength
     )
-    return exact && lexeme
-      ? { ...base, kind: "exact", value: exact, lexeme }
-      : null
+    const lexemeValue = lexeme ? parseRationalLexeme(lexeme) : null
+    const parsedAuthored = parseQuantityV1(authored, source)
+    if (
+      !exact ||
+      !lexeme ||
+      !lexemeValue ||
+      !sameRational(exact, lexemeValue) ||
+      parsedAuthored.kind !== "exact" ||
+      parsedAuthored.lexeme !== lexeme ||
+      parsedAuthored.qualifier !== qualifier ||
+      !sameRational(parsedAuthored.value, exact)
+    ) {
+      return null
+    }
+    return { ...base, kind: "exact", value: exact, lexeme }
   }
 
   if (kind === "range") {
@@ -621,6 +635,13 @@ export function normalizeQuantityV1(value: unknown): QuantityV1 | null {
         : null
     const parsedStart = start ? fromPersisted(start, { positive: true }) : null
     const parsedEnd = end ? fromPersisted(end, { positive: true }) : null
+    const startLexemeValue = startLexeme
+      ? parseRationalLexeme(startLexeme)
+      : null
+    const endLexemeValue = endLexeme
+      ? parseRationalLexeme(endLexeme)
+      : null
+    const parsedAuthored = parseQuantityV1(authored, source)
     if (
       !start ||
       !end ||
@@ -629,6 +650,17 @@ export function normalizeQuantityV1(value: unknown): QuantityV1 | null {
       !separator ||
       !parsedStart ||
       !parsedEnd ||
+      !startLexemeValue ||
+      !endLexemeValue ||
+      !sameRational(start, startLexemeValue) ||
+      !sameRational(end, endLexemeValue) ||
+      parsedAuthored.kind !== "range" ||
+      parsedAuthored.startLexeme !== startLexeme ||
+      parsedAuthored.endLexeme !== endLexeme ||
+      parsedAuthored.separator !== separator ||
+      parsedAuthored.qualifier !== qualifier ||
+      !sameRational(parsedAuthored.start, start) ||
+      !sameRational(parsedAuthored.end, end) ||
       compare(parsedStart, parsedEnd) > 0
     ) {
       return null
@@ -645,15 +677,18 @@ export function normalizeQuantityV1(value: unknown): QuantityV1 | null {
   }
 
   if (kind === "qualitative") {
+    const parsedAuthored = parseQuantityV1(authored, source)
     return hasOnlyKeys(value, [
       "version",
       "kind",
       "authored",
       "source",
       "qualifier",
-    ])
-      ? { ...base, kind: "qualitative" }
-      : null
+    ]) &&
+      qualifier === undefined &&
+      parsedAuthored.kind === "qualitative"
+        ? { ...base, kind: "qualitative" }
+        : null
   }
 
   if (kind === "unparsed") {
@@ -677,6 +712,12 @@ export function normalizeQuantityV1(value: unknown): QuantityV1 | null {
             RECIPE_QUANTITY_LIMITS.reasonLength
           )
     if (value.reason !== undefined && !reason) return null
+    if (
+      qualifier !== undefined ||
+      parseQuantityV1(authored, source).kind !== "unparsed"
+    ) {
+      return null
+    }
     return {
       ...base,
       kind: "unparsed",
@@ -739,15 +780,23 @@ export function normalizePackageV1(value: unknown): PackageV1 | null {
     value.authoredType,
     RECIPE_QUANTITY_LIMITS.packageTypeLength
   )
+  const parsedSizeLexeme = sizeLexeme
+    ? parseRationalLexeme(sizeLexeme)
+    : null
   if (
     !sizeValue ||
     !sizeLexeme ||
+    !parsedSizeLexeme ||
+    !sameRational(sizeValue, parsedSizeLexeme) ||
     !sizeUnit ||
+    !CANONICAL_UNITS.has(sizeUnit) ||
+    normalizeRecipeUnit(sizeUnit) !== sizeUnit ||
     !authoredUnit ||
+    normalizeRecipeUnit(authoredUnit) !== sizeUnit ||
     !type ||
     !PACKAGE_TYPES.has(type) ||
     !authoredType ||
-    UNIT_ALIASES[authoredType.trim().toLowerCase()] !== type
+    normalizeRecipeUnit(authoredType) !== type
   ) {
     return null
   }
@@ -897,7 +946,7 @@ function sameRational(left: RationalV1, right: RationalV1): boolean {
   return Boolean(a && b && compare(a, b) === 0)
 }
 
-function quantityMatchesLegacy(
+export function quantityMatchesLegacy(
   quantity: QuantityV1,
   amount: Ingredient["amount"]
 ): boolean {
@@ -1051,14 +1100,24 @@ function scaleQuantity(
   quantity: QuantityV1,
   ratio: Rational
 ): QuantityV1 {
+  if (isOne(ratio)) return quantity
+
   if (quantity.kind === "exact") {
     const value = fromPersisted(quantity.value)
     const scaled = value
       ? persistBounded(multiply(value, ratio), { positive: true })
       : null
-    return scaled
-      ? { ...quantity, value: scaled }
-      : quantity
+    if (!scaled) return quantity
+    const lexeme =
+      scaled.denominator === "1"
+        ? scaled.numerator
+        : `${scaled.numerator}/${scaled.denominator}`
+    return {
+      ...quantity,
+      authored: `${qualifierText(quantity)}${lexeme}`,
+      value: scaled,
+      lexeme,
+    }
   }
   if (quantity.kind === "range") {
     const start = fromPersisted(quantity.start)
@@ -1069,13 +1128,25 @@ function scaleQuantity(
     const scaledEnd = end
       ? persistBounded(multiply(end, ratio), { positive: true })
       : null
-    return scaledStart && scaledEnd
-      ? {
-          ...quantity,
-          start: scaledStart,
-          end: scaledEnd,
-        }
-      : quantity
+    if (!scaledStart || !scaledEnd) return quantity
+    const startLexeme =
+      scaledStart.denominator === "1"
+        ? scaledStart.numerator
+        : `${scaledStart.numerator}/${scaledStart.denominator}`
+    const endLexeme =
+      scaledEnd.denominator === "1"
+        ? scaledEnd.numerator
+        : `${scaledEnd.numerator}/${scaledEnd.denominator}`
+    return {
+      ...quantity,
+      authored:
+        `${qualifierText(quantity)}${startLexeme}` +
+        `${quantity.separator}${endLexeme}`,
+      start: scaledStart,
+      end: scaledEnd,
+      startLexeme,
+      endLexeme,
+    }
   }
   return quantity
 }
@@ -1338,11 +1409,10 @@ function formatPackage(
   const validCounts = counts as Rational[]
   const formatted = validCounts.map((count) => formatRational(count, "count"))
   const size = `${packageV1.size.lexeme} ${packageV1.size.authoredUnit}`
-  const underOne =
-    scaled.kind === "exact" &&
+  const fractionalPackage =
     compare(validCounts[0], rational(0n, 1n)) > 0 &&
     compare(validCounts[0], rational(1n, 1n)) < 0
-  const type = underOne
+  const type = fractionalPackage
     ? packageV1.type
     : pluralizeUnit(packageV1.type, validCounts)
   const countText =
@@ -1351,7 +1421,7 @@ function formatPackage(
       : formatted[0].text
   const approximate = formatted.some((part) => part.approximate)
   return {
-    text: `${qualifierText(scaled)}${approximate ? "≈" : ""}${countText}${underOne ? " of a" : ""} ${size} ${type}`,
+    text: `${qualifierText(scaled)}${approximate ? "≈" : ""}${countText}${fractionalPackage ? " of a" : ""} ${size} ${type}`,
     hardToMeasure: false,
     approximate,
     exact: scaled,
@@ -1711,11 +1781,25 @@ export function normalizeYieldMetadataV1(
   const hasValue = value.value !== undefined
   const hasRange = value.range !== undefined
   if (hasValue === hasRange) return null
+  const authoredMatch = authoredText.match(
+    new RegExp(
+      String.raw`^(?:(about|approx\.?|approximately|around)\s+)?(${QUANTITY_ENDPOINT})(?:\s*([-–—])\s*(${QUANTITY_ENDPOINT}))?(?:\s+(.+))?$`,
+      "i"
+    )
+  )
+  if (!authoredMatch || yieldKind(authoredMatch[5] || "") !== kind) {
+    return null
+  }
 
   if (hasValue) {
     const exact = normalizeRationalV1(value.value, { positive: true })
     const exactNumber = exact ? rationalToNumber(exact) : null
-    return exact && exactNumber != null &&
+    const authoredValue = parseRationalLexeme(authoredMatch[2])
+    return exact &&
+      authoredValue &&
+      !authoredMatch[4] &&
+      sameRational(exact, authoredValue) &&
+      exactNumber != null &&
       exactNumber <= RECIPE_QUANTITY_LIMITS.yieldValue
       ? {
           version: 1,
@@ -1756,6 +1840,10 @@ export function normalizeYieldMetadataV1(
       : null
   const parsedStart = start ? fromPersisted(start, { positive: true }) : null
   const parsedEnd = end ? fromPersisted(end, { positive: true }) : null
+  const authoredStart = parseRationalLexeme(authoredMatch[2])
+  const authoredEnd = authoredMatch[4]
+    ? parseRationalLexeme(authoredMatch[4])
+    : null
   const endNumber = end ? rationalToNumber(end) : null
   if (
     !start ||
@@ -1765,6 +1853,13 @@ export function normalizeYieldMetadataV1(
     !separator ||
     !parsedStart ||
     !parsedEnd ||
+    !authoredStart ||
+    !authoredEnd ||
+    authoredMatch[2] !== startLexeme ||
+    authoredMatch[4] !== endLexeme ||
+    authoredMatch[3] !== separator ||
+    !sameRational(start, authoredStart) ||
+    !sameRational(end, authoredEnd) ||
     endNumber == null ||
     endNumber > RECIPE_QUANTITY_LIMITS.yieldValue ||
     compare(parsedStart, parsedEnd) > 0
