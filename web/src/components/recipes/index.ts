@@ -1,7 +1,6 @@
 export { RecipeCard } from "./recipe-card"
 export { RecipeList } from "./recipe-list"
 export { RecipeDialog } from "./recipe-dialog"
-export { RecipeDetailDialog } from "./recipe-detail-dialog"
 export { AddToPlanDialog } from "./add-to-plan-dialog"
 export { RecipeCategorySettingsModal } from "./recipe-category-settings-modal"
 export { RecipeSettingsModal } from "./recipe-settings-modal"

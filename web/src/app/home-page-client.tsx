@@ -10,7 +10,11 @@ import { useRecipes } from "@/hooks/use-recipes"
 import { Header, BottomNav, FirstRunOnboarding } from "@/components/layout"
 import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
-import { HOME_TAB_NAVIGATE_EVENT, persistHomeTab } from "@/lib/home-navigation"
+import {
+  HOME_TAB_NAVIGATE_EVENT,
+  persistHomeTab,
+  readPersistedHomeTab,
+} from "@/lib/home-navigation"
 import { getSupabase } from "@/lib/supabase/client"
 import { configurationKeys, historyKeys, pantryKeys, shoppingKeys } from "@/lib/query-keys"
 import { mapShoppingListRow } from "@/lib/recipe-identity"
@@ -45,7 +49,15 @@ const ShoppingListView = dynamic(
   { ssr: false, loading: TabLoader }
 )
 
-export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?: string }) {
+interface HomePageClientProps {
+  initialTab?: string
+  initialTabIsAuthoritative?: boolean
+}
+
+export function HomePageClient({
+  initialTab = HOME_DEFAULT_TAB,
+  initialTabIsAuthoritative = false,
+}: HomePageClientProps) {
   const normalizedInitialTab = normalizeHomeTab(initialTab)
   const [activeTab, setActiveTab] = useState(() => normalizedInitialTab)
   // Tracks which tabs have been activated at least once. A tab is only mounted
@@ -62,11 +74,24 @@ export function HomePageClient({ initialTab = HOME_DEFAULT_TAB }: { initialTab?:
   const visitedRef = useRef(visited)
   visitedRef.current = visited
   const prefetchFiredRef = useRef(false)
+  const reconciledPersistedTabRef = useRef(false)
 
   useEffect(() => {
-    // Align local persistence with the server-provided initial tab on first mount.
+    if (!reconciledPersistedTabRef.current) {
+      reconciledPersistedTabRef.current = true
+
+      if (!initialTabIsAuthoritative) {
+        const persistedTab = readPersistedHomeTab()
+        if (persistedTab && persistedTab !== activeTab) {
+          setActiveTab(persistedTab)
+          setVisited((previous) => new Set(previous).add(persistedTab))
+          return
+        }
+      }
+    }
+
     persistHomeTab(activeTab)
-  }, [activeTab])
+  }, [activeTab, initialTabIsAuthoritative])
 
   useEffect(() => {
     if (!recipes || !user || prefetchFiredRef.current) return

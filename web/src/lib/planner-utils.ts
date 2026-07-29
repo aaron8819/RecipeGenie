@@ -3,6 +3,28 @@ export function parseLocalDate(isoDate: string): Date {
   return new Date(y, m - 1, d)
 }
 
+export function isCanonicalLocalDate(dateString: unknown): dateString is string {
+  if (
+    typeof dateString !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dateString)
+  ) {
+    return false
+  }
+
+  const [year, month, day] = dateString.split("-").map(Number)
+  if (year === 0) return false
+
+  const parsed = new Date(0)
+  parsed.setHours(12, 0, 0, 0)
+  parsed.setFullYear(year, month - 1, day)
+
+  return (
+    parsed.getFullYear() === year &&
+    parsed.getMonth() === month - 1 &&
+    parsed.getDate() === day
+  )
+}
+
 /**
  * Parse a date string into a local calendar date (midnight local time).
  * Supports YYYY-MM-DD or full ISO strings with time.

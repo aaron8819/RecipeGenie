@@ -32,6 +32,15 @@ const bulkMutationEvents: string[] = []
 const bulkMutationResolvers: ResolveFn[] = []
 const moveExcludedResolvers: ResolveFn[] = []
 const originalConsoleError = console.error
+const routerPush = vi.fn()
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+  }),
+}))
 
 let currentShoppingList: ShoppingList
 let currentConfig: UserConfig
@@ -254,18 +263,8 @@ vi.mock("@/components/shopping/shopping-settings-modal", () => ({
   ShoppingSettingsModal: () => null,
 }))
 
-vi.mock("@/components/recipes/recipe-detail-dialog", () => ({
-  RecipeDetailDialog: () => null,
-}))
-
-vi.mock("@/components/recipes/recipe-dialog", () => ({
-  RecipeDialog: () => null,
-}))
-
 vi.mock("@/hooks/use-recipes", () => ({
-  useRecipe: () => ({ data: null }),
   useRecipes: () => ({ data: [] }),
-  useCategories: () => ({ data: ["Produce"] }),
 }))
 
 vi.mock("@/hooks/use-shopping", () => ({

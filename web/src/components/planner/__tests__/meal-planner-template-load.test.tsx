@@ -15,6 +15,15 @@ const saveDayAssignmentsMutate = vi.fn<
   (args: { weekDate: string; dayAssignments: Record<string, number> }) => void
 >()
 const undoToastShow = vi.fn<(args: { message: string; duration?: number }) => void>()
+const routerPush = vi.fn()
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+  }),
+}))
 
 let loadTemplateToApply: PlanTemplate
 let currentWeeklyPlan: WeeklyPlan
@@ -153,14 +162,6 @@ vi.mock("@/hooks/use-recipes", () => ({
   useRecipes: () => ({
     data: currentRecipes,
   }),
-}))
-
-vi.mock("@/components/recipes/recipe-detail-dialog", () => ({
-  RecipeDetailDialog: () => null,
-}))
-
-vi.mock("@/components/recipes/recipe-dialog", () => ({
-  RecipeDialog: () => null,
 }))
 
 vi.mock("../add-recipe-to-plan-modal", () => ({

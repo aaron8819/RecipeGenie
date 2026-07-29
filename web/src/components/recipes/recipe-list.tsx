@@ -1,12 +1,12 @@
 "use client"
 
-import React, { useState, useMemo, useEffect, useCallback } from "react"
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Inbox, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { RecipeCard } from "./recipe-card"
 import { RecipeDialog } from "./recipe-dialog"
-import { RecipeDetailDialog } from "./recipe-detail-dialog"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
 import { RecipeSettingsModal } from "./recipe-settings-modal"
 import { ShareRecipeDialog } from "./share-recipe-dialog"
@@ -21,15 +21,86 @@ import {
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
-import { useRecipeHistoryStats, useMarkRecipeAsMade, useUnmarkRecipeAsMade } from "@/hooks/use-planner"
+import { useRecipeHistoryStats } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { downloadRecipesAsJson } from "@/lib/recipe-export"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
+import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import type { Recipe } from "@/types/database"
 
 type SortOption = "timesMade" | "lastMade" | "name" | "newest"
+
+const RECIPE_VIEW_STATE_KEY = "recipe-genie:recipes-view-state:v1"
+
+interface RecipeViewState {
+  category: string | null
+  favoritesOnly: boolean
+  scrollTop: number
+  search: string
+  selectedTags: string[]
+  sortBy: SortOption
+  viewMode: "grid" | "list"
+}
+
+function getDefaultRecipeViewState(): RecipeViewState {
+  return {
+    category: null,
+    favoritesOnly: false,
+    scrollTop: 0,
+    search: "",
+    selectedTags: [],
+    sortBy: "lastMade",
+    viewMode: "grid",
+  }
+}
+
+function readRecipeViewState(): RecipeViewState {
+  const fallback = getDefaultRecipeViewState()
+  if (typeof window === "undefined") return fallback
+
+  try {
+    const stored = JSON.parse(
+      window.sessionStorage.getItem(RECIPE_VIEW_STATE_KEY) || "null"
+    ) as Partial<RecipeViewState> | null
+    if (!stored) return fallback
+
+    return {
+      category: typeof stored.category === "string" ? stored.category : null,
+      favoritesOnly: stored.favoritesOnly === true,
+      scrollTop:
+        typeof stored.scrollTop === "number" && stored.scrollTop >= 0
+          ? stored.scrollTop
+          : 0,
+      search: typeof stored.search === "string" ? stored.search : "",
+      selectedTags: Array.isArray(stored.selectedTags)
+        ? stored.selectedTags.filter(
+            (tag): tag is string => typeof tag === "string"
+          )
+        : [],
+      sortBy:
+        stored.sortBy &&
+        ["timesMade", "lastMade", "name", "newest"].includes(stored.sortBy)
+          ? stored.sortBy
+          : "lastMade",
+      viewMode:
+        stored.viewMode === "grid" || stored.viewMode === "list"
+          ? stored.viewMode
+          : fallback.viewMode,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+function persistRecipeViewState(state: RecipeViewState) {
+  try {
+    window.sessionStorage.setItem(RECIPE_VIEW_STATE_KEY, JSON.stringify(state))
+  } catch {
+    // Recipe browsing remains functional when browser storage is unavailable.
+  }
+}
 
 const SHOPPING_ITEM_LABEL = {
   singular: "shopping item",
@@ -305,29 +376,40 @@ function MobileRecipesHeader({
 
 export function RecipeList() {
   const isDesktop = useIsDesktop()
+  const router = useRouter()
+  const [initialViewState] = useState(readRecipeViewState)
+  const restoredScrollRef = useRef(false)
+  const scrollTopRef = useRef(initialViewState.scrollTop)
 
-  const [search, setSearch] = useState("")
-  const [category, setCategory] = useState<string | null>(null)
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [favoritesOnly, setFavoritesOnly] = useState(false)
+  const [search, setSearch] = useState(initialViewState.search)
+  const [category, setCategory] = useState<string | null>(
+    initialViewState.category
+  )
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    initialViewState.selectedTags
+  )
+  const [favoritesOnly, setFavoritesOnly] = useState(
+    initialViewState.favoritesOnly
+  )
   const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
     if (typeof window === "undefined") return "grid"
 
-    // Check localStorage for saved preference
-    const saved = localStorage.getItem("recipeViewMode")
-    if (saved === "grid" || saved === "list") {
-      return saved
+    try {
+      const saved = localStorage.getItem("recipeViewMode")
+      if (saved === "grid" || saved === "list") {
+        return saved
+      }
+    } catch {
+      return initialViewState.viewMode
     }
 
-    // Fallback to responsive default
-    return window.innerWidth < 768 ? "list" : "grid"
+    return initialViewState.viewMode === "list" || window.innerWidth < 768
+      ? "list"
+      : "grid"
   })
-  const [sortBy, setSortBy] = useState<SortOption>("lastMade")
-  const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null)
-  const [viewingRecipeId, setViewingRecipeId] = useState<string | null>(null)
+  const [sortBy, setSortBy] = useState<SortOption>(initialViewState.sortBy)
   const [addToPlanRecipeId, setAddToPlanRecipeId] = useState<string | null>(null)
   const [addingToShoppingListId, setAddingToShoppingListId] = useState<string | null>(null)
-  const [markingAsMadeId, setMarkingAsMadeId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSharedInboxOpen, setIsSharedInboxOpen] = useState(false)
@@ -338,8 +420,24 @@ export function RecipeList() {
   // Persist view mode preference to localStorage
   useEffect(() => {
     if (typeof window === "undefined") return
-    localStorage.setItem("recipeViewMode", viewMode)
+    try {
+      localStorage.setItem("recipeViewMode", viewMode)
+    } catch {
+      // The session-scoped view state still works when local storage is disabled.
+    }
   }, [viewMode])
+
+  useEffect(() => {
+    persistRecipeViewState({
+      category,
+      favoritesOnly,
+      scrollTop: scrollTopRef.current,
+      search,
+      selectedTags,
+      sortBy,
+      viewMode,
+    })
+  }, [category, favoritesOnly, search, selectedTags, sortBy, viewMode])
 
   const normalizedSearch = search.trim()
 
@@ -356,8 +454,6 @@ export function RecipeList() {
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
   const addToShoppingList = useAddToShoppingList()
-  const markAsMade = useMarkRecipeAsMade()
-  const unmarkAsMade = useUnmarkRecipeAsMade()
   const { show: showToast } = useUndoToast()
 
   // Build a map of recipe_id -> stats (last made + times made)
@@ -371,7 +467,7 @@ export function RecipeList() {
     if (!displayRecipes.length) return []
     return sortRecipes(displayRecipes, statsMap, sortBy)
   }, [displayRecipes, statsMap, sortBy])
-  
+
   // Only show skeleton on initial load with no cached data, and only after a short delay to avoid flash on fast/cached loads
   const isLoadingWithNoData = isLoading && !displayRecipes.length
   useEffect(() => {
@@ -383,6 +479,21 @@ export function RecipeList() {
     return undefined
   }, [isLoadingWithNoData])
   const showSkeleton = isLoadingWithNoData && skeletonDelayed
+
+  useEffect(() => {
+    if (restoredScrollRef.current || isLoadingWithNoData) return
+
+    const panel = document.querySelector<HTMLElement>(
+      '[data-home-tab-panel="recipes"]'
+    )
+    if (!panel) return
+
+    const frame = requestAnimationFrame(() => {
+      panel.scrollTop = scrollTopRef.current
+      restoredScrollRef.current = true
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [displayRecipes.length, isLoadingWithNoData])
 
   const deleteRecipeAndNotify = useCallback(async (recipe: Recipe) => {
     try {
@@ -431,35 +542,35 @@ export function RecipeList() {
     }
   }, [addToShoppingList, showToast])
 
-  const handleMarkAsMade = useCallback(async (recipe: Recipe) => {
-    setMarkingAsMadeId(recipe.id)
-    try {
-      await markAsMade.mutateAsync(recipe.id)
-
-      // Show undo toast after mutation succeeds
-      showToast({
-        message: `"${recipe.name}" marked as made`,
-        onUndo: () => {
-          // Remove the most recent history entry for this recipe
-          unmarkAsMade.mutate(recipe.id)
-        },
-        onExpire: () => {
-          // Mutation already executed, nothing to do
-        },
-      })
-    } catch (error) {
-      showToast({
-        message: getErrorMessage(error, "Failed to mark recipe as made"),
-      })
-    } finally {
-      setMarkingAsMadeId(null)
-    }
-  }, [markAsMade, unmarkAsMade, showToast])
-
   const handleShareRecipe = useCallback((recipe: Recipe) => {
     setShareRecipeId(recipe.id)
     setIsShareDialogOpen(true)
   }, [])
+
+  const handleOpenRecipe = useCallback((recipe: Recipe) => {
+    const panel = document.querySelector<HTMLElement>(
+      '[data-home-tab-panel="recipes"]'
+    )
+    scrollTopRef.current = panel?.scrollTop ?? 0
+    persistRecipeViewState({
+      category,
+      favoritesOnly,
+      scrollTop: scrollTopRef.current,
+      search,
+      selectedTags,
+      sortBy,
+      viewMode,
+    })
+    openRecipeDetail(router, recipe.id, "recipes")
+  }, [
+    category,
+    favoritesOnly,
+    router,
+    search,
+    selectedTags,
+    sortBy,
+    viewMode,
+  ])
 
   const handleToggleFavorite = useCallback((r: Recipe) => {
     toggleFavorite.mutate({ id: r.id, favorite: !!r.favorite })
@@ -812,7 +923,7 @@ export function RecipeList() {
                     onAddToPlan={(recipe) => setAddToPlanRecipeId(recipe.id)}
                     onAddToShoppingList={handleAddToShoppingList}
                     onShare={handleShareRecipe}
-                    onClick={(recipe) => setViewingRecipeId(recipe.id)}
+                    onClick={handleOpenRecipe}
                     onTagClick={handleTagClick}
                     lastMade={stats?.lastMade ?? null}
                     timesMade={stats?.timesMade ?? 0}
@@ -845,37 +956,7 @@ export function RecipeList() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         categories={categories || []}
-        onRecipeCreated={(recipe) => setViewingRecipeId(recipe.id)}
-      />
-
-      {/* Edit Dialog */}
-      <RecipeDialog
-        open={!!editingRecipeId}
-        onOpenChange={(open) => !open && setEditingRecipeId(null)}
-        recipeId={editingRecipeId || undefined}
-        categories={categories || []}
-      />
-
-      {/* View Dialog */}
-      <RecipeDetailDialog
-        open={!!viewingRecipeId}
-        onOpenChange={(open) => !open && setViewingRecipeId(null)}
-        recipeId={viewingRecipeId}
-        onEdit={(recipe) => {
-          setViewingRecipeId(null)
-          setEditingRecipeId(recipe.id)
-        }}
-        onDelete={deleteRecipeAndNotify}
-        onAddToPlan={(recipe) => setAddToPlanRecipeId(recipe.id)}
-        onAddToShoppingList={handleAddToShoppingList}
-        onMarkAsMade={handleMarkAsMade}
-        onShare={handleShareRecipe}
-        lastMade={viewingRecipeId ? statsMap.get(viewingRecipeId)?.lastMade ?? null : null}
-        timesMade={viewingRecipeId ? statsMap.get(viewingRecipeId)?.timesMade ?? 0 : 0}
-        isAddingToPlan={false}
-        isAddingToShoppingList={viewingRecipeId != null && addingToShoppingListId === viewingRecipeId}
-        isMarkingAsMade={viewingRecipeId != null && markingAsMadeId === viewingRecipeId}
-        isSharing={false}
+        onRecipeCreated={handleOpenRecipe}
       />
 
       <ShareRecipeDialog

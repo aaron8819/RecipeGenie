@@ -36,6 +36,44 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .recipe-detail-scroll {
+    scroll-behavior: auto;
+  }
+}
+
+@media print {
+  html,
+  body {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    background: white;
+  }
+
+  .recipe-detail-scroll {
+    overflow: visible;
+  }
+
+  .recipe-detail-page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .recipe-detail-print-hidden {
+    display: none !important;
+  }
+
+  .recipe-detail-print-only {
+    display: inline !important;
+  }
+
+  .recipe-detail-page section {
+    break-inside: avoid;
+  }
+}
+
 @supports (height: 100dvh) {
   :root {
     --app-height: 100dvh;

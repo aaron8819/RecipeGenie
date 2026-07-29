@@ -1,6 +1,8 @@
 export const HOME_VALID_TABS = ["recipes", "planner", "pantry", "shopping"] as const
 export const HOME_TAB_STORAGE_KEY = "recipe-genie-active-tab"
 export const HOME_TAB_COOKIE = "recipe-genie-active-tab"
+export const HOME_TAB_RECONCILIATION_COOKIE =
+  "recipe-genie-active-tab-reconciliation"
 export const HOME_DEFAULT_TAB = "recipes"
 
 export type HomeTab = (typeof HOME_VALID_TABS)[number]

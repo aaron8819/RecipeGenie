@@ -25,12 +25,23 @@ const addToShoppingListMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
 const removeFromPlanMutate = vi.fn()
 const addRecipeToPlanMutate = vi.fn()
+const routerPush = vi.fn()
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+  }),
+}))
 
 let currentWeeklyPlan: WeeklyPlan
 let currentUserConfig: UserConfig
 let currentRecipes: Recipe[]
 let currentWeeklyPlanRecipes: Recipe[]
 let currentShoppingSourceRecipes: string[]
+let requestedWeekDate: string
+let requestedWeekDates: string[]
 
 vi.mock("next/image", () => ({
   default: ({
@@ -82,10 +93,14 @@ vi.mock("@dnd-kit/utilities", () => ({
 }))
 
 vi.mock("@/hooks/use-planner", () => ({
-  useWeeklyPlan: () => ({
+  useWeeklyPlan: (weekDate: string) => {
+    requestedWeekDate = weekDate
+    requestedWeekDates.push(weekDate)
+    return {
     data: currentWeeklyPlan,
     isLoading: false,
-  }),
+    }
+  },
   useWeeklyPlanRecipes: () => ({
     data: currentWeeklyPlanRecipes,
   }),
@@ -165,14 +180,6 @@ vi.mock("@/hooks/use-recipes", () => ({
   useRecipes: () => ({
     data: currentRecipes,
   }),
-}))
-
-vi.mock("@/components/recipes/recipe-detail-dialog", () => ({
-  RecipeDetailDialog: () => null,
-}))
-
-vi.mock("@/components/recipes/recipe-dialog", () => ({
-  RecipeDialog: () => null,
 }))
 
 vi.mock("../add-recipe-to-plan-modal", () => ({
@@ -445,6 +452,9 @@ describe("MealPlanner interactions", () => {
     currentRecipes = [recipeFixture()]
     currentWeeklyPlanRecipes = [recipeFixture()]
     currentShoppingSourceRecipes = []
+    requestedWeekDate = ""
+    requestedWeekDates = []
+    window.sessionStorage.clear()
   })
 
   it("keeps regenerate confirmation in context on failure and closes it only after a confirmed retry success", async () => {
@@ -663,4 +673,60 @@ describe("MealPlanner interactions", () => {
 
     expect(screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })).toBeEnabled()
   })
+
+  it("opens planned recipes on the canonical full-page route", () => {
+    render(<MealPlanner />)
+
+    const recipeTitles = screen.getAllByText("Planner Recipe")
+    const recipeCard = recipeTitles[0].closest('[role="button"]')
+    expect(recipeCard).not.toBeNull()
+    fireEvent.click(recipeCard!)
+
+    expect(routerPush).toHaveBeenCalledOnce()
+    expect(routerPush.mock.calls[0][0]).toMatch(
+      /^\/recipes\/recipe-1\?from=planner&origin=/
+    )
+  })
+
+  it("restores the selected planner week after a route remount", () => {
+    window.sessionStorage.setItem(
+      "recipe-genie:planner-view-state:v1",
+      JSON.stringify({
+        currentWeekDate: "2026-08-10",
+        mobileWeekTab: "nextWeek",
+      })
+    )
+
+    render(<MealPlanner />)
+
+    expect(requestedWeekDate).toBe("2026-08-10")
+  })
+
+  it.each([
+    "2026-02-29",
+    "2026-04-31",
+    "2026-00-15",
+    "2026-13-15",
+    "2026-99-99",
+    "2026-01-00",
+    "2026-01-32",
+    "2026/01/15",
+  ])(
+    "rejects persisted date %s before the Planner data query",
+    (invalidDate) => {
+      window.sessionStorage.setItem(
+        "recipe-genie:planner-view-state:v1",
+        JSON.stringify({
+          currentWeekDate: invalidDate,
+          mobileWeekTab: "nextWeek",
+        })
+      )
+
+      render(<MealPlanner />)
+
+      const safeDefault = getWeekStartDate(new Date(), 1)
+      expect(requestedWeekDate).toBe(safeDefault)
+      expect(requestedWeekDates).not.toContain(invalidDate)
+    }
+  )
 })

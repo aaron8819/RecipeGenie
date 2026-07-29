@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useRouter } from "next/navigation"
 import {
   DndContext,
   DragOverlay,
@@ -44,8 +45,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
-import { RecipeDialog } from "@/components/recipes/recipe-dialog"
 import { AddRecipeToPlanModal } from "./add-recipe-to-plan-modal"
 import { PlanSettingsModal } from "./plan-settings-modal"
 import { SaveTemplateDialog } from "./save-template-dialog"
@@ -75,6 +74,7 @@ import { getTagClassName, getTagColor } from "@/lib/tag-colors"
 import { getCategoryHexColor } from "@/lib/planner-colors"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import {
+  isCanonicalLocalDate,
   parseLocalDate,
   toLocalNoonISOString,
   dayIndexToDayOfWeek,
@@ -83,6 +83,7 @@ import {
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
 import { navigateToHomeTab } from "@/lib/home-navigation"
+import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import { cn, getErrorMessage } from "@/lib/utils"
 import {
   formatLocalISODate,
@@ -139,6 +140,41 @@ import type { Recipe, RecipeHistory, PlanTemplate } from "@/types/database"
 const SHOPPING_ITEM_LABEL = {
   singular: "shopping item",
   plural: "shopping items",
+}
+
+const PLANNER_VIEW_STATE_STORAGE_KEY = "recipe-genie:planner-view-state:v1"
+
+interface PlannerViewState {
+  currentWeekDate: string
+  mobileWeekTab: MobileWeekTab
+}
+
+function getStoredPlannerViewState(): PlannerViewState | null {
+  if (typeof window === "undefined") return null
+
+  try {
+    const stored = window.sessionStorage.getItem(
+      PLANNER_VIEW_STATE_STORAGE_KEY
+    )
+    if (!stored) return null
+
+    const parsed = JSON.parse(stored) as Partial<PlannerViewState>
+    const validTab =
+      parsed.mobileWeekTab === "today" ||
+      parsed.mobileWeekTab === "thisWeek" ||
+      parsed.mobileWeekTab === "nextWeek"
+    const validDate =
+      isCanonicalLocalDate(parsed.currentWeekDate)
+
+    return validTab && validDate
+      ? {
+          currentWeekDate: parsed.currentWeekDate!,
+          mobileWeekTab: parsed.mobileWeekTab!,
+        }
+      : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -1096,13 +1132,13 @@ function MobileRecipeCard({
 }
 
 export function MealPlanner() {
+  const router = useRouter()
+  const [initialViewState] = useState(getStoredPlannerViewState)
   // Default to current week (client local date); syncs to user's week_start_day when config loads
   const [currentWeekDate, setCurrentWeekDate] = useState<string>(() =>
-    getWeekStartDate(new Date(), 1)
+    initialViewState?.currentWeekDate ?? getWeekStartDate(new Date(), 1)
   )
   const [selection, setSelection] = useState<Record<string, number>>({})
-  const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null)
-  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [markingRecipeId, setMarkingRecipeId] = useState<string | null>(null)
   const [addingToCartRecipeId, setAddingToCartRecipeId] = useState<string | null>(null)
   const [cartAddedRecipeId, setCartAddedRecipeId] = useState<string | null>(null)
@@ -1118,7 +1154,9 @@ export function MealPlanner() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false)
   const [isLoadTemplateOpen, setIsLoadTemplateOpen] = useState(false)
-  const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>("thisWeek")
+  const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>(
+    initialViewState?.mobileWeekTab ?? "thisWeek"
+  )
   const mobileDaysContainerRef = useRef<HTMLDivElement>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
   const [pendingAssignmentOverlays, setPendingAssignmentOverlays] = useState<Record<string, Record<string, number>>>({})
@@ -1128,6 +1166,10 @@ export function MealPlanner() {
     return window.matchMedia("(min-width: 1024px)").matches
   })
 
+  const handleOpenRecipe = useCallback((recipe: Recipe) => {
+    openRecipeDetail(router, recipe.id, "planner")
+  }, [router])
+
   useEffect(() => {
     if (typeof window === "undefined") return
     const mq = window.matchMedia("(min-width: 1024px)")
@@ -1136,6 +1178,17 @@ export function MealPlanner() {
     mq.addEventListener("change", handler)
     return () => mq.removeEventListener("change", handler)
   }, [])
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        PLANNER_VIEW_STATE_STORAGE_KEY,
+        JSON.stringify({ currentWeekDate, mobileWeekTab })
+      )
+    } catch {
+      // Planner state remains functional when browser storage is unavailable.
+    }
+  }, [currentWeekDate, mobileWeekTab])
 
   // Hook to save day assignments to database
   const saveDayAssignments = useSaveDayAssignments()
@@ -1235,7 +1288,7 @@ export function MealPlanner() {
   const statsMap = useMemo(() => getRecipeStatsMap(historyStats), [historyStats])
 
   // Sync to current week when config first loads (user's week_start_day)
-  const hasSyncedInitialWeekRef = useRef(false)
+  const hasSyncedInitialWeekRef = useRef(!!initialViewState)
   const markUserNavigated = useCallback(() => {
     hasSyncedInitialWeekRef.current = true
   }, [])
@@ -2070,7 +2123,7 @@ export function MealPlanner() {
                         swappingRecipeId={swappingRecipeId}
                         removingRecipeId={removingRecipeId}
                         isInShopping={isRecipeInShopping}
-                        onViewRecipe={setViewingRecipe}
+                        onViewRecipe={handleOpenRecipe}
                         onSwapRecipe={handleSwapRecipe}
                         onMarkMade={handleMarkMade}
                         onAddToCart={handleAddRecipeToCart}
@@ -2110,7 +2163,7 @@ export function MealPlanner() {
                       swappingRecipeId={swappingRecipeId}
                       removingRecipeId={removingRecipeId}
                       isInShopping={isRecipeInShopping}
-                      onViewRecipe={setViewingRecipe}
+                      onViewRecipe={handleOpenRecipe}
                       onSwapRecipe={handleSwapRecipe}
                       onMarkMade={handleMarkMade}
                       onAddToCart={handleAddRecipeToCart}
@@ -2147,7 +2200,7 @@ export function MealPlanner() {
                       cartAddedRecipeId={cartAddedRecipeId}
                       removingRecipeId={removingRecipeId}
                       isInShopping={isRecipeInShopping}
-                      onViewRecipe={setViewingRecipe}
+                      onViewRecipe={handleOpenRecipe}
                       onSwapRecipe={handleSwapRecipe}
                       onMarkMade={handleMarkMade}
                       onAddToCart={handleAddRecipeToCart}
@@ -2166,27 +2219,6 @@ export function MealPlanner() {
 
           </>
         )}
-      {/* Recipe Detail Dialog */}
-      <RecipeDetailDialog
-        open={!!viewingRecipe}
-        onOpenChange={(open) => !open && setViewingRecipe(null)}
-        recipe={viewingRecipe}
-        onEdit={(r) => {
-          setViewingRecipe(null)
-          setEditingRecipe(r)
-        }}
-        lastMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.lastMade ?? null : null}
-        timesMade={viewingRecipe ? statsMap.get(viewingRecipe.id)?.timesMade ?? 0 : 0}
-      />
-
-      {/* Edit Recipe Dialog */}
-      <RecipeDialog
-        open={!!editingRecipe}
-        onOpenChange={(open) => !open && setEditingRecipe(null)}
-        recipe={editingRecipe || undefined}
-        categories={allCategories || []}
-      />
-
       {/* Add Recipe to Plan Modal */}
       <AddRecipeToPlanModal
         open={isAddRecipeModalOpen}

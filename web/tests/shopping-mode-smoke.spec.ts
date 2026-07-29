@@ -153,11 +153,12 @@ async function createSmokeRecipe(
   await dialog.getByRole('button', { name: /^add recipe$/i }).click()
   await expect(dialog).toBeHidden({ timeout: 15000 })
 
-  const detailDialog = page.getByRole('dialog', { name: new RegExp(smokeRecipe.name, 'i') })
-  if (await detailDialog.isVisible().catch(() => false)) {
-    await detailDialog.getByRole('button', { name: /^close$/i }).click()
-    await expect(detailDialog).toBeHidden({ timeout: 10000 })
-  }
+  const detailPage = page.getByTestId('recipe-detail-page')
+  await expect(
+    detailPage.getByRole('heading', { name: smokeRecipe.name, level: 1 })
+  ).toBeVisible()
+  await detailPage.getByRole('button', { name: /back to recipes/i }).click()
+  await expect(detailPage).toHaveCount(0)
 }
 
 async function seedPantryAndExcludedState(
