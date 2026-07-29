@@ -5,6 +5,7 @@ import {
 } from "@/lib/ingredient-units"
 import {
   parseIngredientQuantityPrefix,
+  RECIPE_QUANTITY_LIMITS,
   parseQuantityV1,
   parseYieldMetadata,
   quantityToLegacyAmount,
@@ -1240,6 +1241,12 @@ const UNIT_ABBREVIATIONS = [
  * Parse a single ingredient line into an Ingredient object.
  */
 export function parseIngredientLine(line: string): Ingredient {
+  if (
+    typeof line !== "string" ||
+    line.length > RECIPE_QUANTITY_LIMITS.ingredientLineLength
+  ) {
+    return { item: "", amount: null, unit: "" }
+  }
   let cleaned = line.trim()
 
   // Remove list markers at the start, but preserve numbered amounts.

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeDialog } from "../recipe-dialog"
 import type { Ingredient, Recipe } from "@/types/database"
+import { parseIngredientLine } from "@/lib/recipe-parser"
 
 globalThis.React = React
 
@@ -31,6 +32,7 @@ vi.mock("next/dynamic", () => ({
     function MockSortableIngredientList({
       ingredients,
       onIngredientChange,
+      onIngredientParsed,
     }: {
       ingredients: Ingredient[]
       onIngredientChange: (
@@ -38,6 +40,7 @@ vi.mock("next/dynamic", () => ({
         field: keyof Ingredient,
         value: string | number | null
       ) => void
+      onIngredientParsed: (index: number, ingredient: Ingredient) => void
     }) {
       return (
         <div>
@@ -47,6 +50,9 @@ vi.mock("next/dynamic", () => ({
               aria-label={`Ingredient ${index + 1}`}
               value={ingredient.item}
               onChange={(event) => onIngredientChange(index, "item", event.target.value)}
+              onBlur={(event) =>
+                onIngredientParsed(index, parseIngredientLine(event.target.value))
+              }
             />
           ))}
         </div>
@@ -429,6 +435,48 @@ describe("RecipeDialog image orchestration", () => {
     )
     expect(onRecipeCreated).toHaveBeenCalledWith(currentCreatedRecipe)
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("submits the complete parsed ingredient after single-line manual entry", async () => {
+    renderCreateDialog()
+
+    fireEvent.change(screen.getByLabelText("Recipe Name"), {
+      target: { value: "Tomato Soup" },
+    })
+    const ingredient = screen.getByLabelText("Ingredient 1")
+    fireEvent.change(ingredient, {
+      target: { value: "about 0.50–1 (14 oz) cans tomatoes" },
+    })
+    fireEvent.blur(ingredient, {
+      target: { value: "about 0.50–1 (14 oz) cans tomatoes" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Add Recipe" }))
+
+    await waitFor(() => {
+      expect(createRecipeMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ingredients: [
+            expect.objectContaining({
+              item: "tomatoes",
+              amount: "0.5–1",
+              unit: "(14 oz) cans",
+              originalText: "about 0.50–1 (14 oz) cans tomatoes",
+              quantityV1: expect.objectContaining({
+                kind: "range",
+                authored: "about 0.50–1",
+                qualifier: "about",
+                startLexeme: "0.50",
+                endLexeme: "1",
+              }),
+              packageV1: expect.objectContaining({
+                type: "can",
+                authoredType: "cans",
+              }),
+            }),
+          ],
+        })
+      )
+    })
   })
 
   it("preserves the create submit flow and shows the existing toast when image upload fails", async () => {

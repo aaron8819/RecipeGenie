@@ -182,6 +182,15 @@ function Get-RecipeGenieMigrationBackupDefinition {
                 RequireRestoreVerification = $true
             }
         }
+        'supabase/migrations/014_add_recipe_yield_metadata.sql' {
+            [ordered]@{
+                MigrationPath = $normalizedPath
+                PendingMigrationVersion = '014'
+                ExpectedAppliedMigrationVersions = @('001','002','003','004','005','006','007','008','009','010','011','012','013')
+                ExpectedProjectReference = 'eyaoahwzixqetjgfghsh'
+                RequireRestoreVerification = $true
+            }
+        }
         default { throw 'Migration is not supported by the Recipe Genie production backup gate.' }
     }
     [pscustomobject]$definition

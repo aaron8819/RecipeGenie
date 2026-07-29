@@ -20,6 +20,11 @@ import {
   quantityToLegacyAmount,
   resolveIngredientQuantity,
 } from "@/lib/recipe-quantity"
+import {
+  normalizeIngredient,
+  normalizeIngredients,
+  requireIngredientsForPersistence,
+} from "@/lib/recipe-data-validation"
 
 export const DEFAULT_RECIPE_SERVINGS = 4
 
@@ -288,65 +293,75 @@ export function normalizeIngredientUnit(unit?: string | null): string {
 }
 
 export function normalizeRecipeIngredient(ingredient: Ingredient): Ingredient {
-  const item = normalizeIngredientWhitespace(ingredient.item)
-  const normalizedUnit = normalizeIngredientUnit(ingredient.unit)
+  const safeIngredient =
+    normalizeIngredient(ingredient, "hydrate") || EMPTY_RECIPE_INGREDIENT
+  const item = normalizeIngredientWhitespace(safeIngredient.item)
+  const normalizedUnit = normalizeIngredientUnit(safeIngredient.unit)
   const unit =
     normalizedUnit ||
-    (item && hasIngredientAmount(ingredient.amount)
+    (item && hasIngredientAmount(safeIngredient.amount)
       ? WHOLE_COUNT_UNIT
       : "")
-  const groupLabel = normalizeIngredientWhitespace(ingredient.groupLabel)
-  const modifier = normalizeIngredientWhitespace(ingredient.modifier)
-  const alternatives = ingredient.alternatives
+  const groupLabel = normalizeIngredientWhitespace(safeIngredient.groupLabel)
+  const modifier = normalizeIngredientWhitespace(safeIngredient.modifier)
+  const alternatives = safeIngredient.alternatives
     ?.map((alternative) => normalizeIngredientWhitespace(alternative))
     .filter(Boolean)
 
   const manuallyAuthoredQuantity =
-    typeof ingredient.amount === "string"
-      ? parseQuantityV1(ingredient.amount)
+    typeof safeIngredient.amount === "string"
+      ? parseQuantityV1(safeIngredient.amount)
       : null
-  const resolved = resolveIngredientQuantity(ingredient)
+  const resolved = resolveIngredientQuantity(safeIngredient)
+  const structuredQuantity = isValidQuantityV1(safeIngredient.quantityV1)
+    ? safeIngredient.quantityV1
+    : null
   const quantityV1 =
-    manuallyAuthoredQuantity &&
+    structuredQuantity ??
+    (manuallyAuthoredQuantity &&
     manuallyAuthoredQuantity.kind !== "unparsed"
       ? manuallyAuthoredQuantity
-      : isValidQuantityV1(ingredient.quantityV1)
-        ? ingredient.quantityV1
-        : resolved.quantity ?? undefined
+      : resolved.quantity ?? undefined)
 
   return {
-    ...ingredient,
+    ...safeIngredient,
     item,
     unit,
     amount:
+      !structuredQuantity &&
       quantityV1 &&
       manuallyAuthoredQuantity &&
       manuallyAuthoredQuantity.kind !== "unparsed"
         ? quantityToLegacyAmount(quantityV1)
-        : ingredient.amount,
+        : safeIngredient.amount,
     quantityV1,
     authoredUnit:
-      normalizeIngredientWhitespace(ingredient.authoredUnit) ||
-      normalizeIngredientWhitespace(ingredient.unit) ||
+      normalizeIngredientWhitespace(safeIngredient.authoredUnit) ||
+      normalizeIngredientWhitespace(safeIngredient.unit) ||
       undefined,
-    packageV1: ingredient.packageV1 ?? resolved.packageV1,
+    packageV1: safeIngredient.packageV1 ?? resolved.packageV1,
     groupLabel: groupLabel || undefined,
     modifier: modifier || undefined,
     alternatives: alternatives && alternatives.length > 0 ? alternatives : undefined,
-    originalText: normalizeIngredientWhitespace(ingredient.originalText) || undefined,
+    originalText:
+      normalizeIngredientWhitespace(safeIngredient.originalText) || undefined,
   }
 }
 
 export function normalizeRecipeIngredientsForEditing(
   ingredients: Ingredient[]
 ): Ingredient[] {
-  return ingredients.map((ingredient) => normalizeRecipeIngredient(ingredient))
+  return (normalizeIngredients(ingredients, "hydrate") || [])
+    .map((ingredient) => normalizeRecipeIngredient(ingredient))
 }
 
 export function normalizeRecipeIngredientsForSubmission(
   ingredients: Ingredient[]
 ): Ingredient[] {
-  return ingredients
+  const populatedIngredients = ingredients.filter(
+    (ingredient) =>
+      typeof ingredient.item === "string" && ingredient.item.trim().length > 0
+  )
+  return requireIngredientsForPersistence(populatedIngredients)
     .map((ingredient) => normalizeRecipeIngredient(ingredient))
-    .filter((ingredient) => ingredient.item)
 }

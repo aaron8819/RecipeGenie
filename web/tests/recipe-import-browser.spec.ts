@@ -220,18 +220,21 @@ async function openImportedRecipe(page: Page) {
   const card = page.locator(`[data-recipe-name="${IMPORTED_TITLE}"]`).first()
   await expect(card).toBeVisible()
   await card.click()
-  const detail = page.getByRole('dialog').last()
+  const detail = page.getByTestId('recipe-detail-page')
   await expect(detail.locator('h1')).toHaveText(IMPORTED_TITLE)
   return detail
 }
 
 async function assertImportedDetail(detail: Locator) {
-  await expect(detail.getByText('4 servings', { exact: true })).toBeVisible()
-  await expect(detail.getByText('Prep 15 min', { exact: true })).toBeVisible()
-  await expect(detail.getByText('Cook 10 min', { exact: true })).toBeVisible()
-  await expect(detail.getByText('Total 25 min', { exact: true })).toBeVisible()
+  await expect(detail.locator('h1')).toHaveText(IMPORTED_TITLE, {
+    timeout: 30_000,
+  })
+  await expect(detail.getByText('4 servings', { exact: true }).first()).toBeVisible()
+  await expect(detail.getByText('Prep 15 min', { exact: true }).first()).toBeVisible()
+  await expect(detail.getByText('Cook 10 min', { exact: true }).first()).toBeVisible()
+  await expect(detail.getByText('Total 25 min', { exact: true }).first()).toBeVisible()
   const ingredientsHeading = detail.getByRole('heading', {
-    name: 'Ingredients (30)',
+    name: 'Ingredients',
     exact: true,
   })
   const ingredientsSection = ingredientsHeading.locator('xpath=ancestor::section[1]')
@@ -377,10 +380,10 @@ test.describe('local recipe import browser verification', () => {
       expect(row.category).toBe('beef')
       console.log('[recipe-import] create assertions: PASS')
 
-      let detail = page.getByRole('dialog').last()
+      let detail = page.getByTestId('recipe-detail-page')
       await assertImportedDetail(detail)
-      await detail.getByRole('button', { name: /^close$/i }).click()
-      await expect(page.getByRole('dialog')).toHaveCount(0)
+      await detail.getByRole('button', { name: /^back to recipes$/i }).click()
+      await expect(detail).toBeHidden()
 
       await page.reload()
       await navigateToTab('recipes')
@@ -442,11 +445,11 @@ test.describe('local recipe import browser verification', () => {
       await search.fill(fixture.name)
       await page.locator(`[data-recipe-name="${fixture.name}"]`).first().click()
 
-      const detail = page.getByRole('dialog').last()
+      const detail = page.getByTestId('recipe-detail-page')
       await expect(detail.locator('h1')).toHaveText(fixture.name)
       await expect(detail.getByRole('button', { name: 'Remove from favorites' })).toBeVisible()
       const legacyIngredientsHeading = detail.getByRole('heading', {
-        name: 'Ingredients (1)',
+        name: 'Ingredients',
         exact: true,
       })
       const legacyIngredientsSection =
@@ -490,7 +493,7 @@ test.describe('local recipe import browser verification', () => {
       await expect(
         replacedDetail.getByRole('button', { name: 'Remove from favorites' })
       ).toBeVisible()
-      await expect(replacedDetail.getByText('lamb', { exact: true })).toBeVisible()
+      await expect(replacedDetail.getByText(/^lamb$/i)).toBeVisible()
       await expect(replacedDetail.getByText('preserve-me', { exact: true })).toBeVisible()
       await expect(
         replacedDetail.getByText('browser-fixture', { exact: true })
@@ -573,7 +576,7 @@ test.describe('local recipe import browser verification', () => {
       expect(row.instructions).toEqual(LEGACY_INSTRUCTIONS)
       expect(row.notes).toEqual(LEGACY_NOTES)
 
-      const detail = page.getByRole('dialog').last()
+      const detail = page.getByTestId('recipe-detail-page')
       await expect(detail.locator('h1')).toHaveText(LEGACY_TITLE)
       await expect(
         detail.getByText(LEGACY_NOTES[0], { exact: true })

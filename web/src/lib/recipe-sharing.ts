@@ -1,7 +1,8 @@
 import type { Recipe, RecipeShareSnapshot } from '@/types/database';
+import { normalizeRecipeShareSnapshot } from './recipe-data-validation';
 
 export function buildRecipeShareSnapshot(recipe: Recipe): RecipeShareSnapshot {
-  return {
+  const snapshot = normalizeRecipeShareSnapshot({
     name: recipe.name,
     category: recipe.category,
     servings: recipe.servings,
@@ -15,5 +16,9 @@ export function buildRecipeShareSnapshot(recipe: Recipe): RecipeShareSnapshot {
     total_time_minutes: recipe.total_time_minutes ?? null,
     notes: recipe.notes ?? [],
     instruction_groups: recipe.instruction_groups ?? null,
-  };
+  }, "persist");
+  if (!snapshot) {
+    throw new Error('Recipe contains invalid structured metadata');
+  }
+  return snapshot;
 }

@@ -34,7 +34,11 @@ import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
-import { parseQuantityV1 } from "@/lib/recipe-quantity"
+import {
+  normalizePackageV1,
+  normalizeRecipeUnit,
+  parseQuantityV1,
+} from "@/lib/recipe-quantity"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient, RecipeInstructionGroup } from "@/types/database"
 import { createRecipeUuid } from "@/lib/recipe-identity"
@@ -291,6 +295,9 @@ export function RecipeDialog({
     setIngredients((current) => {
       const next = [...current]
       const ingredient = { ...next[index], [field]: value }
+      if (["amount", "unit", "item", "modifier"].includes(field)) {
+        ingredient.originalText = undefined
+      }
       if (field === "amount") {
         const quantity =
           value == null ? null : parseQuantityV1(String(value), "authored")
@@ -301,16 +308,44 @@ export function RecipeDialog({
             ...ingredient.packageV1,
             count: ingredient.quantityV1,
           }
+        } else if (ingredient.packageV1) {
+          ingredient.packageV1 = undefined
         }
       }
       if (field === "unit") {
-        ingredient.authoredUnit = String(value || "")
-        ingredient.packageV1 = undefined
+        const authoredUnit = String(value || "")
+        ingredient.authoredUnit = authoredUnit
+        if (ingredient.packageV1) {
+          const packageType = normalizeRecipeUnit(authoredUnit)
+          ingredient.packageV1 = normalizePackageV1({
+            ...ingredient.packageV1,
+            type: packageType,
+            authoredType: authoredUnit,
+          }) ?? undefined
+        }
       }
       next[index] = ingredient
       return next
     })
   }
+
+  const handleIngredientParsed = useCallback((
+    index: number,
+    parsed: Ingredient
+  ) => {
+    setIngredients((current) => {
+      const next = [...current]
+      const existing = next[index]
+      const [normalized] = normalizeRecipeIngredientsForEditing([{
+        ...parsed,
+        ...(existing?.groupLabel
+          ? { groupLabel: existing.groupLabel }
+          : {}),
+      }])
+      if (normalized) next[index] = normalized
+      return next
+    })
+  }, [])
 
   const handleReorderIngredients = useCallback((event: DragEndEvent) => {
     const { active, over } = event
@@ -984,6 +1019,7 @@ export function RecipeDialog({
                 onAddIngredient={handleAddIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
                 onIngredientChange={handleIngredientChange}
+                onIngredientParsed={handleIngredientParsed}
                 isEditing={false}
                 onReorderIngredients={handleReorderIngredients}
                 onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1060,6 +1096,7 @@ export function RecipeDialog({
                 onAddIngredient={handleAddIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
                 onIngredientChange={handleIngredientChange}
+                onIngredientParsed={handleIngredientParsed}
                 isEditing={true}
                 onReorderIngredients={handleReorderIngredients}
                 onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1129,6 +1166,7 @@ export function RecipeDialog({
                   onAddIngredient={handleAddIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
                   onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1172,6 +1210,7 @@ export function RecipeDialog({
                   onAddIngredient={handleAddIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
                   onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1215,6 +1254,7 @@ export function RecipeDialog({
                   onAddIngredient={handleAddIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
                   onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1362,6 +1402,7 @@ interface RecipeFormContentProps {
     field: keyof Ingredient,
     value: string | number | null
   ) => void
+  onIngredientParsed: (index: number, ingredient: Ingredient) => void
   isEditing: boolean
   onReorderIngredients: (event: DragEndEvent) => void
   onBulkPasteIngredients: (index: number, text: string) => void
@@ -1410,6 +1451,7 @@ function RecipeFormContent({
   onAddIngredient,
   onRemoveIngredient,
   onIngredientChange,
+  onIngredientParsed,
   isEditing,
   onReorderIngredients,
   onBulkPasteIngredients,
@@ -1504,6 +1546,7 @@ function RecipeFormContent({
               duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
               onRemoveIngredient={onRemoveIngredient}
               onIngredientChange={onIngredientChange}
+              onIngredientParsed={onIngredientParsed}
             />
           </RecipeIngredientsSection>
         </div>
@@ -1584,6 +1627,7 @@ function RecipeFormContent({
             duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
             onRemoveIngredient={onRemoveIngredient}
             onIngredientChange={onIngredientChange}
+            onIngredientParsed={onIngredientParsed}
           />
         </RecipeIngredientsSection>
 

@@ -59,9 +59,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/011_fix_uuid_made_state_date_contract.sql`
 - `supabase/migrations/012_enforce_uuid_active_recipe_writes.sql`
 - `supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql`
+- `supabase/migrations/014_add_recipe_yield_metadata.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 13 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 14 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -76,6 +77,8 @@ Archived files are not replacement migrations and are not part of that chain.
   UUID linkage. No UUID is invented for a deleted or unresolved recipe.
 - Migration 013 preserves UUID authority when an existing shopping
   contribution is replaced without rewriting its unchanged identity pair.
+- Migration 014 adds versioned authored-yield metadata and hardens shared
+  snapshot acceptance while preserving the numeric servings projection.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -691,11 +694,12 @@ The repository now uses a baseline-first bootstrap strategy:
 11. **011_fix_uuid_made_state_date_contract.sql** - Replaced the defective UUID/text made-state RPC with the canonical UUID/date command and retained the authenticated legacy overload.
 12. **012_enforce_uuid_active_recipe_writes.sql** - Required UUID authority for active recipe writes, derived compatibility mirrors, and added UUID-coordinated recipe deletion.
 13. **013_allow_uuid_shopping_contribution_replacement.sql** - Preserved UUID authority for content-only replacement of an existing contribution identity pair.
+14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and safe shared-snapshot acceptance.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through 013. The archived pre-baseline sequence is not replayed.
+  migration through 014. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -913,7 +917,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 013, and the
+instructions. The current authoritative chain ends at migration 014, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

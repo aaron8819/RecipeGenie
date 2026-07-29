@@ -420,6 +420,51 @@ describe("shopping amount formatting", () => {
     ).toBe("0.5–1 tsp")
   })
 
+  it("formats exact scaled ranges and packages from structured metadata", () => {
+    expect(
+      formatShoppingItemAmount(
+        item({
+          amount: null,
+          unit: "can (14 oz)",
+          exactQuantityV1: {
+            version: 1,
+            kind: "range",
+            authored: "1–2",
+            source: "authored",
+            start: { numerator: "3", denominator: "2" },
+            end: { numerator: "3", denominator: "1" },
+            startLexeme: "1",
+            endLexeme: "2",
+            separator: "–",
+          },
+          exactAuthoredUnit: "(14 oz) cans",
+          exactPackageV1: {
+            version: 1,
+            count: {
+              version: 1,
+              kind: "range",
+              authored: "1–2",
+              source: "authored",
+              start: { numerator: "3", denominator: "2" },
+              end: { numerator: "3", denominator: "1" },
+              startLexeme: "1",
+              endLexeme: "2",
+              separator: "–",
+            },
+            size: {
+              value: { numerator: "14", denominator: "1" },
+              lexeme: "14",
+              unit: "oz",
+              authoredUnit: "oz",
+            },
+            type: "can",
+            authoredType: "cans",
+          },
+        })
+      )
+    ).toBe("1½–3 14 oz cans")
+  })
+
   it("formats additional amounts independently from the primary amount", () => {
     expect(formatAdditionalAmountParts([{ amount: 2, unit: "package" }, { amount: 1, unit: "head" }])).toEqual([
       "2 packages",

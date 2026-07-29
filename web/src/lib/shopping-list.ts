@@ -22,7 +22,11 @@ import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { getIngredientQuantityRange } from "./recipe-parser"
 import {
+  normalizeScaleRatioV1,
+  parseRationalLexeme,
+  rationalToNumber,
   resolveIngredientQuantity,
+  scalePackageV1,
   scaleQuantityV1,
 } from "./recipe-quantity"
 
@@ -177,29 +181,68 @@ export function generateShoppingList(
       categoryOrder: number
       citrusPrepByRecipe?: Map<string, CitrusPrepNeeds>
       preserveExactFraction: boolean
+      exactQuantityV1?: ShoppingItem["exactQuantityV1"]
+      exactPackageV1?: ShoppingItem["exactPackageV1"]
+      exactAuthoredUnit?: string
+      structuredSourceKey?: string
     }
   >()
 
   let totalBaseServings = 0
+  const validatedScale =
+    normalizeScaleRatioV1(exactScaleV1) ||
+    normalizeScaleRatioV1(parseRationalLexeme(String(scale))) ||
+    undefined
 
   for (const recipe of recipes) {
     totalBaseServings += recipe.servings || 4
 
-    for (const ingredient of recipe.ingredients || []) {
+    for (const [ingredientIndex, ingredient] of (
+      recipe.ingredients || []
+    ).entries()) {
       const quantityRange = getIngredientQuantityRange(ingredient.amount)
+      const resolved = resolveIngredientQuantity(ingredient)
+      const structuredScale =
+        resolved.quantity?.kind === "exact" ||
+        resolved.quantity?.kind === "range"
+          ? validatedScale
+          : undefined
+      const exactQuantity =
+        structuredScale && resolved.quantity
+          ? scaleQuantityV1(resolved.quantity, structuredScale)
+          : undefined
+      const exactPackage =
+        structuredScale && resolved.packageV1
+          ? scalePackageV1(resolved.packageV1, structuredScale) || undefined
+          : undefined
+      const sourceAwareStructured =
+        exactQuantity?.kind === "range" || Boolean(exactPackage)
+      const exactScalarAmount =
+        exactQuantity?.kind === "exact"
+          ? rationalToNumber(exactQuantity.value)
+          : null
+      const compatibilityUnit = exactPackage
+        ? `${exactPackage.type} (${exactPackage.size.lexeme} ${exactPackage.size.authoredUnit})`
+        : ingredient.unit || ""
       const purchase = normalizeShoppingPurchase({
         item: ingredient.item,
         amount:
-          typeof ingredient.amount === "number"
-            ? ingredient.amount
-            : quantityRange?.start ?? null,
-        unit: quantityRange
-          ? `${quantityRange.quantity.replace("–", "-")} ${ingredient.unit || ""}`.trim()
-          : ingredient.unit || "",
+          exactQuantity
+            ? exactScalarAmount
+            : typeof ingredient.amount === "number"
+              ? ingredient.amount
+              : quantityRange?.start ?? null,
+        unit: exactQuantity
+          ? compatibilityUnit
+          : quantityRange
+            ? ingredient.unit || ""
+            : ingredient.unit || "",
         modifier: ingredient.modifier,
       })
       const itemName = purchase.purchaseName
-      const amount = (purchase.purchaseQuantity || 0) * scale
+      const amount = exactQuantity
+        ? purchase.purchaseQuantity || 0
+        : (purchase.purchaseQuantity || 0) * scale
       const unit = normalizeUnit(purchase.purchaseUnit || "")
       const preserveExactFraction =
         purchase.purchaseQuantity === purchase.originalQuantity &&
@@ -216,15 +259,10 @@ export function generateShoppingList(
         preparationModifiers: purchase.canonical.preparationModifiers,
         optional: purchase.canonical.optional,
         originalText: ingredient.originalText,
-        exactScaleV1,
-        exactQuantityV1: exactScaleV1
-          ? (() => {
-              const resolved = resolveIngredientQuantity(ingredient)
-              return resolved.quantity
-                ? scaleQuantityV1(resolved.quantity, exactScaleV1)
-                : undefined
-            })()
-          : undefined,
+        exactScaleV1: structuredScale,
+        exactQuantityV1: exactQuantity,
+        exactPackageV1: exactPackage,
+        exactAuthoredUnit: resolved.authoredUnit,
       }
 
       // Build display name with alternatives if present (normalized to lowercase)
@@ -239,7 +277,12 @@ export function generateShoppingList(
       )
 
       // Category is part of merge compatibility, but not the public purchase key.
-      const key = `${purchase.canonical.mergeKey}|category:${effectiveCategoryKey}`
+      const structuredSourceKey = sourceAwareStructured
+        ? `${recipe.id || recipe.name}:${ingredientIndex}`
+        : undefined
+      const key = `${purchase.canonical.mergeKey}|category:${effectiveCategoryKey}${
+        structuredSourceKey ? `|structured:${structuredSourceKey}` : ""
+      }`
 
       if (ingredientMap.has(key)) {
         const existing = ingredientMap.get(key)!
@@ -304,6 +347,13 @@ export function generateShoppingList(
           categoryOrder: effectiveCategoryOrder,
           citrusPrepByRecipe,
           preserveExactFraction,
+          exactQuantityV1:
+            sourceAwareStructured ? exactQuantity : undefined,
+          exactPackageV1:
+            sourceAwareStructured ? exactPackage : undefined,
+          exactAuthoredUnit:
+            sourceAwareStructured ? resolved.authoredUnit : undefined,
+          structuredSourceKey,
         })
       }
     }
@@ -324,6 +374,10 @@ export function generateShoppingList(
       categoryKey: ingredient.categoryKey,
       categoryOrder: ingredient.categoryOrder,
       sources: ingredient.sources,
+      exactQuantityV1: ingredient.exactQuantityV1,
+      exactPackageV1: ingredient.exactPackageV1,
+      exactAuthoredUnit: ingredient.exactAuthoredUnit,
+      structuredSourceKey: ingredient.structuredSourceKey,
       shoppingCategory: ingredient.shoppingCategory,
       additionalAmounts: ingredient.additionalAmounts?.map(a => ({
         amount: roundForDisplay(a.amount),

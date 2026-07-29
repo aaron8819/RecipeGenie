@@ -5,6 +5,7 @@ import {
   ensureCategoryInfo,
 } from '../shopping-list'
 import type { Recipe, PantryItem, ShoppingItem } from '@/types/database'
+import { parseIngredientLine } from '@/lib/recipe-parser'
 
 /**
  * Unit tests for shopping-list.ts business logic
@@ -651,6 +652,75 @@ describe('generateShoppingList', () => {
       const flour = result.items.find(i => i.item === 'flour')
       expect(flour?.amount).toBe(1) // 2 * 0.5 = 1
       expect(result.totalServings).toBe(2) // 4 * 0.5 = 2
+    })
+
+    it('preserves and scales both endpoints of a structured range', () => {
+      const recipe = createMockRecipe({
+        ingredients: [parseIngredientLine('1–2 tbsp sugar')],
+      })
+
+      const result = generateShoppingList(
+        [recipe],
+        [],
+        [],
+        0.75,
+        null,
+        null,
+        { numerator: '3', denominator: '4' }
+      )
+      const sugar = result.items.find((item) => item.item === 'sugar')
+
+      expect(sugar).toMatchObject({
+        amount: null,
+        unit: 'tbsp',
+        exactQuantityV1: {
+          kind: 'range',
+          start: { numerator: '3', denominator: '4' },
+          end: { numerator: '3', denominator: '2' },
+        },
+      })
+      expect(sugar?.sources?.[0]).toMatchObject({
+        exactQuantityV1: {
+          kind: 'range',
+          start: { numerator: '3', denominator: '4' },
+          end: { numerator: '3', denominator: '2' },
+        },
+        exactScaleV1: { numerator: '3', denominator: '4' },
+      })
+    })
+
+    it('keeps scaled package size and count as immutable Shopping metadata', () => {
+      const recipe = createMockRecipe({
+        ingredients: [parseIngredientLine('1–2 (14 oz) cans tomatoes')],
+      })
+
+      const result = generateShoppingList(
+        [recipe],
+        [],
+        [],
+        1.5,
+        null,
+        null,
+        { numerator: '3', denominator: '2' }
+      )
+      const tomatoes = result.items.find((item) => item.item === 'tomato')
+
+      expect(tomatoes).toMatchObject({
+        amount: null,
+        exactQuantityV1: {
+          kind: 'range',
+          start: { numerator: '3', denominator: '2' },
+          end: { numerator: '3', denominator: '1' },
+        },
+        exactPackageV1: {
+          type: 'can',
+          size: {
+            value: { numerator: '14', denominator: '1' },
+            authoredUnit: 'oz',
+          },
+        },
+      })
+      expect(tomatoes?.structuredSourceKey).toContain(':0')
     })
   })
 

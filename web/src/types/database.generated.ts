@@ -482,6 +482,7 @@ export type Database = {
           total_time_minutes: number | null
           updated_at: string | null
           user_id: string
+          yield_metadata: Json | null
         }[]
         SetofOptions: {
           from: "*"

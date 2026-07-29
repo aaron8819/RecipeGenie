@@ -77,6 +77,7 @@ export type ShoppingContributionProjection = {
 }
 
 function canonicalizeStoredContributionKey(key: string): string {
+  if (key.startsWith("structured:")) return key
   const categorySeparator = "|category:"
   const categoryIndex = key.indexOf(categorySeparator)
   if (categoryIndex < 0) {
@@ -90,6 +91,9 @@ function canonicalizeStoredContributionKey(key: string): string {
 
 function contributionKey(item: ShoppingItem): string {
   const awareItem = item as ContributionAwareShoppingItem
+  if (item.structuredSourceKey) {
+    return `structured:${item.structuredSourceKey}`
+  }
   return awareItem.contributionKey
     ? canonicalizeStoredContributionKey(awareItem.contributionKey)
     : createShoppingPurchaseKey(item.item, item.amount, item.unit)
@@ -164,11 +168,21 @@ function aggregateContributions(
 
   const baseKeyCounts = new Map<string, number>()
   for (const item of aggregate) {
+    if (item.structuredSourceKey) continue
     const key = createShoppingPurchaseKey(item.item, item.amount, item.unit)
     baseKeyCounts.set(key, (baseKeyCounts.get(key) || 0) + 1)
   }
 
   return aggregate.map((item) => {
+    if (item.structuredSourceKey) {
+      const key = `structured:${item.structuredSourceKey}`
+      return {
+        ...item,
+        rowId: item.rowId || `derived:${key}`,
+        contributionKey: key,
+        derivedQuantity: quantityOf(item),
+      }
+    }
     const baseKey = createShoppingPurchaseKey(item.item, item.amount, item.unit)
     const key = (baseKeyCounts.get(baseKey) || 0) > 1
       ? `${baseKey}|category:${item.categoryKey}`
@@ -285,7 +299,7 @@ function applyOverride(
 ): ContributionAwareShoppingItem | null {
   if (override?.deleted) return null
 
-  return {
+  const projected = {
     ...item,
     rowId: override?.rowId || item.rowId,
     item: override?.displayName || item.item,
@@ -294,6 +308,12 @@ function applyOverride(
     checked: override?.checked ?? item.checked,
     ...(override?.quantity || {}),
   }
+  if (override?.quantity) {
+    projected.exactQuantityV1 = undefined
+    projected.exactPackageV1 = undefined
+    projected.exactAuthoredUnit = undefined
+  }
+  return projected
 }
 
 function sortProjectionItems(

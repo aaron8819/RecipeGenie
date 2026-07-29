@@ -14,6 +14,8 @@ Migration 012 uses 012_enforce_uuid_active_recipe_writes.sql. Run it only after 
 
 Migration 013 uses 013_allow_uuid_shopping_contribution_replacement.sql. It requires the authoritative ledger to contain exactly 001 through 012, which also proves that 013 and every unexpected migration are absent. It verifies the migration-012 shopping contribution function and enabled trigger plus same-owner UUID/text identity parity for every existing contribution. It is read-only, returns no customer rows or identifiers, and rolls back unconditionally.
 
+Migration 014 uses 014_add_recipe_yield_metadata.sql. It requires the authoritative ledger to contain exactly 001 through 013, verifies that `recipes.yield_metadata` is absent, checks the hardened recipe-share RPC contract, and rejects incompatible pending share snapshots. It is read-only, returns no customer rows or identifiers, and rolls back unconditionally.
+
 The expected application evidence is the deployed Stage 2C application-ahead compatibility bridge plus the deletion-integrity repair. Repository history records those as deployed, but an operator must verify the authorized production application version at execution time. SQL must not infer it.
 
-Do not run a preflight merely because a backup exists. Migrations 012 and 013 change active-write authority and separately require a verified disposable restore.
+Do not run a preflight merely because a backup exists. Migrations 012 through 014 change active-write or RPC authority and separately require a verified disposable restore.

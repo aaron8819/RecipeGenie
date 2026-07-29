@@ -32,6 +32,7 @@ import { cn, toFraction } from "@/lib/utils"
 import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import type { ShoppingItem } from "@/types/database"
 import { pluralizeCanonicalShoppingName } from "@/lib/shopping-ingredient-canonicalization"
+import { formatStructuredRecipeQuantity } from "@/lib/recipe-quantity"
 
 const RECIPE_COLORS = [
   { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" },
@@ -130,6 +131,13 @@ export function formatAdditionalAmountParts(
 }
 
 export function formatShoppingItemAmount(item: ShoppingItem): string {
+  const structured = formatStructuredRecipeQuantity(
+    item.exactQuantityV1,
+    item.exactAuthoredUnit ?? item.unit,
+    item.exactPackageV1
+  )
+  if (structured) return structured.text
+
   const parts: string[] = []
 
   const primaryAmount = formatAmountPart(item.amount, item.unit)
@@ -161,6 +169,15 @@ function getDisplayItemName(item: ShoppingItem): string {
 
 function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]>[number]): string | null {
   if (!source.originalItem) return null
+
+  const structured = formatStructuredRecipeQuantity(
+    source.exactQuantityV1,
+    source.exactAuthoredUnit ?? source.originalUnit ?? "",
+    source.exactPackageV1
+  )
+  if (structured) {
+    return `${structured.text} ${source.originalItem}`
+  }
 
   const rangeAmount = formatEncodedRangeAmount(
     source.originalAmount,

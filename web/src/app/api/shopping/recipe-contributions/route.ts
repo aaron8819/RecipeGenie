@@ -23,18 +23,17 @@ import {
   mapShoppingListRow,
   type RecipeRow,
 } from "@/lib/recipe-identity"
-import { rationalToNumber } from "@/lib/recipe-quantity"
+import {
+  normalizeScaleRatioV1,
+  rationalToNumber,
+} from "@/lib/recipe-quantity"
+import {
+  RECIPE_DATA_LIMITS,
+  normalizeShoppingItems,
+} from "@/lib/recipe-data-validation"
 
 const MAX_COMMAND_RETRIES = 4
 const MAX_RECIPES_PER_COMMAND = 100
-
-type CommandBody = {
-  recipeIds?: string[]
-  scale?: number
-  scaleV1?: RationalV1
-  idempotencyKey?: string
-  clearAll?: boolean
-}
 
 type StoredContribution = {
   recipe_uuid: string
@@ -61,18 +60,55 @@ function identifierCorrelation(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12)
 }
 
-function parseBody(body: CommandBody) {
-  const recipeIds = [...new Set((body.recipeIds || []).map((id) => id.trim()))]
+function parseBody(body: unknown) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Invalid request body")
+  }
+  const command = body as Record<string, unknown>
+  if (
+    command.recipeIds !== undefined &&
+    (!Array.isArray(command.recipeIds) ||
+      command.recipeIds.some((id) => typeof id !== "string"))
+  ) {
+    throw new Error("Recipe IDs must be an array of UUIDs")
+  }
+  const recipeIds = [...new Set(
+    ((command.recipeIds as string[] | undefined) || [])
+      .map((id) => id.trim())
+  )]
     .filter(Boolean)
     .sort()
-  const exactScale = body.scaleV1
-    ? rationalToNumber(body.scaleV1)
+  const scaleV1 =
+    command.scaleV1 === undefined
+      ? undefined
+      : normalizeScaleRatioV1(command.scaleV1) || undefined
+  const exactScale = scaleV1
+    ? rationalToNumber(scaleV1)
     : null
-  if (body.scaleV1 && exactScale == null) {
-    throw new Error("Exact scale must be a valid rational")
+  if (command.scaleV1 !== undefined && exactScale == null) {
+    throw new Error("Exact scale must be a valid positive rational")
   }
-  const scale = exactScale ?? body.scale ?? 1
-  const idempotencyKey = body.idempotencyKey?.trim() || ""
+  if (
+    command.scale !== undefined &&
+    typeof command.scale !== "number"
+  ) {
+    throw new Error("Scale must be a number")
+  }
+  const scale = exactScale ?? command.scale ?? 1
+  if (
+    command.idempotencyKey !== undefined &&
+    typeof command.idempotencyKey !== "string"
+  ) {
+    throw new Error("A valid idempotency key is required")
+  }
+  const idempotencyKey =
+    (command.idempotencyKey as string | undefined)?.trim() || ""
+  if (
+    command.clearAll !== undefined &&
+    typeof command.clearAll !== "boolean"
+  ) {
+    throw new Error("clearAll must be a boolean")
+  }
 
   if (recipeIds.length > MAX_RECIPES_PER_COMMAND) {
     throw new Error("Too many recipes in one shopping command")
@@ -85,8 +121,8 @@ function parseBody(body: CommandBody) {
   }
   if (
     exactScale != null &&
-    body.scale != null &&
-    Math.abs(exactScale - body.scale) > 1e-12
+    command.scale != null &&
+    Math.abs(exactScale - Number(command.scale)) > 1e-12
   ) {
     throw new Error("Numeric and exact scales must agree")
   }
@@ -97,21 +133,59 @@ function parseBody(body: CommandBody) {
   return {
     recipeIds,
     scale,
-    scaleV1: body.scaleV1,
+    scaleV1,
     idempotencyKey,
-    clearAll: Boolean(body.clearAll),
+    clearAll: Boolean(command.clearAll),
   }
 }
 
-function storedToDomain(row: StoredContribution): RecipeShoppingContribution {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function storedToDomain(
+  value: unknown
+): RecipeShoppingContribution | null {
+  if (!isRecord(value) || !isRecord(value.snapshot)) return null
+  const row = value as unknown as StoredContribution
+  const items = normalizeShoppingItems(row.snapshot.items, "hydrate")
+  const exactScale =
+    row.snapshot.exactScaleV1 === undefined
+      ? undefined
+      : normalizeScaleRatioV1(row.snapshot.exactScaleV1)
+  if (
+    typeof row.recipe_uuid !== "string" ||
+    !isRecipeUuid(row.recipe_uuid) ||
+    !Number.isSafeInteger(row.servings) ||
+    row.servings <= 0 ||
+    row.servings > RECIPE_DATA_LIMITS.numericAmount ||
+    !Number.isFinite(row.scale) ||
+    row.scale <= 0 ||
+    row.scale > 100 ||
+    !Number.isSafeInteger(row.normalization_version) ||
+    row.normalization_version <= 0 ||
+    typeof row.snapshot.recipeName !== "string" ||
+    row.snapshot.recipeName.length === 0 ||
+    row.snapshot.recipeName.length > RECIPE_DATA_LIMITS.recipeNameLength ||
+    !items ||
+    (row.snapshot.exactScaleV1 !== undefined && !exactScale)
+  ) {
+    return null
+  }
+  const contributionItems: ShoppingContributionItem[] = []
+  for (const item of items) {
+    const bucket = (item as ShoppingContributionItem).bucket
+    if (!["items", "already_have", "excluded"].includes(bucket)) return null
+    contributionItems.push({ ...item, bucket })
+  }
   return {
     recipeId: row.recipe_uuid,
     recipeName: row.snapshot.recipeName,
     servings: row.servings,
     scale: row.scale,
-    scaleV1: row.snapshot.exactScaleV1,
+    scaleV1: exactScale || undefined,
     normalizationVersion: row.normalization_version,
-    items: mapShoppingItems(row.snapshot.items),
+    items: mapShoppingItems(contributionItems),
   }
 }
 
@@ -176,7 +250,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
 
   let input: ReturnType<typeof parseBody>
   try {
-    input = parseBody((await request.json()) as CommandBody)
+    input = parseBody(await request.json())
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Invalid request body" },
@@ -213,8 +287,26 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
     if (configResult.error) throw configResult.error
 
     const state = stateResult.data as unknown as StoredContributionState
+    if (
+      !isRecord(state) ||
+      !isRecord(state.shopping_list) ||
+      !Array.isArray(state.contributions)
+    ) {
+      return NextResponse.json(
+        { error: "Stored shopping state is invalid" },
+        { status: 409 }
+      )
+    }
     const currentList = mapShoppingListRow(state.shopping_list as never)
-    const previousContributions = (state.contributions || []).map(storedToDomain)
+    const normalizedContributions = state.contributions.map(storedToDomain)
+    if (normalizedContributions.some((contribution) => !contribution)) {
+      return NextResponse.json(
+        { error: "Stored shopping contribution data is invalid" },
+        { status: 409 }
+      )
+    }
+    const previousContributions =
+      normalizedContributions as RecipeShoppingContribution[]
     const pantryItems = (pantryResult.data || []) as PantryItem[]
     const config = (configResult.data || {}) as {
       excluded_keywords?: string[] | null
@@ -260,17 +352,26 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         ),
         ...replacements,
       ]
-      contributionPayload = replacements.map((contribution) => ({
-        recipe_uuid: contribution.recipeId,
-        servings: contribution.servings,
-        scale: contribution.scale,
-        normalization_version: contribution.normalizationVersion,
-        snapshot: {
-          recipeName: contribution.recipeName,
-          items: contribution.items,
-          exactScaleV1: contribution.scaleV1,
-        },
-      }))
+      contributionPayload = replacements.map((contribution) => {
+        const safeItems = normalizeShoppingItems(
+          contribution.items,
+          "persist"
+        )
+        if (!safeItems) {
+          throw new Error("Generated shopping contribution is invalid")
+        }
+        return {
+          recipe_uuid: contribution.recipeId,
+          servings: contribution.servings,
+          scale: contribution.scale,
+          normalization_version: contribution.normalizationVersion,
+          snapshot: {
+            recipeName: contribution.recipeName,
+            items: safeItems as ShoppingContributionItem[],
+            exactScaleV1: contribution.scaleV1,
+          },
+        }
+      })
     } else {
       const removeIds = input.clearAll
         ? previousContributions.map((contribution) => contribution.recipeId)
@@ -295,6 +396,28 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         config.shopping_item_order
       ),
     })
+    const safeProjectionItems = normalizeShoppingItems(
+      projection.shoppingList.items,
+      "persist"
+    )
+    const safeProjectionAlreadyHave = normalizeShoppingItems(
+      projection.shoppingList.already_have,
+      "persist"
+    )
+    const safeProjectionExcluded = normalizeShoppingItems(
+      projection.shoppingList.excluded,
+      "persist"
+    )
+    if (
+      !safeProjectionItems ||
+      !safeProjectionAlreadyHave ||
+      !safeProjectionExcluded
+    ) {
+      return NextResponse.json(
+        { error: "Generated shopping projection is invalid" },
+        { status: 500 }
+      )
+    }
     const recipeCorrelations = input.recipeIds.map(identifierCorrelation)
     const idempotencyCorrelation = identifierCorrelation(input.idempotencyKey)
 
@@ -313,6 +436,9 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
           commandType === "remove" ? input.recipeIds : [],
         p_projection: {
           ...projection.shoppingList,
+          items: safeProjectionItems,
+          already_have: safeProjectionAlreadyHave,
+          excluded: safeProjectionExcluded,
           source_recipe_uuids: projection.shoppingList.source_recipes,
         },
         p_contribution_overrides: projection.overrides,

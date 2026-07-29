@@ -1,11 +1,11 @@
 import * as cheerio from 'cheerio';
 import { parseIngredientLine } from './recipe-parser';
 import {
-  isValidQuantityV1,
   isValidYieldMetadata,
   parseYieldMetadata,
   rationalToNumber,
 } from './recipe-quantity';
+import { normalizeIngredients } from './recipe-data-validation';
 import type { Ingredient, YieldMetadataV1 } from '@/types/database';
 
 export interface ExtractedRecipe {
@@ -279,21 +279,7 @@ function parseStructuredRecipeIngredients(
 ): Ingredient[] | null {
   if (!raw || typeof raw !== 'object') return null;
   const ingredients = (raw as { ingredients?: unknown }).ingredients;
-  if (!Array.isArray(ingredients)) return null;
-
-  const parsed = ingredients.filter((value): value is Ingredient => {
-    if (!value || typeof value !== 'object') return false;
-    const ingredient = value as Partial<Ingredient>;
-    return (
-      typeof ingredient.item === 'string' &&
-      (typeof ingredient.amount === 'string' ||
-        typeof ingredient.amount === 'number' ||
-        ingredient.amount === null) &&
-      typeof ingredient.unit === 'string' &&
-      (!ingredient.quantityV1 || isValidQuantityV1(ingredient.quantityV1))
-    );
-  });
-  return parsed.length === ingredients.length ? parsed : null;
+  return normalizeIngredients(ingredients, "persist");
 }
 
 /**

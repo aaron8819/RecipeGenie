@@ -7,6 +7,11 @@ import type {
   ShoppingList,
   WeeklyPlan,
 } from "@/types/database"
+import {
+  normalizeIngredients,
+  normalizeShoppingItems,
+  normalizeYieldMetadataForHydration,
+} from "./recipe-data-validation"
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -36,9 +41,17 @@ export function createRecipeUuid(): string {
 
 /** The only database-row to application-recipe identity mapping seam. */
 export function mapRecipeRow(row: RecipeRow): Recipe {
-  const { id: legacyId, recipe_uuid: id, ...recipe } = row
+  const {
+    id: legacyId,
+    recipe_uuid: id,
+    ingredients: rawIngredients,
+    yield_metadata: rawYieldMetadata,
+    ...recipe
+  } = row
   return {
     ...recipe,
+    ingredients: normalizeIngredients(rawIngredients, "hydrate") || [],
+    yield_metadata: normalizeYieldMetadataForHydration(rawYieldMetadata),
     id,
     legacyId,
   } as Recipe
@@ -91,15 +104,16 @@ export function mapRecipeHistoryRow(row: RecipeHistoryRow): RecipeHistory {
 export function mapShoppingListRow(row: ShoppingListRow): ShoppingList {
   return {
     ...row,
-    items: mapShoppingItems(row.items as unknown as ShoppingItem[]),
-    already_have: mapShoppingItems(row.already_have as unknown as ShoppingItem[]),
-    excluded: mapShoppingItems(row.excluded as unknown as ShoppingItem[]),
+    items: mapShoppingItems(row.items),
+    already_have: mapShoppingItems(row.already_have),
+    excluded: mapShoppingItems(row.excluded),
     source_recipes: row.source_recipe_uuids,
   } as ShoppingList
 }
 
-export function mapShoppingItems<T extends ShoppingItem>(items: T[]): T[] {
-  return (items || []).map((item) => ({
+export function mapShoppingItems<T extends ShoppingItem>(items: unknown): T[] {
+  const normalized = normalizeShoppingItems(items, "hydrate") || []
+  return normalized.map((item) => ({
     ...item,
     sources: item.sources?.map((source) => {
       const persisted = source as typeof source & { recipeUuid?: string }

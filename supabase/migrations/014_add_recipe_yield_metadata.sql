@@ -42,18 +42,135 @@ begin
     raise exception 'Share is no longer pending';
   end if;
 
-  v_name := coalesce(
-    nullif(trim(v_share.source_recipe_snapshot->>'name'), ''),
-    'Shared Recipe'
-  );
-  v_category := coalesce(
-    nullif(trim(v_share.source_recipe_snapshot->>'category'), ''),
-    'uncategorized'
-  );
-  v_servings := coalesce(
-    (v_share.source_recipe_snapshot->>'servings')::integer,
-    4
-  );
+  if v_share.source_recipe_snapshot = '{}'::jsonb then
+    v_name := 'Shared Recipe';
+    v_category := 'uncategorized';
+    v_servings := 4;
+  else
+  if jsonb_typeof(v_share.source_recipe_snapshot) <> 'object' then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if not (v_share.source_recipe_snapshot ? 'name')
+     or not (v_share.source_recipe_snapshot ? 'category')
+     or not (v_share.source_recipe_snapshot ? 'servings')
+     or jsonb_typeof(v_share.source_recipe_snapshot->'name') <> 'string'
+     or length(v_share.source_recipe_snapshot->>'name') > 512
+     or nullif(trim(v_share.source_recipe_snapshot->>'name'), '') is null
+     or jsonb_typeof(v_share.source_recipe_snapshot->'category') <> 'string'
+     or length(v_share.source_recipe_snapshot->>'category') > 128
+     or nullif(trim(v_share.source_recipe_snapshot->>'category'), '') is null
+     or jsonb_typeof(v_share.source_recipe_snapshot->'servings') <> 'number'
+     or (v_share.source_recipe_snapshot->>'servings') !~ '^(?:[1-9][0-9]{0,3}|10000)$' then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if not (v_share.source_recipe_snapshot ? 'tags')
+     or not (v_share.source_recipe_snapshot ? 'ingredients')
+     or not (v_share.source_recipe_snapshot ? 'instructions')
+     or jsonb_typeof(v_share.source_recipe_snapshot->'tags') <> 'array'
+     or jsonb_array_length(v_share.source_recipe_snapshot->'tags') > 100
+     or jsonb_typeof(v_share.source_recipe_snapshot->'ingredients') <> 'array'
+     or jsonb_array_length(v_share.source_recipe_snapshot->'ingredients') > 500
+     or jsonb_typeof(v_share.source_recipe_snapshot->'instructions') <> 'array'
+     or jsonb_array_length(v_share.source_recipe_snapshot->'instructions') > 2000 then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if exists (
+    select 1
+    from jsonb_array_elements(v_share.source_recipe_snapshot->'tags') as entry
+    where jsonb_typeof(entry) <> 'string'
+       or length(entry #>> '{}') > 128
+  ) or exists (
+    select 1
+    from jsonb_array_elements(v_share.source_recipe_snapshot->'instructions') as entry
+    where jsonb_typeof(entry) <> 'string'
+       or length(entry #>> '{}') > 10000
+  ) or exists (
+    select 1
+    from jsonb_array_elements(v_share.source_recipe_snapshot->'ingredients') as ingredient
+    where jsonb_typeof(ingredient) <> 'object'
+       or not (ingredient ? 'item')
+       or not (ingredient ? 'amount')
+       or not (ingredient ? 'unit')
+       or jsonb_typeof(ingredient->'item') <> 'string'
+       or nullif(trim(ingredient->>'item'), '') is null
+       or length(ingredient->>'item') > 512
+       or jsonb_typeof(ingredient->'unit') <> 'string'
+       or length(ingredient->>'unit') > 64
+       or (
+         jsonb_typeof(ingredient->'amount') not in ('number', 'string', 'null')
+       )
+       or (
+         ingredient ? 'quantityV1'
+         and jsonb_typeof(ingredient->'quantityV1') <> 'object'
+       )
+       or (
+         ingredient ? 'packageV1'
+         and jsonb_typeof(ingredient->'packageV1') <> 'object'
+       )
+  ) then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if v_share.source_recipe_snapshot ? 'yield_metadata'
+     and jsonb_typeof(v_share.source_recipe_snapshot->'yield_metadata') not in ('object', 'null') then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if jsonb_typeof(v_share.source_recipe_snapshot->'yield_metadata') = 'object'
+     and (
+       not (v_share.source_recipe_snapshot->'yield_metadata' ? 'version')
+       or not (v_share.source_recipe_snapshot->'yield_metadata' ? 'authoredText')
+       or not (v_share.source_recipe_snapshot->'yield_metadata' ? 'kind')
+       or not (v_share.source_recipe_snapshot->'yield_metadata' ? 'scalingBasis')
+       or v_share.source_recipe_snapshot->'yield_metadata'->>'version' <> '1'
+       or jsonb_typeof(v_share.source_recipe_snapshot->'yield_metadata'->'authoredText') <> 'string'
+       or length(v_share.source_recipe_snapshot->'yield_metadata'->>'authoredText') > 256
+       or v_share.source_recipe_snapshot->'yield_metadata'->>'kind'
+         not in ('servings', 'portions', 'items', 'other')
+       or jsonb_typeof(v_share.source_recipe_snapshot->'yield_metadata'->'scalingBasis') <> 'object'
+     ) then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if v_share.source_recipe_snapshot ? 'image_url'
+     and jsonb_typeof(v_share.source_recipe_snapshot->'image_url') not in ('string', 'null') then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if exists (
+    select 1
+    from unnest(array['prep_time_minutes', 'cook_time_minutes', 'total_time_minutes']) as field_name
+    where v_share.source_recipe_snapshot ? field_name
+      and jsonb_typeof(v_share.source_recipe_snapshot->field_name) <> 'null'
+      and (
+        jsonb_typeof(v_share.source_recipe_snapshot->field_name) <> 'number'
+        or (v_share.source_recipe_snapshot->>field_name) !~ '^[0-9]{1,9}$'
+      )
+  ) then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if v_share.source_recipe_snapshot ? 'notes'
+     and jsonb_typeof(v_share.source_recipe_snapshot->'notes') <> 'array' then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if jsonb_typeof(v_share.source_recipe_snapshot->'notes') = 'array'
+     and (
+       jsonb_array_length(v_share.source_recipe_snapshot->'notes') > 2000
+       or exists (
+         select 1
+         from jsonb_array_elements(v_share.source_recipe_snapshot->'notes') as entry
+         where jsonb_typeof(entry) <> 'string'
+            or length(entry #>> '{}') > 10000
+       )
+     ) then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+  if v_share.source_recipe_snapshot ? 'instruction_groups'
+     and jsonb_typeof(v_share.source_recipe_snapshot->'instruction_groups')
+       not in ('array', 'null') then
+    raise exception 'Invalid recipe snapshot';
+  end if;
+
+  v_name := trim(v_share.source_recipe_snapshot->>'name');
+  v_category := trim(v_share.source_recipe_snapshot->>'category');
+  v_servings := (v_share.source_recipe_snapshot->>'servings')::integer;
+  end if;
 
   select coalesce(array_agg(value), '{}'::text[])
   into v_tags

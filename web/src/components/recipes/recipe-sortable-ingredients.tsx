@@ -73,6 +73,7 @@ function SortableIngredientRow({
   index,
   onRemoveIngredient,
   onIngredientChange,
+  onIngredientParsed,
   ingredients,
   onKeyboardMoveIngredient,
   isEditing,
@@ -88,6 +89,7 @@ function SortableIngredientRow({
   index: number
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
+  onIngredientParsed: (index: number, ingredient: Ingredient) => void
   onBulkPasteIngredients: (index: number, text: string) => void
   onKeyboardMoveIngredient: (fromIndex: number, toIndex: number) => void
   ingredients: Ingredient[]
@@ -166,10 +168,7 @@ function SortableIngredientRow({
       return
     }
 
-    onIngredientChange(index, "amount", parsed.amount)
-    onIngredientChange(index, "unit", parsed.unit || "")
-    onIngredientChange(index, "item", parsed.item)
-    onIngredientChange(index, "modifier", parsed.modifier || null)
+    onIngredientParsed(index, parsed)
   }
 
   const handleDragHandleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -526,6 +525,7 @@ export interface SortableIngredientListProps {
   onReorderIngredients: (event: DragEndEvent) => void
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
+  onIngredientParsed: (index: number, ingredient: Ingredient) => void
   onBulkPasteIngredients: (index: number, text: string) => void
   duplicateWarningsByRow?: Record<number, string[]>
 }
@@ -539,6 +539,7 @@ export function SortableIngredientList({
   onReorderIngredients,
   onRemoveIngredient,
   onIngredientChange,
+  onIngredientParsed,
   onBulkPasteIngredients,
   duplicateWarningsByRow,
 }: SortableIngredientListProps) {
@@ -598,6 +599,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onIngredientParsed={onIngredientParsed}
                 onBulkPasteIngredients={onBulkPasteIngredients}
                 onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}
@@ -625,6 +627,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onIngredientParsed={onIngredientParsed}
                 onBulkPasteIngredients={onBulkPasteIngredients}
                 onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}
@@ -643,6 +646,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onIngredientParsed={onIngredientParsed}
                 onBulkPasteIngredients={onBulkPasteIngredients}
                 onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
                 duplicateWarnings={duplicateWarningsByRow?.[index]}

@@ -8,6 +8,10 @@ import {
   getScalingBasis,
   isValidQuantityV1,
   multiplyRationals,
+  normalizePackageV1,
+  normalizeQuantityV1,
+  normalizeScaleRatioV1,
+  normalizeYieldMetadataV1,
   parseQuantityV1,
   parseRationalLexeme,
   parseYieldMetadata,
@@ -86,6 +90,76 @@ describe("exact recipe quantities", () => {
     })
     expect(isValidQuantityV1(range)).toBe(true)
   })
+
+  it("rejects malformed and impractically large persisted rationals before BigInt conversion", () => {
+    const valid = parseQuantityV1("1/2")
+    expect(normalizeQuantityV1(valid)).toEqual(valid)
+    expect(
+      normalizeQuantityV1({
+        ...valid,
+        authored: 0.5,
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...valid,
+        value: { numerator: "1000000000000", denominator: "1" },
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...valid,
+        value: { numerator: "1", denominator: "0000000000001" },
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...valid,
+        value: { numerator: "-0", denominator: "1" },
+      })
+    ).toBeNull()
+    expect(
+      normalizeQuantityV1({
+        ...valid,
+        value: { numerator: "1", denominator: "0" },
+      })
+    ).toBeNull()
+    expect(normalizeQuantityV1({ ...valid, unexpected: true })).toBeNull()
+    expect(normalizeQuantityV1([])).toBeNull()
+    expect(normalizeQuantityV1(null)).toBeNull()
+    expect(parseRationalLexeme("9".repeat(13))).toBeNull()
+    expect(parseRationalLexeme("99999999")).not.toBeNull()
+  })
+
+  it("rejects partial package, yield, and scale metadata", () => {
+    expect(normalizePackageV1({})).toBeNull()
+    expect(
+      normalizePackageV1({
+        version: 1,
+        count: parseQuantityV1("1"),
+        size: {
+          value: { numerator: "14", denominator: "1" },
+          lexeme: "14",
+          unit: "oz",
+          authoredUnit: "oz",
+        },
+        type: "can",
+        authoredType: "can",
+      })
+    ).not.toBeNull()
+    expect(normalizeScaleRatioV1({ numerator: "0", denominator: "1" })).toBeNull()
+    expect(
+      normalizeScaleRatioV1({ numerator: "101", denominator: "1" })
+    ).toBeNull()
+    expect(
+      normalizeYieldMetadataV1({
+        version: 1,
+        authoredText: 4,
+        kind: "servings",
+        scalingBasis: { numerator: "4", denominator: "1" },
+      })
+    ).toBeNull()
+  })
 })
 
 describe("recipe quantity formatting", () => {
@@ -114,7 +188,9 @@ describe("recipe quantity formatting", () => {
     ["2 eggs", 4, 3, "1½"],
     ["1 egg", 6, 5, "5/6"],
     ["1 (14 oz) can tomatoes", 4, 3, "¾ of a 14 oz can"],
+    ["about 1 (14 oz) can tomatoes", 4, 3, "about ¾ of a 14 oz can"],
     ["2 (14 oz) cans tomatoes", 4, 6, "3 14 oz cans"],
+    ["1–2 (14 oz) cans tomatoes", 4, 6, "1½–3 14 oz cans"],
   ])("formats %s from %s→%s", (line, basis, selected, expected) => {
     expect(format(line, basis, selected)).toBe(expected)
   })
@@ -126,6 +202,8 @@ describe("recipe quantity formatting", () => {
       ["1 1/2 cups flour", "1 1/2 cups"],
       ["0.50 cup milk", "0.50 cup"],
       ["1 - 2 tbsp sugar", "1 - 2 tbsp"],
+      ["about 1 (14 oz) can tomatoes", "about 1 (14 oz) can"],
+      ["1–2 (14 oz) cans tomatoes", "1–2 (14 oz) cans"],
     ]) {
       expect(format(line, 4, 4)).toBe(expected)
     }

@@ -39,6 +39,9 @@ function createMergeMapKey(
 ): string {
   const identity = createShoppingPurchaseKey(item.item, item.amount, item.unit)
   const category = item.categoryKey || ""
+  if (item.structuredSourceKey) {
+    return `${identity}|category:${category}|structured:${item.structuredSourceKey}`
+  }
   if (isManualItem(item)) {
     return `${identity}|category:${category}|manual:${item.rowId || position}`
   }

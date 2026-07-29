@@ -152,6 +152,67 @@ export type ParsedIngredientQuantityPrefix = {
   confidence: "high" | "low"
 }
 
+/**
+ * Shared trust-boundary limits for persisted/imported quantity metadata.
+ * Components are intentionally small enough to bound BigInt work while the
+ * represented value remains generous for real recipes and yields.
+ */
+export const RECIPE_QUANTITY_LIMITS = {
+  rationalDigits: 12,
+  rationalComponent: 999_999_999_999n,
+  rationalValue: 100_000_000n,
+  yieldValue: 10_000,
+  selectedYield: 100,
+  scaleRatio: 100,
+  authoredQuantityLength: 128,
+  authoredYieldLength: 256,
+  lexemeLength: 64,
+  unitLength: 64,
+  packageTypeLength: 32,
+  reasonLength: 256,
+  ingredientLineLength: 2_048,
+} as const
+
+const QUANTITY_SOURCES = new Set<QuantitySourceV1>([
+  "authored",
+  "original-text",
+  "legacy-synthesized",
+])
+const QUANTITY_QUALIFIERS = new Set([
+  "about",
+  "approximately",
+  "around",
+])
+const RANGE_SEPARATORS = new Set(["-", "–", "—"])
+const YIELD_KINDS = new Set<YieldKindV1>([
+  "servings",
+  "portions",
+  "items",
+  "other",
+])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowed: readonly string[]
+): boolean {
+  const allowedKeys = new Set(allowed)
+  return Object.keys(value).every((key) => allowedKeys.has(key))
+}
+
+function boundedString(
+  value: unknown,
+  maximumLength: number,
+  allowEmpty = false
+): string | null {
+  if (typeof value !== "string" || value.length > maximumLength) return null
+  if (!allowEmpty && value.trim().length === 0) return null
+  return value
+}
+
 function bigintAbs(value: bigint): bigint {
   return value < 0n ? -value : value
 }
@@ -182,19 +243,52 @@ function rational(
   }
 }
 
-function fromPersisted(value: RationalV1): Rational | null {
+function parseBoundedInteger(value: unknown): bigint | null {
   if (
-    !value ||
-    !/^-?\d+$/.test(value.numerator) ||
-    !/^-?\d+$/.test(value.denominator)
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > RECIPE_QUANTITY_LIMITS.rationalDigits + 1 ||
+    !/^-?\d+$/.test(value)
   ) {
     return null
   }
+  const digits = value.startsWith("-") ? value.slice(1) : value
+  if (digits.length > RECIPE_QUANTITY_LIMITS.rationalDigits) return null
   try {
-    return rational(BigInt(value.numerator), BigInt(value.denominator))
+    const parsed = BigInt(value)
+    return bigintAbs(parsed) <= RECIPE_QUANTITY_LIMITS.rationalComponent
+      ? parsed
+      : null
   } catch {
     return null
   }
+}
+
+function fromPersisted(
+  value: unknown,
+  options: { positive?: boolean; nonNegative?: boolean } = {}
+): Rational | null {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["numerator", "denominator"])
+  ) {
+    return null
+  }
+  const numerator = parseBoundedInteger(value.numerator)
+  const denominator = parseBoundedInteger(value.denominator)
+  if (numerator == null || denominator == null || denominator === 0n) {
+    return null
+  }
+  const normalized = rational(numerator, denominator)
+  if (options.positive && normalized.numerator <= 0n) return null
+  if (options.nonNegative && normalized.numerator < 0n) return null
+  if (
+    bigintAbs(normalized.numerator) >
+    RECIPE_QUANTITY_LIMITS.rationalValue * normalized.denominator
+  ) {
+    return null
+  }
+  return normalized
 }
 
 function persist(value: Rational): RationalV1 {
@@ -202,6 +296,21 @@ function persist(value: Rational): RationalV1 {
     numerator: value.numerator.toString(),
     denominator: value.denominator.toString(),
   }
+}
+
+export function normalizeRationalV1(
+  value: unknown,
+  options: { positive?: boolean; nonNegative?: boolean } = {}
+): RationalV1 | null {
+  const parsed = fromPersisted(value, options)
+  return parsed ? persist(parsed) : null
+}
+
+function persistBounded(
+  value: Rational,
+  options: { positive?: boolean; nonNegative?: boolean } = {}
+): RationalV1 | null {
+  return normalizeRationalV1(persist(value), options)
 }
 
 export function rationalFromIntegers(
@@ -214,7 +323,13 @@ export function rationalFromIntegers(
   ) {
     throw new Error("Rational integer inputs must be safe integers")
   }
-  return persist(rational(BigInt(numerator), BigInt(denominator)))
+  const result = persistBounded(
+    rational(BigInt(numerator), BigInt(denominator))
+  )
+  if (!result) {
+    throw new Error("Rational integer inputs exceed recipe quantity limits")
+  }
+  return result
 }
 
 export function multiplyRationals(
@@ -275,16 +390,25 @@ function parseDecimal(value: string): Rational {
 
 export function parseRationalLexeme(value: string): RationalV1 | null {
   const lexeme = value.trim()
+  if (
+    lexeme.length === 0 ||
+    lexeme.length > RECIPE_QUANTITY_LIMITS.lexemeLength ||
+    new RegExp(`\\d{${RECIPE_QUANTITY_LIMITS.rationalDigits + 1},}`).test(
+      lexeme
+    )
+  ) {
+    return null
+  }
   const unicode = lexeme.match(
     new RegExp(String.raw`^(\d+)?([${UNICODE_FRACTION_PATTERN}])$`)
   )
   if (unicode) {
     const [numerator, denominator] = UNICODE_FRACTIONS[unicode[2]]
     const whole = BigInt(unicode[1] || "0")
-    return persist(addRationals(
+    return persistBounded(addRationals(
       rational(whole, 1n),
       rational(numerator, denominator)
-    ))
+    ), { nonNegative: true })
   }
 
   const mixed = lexeme.match(/^(\d+)\s+(\d+)\/(\d+)$/)
@@ -292,10 +416,10 @@ export function parseRationalLexeme(value: string): RationalV1 | null {
     try {
       const denominator = BigInt(mixed[3])
       if (denominator === 0n) return null
-      return persist(addRationals(
+      return persistBounded(addRationals(
         rational(BigInt(mixed[1]), 1n),
         rational(BigInt(mixed[2]), denominator)
-      ))
+      ), { nonNegative: true })
     } catch {
       return null
     }
@@ -306,7 +430,10 @@ export function parseRationalLexeme(value: string): RationalV1 | null {
     try {
       const denominator = BigInt(fraction[2])
       if (denominator === 0n) return null
-      return persist(rational(BigInt(fraction[1]), denominator))
+      return persistBounded(
+        rational(BigInt(fraction[1]), denominator),
+        { nonNegative: true }
+      )
     } catch {
       return null
     }
@@ -314,7 +441,7 @@ export function parseRationalLexeme(value: string): RationalV1 | null {
 
   if (/^\d+(?:\.\d+)?$/.test(lexeme)) {
     try {
-      return persist(parseDecimal(lexeme))
+      return persistBounded(parseDecimal(lexeme), { nonNegative: true })
     } catch {
       return null
     }
@@ -338,6 +465,21 @@ export function parseQuantityV1(
   source: QuantitySourceV1 = "authored"
 ): QuantityV1 {
   const authored = value.trim()
+  if (
+    authored.length === 0 ||
+    authored.length > RECIPE_QUANTITY_LIMITS.authoredQuantityLength
+  ) {
+    return {
+      version: 1,
+      kind: "unparsed",
+      authored: authored.slice(
+        0,
+        RECIPE_QUANTITY_LIMITS.authoredQuantityLength
+      ),
+      source,
+      reason: "Quantity exceeds supported limits",
+    }
+  }
   if (QUALITATIVE_PATTERN.test(authored)) {
     return { version: 1, kind: "qualitative", authored, source }
   }
@@ -392,25 +534,235 @@ export function parseQuantityV1(
   }
 }
 
-export function isValidQuantityV1(value: unknown): value is QuantityV1 {
-  if (!value || typeof value !== "object") return false
-  const quantity = value as QuantityV1
-  if (
-    quantity.version !== 1 ||
-    typeof quantity.authored !== "string" ||
-    !["authored", "original-text", "legacy-synthesized"].includes(quantity.source)
-  ) {
-    return false
+export function normalizeQuantityV1(value: unknown): QuantityV1 | null {
+  if (!isRecord(value) || value.version !== 1) return null
+
+  const kind = value.kind
+  const authored = boundedString(
+    value.authored,
+    RECIPE_QUANTITY_LIMITS.authoredQuantityLength
+  )
+  const source =
+    typeof value.source === "string" &&
+    QUANTITY_SOURCES.has(value.source as QuantitySourceV1)
+      ? value.source as QuantitySourceV1
+      : null
+  const qualifier =
+    value.qualifier === undefined
+      ? undefined
+      : typeof value.qualifier === "string" &&
+          QUANTITY_QUALIFIERS.has(value.qualifier)
+        ? value.qualifier as QuantityV1["qualifier"]
+        : null
+  if (!authored || !source || qualifier === null) return null
+
+  const base = {
+    version: 1 as const,
+    authored,
+    source,
+    ...(qualifier ? { qualifier } : {}),
   }
-  if (quantity.kind === "exact") return Boolean(fromPersisted(quantity.value))
-  if (quantity.kind === "range") {
-    return Boolean(
-      fromPersisted(quantity.start) &&
-      fromPersisted(quantity.end) &&
-      ["-", "–", "—"].includes(quantity.separator)
+
+  if (kind === "exact") {
+    if (
+      !hasOnlyKeys(value, [
+        "version",
+        "kind",
+        "authored",
+        "source",
+        "qualifier",
+        "value",
+        "lexeme",
+      ])
+    ) {
+      return null
+    }
+    const exact = normalizeRationalV1(value.value, { positive: true })
+    const lexeme = boundedString(
+      value.lexeme,
+      RECIPE_QUANTITY_LIMITS.lexemeLength
     )
+    return exact && lexeme
+      ? { ...base, kind: "exact", value: exact, lexeme }
+      : null
   }
-  return quantity.kind === "qualitative" || quantity.kind === "unparsed"
+
+  if (kind === "range") {
+    if (
+      !hasOnlyKeys(value, [
+        "version",
+        "kind",
+        "authored",
+        "source",
+        "qualifier",
+        "start",
+        "end",
+        "startLexeme",
+        "endLexeme",
+        "separator",
+      ])
+    ) {
+      return null
+    }
+    const start = normalizeRationalV1(value.start, { positive: true })
+    const end = normalizeRationalV1(value.end, { positive: true })
+    const startLexeme = boundedString(
+      value.startLexeme,
+      RECIPE_QUANTITY_LIMITS.lexemeLength
+    )
+    const endLexeme = boundedString(
+      value.endLexeme,
+      RECIPE_QUANTITY_LIMITS.lexemeLength
+    )
+    const separator: "-" | "–" | "—" | null =
+      typeof value.separator === "string" &&
+      RANGE_SEPARATORS.has(value.separator)
+        ? value.separator as "-" | "–" | "—"
+        : null
+    const parsedStart = start ? fromPersisted(start, { positive: true }) : null
+    const parsedEnd = end ? fromPersisted(end, { positive: true }) : null
+    if (
+      !start ||
+      !end ||
+      !startLexeme ||
+      !endLexeme ||
+      !separator ||
+      !parsedStart ||
+      !parsedEnd ||
+      compare(parsedStart, parsedEnd) > 0
+    ) {
+      return null
+    }
+    return {
+      ...base,
+      kind: "range",
+      start,
+      end,
+      startLexeme,
+      endLexeme,
+      separator,
+    }
+  }
+
+  if (kind === "qualitative") {
+    return hasOnlyKeys(value, [
+      "version",
+      "kind",
+      "authored",
+      "source",
+      "qualifier",
+    ])
+      ? { ...base, kind: "qualitative" }
+      : null
+  }
+
+  if (kind === "unparsed") {
+    if (
+      !hasOnlyKeys(value, [
+        "version",
+        "kind",
+        "authored",
+        "source",
+        "qualifier",
+        "reason",
+      ])
+    ) {
+      return null
+    }
+    const reason =
+      value.reason === undefined
+        ? undefined
+        : boundedString(
+            value.reason,
+            RECIPE_QUANTITY_LIMITS.reasonLength
+          )
+    if (value.reason !== undefined && !reason) return null
+    return {
+      ...base,
+      kind: "unparsed",
+      ...(reason ? { reason } : {}),
+    }
+  }
+
+  return null
+}
+
+export function isValidQuantityV1(value: unknown): value is QuantityV1 {
+  return Boolean(normalizeQuantityV1(value))
+}
+
+export function normalizePackageV1(value: unknown): PackageV1 | null {
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    !hasOnlyKeys(value, [
+      "version",
+      "count",
+      "size",
+      "type",
+      "authoredType",
+    ])
+  ) {
+    return null
+  }
+  const count = normalizeQuantityV1(value.count)
+  if (!count || !["exact", "range"].includes(count.kind)) return null
+  if (
+    !isRecord(value.size) ||
+    !hasOnlyKeys(value.size, [
+      "value",
+      "lexeme",
+      "unit",
+      "authoredUnit",
+    ])
+  ) {
+    return null
+  }
+  const sizeValue = normalizeRationalV1(value.size.value, { positive: true })
+  const sizeLexeme = boundedString(
+    value.size.lexeme,
+    RECIPE_QUANTITY_LIMITS.lexemeLength
+  )
+  const sizeUnit = boundedString(
+    value.size.unit,
+    RECIPE_QUANTITY_LIMITS.unitLength
+  )
+  const authoredUnit = boundedString(
+    value.size.authoredUnit,
+    RECIPE_QUANTITY_LIMITS.unitLength
+  )
+  const type = boundedString(
+    value.type,
+    RECIPE_QUANTITY_LIMITS.packageTypeLength
+  )
+  const authoredType = boundedString(
+    value.authoredType,
+    RECIPE_QUANTITY_LIMITS.packageTypeLength
+  )
+  if (
+    !sizeValue ||
+    !sizeLexeme ||
+    !sizeUnit ||
+    !authoredUnit ||
+    !type ||
+    !PACKAGE_TYPES.has(type) ||
+    !authoredType ||
+    UNIT_ALIASES[authoredType.trim().toLowerCase()] !== type
+  ) {
+    return null
+  }
+  return {
+    version: 1,
+    count,
+    size: {
+      value: sizeValue,
+      lexeme: sizeLexeme,
+      unit: sizeUnit,
+      authoredUnit,
+    },
+    type,
+    authoredType,
+  }
 }
 
 function unitPrefix(text: string): {
@@ -443,6 +795,12 @@ export function parseIngredientQuantityPrefix(
   source: QuantitySourceV1 = "authored"
 ): ParsedIngredientQuantityPrefix | null {
   const text = input.trim()
+  if (
+    text.length === 0 ||
+    text.length > RECIPE_QUANTITY_LIMITS.ingredientLineLength
+  ) {
+    return null
+  }
   const match = text.match(QUANTITY_PREFIX_PATTERN)
   if (!match) {
     if (/^(?:about|approx\.?|approximately|around\s+)?\d+\//i.test(text)) {
@@ -559,8 +917,27 @@ function quantityMatchesLegacy(
   return false
 }
 
-function normalizedWords(value: string): string {
-  return value
+function sameQuantityValue(left: QuantityV1, right: QuantityV1): boolean {
+  if (
+    left.kind !== right.kind ||
+    left.qualifier !== right.qualifier
+  ) {
+    return false
+  }
+  if (left.kind === "exact" && right.kind === "exact") {
+    return sameRational(left.value, right.value)
+  }
+  if (left.kind === "range" && right.kind === "range") {
+    return (
+      sameRational(left.start, right.start) &&
+      sameRational(left.end, right.end)
+    )
+  }
+  return left.authored === right.authored
+}
+
+function normalizedWords(value: unknown): string {
+  return (typeof value === "string" ? value : "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
@@ -577,16 +954,30 @@ function cloneQuantitySource(
 export function resolveIngredientQuantity(
   ingredient: Ingredient
 ): IngredientQuantityResolution {
-  if (isValidQuantityV1(ingredient.quantityV1)) {
+  const quantity = normalizeQuantityV1(ingredient.quantityV1)
+  const packageV1 = normalizePackageV1(ingredient.packageV1)
+  if (quantity) {
     return {
-      quantity: ingredient.quantityV1,
-      authoredUnit: ingredient.authoredUnit ?? ingredient.unit,
-      packageV1: ingredient.packageV1,
-      provenance: ingredient.quantityV1.source,
+      quantity,
+      authoredUnit:
+        typeof ingredient.authoredUnit === "string"
+          ? ingredient.authoredUnit
+          : typeof ingredient.unit === "string"
+            ? ingredient.unit
+            : "",
+      packageV1:
+        packageV1 && sameQuantityValue(quantity, packageV1.count)
+          ? packageV1
+          : undefined,
+      provenance: quantity.source,
     }
   }
 
-  if (ingredient.originalText) {
+  if (
+    typeof ingredient.originalText === "string" &&
+    ingredient.originalText.length <=
+      RECIPE_QUANTITY_LIMITS.authoredYieldLength * 8
+  ) {
     const parsed = parseIngredientQuantityPrefix(
       ingredient.originalText,
       "original-text"
@@ -595,7 +986,10 @@ export function resolveIngredientQuantity(
     const originalRest = normalizedWords(parsed?.rest || "")
     const unitMatches =
       !parsed ||
-      normalizeRecipeUnit(parsed.unit) === normalizeRecipeUnit(ingredient.unit)
+      normalizeRecipeUnit(parsed.unit) ===
+      normalizeRecipeUnit(
+        typeof ingredient.unit === "string" ? ingredient.unit : ""
+      )
     if (
       parsed?.confidence === "high" &&
       quantityMatchesLegacy(parsed.quantityV1, ingredient.amount) &&
@@ -618,14 +1012,16 @@ export function resolveIngredientQuantity(
     )
     return {
       quantity: synthesized,
-      authoredUnit: ingredient.unit,
+      authoredUnit:
+        typeof ingredient.unit === "string" ? ingredient.unit : "",
       provenance: "legacy-synthesized",
     }
   }
 
   return {
     quantity: null,
-    authoredUnit: ingredient.unit,
+    authoredUnit:
+      typeof ingredient.unit === "string" ? ingredient.unit : "",
     provenance: "missing",
   }
 }
@@ -657,18 +1053,27 @@ function scaleQuantity(
 ): QuantityV1 {
   if (quantity.kind === "exact") {
     const value = fromPersisted(quantity.value)
-    return value
-      ? { ...quantity, value: persist(multiply(value, ratio)) }
+    const scaled = value
+      ? persistBounded(multiply(value, ratio), { positive: true })
+      : null
+    return scaled
+      ? { ...quantity, value: scaled }
       : quantity
   }
   if (quantity.kind === "range") {
     const start = fromPersisted(quantity.start)
     const end = fromPersisted(quantity.end)
-    return start && end
+    const scaledStart = start
+      ? persistBounded(multiply(start, ratio), { positive: true })
+      : null
+    const scaledEnd = end
+      ? persistBounded(multiply(end, ratio), { positive: true })
+      : null
+    return scaledStart && scaledEnd
       ? {
           ...quantity,
-          start: persist(multiply(start, ratio)),
-          end: persist(multiply(end, ratio)),
+          start: scaledStart,
+          end: scaledEnd,
         }
       : quantity
   }
@@ -679,8 +1084,33 @@ export function scaleQuantityV1(
   quantity: QuantityV1,
   ratio: RationalV1
 ): QuantityV1 {
-  const parsedRatio = fromPersisted(ratio)
-  return parsedRatio ? scaleQuantity(quantity, parsedRatio) : quantity
+  const parsedQuantity = normalizeQuantityV1(quantity)
+  const parsedRatio = fromPersisted(ratio, { positive: true })
+  return parsedQuantity && parsedRatio
+    ? scaleQuantity(parsedQuantity, parsedRatio)
+    : quantity
+}
+
+export function normalizeScaleRatioV1(value: unknown): RationalV1 | null {
+  const normalized = normalizeRationalV1(value, { positive: true })
+  const numeric = normalized ? rationalToNumber(normalized) : null
+  return normalized &&
+    numeric != null &&
+    numeric <= RECIPE_QUANTITY_LIMITS.scaleRatio
+    ? normalized
+    : null
+}
+
+export function scalePackageV1(
+  packageV1: unknown,
+  ratio: unknown
+): PackageV1 | null {
+  const parsedPackage = normalizePackageV1(packageV1)
+  const parsedRatio = normalizeScaleRatioV1(ratio)
+  if (!parsedPackage || !parsedRatio) return null
+  const count = scaleQuantityV1(parsedPackage.count, parsedRatio)
+  const scaled = { ...parsedPackage, count }
+  return normalizePackageV1(scaled)
 }
 
 function isOne(value: Rational): boolean {
@@ -876,7 +1306,9 @@ function formatPackage(
 ): FormattedRecipeQuantity {
   if (restoreAuthored) {
     return {
-      text: `${quantity.authored} ${packageV1.count.authored === quantity.authored ? "" : ""}${packageV1.size.lexeme ? `(${packageV1.size.lexeme} ${packageV1.size.authoredUnit}) ${packageV1.authoredType}` : packageV1.authoredType}`.replace(/\s+/g, " ").trim(),
+      text: `${quantity.authored} (${packageV1.size.lexeme} ${packageV1.size.authoredUnit}) ${packageV1.authoredType}`
+        .replace(/\s+/g, " ")
+        .trim(),
       hardToMeasure: false,
       approximate: false,
       exact: quantity,
@@ -884,27 +1316,137 @@ function formatPackage(
   }
 
   const scaled = scaleQuantity(quantity, ratio)
-  if (scaled.kind !== "exact") {
-    return { text: scaled.authored, hardToMeasure: false, approximate: false, exact: scaled }
+  const counts =
+    scaled.kind === "exact"
+      ? [fromPersisted(scaled.value, { positive: true })]
+      : scaled.kind === "range"
+        ? [
+            fromPersisted(scaled.start, { positive: true }),
+            fromPersisted(scaled.end, { positive: true }),
+          ]
+        : []
+  if (counts.length === 0 || counts.some((count) => !count)) {
+    return {
+      text: `${quantity.authored} (${packageV1.size.lexeme} ${packageV1.size.authoredUnit}) ${packageV1.authoredType}`
+        .replace(/\s+/g, " ")
+        .trim(),
+      hardToMeasure: false,
+      approximate: false,
+      exact: scaled,
+    }
   }
-  const count = fromPersisted(scaled.value)
-  if (!count) {
-    return { text: quantity.authored, hardToMeasure: false, approximate: false, exact: scaled }
-  }
-  const formatted = formatRational(count, "count")
+  const validCounts = counts as Rational[]
+  const formatted = validCounts.map((count) => formatRational(count, "count"))
   const size = `${packageV1.size.lexeme} ${packageV1.size.authoredUnit}`
   const underOne =
-    compare(count, rational(0n, 1n)) > 0 &&
-    compare(count, rational(1n, 1n)) < 0
+    scaled.kind === "exact" &&
+    compare(validCounts[0], rational(0n, 1n)) > 0 &&
+    compare(validCounts[0], rational(1n, 1n)) < 0
   const type = underOne
     ? packageV1.type
-    : pluralizeUnit(packageV1.type, [count])
+    : pluralizeUnit(packageV1.type, validCounts)
+  const countText =
+    scaled.kind === "range"
+      ? `${formatted[0].text}${scaled.separator}${formatted[1].text}`
+      : formatted[0].text
+  const approximate = formatted.some((part) => part.approximate)
   return {
-    text: `${formatted.approximate ? "≈" : ""}${formatted.text}${underOne ? " of a" : ""} ${size} ${type}`,
+    text: `${qualifierText(scaled)}${approximate ? "≈" : ""}${countText}${underOne ? " of a" : ""} ${size} ${type}`,
     hardToMeasure: false,
-    approximate: formatted.approximate,
+    approximate,
     exact: scaled,
   }
+}
+
+function formatScaledQuantity(
+  scaled: QuantityV1,
+  authoredUnit: string
+): FormattedRecipeQuantity {
+  if (scaled.kind === "qualitative" || scaled.kind === "unparsed") {
+    return {
+      text: scaled.authored,
+      hardToMeasure: false,
+      approximate: false,
+      exact: scaled,
+    }
+  }
+
+  const rawValues =
+    scaled.kind === "exact"
+      ? [fromPersisted(scaled.value, { positive: true })]
+      : [
+          fromPersisted(scaled.start, { positive: true }),
+          fromPersisted(scaled.end, { positive: true }),
+        ]
+  if (rawValues.some((value) => !value)) {
+    return {
+      text: scaled.authored,
+      hardToMeasure: false,
+      approximate: false,
+      exact: scaled,
+    }
+  }
+  const values = rawValues as Rational[]
+  const fromUnit = normalizeRecipeUnit(authoredUnit)
+  const displayUnit = chooseUnit(values, fromUnit)
+  const converted = values.map(
+    (value) => convertUnit(value, fromUnit, displayUnit) || value
+  )
+  const formatted = converted.map(
+    (value) =>
+      formatMetricRounded(value, displayUnit) ||
+      formatRational(value, displayUnit)
+  )
+  const approximate = formatted.some((value) => value.approximate)
+  const quantityText =
+    scaled.kind === "range"
+      ? `${formatted[0].text}${scaled.separator}${formatted[1].text}`
+      : formatted[0].text
+  const unitText =
+    !displayUnit || displayUnit === "count"
+      ? ""
+      : pluralizeUnit(displayUnit, converted)
+  const hardToMeasure =
+    displayUnit === "tsp" &&
+    converted.some(
+      (value) =>
+        compare(value, rational(0n, 1n)) > 0 &&
+        compare(value, rational(1n, 8n)) < 0
+    )
+
+  return {
+    text: `${qualifierText(scaled)}${approximate ? "≈" : ""}${quantityText}${unitText ? ` ${unitText}` : ""}`,
+    hardToMeasure,
+    approximate,
+    exact: scaled,
+  }
+}
+
+export function formatStructuredRecipeQuantity(
+  quantity: unknown,
+  authoredUnit: unknown,
+  packageV1?: unknown
+): FormattedRecipeQuantity | null {
+  const parsedQuantity = normalizeQuantityV1(quantity)
+  if (!parsedQuantity) return null
+  const parsedUnit = boundedString(
+    authoredUnit,
+    RECIPE_QUANTITY_LIMITS.unitLength,
+    true
+  )
+  if (parsedUnit == null) return null
+  const parsedPackage = normalizePackageV1(packageV1)
+  if (packageV1 !== undefined && !parsedPackage) return null
+  if (parsedPackage) {
+    if (!sameQuantityValue(parsedQuantity, parsedPackage.count)) return null
+    return formatPackage(
+      parsedQuantity,
+      parsedPackage,
+      rational(1n, 1n),
+      false
+    )
+  }
+  return formatScaledQuantity(parsedQuantity, parsedUnit)
 }
 
 export function formatRecipeQuantity(
@@ -922,8 +1464,14 @@ export function formatRecipeQuantity(
     }
   }
 
-  const basis = rational(BigInt(scalingBasis), 1n)
-  if (basis.numerator <= 0n || !Number.isSafeInteger(selectedYield)) {
+  if (
+    !Number.isSafeInteger(scalingBasis) ||
+    scalingBasis <= 0 ||
+    scalingBasis > RECIPE_QUANTITY_LIMITS.yieldValue ||
+    !Number.isSafeInteger(selectedYield) ||
+    selectedYield <= 0 ||
+    selectedYield > RECIPE_QUANTITY_LIMITS.selectedYield
+  ) {
     return {
       text: resolved.quantity.authored,
       hardToMeasure: false,
@@ -931,6 +1479,7 @@ export function formatRecipeQuantity(
       exact: resolved.quantity,
     }
   }
+  const basis = rational(BigInt(scalingBasis), 1n)
   const ratio = rational(BigInt(selectedYield), basis.numerator)
   const restoreAuthored = isOne(ratio) && resolved.provenance !== "legacy-synthesized"
 
@@ -963,71 +1512,41 @@ export function formatRecipeQuantity(
   }
 
   const scaled = scaleQuantity(resolved.quantity, ratio)
-  const rawValues =
-    scaled.kind === "exact"
-      ? [fromPersisted(scaled.value)]
-      : scaled.kind === "range"
-        ? [fromPersisted(scaled.start), fromPersisted(scaled.end)]
-        : []
-  if (rawValues.some((value) => !value)) {
-    return {
-      text: resolved.quantity.authored,
-      hardToMeasure: false,
-      approximate: false,
-      exact: scaled,
-    }
-  }
-  const values = rawValues as Rational[]
-  const fromUnit = normalizeRecipeUnit(resolved.authoredUnit || ingredient.unit)
-  const displayUnit = chooseUnit(values, fromUnit)
-  const converted = values.map(
-    (value) => convertUnit(value, fromUnit, displayUnit) || value
+  return formatScaledQuantity(
+    scaled,
+    resolved.authoredUnit ||
+      (typeof ingredient.unit === "string" ? ingredient.unit : "")
   )
-  const formatted = converted.map(
-    (value) => formatMetricRounded(value, displayUnit) || formatRational(value, displayUnit)
-  )
-  const approximate = formatted.some((value) => value.approximate)
-  const quantityText =
-    scaled.kind === "range"
-      ? `${formatted[0].text}${scaled.separator}${formatted[1].text}`
-      : formatted[0].text
-  const unitText =
-    !displayUnit || displayUnit === "count"
-      ? ""
-      : pluralizeUnit(displayUnit, converted)
-  const hardToMeasure =
-    displayUnit === "tsp" &&
-    converted.some(
-      (value) =>
-        compare(value, rational(0n, 1n)) > 0 &&
-        compare(value, rational(1n, 8n)) < 0
-    )
-
-  return {
-    text: `${qualifierText(scaled)}${approximate ? "≈" : ""}${quantityText}${unitText ? ` ${unitText}` : ""}`,
-    hardToMeasure,
-    approximate,
-    exact: scaled,
-  }
 }
 
 export function getScalingBasis(
   metadata: YieldMetadataV1 | null | undefined,
   servings: number
 ): number {
-  const basis = metadata ? rationalToNumber(metadata.scalingBasis) : null
-  return basis && Number.isSafeInteger(basis) && basis > 0 ? basis : servings
+  const parsed = normalizeYieldMetadataV1(metadata)
+  const basis = parsed ? rationalToNumber(parsed.scalingBasis) : null
+  const fallback =
+    Number.isSafeInteger(servings) &&
+    servings > 0 &&
+    servings <= RECIPE_QUANTITY_LIMITS.yieldValue
+      ? servings
+      : 4
+  return basis && Number.isSafeInteger(basis) && basis > 0 ? basis : fallback
 }
 
 export function getAuthoredYieldText(
   metadata: YieldMetadataV1 | null | undefined,
   servings: number
 ): string {
-  return metadata?.authoredText?.trim() || `${servings} ${servings === 1 ? "serving" : "servings"}`
+  const parsed = normalizeYieldMetadataV1(metadata)
+  const fallback = getScalingBasis(null, servings)
+  return parsed?.authoredText ||
+    `${fallback} ${fallback === 1 ? "serving" : "servings"}`
 }
 
 function getYieldLabel(metadata: YieldMetadataV1 | null | undefined): string {
-  const authored = metadata?.authoredText?.trim() || ""
+  const parsed = normalizeYieldMetadataV1(metadata)
+  const authored = parsed?.authoredText || ""
   const label = authored.replace(
     new RegExp(
       String.raw`^(?:(?:about|approx\.?|approximately|around)\s+)?${QUANTITY_ENDPOINT}(?:\s*[-–—]\s*${QUANTITY_ENDPOINT})?\s*`,
@@ -1036,9 +1555,9 @@ function getYieldLabel(metadata: YieldMetadataV1 | null | undefined): string {
     ""
   ).trim()
   if (label) return label
-  if (metadata?.kind === "portions") return "portions"
-  if (metadata?.kind === "items") return "items"
-  if (metadata?.kind === "other") return "yield"
+  if (parsed?.kind === "portions") return "portions"
+  if (parsed?.kind === "items") return "items"
+  if (parsed?.kind === "other") return "yield"
   return "servings"
 }
 
@@ -1100,6 +1619,12 @@ export function parseYieldMetadata(
   explicitBasis?: number
 ): YieldMetadataV1 | null {
   const text = authoredText.trim()
+  if (
+    text.length === 0 ||
+    text.length > RECIPE_QUANTITY_LIMITS.authoredYieldLength
+  ) {
+    return null
+  }
   const prefix = text.match(
     new RegExp(
       String.raw`^(?:(about|approx\.?|approximately|around)\s+)?(${QUANTITY_ENDPOINT})(?:\s*([-–—])\s*(${QUANTITY_ENDPOINT}))?(?:\s+(.+))?$`,
@@ -1110,9 +1635,16 @@ export function parseYieldMetadata(
   const start = parseRationalLexeme(prefix[2])
   const end = prefix[4] ? parseRationalLexeme(prefix[4]) : null
   if (!start || (prefix[4] && !end)) return null
-  const basis = explicitBasis
-    ? rationalFromIntegers(explicitBasis)
-    : start
+  if (
+    explicitBasis !== undefined &&
+    (!Number.isSafeInteger(explicitBasis) || explicitBasis <= 0)
+  ) {
+    return null
+  }
+  const basis =
+    explicitBasis === undefined
+      ? start
+      : rationalFromIntegers(explicitBasis)
   const metadata: YieldMetadataV1 = {
     version: 1,
     authoredText: text,
@@ -1130,36 +1662,150 @@ export function parseYieldMetadata(
   } else {
     metadata.value = start
   }
-  return metadata
+  return normalizeYieldMetadataV1(metadata)
+}
+
+export function normalizeYieldMetadataV1(
+  value: unknown
+): YieldMetadataV1 | null {
+  if (
+    !isRecord(value) ||
+    value.version !== 1 ||
+    !hasOnlyKeys(value, [
+      "version",
+      "authoredText",
+      "kind",
+      "scalingBasis",
+      "value",
+      "range",
+    ])
+  ) {
+    return null
+  }
+  const authoredText = boundedString(
+    value.authoredText,
+    RECIPE_QUANTITY_LIMITS.authoredYieldLength
+  )
+  const kind =
+    typeof value.kind === "string" &&
+    YIELD_KINDS.has(value.kind as YieldKindV1)
+      ? value.kind as YieldKindV1
+      : null
+  const scalingBasis = normalizeRationalV1(
+    value.scalingBasis,
+    { positive: true }
+  )
+  const basisNumber = scalingBasis
+    ? rationalToNumber(scalingBasis)
+    : null
+  if (
+    !authoredText ||
+    !kind ||
+    !scalingBasis ||
+    basisNumber == null ||
+    basisNumber > RECIPE_QUANTITY_LIMITS.yieldValue
+  ) {
+    return null
+  }
+
+  const hasValue = value.value !== undefined
+  const hasRange = value.range !== undefined
+  if (hasValue === hasRange) return null
+
+  if (hasValue) {
+    const exact = normalizeRationalV1(value.value, { positive: true })
+    const exactNumber = exact ? rationalToNumber(exact) : null
+    return exact && exactNumber != null &&
+      exactNumber <= RECIPE_QUANTITY_LIMITS.yieldValue
+      ? {
+          version: 1,
+          authoredText,
+          kind,
+          scalingBasis,
+          value: exact,
+        }
+      : null
+  }
+
+  if (
+    !isRecord(value.range) ||
+    !hasOnlyKeys(value.range, [
+      "start",
+      "end",
+      "startLexeme",
+      "endLexeme",
+      "separator",
+    ])
+  ) {
+    return null
+  }
+  const start = normalizeRationalV1(value.range.start, { positive: true })
+  const end = normalizeRationalV1(value.range.end, { positive: true })
+  const startLexeme = boundedString(
+    value.range.startLexeme,
+    RECIPE_QUANTITY_LIMITS.lexemeLength
+  )
+  const endLexeme = boundedString(
+    value.range.endLexeme,
+    RECIPE_QUANTITY_LIMITS.lexemeLength
+  )
+  const separator: "-" | "–" | "—" | null =
+    typeof value.range.separator === "string" &&
+    RANGE_SEPARATORS.has(value.range.separator)
+      ? value.range.separator as "-" | "–" | "—"
+      : null
+  const parsedStart = start ? fromPersisted(start, { positive: true }) : null
+  const parsedEnd = end ? fromPersisted(end, { positive: true }) : null
+  const endNumber = end ? rationalToNumber(end) : null
+  if (
+    !start ||
+    !end ||
+    !startLexeme ||
+    !endLexeme ||
+    !separator ||
+    !parsedStart ||
+    !parsedEnd ||
+    endNumber == null ||
+    endNumber > RECIPE_QUANTITY_LIMITS.yieldValue ||
+    compare(parsedStart, parsedEnd) > 0
+  ) {
+    return null
+  }
+  return {
+    version: 1,
+    authoredText,
+    kind,
+    scalingBasis,
+    range: {
+      start,
+      end,
+      startLexeme,
+      endLexeme,
+      separator,
+    },
+  }
 }
 
 export function isValidYieldMetadata(
   value: unknown
 ): value is YieldMetadataV1 {
-  if (!value || typeof value !== "object") return false
-  const metadata = value as YieldMetadataV1
-  if (
-    metadata.version !== 1 ||
-    !metadata.authoredText ||
-    !["servings", "portions", "items", "other"].includes(metadata.kind) ||
-    !fromPersisted(metadata.scalingBasis)
-  ) {
-    return false
-  }
-  if (metadata.range) {
-    return Boolean(
-      fromPersisted(metadata.range.start) &&
-      fromPersisted(metadata.range.end) &&
-      ["-", "–", "—"].includes(metadata.range.separator)
-    )
-  }
-  return Boolean(metadata.value && fromPersisted(metadata.value))
+  return Boolean(normalizeYieldMetadataV1(value))
 }
 
 export function selectedYieldRatio(
   selectedYield: number,
   scalingBasis: number
 ): RationalV1 {
+  if (
+    !Number.isSafeInteger(selectedYield) ||
+    selectedYield <= 0 ||
+    selectedYield > RECIPE_QUANTITY_LIMITS.selectedYield ||
+    !Number.isSafeInteger(scalingBasis) ||
+    scalingBasis <= 0 ||
+    scalingBasis > RECIPE_QUANTITY_LIMITS.yieldValue
+  ) {
+    throw new Error("Selected yield is outside supported limits")
+  }
   return rationalFromIntegers(selectedYield, scalingBasis)
 }
 

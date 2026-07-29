@@ -107,6 +107,10 @@ export type ShoppingItem = {
   item: string
   amount: number | null
   unit: string
+  exactQuantityV1?: QuantityV1
+  exactPackageV1?: PackageV1
+  exactAuthoredUnit?: string
+  structuredSourceKey?: string
   categoryKey: string
   categoryOrder: number
   sources?: {
@@ -118,6 +122,8 @@ export type ShoppingItem = {
     originalUnit?: string | null
     originalText?: string
     exactQuantityV1?: QuantityV1
+    exactPackageV1?: PackageV1
+    exactAuthoredUnit?: string
     exactScaleV1?: RationalV1
     prepIntent?: string
     preparationModifiers?: string[]

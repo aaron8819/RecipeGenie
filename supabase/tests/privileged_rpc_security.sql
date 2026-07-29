@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(40);
+select extensions.plan(41);
 
 insert into auth.users (id, email)
 values
@@ -62,6 +62,16 @@ values
     array['common', 'rename-b', 'merge-b', 'delete-b'],
     '[]'::jsonb,
     '{}'::text[]
+  ),
+  (
+    'b-malformed-source',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Malformed Share Source',
+    'security-test',
+    2,
+    array['malformed-share-source'],
+    '[]'::jsonb,
+    '{}'::text[]
   );
 
 insert into public.recipe_history (user_id, recipe_id, date_made)
@@ -97,6 +107,15 @@ values
     'security-b@example.test',
     'a-owned',
     '{"name":"Shared for B","category":"security-test","servings":2,"tags":["shared"],"ingredients":[],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000003',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-malformed-source',
+    '{"name":"Malformed for A","category":"security-test","servings":"many","tags":{},"ingredients":[],"instructions":[]}'::jsonb
   );
 
 create temporary table user_b_recipe_before as
@@ -144,6 +163,13 @@ select extensions.throws_ok(
   'P0001',
   'Share not found',
   'User A cannot accept a share addressed to User B'
+);
+
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000003') $$,
+  'P0001',
+  'Invalid recipe snapshot',
+  'malformed shared JSON is rejected without leaking a cast or iterator error'
 );
 
 select extensions.ok(
