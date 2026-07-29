@@ -26,6 +26,7 @@ import {
 import {
   normalizeScaleRatioV1,
   rationalToNumber,
+  RecipeQuantityScaleError,
 } from "@/lib/recipe-quantity"
 import {
   RECIPE_DATA_LIMITS,
@@ -122,7 +123,7 @@ function parseBody(body: unknown) {
   if (
     exactScale != null &&
     command.scale != null &&
-    Math.abs(exactScale - Number(command.scale)) > 1e-12
+    exactScale !== command.scale
   ) {
     throw new Error("Numeric and exact scales must agree")
   }
@@ -141,6 +142,18 @@ function parseBody(body: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function shoppingItemsUseScale(
+  items: ShoppingContributionItem[],
+  scale: number
+): boolean {
+  return items.every((item) =>
+    (item.sources || []).every((source) => {
+      if (!source.exactScaleV1) return true
+      return rationalToNumber(source.exactScaleV1) === scale
+    })
+  )
 }
 
 function storedToDomain(
@@ -168,7 +181,8 @@ function storedToDomain(
     row.snapshot.recipeName.length === 0 ||
     row.snapshot.recipeName.length > RECIPE_DATA_LIMITS.recipeNameLength ||
     !items ||
-    (row.snapshot.exactScaleV1 !== undefined && !exactScale)
+    (row.snapshot.exactScaleV1 !== undefined && !exactScale) ||
+    (exactScale && rationalToNumber(exactScale) !== row.scale)
   ) {
     return null
   }
@@ -178,6 +192,7 @@ function storedToDomain(
     if (!["items", "already_have", "excluded"].includes(bucket)) return null
     contributionItems.push({ ...item, bucket })
   }
+  if (!shoppingItemsUseScale(contributionItems, row.scale)) return null
   return {
     recipeId: row.recipe_uuid,
     recipeName: row.snapshot.recipeName,
@@ -334,17 +349,28 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         return NextResponse.json({ error: "Recipe not found" }, { status: 404 })
       }
 
-      const replacements = mapRecipeRows(recipes as RecipeRow[] | null)
-        .map((recipe) =>
-          buildContribution(
-            recipe,
-            pantryItems,
-            config,
-            input.scale,
-            input.scaleV1
+      let replacements: RecipeShoppingContribution[]
+      try {
+        replacements = mapRecipeRows(recipes as RecipeRow[] | null)
+          .map((recipe) =>
+            buildContribution(
+              recipe,
+              pantryItems,
+              config,
+              input.scale,
+              input.scaleV1
+            )
           )
-        )
-        .sort((left, right) => left.recipeId.localeCompare(right.recipeId))
+          .sort((left, right) => left.recipeId.localeCompare(right.recipeId))
+      } catch (error) {
+        if (error instanceof RecipeQuantityScaleError) {
+          return NextResponse.json(
+            { error: error.message },
+            { status: 422 }
+          )
+        }
+        throw error
+      }
       const replacementIds = new Set(replacements.map((item) => item.recipeId))
       nextContributions = [
         ...previousContributions.filter(
@@ -359,6 +385,14 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         )
         if (!safeItems) {
           throw new Error("Generated shopping contribution is invalid")
+        }
+        if (
+          !shoppingItemsUseScale(
+            safeItems as ShoppingContributionItem[],
+            contribution.scale
+          )
+        ) {
+          throw new Error("Generated shopping contribution scale is invalid")
         }
         return {
           recipe_uuid: contribution.recipeId,

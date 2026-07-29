@@ -23,6 +23,7 @@ import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { getIngredientQuantityRange } from "./recipe-parser"
 import {
   normalizeScaleRatioV1,
+  normalizeQuantityV1,
   parseRationalLexeme,
   rationalToNumber,
   resolveIngredientQuantity,
@@ -202,14 +203,15 @@ export function generateShoppingList(
     ).entries()) {
       const quantityRange = getIngredientQuantityRange(ingredient.amount)
       const resolved = resolveIngredientQuantity(ingredient)
+      const structuredQuantity = normalizeQuantityV1(resolved.quantity)
       const structuredScale =
-        resolved.quantity?.kind === "exact" ||
-        resolved.quantity?.kind === "range"
+        structuredQuantity?.kind === "exact" ||
+        structuredQuantity?.kind === "range"
           ? validatedScale
           : undefined
       const exactQuantity =
-        structuredScale && resolved.quantity
-          ? scaleQuantityV1(resolved.quantity, structuredScale)
+        structuredScale && structuredQuantity
+          ? scaleQuantityV1(structuredQuantity, structuredScale)
           : undefined
       const exactPackage =
         structuredScale && resolved.packageV1

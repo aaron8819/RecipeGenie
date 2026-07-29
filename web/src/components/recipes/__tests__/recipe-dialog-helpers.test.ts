@@ -9,8 +9,10 @@ import {
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
   normalizeRecipeIngredient,
+  updateRecipeIngredientField,
 } from "../recipe-dialog.defaults"
 import type { Recipe } from "@/types/database"
+import { formatRecipeQuantity } from "@/lib/recipe-quantity"
 import {
   analyzeIngredientDuplicates,
   autoFixIngredients,
@@ -208,6 +210,109 @@ describe("recipe import helpers", () => {
 })
 
 describe("recipe dialog defaults helpers", () => {
+  it("rebuilds package metadata through edit, save, hydrate, resave, and scaling", () => {
+    const created = normalizeRecipeIngredient(
+      {
+        ...parseRecipeImportPreview(
+          "Tomatoes\n\nIngredients:\n1 (14 oz) can tomatoes\n\nInstructions:\nCook"
+        )!.ingredients[0],
+      },
+      true
+    )
+    const resized = updateRecipeIngredientField(
+      created,
+      "unit",
+      "(28 oz) cans"
+    )
+    expect(resized).toMatchObject({
+      unit: "(28 oz) cans",
+      packageV1: {
+        size: {
+          value: { numerator: "28", denominator: "1" },
+          unit: "oz",
+        },
+        type: "can",
+        authoredType: "cans",
+      },
+    })
+    expect(resized.originalText).toBeUndefined()
+
+    const ranged = updateRecipeIngredientField(resized, "amount", "1–2")
+    expect(ranged.packageV1?.count).toMatchObject({
+      kind: "range",
+      startLexeme: "1",
+      endLexeme: "2",
+    })
+    const qualified = updateRecipeIngredientField(
+      ranged,
+      "amount",
+      "about 1"
+    )
+    expect(qualified.packageV1?.count).toMatchObject({
+      kind: "exact",
+      qualifier: "about",
+    })
+    const scalar = updateRecipeIngredientField(qualified, "amount", "1")
+
+    const defaults = buildNewRecipeDialogFormValues(["dinner"])
+    const saved = buildRecipeSubmissionData({
+      ...defaults,
+      name: "Tomatoes",
+      ingredients: [scalar],
+      instructionGroups: [{ steps: ["Cook"] }],
+    })
+    const recipe = {
+      id: "tomatoes-1",
+      user_id: "user-1",
+      name: saved.name,
+      category: saved.category,
+      servings: saved.servings ?? 4,
+      favorite: false,
+      tags: saved.tags ?? [],
+      ingredients: saved.ingredients ?? [],
+      instructions: saved.instructions ?? [],
+      instruction_groups: saved.instruction_groups ?? null,
+      notes: saved.notes ?? [],
+      image_url: null,
+      created_at: "2026-07-29T00:00:00.000Z",
+      updated_at: "2026-07-29T00:00:00.000Z",
+    } satisfies Recipe
+    const reopened = buildEditingRecipeDialogFormValues(recipe)
+    const resaved = buildRecipeSubmissionData(reopened)
+    expect(resaved.ingredients?.[0].packageV1).toEqual(
+      saved.ingredients?.[0].packageV1
+    )
+    expect(
+      formatRecipeQuantity(resaved.ingredients![0], 4, 3).text
+    ).toBe("¾ of a 28 oz can")
+    expect(
+      formatRecipeQuantity(resaved.ingredients![0], 4, 3).text
+    ).not.toContain("¾ (28 oz) cans")
+  })
+
+  it("deliberately transitions between package and ordinary units", () => {
+    const packageIngredient = parseRecipeImportPreview(
+      "Tomatoes\n\nIngredients:\n1 (14 oz) can tomatoes\n\nInstructions:\nCook"
+    )!.ingredients[0]
+    const ordinary = updateRecipeIngredientField(
+      packageIngredient,
+      "unit",
+      "cup"
+    )
+    expect(ordinary.packageV1).toBeUndefined()
+    expect(ordinary).toMatchObject({ amount: 1, unit: "cup" })
+
+    const packaged = updateRecipeIngredientField(
+      ordinary,
+      "unit",
+      "(28 oz) jars"
+    )
+    expect(packaged.packageV1).toMatchObject({
+      type: "jar",
+      authoredType: "jars",
+      size: { unit: "oz", lexeme: "28" },
+    })
+  })
   it("normalizes ingredient data for cleaner downstream storage", () => {
     expect(
       normalizeRecipeIngredient({

@@ -34,11 +34,6 @@ import { useUndoToast } from "@/hooks/use-undo-toast"
 import { useDebouncedCallback } from "@/hooks/use-debounce"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
-import {
-  normalizePackageV1,
-  normalizeRecipeUnit,
-  parseQuantityV1,
-} from "@/lib/recipe-quantity"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
 import type { Recipe, Ingredient, RecipeInstructionGroup } from "@/types/database"
 import { createRecipeUuid } from "@/lib/recipe-identity"
@@ -60,6 +55,7 @@ import {
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
   normalizeRecipeIngredientsForEditing,
+  updateRecipeIngredientField,
 } from "./recipe-dialog.defaults"
 import {
   getImportErrorMessage,
@@ -294,37 +290,7 @@ export function RecipeDialog({
   ) => {
     setIngredients((current) => {
       const next = [...current]
-      const ingredient = { ...next[index], [field]: value }
-      if (["amount", "unit", "item", "modifier"].includes(field)) {
-        ingredient.originalText = undefined
-      }
-      if (field === "amount") {
-        const quantity =
-          value == null ? null : parseQuantityV1(String(value), "authored")
-        ingredient.quantityV1 =
-          quantity && quantity.kind !== "unparsed" ? quantity : undefined
-        if (ingredient.packageV1 && ingredient.quantityV1) {
-          ingredient.packageV1 = {
-            ...ingredient.packageV1,
-            count: ingredient.quantityV1,
-          }
-        } else if (ingredient.packageV1) {
-          ingredient.packageV1 = undefined
-        }
-      }
-      if (field === "unit") {
-        const authoredUnit = String(value || "")
-        ingredient.authoredUnit = authoredUnit
-        if (ingredient.packageV1) {
-          const packageType = normalizeRecipeUnit(authoredUnit)
-          ingredient.packageV1 = normalizePackageV1({
-            ...ingredient.packageV1,
-            type: packageType,
-            authoredType: authoredUnit,
-          }) ?? undefined
-        }
-      }
-      next[index] = ingredient
+      next[index] = updateRecipeIngredientField(next[index], field, value)
       return next
     })
   }

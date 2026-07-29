@@ -2,6 +2,7 @@ import React from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { ShoppingItem } from "@/types/database"
+import { normalizeShoppingItem } from "@/lib/recipe-data-validation"
 import {
   formatAdditionalAmountParts,
   formatAmountPart,
@@ -463,6 +464,23 @@ describe("shopping amount formatting", () => {
         })
       )
     ).toBe("1½–3 14 oz cans")
+  })
+
+  it("renders the compatibility unit after hydration strips contradictory metadata", () => {
+    const hydrated = normalizeShoppingItem({
+      ...item({ amount: 1, unit: "cup" }),
+      exactQuantityV1: {
+        version: 1,
+        kind: "exact",
+        authored: "1",
+        source: "authored",
+        value: { numerator: "1", denominator: "1" },
+        lexeme: "1",
+      },
+      exactAuthoredUnit: "lb",
+    })
+    expect(hydrated).not.toBeNull()
+    expect(formatShoppingItemAmount(hydrated!)).toBe("1 cup")
   })
 
   it("formats additional amounts independently from the primary amount", () => {

@@ -12,6 +12,7 @@ import {
   normalizeScaleRatioV1,
   normalizeYieldMetadataV1,
   normalizeRecipeUnit,
+  packageMatchesCompatibilityUnit,
   quantityMatchesLegacy,
   resolveIngredientQuantity,
   formatStructuredRecipeQuantity,
@@ -30,6 +31,8 @@ export const RECIPE_DATA_LIMITS = {
   recipeNameLength: 512,
   instructionLength: 10_000,
   instructionsPerRecipe: 2_000,
+  instructionGroupsPerRecipe: 500,
+  imageUrlLength: 8_192,
   tagsPerRecipe: 100,
   tagLength: 128,
   numericAmount: 100_000_000,
@@ -258,18 +261,26 @@ function normalizeOptionalInteger(
 }
 
 function normalizeInstructionGroups(
-  value: unknown
+  value: unknown,
+  mode: ValidationMode
 ): RecipeInstructionGroup[] | null | undefined {
   if (value === undefined || value === null) return value
   if (
     !Array.isArray(value) ||
-    value.length > RECIPE_DATA_LIMITS.ingredientsPerRecipe
+    value.length > RECIPE_DATA_LIMITS.instructionGroupsPerRecipe
   ) {
     return undefined
   }
   const groups: RecipeInstructionGroup[] = []
+  let totalSteps = 0
   for (const entry of value) {
     if (!isRecord(entry)) return undefined
+    if (
+      mode === "persist" &&
+      Object.keys(entry).some((key) => !["label", "steps"].includes(key))
+    ) {
+      return undefined
+    }
     const label = optionalString(
       entry.label,
       RECIPE_DATA_LIMITS.groupLabelLength
@@ -279,7 +290,19 @@ function normalizeInstructionGroups(
       RECIPE_DATA_LIMITS.instructionsPerRecipe,
       RECIPE_DATA_LIMITS.instructionLength
     )
-    if (label === null || !steps) return undefined
+    if (
+      label === null ||
+      !steps ||
+      (mode === "persist" &&
+        entry.label !== undefined &&
+        (typeof entry.label !== "string" || !label))
+    ) {
+      return undefined
+    }
+    totalSteps += steps.length
+    if (totalSteps > RECIPE_DATA_LIMITS.instructionsPerRecipe) {
+      return undefined
+    }
     groups.push({
       ...(label ? { label } : {}),
       steps,
@@ -318,7 +341,11 @@ export function normalizeRecipeShareSnapshot(
   const parsedImageUrl =
     value.image_url === null
       ? null
-      : boundedString(value.image_url, RECIPE_DATA_LIMITS.originalTextLength)
+      : boundedString(
+          value.image_url,
+          RECIPE_DATA_LIMITS.imageUrlLength,
+          true
+        )
   if (
     !name ||
     !category ||
@@ -329,11 +356,11 @@ export function normalizeRecipeShareSnapshot(
     (mode === "persist" &&
       value.image_url !== undefined &&
       value.image_url !== null &&
-      !parsedImageUrl)
+      parsedImageUrl === null)
   ) {
     return null
   }
-  const imageUrl = parsedImageUrl || null
+  const imageUrl = parsedImageUrl?.trim() ? parsedImageUrl : null
 
   const yieldMetadata = normalizeYieldMetadataV1(value.yield_metadata)
   if (
@@ -370,7 +397,8 @@ export function normalizeRecipeShareSnapshot(
   if (mode === "persist" && !parsedNotes) return null
   const notes = parsedNotes || []
   const parsedInstructionGroups = normalizeInstructionGroups(
-    value.instruction_groups
+    value.instruction_groups,
+    mode
   )
   if (
     mode === "persist" &&
@@ -428,7 +456,7 @@ function normalizeShoppingSource(
     RECIPE_DATA_LIMITS.recipeNameLength
   )
   if (!recipeName) return null
-  const exactQuantity = normalizeQuantityV1(value.exactQuantityV1)
+  let exactQuantity = normalizeQuantityV1(value.exactQuantityV1)
   const exactScale = normalizeScaleRatioV1(value.exactScaleV1)
   let exactPackage = normalizePackageV1(value.exactPackageV1)
   const parsedExactAuthoredUnit = optionalString(
@@ -485,6 +513,18 @@ function normalizeShoppingSource(
   if (value.originalAmount !== undefined && originalAmount === undefined) {
     if (mode === "persist") return null
   }
+  const structuredCoherent = shoppingStructuredMetadataIsCoherent({
+    quantity: exactQuantity,
+    packageV1: exactPackage,
+    authoredUnit: exactAuthoredUnit,
+    amount: originalAmount,
+    unit: strings.originalUnit,
+  })
+  if (!structuredCoherent) {
+    if (mode === "persist") return null
+    exactQuantity = null
+    exactPackage = null
+  }
   const preparationModifiers =
     value.preparationModifiers === undefined
       ? undefined
@@ -505,9 +545,9 @@ function normalizeShoppingSource(
     ...strings,
     ...(originalAmount !== undefined ? { originalAmount } : {}),
     ...(exactQuantity ? { exactQuantityV1: exactQuantity } : {}),
-    ...(exactScale ? { exactScaleV1: exactScale } : {}),
+    ...(exactScale && structuredCoherent ? { exactScaleV1: exactScale } : {}),
     ...(exactPackage ? { exactPackageV1: exactPackage } : {}),
-    ...(exactAuthoredUnit ? { exactAuthoredUnit } : {}),
+    ...(exactAuthoredUnit && structuredCoherent ? { exactAuthoredUnit } : {}),
     ...(preparationModifiers ? { preparationModifiers } : {}),
     ...(typeof value.optional === "boolean"
       ? { optional: value.optional }
@@ -543,6 +583,41 @@ function normalizeAdditionalAmounts(
     normalized.push({ amount, unit })
   }
   return normalized
+}
+
+function shoppingStructuredMetadataIsCoherent({
+  quantity,
+  packageV1,
+  authoredUnit,
+  amount,
+  unit,
+}: {
+  quantity: ReturnType<typeof normalizeQuantityV1>
+  packageV1: ReturnType<typeof normalizePackageV1>
+  authoredUnit?: string
+  amount: Ingredient["amount"] | undefined
+  unit?: string
+}): boolean {
+  if (!quantity) return !packageV1
+  if (amount === undefined) return false
+  const quantityMatches =
+    quantity.kind === "range"
+      ? amount === null
+      : quantityMatchesLegacy(quantity, amount)
+  if (!quantityMatches) return false
+  if (packageV1) {
+    return (
+      packageMatchesCompatibilityUnit(packageV1, unit) &&
+      packageMatchesCompatibilityUnit(
+        packageV1,
+        authoredUnit || unit
+      )
+    )
+  }
+  return (
+    typeof unit === "string" &&
+    normalizeRecipeUnit(authoredUnit || unit) === normalizeRecipeUnit(unit)
+  )
 }
 
 export function normalizeShoppingItem(
@@ -589,7 +664,7 @@ export function normalizeShoppingItem(
       sources.push(parsed)
     }
   }
-  const exactQuantity = normalizeQuantityV1(value.exactQuantityV1)
+  let exactQuantity = normalizeQuantityV1(value.exactQuantityV1)
   let exactPackage = normalizePackageV1(value.exactPackageV1)
   const parsedExactAuthoredUnit = optionalString(
     value.exactAuthoredUnit,
@@ -610,6 +685,18 @@ export function normalizeShoppingItem(
   }
   const exactAuthoredUnit = parsedExactAuthoredUnit || undefined
   const structuredSourceKey = parsedStructuredSourceKey || undefined
+  const structuredCoherent = shoppingStructuredMetadataIsCoherent({
+    quantity: exactQuantity,
+    packageV1: exactPackage,
+    authoredUnit: exactAuthoredUnit,
+    amount,
+    unit,
+  })
+  if (!structuredCoherent) {
+    if (mode === "persist") return null
+    exactQuantity = null
+    exactPackage = null
+  }
   if (
     exactPackage &&
     (!exactQuantity ||
@@ -699,8 +786,8 @@ export function normalizeShoppingItem(
     ...(derivedQuantity ? { derivedQuantity } : {}),
     ...(exactQuantity ? { exactQuantityV1: exactQuantity } : {}),
     ...(exactPackage ? { exactPackageV1: exactPackage } : {}),
-    ...(exactAuthoredUnit ? { exactAuthoredUnit } : {}),
-    ...(structuredSourceKey ? { structuredSourceKey } : {}),
+    ...(exactAuthoredUnit && structuredCoherent ? { exactAuthoredUnit } : {}),
+    ...(structuredSourceKey && structuredCoherent ? { structuredSourceKey } : {}),
     ...(["items", "already_have", "excluded"].includes(String(value.bucket))
       ? { bucket: value.bucket }
       : {}),

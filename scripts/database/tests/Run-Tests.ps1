@@ -478,7 +478,9 @@ try {
         Must ($sql -match 'quantityV1')
         Must ($sql -match 'packageV1')
         Must ($sql -match 'yield_metadata')
-        Must ($sql -match 'structured metadata is incompatible')
+        Must ($sql -match 'rational metadata is incompatible')
+        Must ($sql -match 'instruction groups are incompatible')
+        Must ($sql -match '8192')
     }
     Case 'migration 014 installs private semantic share validators' {
         $sql = [IO.File]::ReadAllText((Join-Path $repo $migration014Path))
@@ -488,13 +490,14 @@ try {
             'recipe_quantity_is_valid',
             'recipe_package_is_valid',
             'recipe_ingredient_is_valid',
-            'recipe_yield_metadata_is_valid'
+            'recipe_yield_metadata_is_valid',
+            'recipe_instruction_groups_are_valid',
+            'recipe_share_snapshot_is_valid'
         )) {
             Must ($sql -match $helper) "missing migration-014 validator: $helper"
         }
         Must ($sql -match 'revoke all privileges on function')
-        Must ($sql -match 'not private\.recipe_ingredient_is_valid')
-        Must ($sql -match 'not private\.recipe_yield_metadata_is_valid')
+        Must ($sql -match 'not private\.recipe_share_snapshot_is_valid')
     }
     Case 'migration 014 evidence matches the committed Git blobs' {
         Must (Test-GitPathMatchesCommit $repo $headCommit $migration014Path $gitExecutable)

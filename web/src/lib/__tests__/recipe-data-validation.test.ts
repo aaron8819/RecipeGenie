@@ -227,4 +227,93 @@ describe("structured recipe data boundaries", () => {
     ])
     expect(normalizeShoppingItems([null], "persist")).toBeNull()
   })
+
+  it("enforces coherent Shopping quantity, unit, range, and package projections", () => {
+    const exact = parseIngredientLine("1 cup sugar")
+    const base = {
+      item: "sugar",
+      amount: 1,
+      unit: "cup",
+      categoryKey: "baking",
+      categoryOrder: 1,
+      exactQuantityV1: exact.quantityV1,
+    }
+    expect(
+      normalizeShoppingItems(
+        [{ ...base, exactAuthoredUnit: "lb" }],
+        "persist"
+      )
+    ).toBeNull()
+    expect(
+      normalizeShoppingItems(
+        [{ ...base, exactAuthoredUnit: "cups" }],
+        "persist"
+      )?.[0]
+    ).toMatchObject({
+      unit: "cup",
+      exactAuthoredUnit: "cups",
+      exactQuantityV1: { kind: "exact" },
+    })
+    expect(
+      normalizeShoppingItems([{ ...base, exactAuthoredUnit: "lb" }])?.[0]
+    ).not.toHaveProperty("exactQuantityV1")
+
+    const range = parseIngredientLine("1–2 cups sugar")
+    expect(
+      normalizeShoppingItems(
+        [{
+          ...base,
+          amount: null,
+          exactQuantityV1: range.quantityV1,
+          exactAuthoredUnit: "cups",
+        }],
+        "persist"
+      )?.[0]
+    ).toMatchObject({
+      amount: null,
+      exactQuantityV1: { kind: "range" },
+    })
+    expect(
+      normalizeShoppingItems(
+        [{
+          ...base,
+          exactQuantityV1: range.quantityV1,
+          exactAuthoredUnit: "cups",
+        }],
+        "persist"
+      )
+    ).toBeNull()
+
+    const packaged = parseIngredientLine("1 (14 oz) can tomatoes")
+    expect(
+      normalizeShoppingItems(
+        [{
+          item: "tomatoes",
+          amount: 1,
+          unit: "(14 oz) can",
+          categoryKey: "canned",
+          categoryOrder: 1,
+          exactQuantityV1: packaged.quantityV1,
+          exactPackageV1: packaged.packageV1,
+          exactAuthoredUnit: "(14 oz) can",
+        }],
+        "persist"
+      )?.[0]
+    ).toHaveProperty("exactPackageV1")
+    expect(
+      normalizeShoppingItems(
+        [{
+          item: "tomatoes",
+          amount: 1,
+          unit: "cup",
+          categoryKey: "canned",
+          categoryOrder: 1,
+          exactQuantityV1: packaged.quantityV1,
+          exactPackageV1: packaged.packageV1,
+          exactAuthoredUnit: "cup",
+        }],
+        "persist"
+      )
+    ).toBeNull()
+  })
 })

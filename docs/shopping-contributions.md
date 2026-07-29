@@ -26,6 +26,14 @@ Identity is `(authenticated user, recipe ID)`. The product currently supports on
 
 Snapshots freeze normalized generated items, selected scale/servings, recipe identity, category/classification at generation time, and `normalization_version`. Recipe edits do not silently change an active contribution; an explicit re-add refreshes it.
 
+Structured quantity metadata becomes authoritative only after its compatibility
+projection is semantically coherent. Scalar and range amounts, qualifiers,
+authored/canonical units, and fixed-package syntax must describe the same
+quantity. `exactScaleV1` must equal the numeric contribution scale both at API
+input and stored-row hydration. Inconsistent client data is rejected before the
+RPC; inconsistent historical structured data fails closed rather than
+rendering a contradictory unit or being legitimized by a retry.
+
 ## Authority flow
 
 Before:

@@ -14,7 +14,7 @@ const schemaVersion = requiredEnvironment("STAGE2C_MATRIX_SCHEMA")
 const apiUrl = requiredEnvironment("STAGE2C_MATRIX_API_URL")
 const anonKey = requiredEnvironment("STAGE2C_MATRIX_ANON_KEY")
 const serviceRoleKey = requiredEnvironment("STAGE2C_MATRIX_SERVICE_ROLE_KEY")
-if (schemaVersion !== "011" && schemaVersion !== "012") {
+if (schemaVersion !== "011" && schemaVersion !== "014") {
   throw new Error(`Unsupported Stage 2C matrix schema: ${schemaVersion}`)
 }
 
@@ -162,7 +162,23 @@ describe(`Stage 2C application against migration ${schemaVersion}`, () => {
     if (renamed.error) throw renamed.error
     expect(mapRecipeRow(renamed.data as RecipeRow).id).toBe(OWNER_RECIPE)
 
-    if (schemaVersion === "012") {
+    if (schemaVersion === "014") {
+      const yieldMetadata = {
+        version: 1,
+        authoredText: "4 servings",
+        kind: "servings",
+        scalingBasis: { numerator: "4", denominator: "1" },
+        value: { numerator: "4", denominator: "1" },
+      }
+      const latestSchemaWrite = await owner
+        .from("recipes")
+        .update({ yield_metadata: yieldMetadata })
+        .eq("recipe_uuid", OWNER_RECIPE)
+        .select("yield_metadata")
+        .single()
+      if (latestSchemaWrite.error) throw latestSchemaWrite.error
+      expect(latestSchemaWrite.data.yield_metadata).toEqual(yieldMetadata)
+
       const mismatch = await owner.from("recipes").insert({
         id: "89999999-9999-4999-8999-999999999999",
         recipe_uuid: "89888888-8888-4888-8888-888888888888",
@@ -269,7 +285,7 @@ describe(`Stage 2C application against migration ${schemaVersion}`, () => {
       rpc: owner.rpc.bind(owner),
       from: (table: "recipes") => owner.from(table),
     }
-    if (schemaVersion === "012") {
+    if (schemaVersion === "014") {
       await expect(
         deleteRecipeByUuid(crossOwnerClient, OTHER_OWNER_RECIPE, ownerId)
       ).rejects.toMatchObject({ code: "23503" })

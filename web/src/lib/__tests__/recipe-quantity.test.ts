@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import { parseIngredientLine } from "@/lib/recipe-parser"
 import {
   divideRationals,
+  assertRecipeScalingFeasible,
   formatRecipeQuantity,
   getAuthoredYieldText,
   getSelectedYieldText,
@@ -17,8 +18,11 @@ import {
   parseRationalLexeme,
   parseYieldMetadata,
   RECIPE_QUANTITY_LIMITS,
+  RECIPE_SCALE_ERROR_MESSAGE,
   rationalFromIntegers,
   resolveIngredientQuantity,
+  scalePackageV1,
+  scaleQuantityV1,
 } from "@/lib/recipe-quantity"
 import type { Ingredient } from "@/types/database"
 
@@ -305,6 +309,53 @@ describe("exact recipe quantities", () => {
 })
 
 describe("recipe quantity formatting", () => {
+  it("fails explicitly at scaling boundaries without returning unscaled values", () => {
+    const maximum = parseQuantityV1("100000000")
+    const boundary = parseQuantityV1("1000000")
+    const overBoundary = parseQuantityV1("1000001")
+    expect(maximum).not.toBeNull()
+    expect(scaleQuantityV1(maximum!, rationalFromIntegers(1, 1))).toEqual(maximum)
+    expect(
+      scaleQuantityV1(boundary!, rationalFromIntegers(100, 1))
+    ).toMatchObject({
+      value: { numerator: "100000000", denominator: "1" },
+    })
+    expect(() =>
+      scaleQuantityV1(overBoundary!, rationalFromIntegers(100, 1))
+    ).toThrow(RECIPE_SCALE_ERROR_MESSAGE)
+    expect(() =>
+      scaleQuantityV1(maximum!, rationalFromIntegers(100, 1))
+    ).toThrow(RECIPE_SCALE_ERROR_MESSAGE)
+
+    const range = parseQuantityV1("1000000–1000001")
+    expect(() =>
+      scaleQuantityV1(range!, rationalFromIntegers(100, 1))
+    ).toThrow(RECIPE_SCALE_ERROR_MESSAGE)
+  })
+
+  it("fails package count and whole-recipe feasibility atomically", () => {
+    const sizedPackage = parseIngredientLine(
+      "1000001–1000002 (14 oz) cans tomatoes"
+    )
+    expect(() =>
+      scalePackageV1(
+        sizedPackage.packageV1,
+        rationalFromIntegers(100, 1)
+      )
+    ).toThrow(RECIPE_SCALE_ERROR_MESSAGE)
+    expect(() =>
+      assertRecipeScalingFeasible(
+        [
+          parseIngredientLine("1 cup flour"),
+          sizedPackage,
+          parseIngredientLine("2 tbsp oil"),
+        ],
+        1,
+        100
+      )
+    ).toThrow(RECIPE_SCALE_ERROR_MESSAGE)
+  })
+
   it.each([
     ["1 lb ground beef", "¾ lb"],
     ["1 tsp chili powder", "¾ tsp"],

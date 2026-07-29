@@ -60,6 +60,7 @@ import {
   type RecipeDetailSource,
 } from "@/lib/recipe-detail-navigation"
 import {
+  assertRecipeScalingFeasible,
   formatRecipeQuantity,
   getAuthoredYieldText,
   getScalingBasis,
@@ -191,6 +192,7 @@ export function RecipeDetailContent({
 }: RecipeDetailContentProps) {
   const scalingBasis = getScalingBasis(recipe.yield_metadata, recipe.servings)
   const [servings, setServings] = useState(scalingBasis)
+  const [scaleError, setScaleError] = useState<string | null>(null)
   const isOriginalYield = servings === scalingBasis
   const authoredYield = getAuthoredYieldText(
     recipe.yield_metadata,
@@ -201,6 +203,21 @@ export function RecipeDetailContent({
     recipe.servings,
     servings
   )
+  const selectYield = (nextYield: number) => {
+    try {
+      assertRecipeScalingFeasible(
+        recipe.ingredients || [],
+        scalingBasis,
+        nextYield
+      )
+      setServings(nextYield)
+      setScaleError(null)
+    } catch (error) {
+      setScaleError(
+        getErrorMessage(error, "The selected yield cannot be scaled safely")
+      )
+    }
+  }
 
   const handleSectionNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
@@ -488,7 +505,7 @@ export function RecipeDetailContent({
             >
               <button
                 type="button"
-                onClick={() => setServings((value) => Math.max(1, value - 1))}
+                onClick={() => selectYield(Math.max(1, servings - 1))}
                 disabled={servings <= 1}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 disabled:opacity-35"
                 aria-label="Decrease yield"
@@ -503,7 +520,7 @@ export function RecipeDetailContent({
               </span>
               <button
                 type="button"
-                onClick={() => setServings((value) => Math.min(99, value + 1))}
+                onClick={() => selectYield(Math.min(99, servings + 1))}
                 disabled={servings >= 99}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 disabled:opacity-35"
                 aria-label="Increase yield"
@@ -516,7 +533,7 @@ export function RecipeDetailContent({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => setServings(scalingBasis)}
+                onClick={() => selectYield(scalingBasis)}
                 className="recipe-detail-print-hidden h-9 rounded-full px-3 text-xs text-stone-500"
               >
                 Reset to {authoredYield}
@@ -526,6 +543,14 @@ export function RecipeDetailContent({
               {selectedYieldLabel}
             </span>
           </div>
+          {scaleError ? (
+            <p
+              className="recipe-detail-print-hidden mt-2 text-sm text-destructive"
+              role="alert"
+            >
+              {scaleError}
+            </p>
+          ) : null}
 
           {ingredientGroups.length > 0 ? (
             <div className="space-y-7">

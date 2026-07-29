@@ -230,6 +230,24 @@ describe("RecipeDetailContent", () => {
     expect(recipe).toEqual(originalRecipe)
   })
 
+  it("keeps the selected yield unchanged after repeated overflow attempts", () => {
+    renderDetail(makeRecipe({
+      servings: 1,
+      ingredients: [
+        { item: "Flour", amount: 100000000, unit: "cup" },
+      ],
+    }))
+
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+
+    expect(screen.getAllByText("1 serving").length).toBeGreaterThan(0)
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Selected yield makes an ingredient quantity too large"
+    )
+    expect(screen.getByText("100000000 cups")).toBeInTheDocument()
+  })
+
   it("renders the approved taco quantities exactly at three servings", () => {
     renderDetail(makeRecipe({
       ingredients: [

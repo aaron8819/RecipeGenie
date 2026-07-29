@@ -157,13 +157,24 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   extension so a Recipe Genie export/import round trip retains structured
   quantities and yield metadata.
 - URL import consumes structured Recipe Genie extension fields only when the
-  envelope is a non-array object with numeric `version: 1`. Missing, malformed,
-  or unsupported versions are ignored as a whole; import falls back to
-  standard schema.org fields without partially trusting extension data.
+  complete envelope is a non-array object with numeric `version: 1`, valid
+  structured ingredients, and valid yield metadata. Extra properties are
+  ignored for forward compatibility. Missing, malformed, or unsupported
+  versions or fields reject the extension atomically; import falls back to
+  standard schema.org fields without producing a structured/standard hybrid.
 - Edit hydration presents a valid structured quantity's authored text in the
   amount control. Saving continues to emit the normalized legacy amount/unit
   projection alongside unchanged authored metadata, while a deliberate amount
   edit rebuilds the affected quantity and invalidates stale original text.
+- Package amount and unit edits rebuild count, qualifier, fixed size, canonical
+  size unit, and package type together. An edit that no longer describes a
+  package deliberately drops package metadata and becomes a coherent ordinary
+  ingredient; stale `originalText` cannot overwrite the edit.
+- Yield selection is prevalidated across the whole recipe. If any exact,
+  ranged, or package-count quantity would exceed the persisted bound, the
+  selected yield remains unchanged and Detail shows a bounded error. Shopping
+  returns the same controlled error before generating or persisting any
+  replacement contribution.
 
 ### Recipe structure compatibility
 

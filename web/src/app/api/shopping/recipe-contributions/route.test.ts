@@ -22,6 +22,7 @@ const recipeB = {
   created_at: "2026-07-14T00:00:00.000Z",
   updated_at: "2026-07-14T00:00:00.000Z",
 } as unknown as Recipe
+let recipeRows = [recipeB]
 
 function storedContribution(recipeId: string, amount: number) {
   return {
@@ -35,6 +36,9 @@ function storedContribution(recipeId: string, amount: number) {
     updated_at: "2026-07-14T00:00:00.000Z",
     snapshot: {
       recipeName: `Recipe ${recipeId.toUpperCase()}`,
+      exactScaleV1: undefined as
+        | { numerator: string; denominator: string }
+        | undefined,
       items: [
         {
           bucket: "items",
@@ -131,7 +135,7 @@ const supabaseMock = {
       return {
         select: () => ({
           in: () => ({
-            eq: async () => ({ data: [recipeB], error: null }),
+            eq: async () => ({ data: recipeRows, error: null }),
           }),
         }),
       }
@@ -150,6 +154,7 @@ import { POST } from "./route"
 beforeEach(() => {
   vi.clearAllMocks()
   rpcAttempt = 0
+  recipeRows = [recipeB]
   vi.spyOn(console, "info").mockImplementation(() => undefined)
   rpcMock.mockImplementation(async (functionName, args) => {
     if (functionName === "get_recipe_shopping_contribution_state") {
@@ -232,5 +237,95 @@ describe("recipe contribution command route", () => {
         value: { numerator: "3", denominator: "2" },
       },
     })
+  })
+
+  it("rejects scaling overflow before any Shopping mutation", async () => {
+    recipeRows = [{
+      ...recipeB,
+      servings: 1,
+      ingredients: [{ item: "flour", amount: 100000000, unit: "cup" }],
+    }]
+    const request = new Request("http://localhost/api/shopping/recipe-contributions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeIds: [RECIPE_B],
+        scale: 100,
+        scaleV1: { numerator: "100", denominator: "1" },
+        idempotencyKey: "overflow-b",
+      }),
+    })
+
+    const response = await POST(request)
+    expect(response.status).toBe(422)
+    await expect(response.json()).resolves.toEqual({
+      error: "Selected yield makes an ingredient quantity too large",
+    })
+    expect(
+      rpcMock.mock.calls.filter(
+        ([name]) => name === "apply_recipe_shopping_contribution_uuid_command"
+      )
+    ).toHaveLength(0)
+  })
+
+  it("rejects persisted exact scale that contradicts the numeric row scale", async () => {
+    rpcMock.mockImplementation(async (functionName) => {
+      if (functionName === "get_recipe_shopping_contribution_state") {
+        const contribution = storedContribution(RECIPE_A, 1)
+        contribution.snapshot.exactScaleV1 = {
+          numerator: "3",
+          denominator: "4",
+        }
+        return {
+          data: {
+            shopping_list: states[0].list,
+            contributions: [contribution],
+          },
+          error: null,
+        }
+      }
+      throw new Error("write must not be attempted")
+    })
+    const request = new Request("http://localhost/api/shopping/recipe-contributions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeIds: [RECIPE_B],
+        scale: 1,
+        scaleV1: { numerator: "1", denominator: "1" },
+        idempotencyKey: "mismatched-stored-scale",
+      }),
+    })
+
+    const response = await POST(request)
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toEqual({
+      error: "Stored shopping contribution data is invalid",
+    })
+    expect(
+      rpcMock.mock.calls.filter(
+        ([name]) => name === "apply_recipe_shopping_contribution_uuid_command"
+      )
+    ).toHaveLength(0)
+  })
+
+  it("rejects even a near numeric scale mismatch before reading state", async () => {
+    const request = new Request("http://localhost/api/shopping/recipe-contributions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeIds: [RECIPE_B],
+        scale: 0.7500000000001,
+        scaleV1: { numerator: "3", denominator: "4" },
+        idempotencyKey: "near-scale-mismatch",
+      }),
+    })
+
+    const response = await POST(request)
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toEqual({
+      error: "Numeric and exact scales must agree",
+    })
+    expect(rpcMock).not.toHaveBeenCalled()
   })
 })

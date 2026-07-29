@@ -66,6 +66,13 @@ vi.mock("next/dynamic", () => ({
                   )
                 }
               />
+              <input
+                aria-label={`Unit ${index + 1}`}
+                value={ingredient.unit}
+                onChange={(event) =>
+                  onIngredientChange(index, "unit", event.target.value)
+                }
+              />
             </React.Fragment>
           ))}
         </div>
@@ -551,6 +558,51 @@ describe("RecipeDialog image orchestration", () => {
                   authored: "1/2",
                   lexeme: "1/2",
                   value: { numerator: "1", denominator: "2" },
+                }),
+              }),
+            ],
+          }),
+        })
+      )
+    })
+  })
+
+  it("rebuilds sized-package metadata from the actual unit edit callback", async () => {
+    const recipe = recipeFixture({
+      id: "sized-package",
+      ingredients: [parseIngredientLine("1 (14 oz) can tomatoes")],
+    })
+    renderEditDialog(recipe)
+
+    fireEvent.change(screen.getByLabelText("Unit 1"), {
+      target: { value: "(28 oz) cans" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+    await waitFor(() => {
+      expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updates: expect.objectContaining({
+            ingredients: [
+              expect.objectContaining({
+                item: "tomatoes",
+                amount: 1,
+                unit: "(28 oz) cans",
+                originalText: undefined,
+                quantityV1: expect.objectContaining({
+                  kind: "exact",
+                  authored: "1",
+                }),
+                packageV1: expect.objectContaining({
+                  count: expect.objectContaining({ authored: "1" }),
+                  size: {
+                    value: { numerator: "28", denominator: "1" },
+                    lexeme: "28",
+                    unit: "oz",
+                    authoredUnit: "oz",
+                  },
+                  type: "can",
+                  authoredType: "cans",
                 }),
               }),
             ],

@@ -90,7 +90,7 @@ try {
   runSupabase(["db", "reset", "--local", "--no-seed"])
   refreshLocalGateway()
   restoredToLatest = true
-  runMatrix("012")
+  runMatrix("014")
 } finally {
   if (!restoredToLatest) {
     runSupabase(["db", "reset", "--local", "--no-seed"])

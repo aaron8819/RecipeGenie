@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(50);
+select extensions.plan(75);
 
 insert into auth.users (id, email)
 values
@@ -122,6 +122,16 @@ values
     array[]::text[],
     '[]'::jsonb,
     '{}'::text[]
+  ),
+  (
+    'b-malformed-instructions',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Malformed Instructions Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
   );
 
 insert into public.recipe_history (user_id, recipe_id, date_made)
@@ -167,6 +177,10 @@ values
         }
       }],
       "instructions":[],
+      "image_url":"",
+      "instruction_groups":[
+        {"label":"Finish","steps":["Serve immediately."]}
+      ],
       "yield_metadata":{
         "version":1,
         "authoredText":"2 servings",
@@ -229,7 +243,123 @@ values
     'security-a@example.test',
     'b-malformed-source',
     '{"name":"Malformed package","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"tomatoes","amount":1,"unit":"can","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"packageV1":{"version":1,"count":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"size":{},"type":"can","authoredType":"can"}}],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000009',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-malformed-instructions',
+    '{"name":"Malformed instructions","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[],"instruction_groups":[{"steps":"not-an-array"}]}'::jsonb
   );
+
+create temporary table snapshot_validation_cases (
+  description text not null,
+  snapshot jsonb not null,
+  expected boolean not null
+);
+
+insert into snapshot_validation_cases(description, snapshot, expected)
+select description, base.snapshot || extension, expected
+from (
+  select
+    '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb
+      as snapshot
+) as base
+cross join lateral (values
+  ('accepts legacy null instruction groups', '{"instruction_groups":null}'::jsonb, true),
+  ('accepts legacy empty instruction groups', '{"instruction_groups":[]}'::jsonb, true),
+  ('accepts current instruction groups', '{"instruction_groups":[{"label":"Sauce","steps":["Whisk."]}]}'::jsonb, true),
+  ('rejects boolean instruction groups', '{"instruction_groups":true}'::jsonb, false),
+  ('rejects object instruction groups', '{"instruction_groups":{}}'::jsonb, false),
+  ('rejects scalar instruction groups', '{"instruction_groups":"steps"}'::jsonb, false),
+  ('rejects null group entries', '{"instruction_groups":[null]}'::jsonb, false),
+  ('rejects array group entries', '{"instruction_groups":[[]]}'::jsonb, false),
+  ('rejects scalar group entries', '{"instruction_groups":["group"]}'::jsonb, false),
+  ('rejects unsupported group fields', '{"instruction_groups":[{"name":"Sauce","steps":[]}]}'::jsonb, false),
+  ('rejects missing steps', '{"instruction_groups":[{"label":"Sauce"}]}'::jsonb, false),
+  ('rejects null steps', '{"instruction_groups":[{"steps":null}]}'::jsonb, false),
+  ('rejects object steps', '{"instruction_groups":[{"steps":{}}]}'::jsonb, false),
+  ('rejects string steps', '{"instruction_groups":[{"steps":"Cook."}]}'::jsonb, false),
+  ('rejects boolean steps', '{"instruction_groups":[{"steps":true}]}'::jsonb, false),
+  ('rejects null labels', '{"instruction_groups":[{"label":null,"steps":[]}]}'::jsonb, false),
+  ('rejects empty labels', '{"instruction_groups":[{"label":" ","steps":[]}]}'::jsonb, false),
+  ('rejects object step entries', '{"instruction_groups":[{"steps":[{"text":"Cook."}]}]}'::jsonb, false),
+  ('rejects invalid image URLs', '{"image_url":false}'::jsonb, false)
+) as cases(description, extension, expected);
+
+insert into snapshot_validation_cases(description, snapshot, expected)
+select
+  'rejects oversized group arrays',
+  base.snapshot || jsonb_build_object(
+    'instruction_groups',
+    (
+      select jsonb_agg(jsonb_build_object('steps', '[]'::jsonb))
+      from generate_series(1, 501)
+    )
+  ),
+  false
+from (
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+) as base
+union all
+select
+  'rejects oversized step arrays',
+  base.snapshot || jsonb_build_object(
+    'instruction_groups',
+    jsonb_build_array(jsonb_build_object(
+      'steps',
+      (select jsonb_agg('Cook.'::text) from generate_series(1, 2001))
+    ))
+  ),
+  false
+from (
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+) as base
+union all
+select
+  'rejects oversized labels',
+  base.snapshot || jsonb_build_object(
+    'instruction_groups',
+    jsonb_build_array(jsonb_build_object(
+      'label', repeat('x', 129),
+      'steps', '[]'::jsonb
+    ))
+  ),
+  false
+from (
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+) as base
+union all
+select
+  'rejects oversized step strings',
+  base.snapshot || jsonb_build_object(
+    'instruction_groups',
+    jsonb_build_array(jsonb_build_object(
+      'steps', jsonb_build_array(repeat('x', 10001))
+    ))
+  ),
+  false
+from (
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+) as base
+union all
+select
+  'rejects oversized image URLs',
+  base.snapshot || jsonb_build_object('image_url', repeat('x', 8193)),
+  false
+from (
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+) as base;
+
+select extensions.is(
+  private.recipe_share_snapshot_is_valid(snapshot),
+  expected,
+  description
+)
+from snapshot_validation_cases
+order by description;
 
 set local role authenticated;
 select set_config(
@@ -356,6 +486,13 @@ select extensions.throws_ok(
   'a directly inserted contradictory yield cannot cross the privileged RPC'
 );
 
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000009') $$,
+  'P0001',
+  'Invalid recipe snapshot',
+  'malformed instruction groups cannot cross the privileged RPC'
+);
+
 select extensions.ok(
   public.accept_recipe_share('a1000000-0000-0000-0000-000000000001') is not null,
   'User A can accept a share addressed to User A'
@@ -366,6 +503,9 @@ select extensions.ok(
     select ingredients #>> '{0,quantityV1,authored}' = '0.50'
       and ingredients #>> '{0,quantityV1,value,numerator}' = '1'
       and yield_metadata->>'authoredText' = '2 servings'
+      and instruction_groups #>> '{0,label}' = 'Finish'
+      and instruction_groups #>> '{0,steps,0}' = 'Serve immediately.'
+      and image_url is null
     from public.recipes
     where recipe_uuid = (
       select accepted_recipe_uuid
@@ -385,11 +525,12 @@ select extensions.is(
       'a1000000-0000-0000-0000-000000000005',
       'a1000000-0000-0000-0000-000000000006',
       'a1000000-0000-0000-0000-000000000007',
-      'a1000000-0000-0000-0000-000000000008'
+      'a1000000-0000-0000-0000-000000000008',
+      'a1000000-0000-0000-0000-000000000009'
     )
       and status = 'pending'
   ),
-  5::bigint,
+  6::bigint,
   'rejected share acceptance leaves every malformed share pending'
 );
 
@@ -402,7 +543,8 @@ select extensions.is(
       'Contradictory package',
       'Oversized rational',
       'Malformed package',
-      'Contradictory yield'
+      'Contradictory yield',
+      'Malformed instructions'
     )
   ),
   0::bigint,

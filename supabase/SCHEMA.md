@@ -696,7 +696,7 @@ The repository now uses a baseline-first bootstrap strategy:
 11. **011_fix_uuid_made_state_date_contract.sql** - Replaced the defective UUID/text made-state RPC with the canonical UUID/date command and retained the authenticated legacy overload.
 12. **012_enforce_uuid_active_recipe_writes.sql** - Required UUID authority for active recipe writes, derived compatibility mirrors, and added UUID-coordinated recipe deletion.
 13. **013_allow_uuid_shopping_contribution_replacement.sql** - Preserved UUID authority for content-only replacement of an existing contribution identity pair.
-14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and deep, atomic shared-snapshot validation for exact quantities, ranges, packages, units, and yield metadata.
+14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and deep, atomic shared-snapshot validation for all copied recipe fields, including bounded instruction groups and images, exact quantities, ranges, packages, units, and yield metadata. Private validators are execution-revoked and the authenticated acceptance RPC rejects the whole snapshot before any recipient recipe or share-state mutation.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.

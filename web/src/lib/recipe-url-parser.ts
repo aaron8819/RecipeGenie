@@ -18,6 +18,11 @@ export interface ExtractedRecipe {
   warnings: string[];
 }
 
+type SupportedRecipeGenieData = {
+  ingredients: Ingredient[];
+  yieldMetadata: YieldMetadataV1;
+};
+
 /**
  * Extract recipe data from HTML using Schema.org JSON-LD,
  * falling back to Open Graph meta tags for name/image.
@@ -77,7 +82,7 @@ export function extractRecipeFromHtml(
       'Unsupported Recipe Genie extension ignored; standard recipe data used'
     );
   }
-  const ingredients = parseStructuredRecipeIngredients(recipeGenieData)
+  const ingredients = recipeGenieData?.ingredients
     || parseRecipeIngredients(recipe.recipeIngredient);
   if (ingredients.length === 0) {
     warnings.push('No ingredients found');
@@ -92,11 +97,7 @@ export function extractRecipeFromHtml(
   }
 
   // Extract servings
-  const structuredYield =
-    recipeGenieData &&
-    isValidYieldMetadata(recipeGenieData.yieldMetadata)
-      ? recipeGenieData.yieldMetadata
-      : undefined;
+  const structuredYield = recipeGenieData?.yieldMetadata;
   const parsedYield = structuredYield
     ? {
         servings: Math.max(
@@ -278,17 +279,9 @@ function parseYield(raw: unknown): {
   };
 }
 
-function parseStructuredRecipeIngredients(
-  raw: unknown
-): Ingredient[] | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const ingredients = (raw as { ingredients?: unknown }).ingredients;
-  return normalizeIngredients(ingredients, "persist");
-}
-
 function supportedRecipeGenieData(
   value: unknown
-): Record<string, unknown> | null {
+): SupportedRecipeGenieData | null {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -297,7 +290,19 @@ function supportedRecipeGenieData(
   ) {
     return null;
   }
-  return value as Record<string, unknown>;
+  const envelope = value as Record<string, unknown>;
+  const ingredients = normalizeIngredients(envelope.ingredients, 'persist');
+  if (!ingredients || !isValidYieldMetadata(envelope.yieldMetadata)) {
+    return null;
+  }
+
+  // Version 1 is an atomic compatibility envelope. Unknown properties are
+  // ignored for forward compatibility, but no supported field is consumed
+  // unless every required version-1 field validates.
+  return {
+    ingredients,
+    yieldMetadata: envelope.yieldMetadata,
+  };
 }
 
 /**

@@ -1,4 +1,7 @@
-import { hasIngredientAmount, type ParsedRecipe } from "@/lib/recipe-parser"
+import {
+  hasIngredientAmount,
+  type ParsedRecipe,
+} from "@/lib/recipe-parser"
 import type { Ingredient, Recipe, RecipeInsert, RecipeInstructionGroup } from "@/types/database"
 import {
   buildInstructionEditorGroups,
@@ -15,6 +18,8 @@ import {
 import {
   getAuthoredYieldText,
   isValidQuantityV1,
+  normalizePackageV1,
+  parseIngredientQuantityPrefix,
   parseQuantityV1,
   parseYieldMetadata,
   quantityToLegacyAmount,
@@ -356,6 +361,57 @@ export function normalizeRecipeIngredientsForEditing(
 ): Ingredient[] {
   return (normalizeIngredients(ingredients, "hydrate") || [])
     .map((ingredient) => normalizeRecipeIngredient(ingredient, true))
+}
+
+export function updateRecipeIngredientField(
+  current: Ingredient,
+  field: keyof Ingredient,
+  value: string | number | null
+): Ingredient {
+  const ingredient: Ingredient = { ...current, [field]: value }
+  if (["amount", "unit", "item", "modifier"].includes(field)) {
+    ingredient.originalText = undefined
+  }
+
+  if (field === "amount") {
+    const quantity =
+      value == null ? null : parseQuantityV1(String(value), "authored")
+    ingredient.quantityV1 =
+      quantity && quantity.kind !== "unparsed" ? quantity : undefined
+    if (ingredient.packageV1 && ingredient.quantityV1) {
+      ingredient.packageV1 = normalizePackageV1({
+        ...ingredient.packageV1,
+        count: ingredient.quantityV1,
+      }) ?? undefined
+    } else if (ingredient.packageV1) {
+      const authoredType = ingredient.packageV1.authoredType
+      ingredient.unit = authoredType
+      ingredient.authoredUnit = authoredType
+      ingredient.packageV1 = undefined
+    }
+  }
+
+  if (field === "unit") {
+    const authoredUnit = String(value || "").replace(/\s+/g, " ").trim()
+    ingredient.unit = authoredUnit
+    ingredient.authoredUnit = authoredUnit || undefined
+    const quantity = isValidQuantityV1(ingredient.quantityV1)
+      ? ingredient.quantityV1
+      : null
+    const parsed =
+      authoredUnit && quantity
+        ? parseIngredientQuantityPrefix(
+            `${quantity.authored} ${authoredUnit} __ingredient__`,
+            "authored"
+          )
+        : null
+    ingredient.packageV1 =
+      parsed?.rest === "__ingredient__" && parsed.packageV1
+        ? parsed.packageV1
+        : undefined
+  }
+
+  return ingredient
 }
 
 export function normalizeRecipeIngredientsForSubmission(

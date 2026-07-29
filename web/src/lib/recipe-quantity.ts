@@ -175,6 +175,16 @@ export const RECIPE_QUANTITY_LIMITS = {
   ingredientLineLength: 2_048,
 } as const
 
+export const RECIPE_SCALE_ERROR_MESSAGE =
+  "Selected yield makes an ingredient quantity too large"
+
+export class RecipeQuantityScaleError extends Error {
+  constructor() {
+    super(RECIPE_SCALE_ERROR_MESSAGE)
+    this.name = "RecipeQuantityScaleError"
+  }
+}
+
 const QUANTITY_SOURCES = new Set<QuantitySourceV1>([
   "authored",
   "original-text",
@@ -839,6 +849,37 @@ export function normalizeRecipeUnit(unit: string): string {
   return UNIT_ALIASES[unit.trim().toLowerCase()] || unit.trim()
 }
 
+export function packageMatchesCompatibilityUnit(
+  packageValue: unknown,
+  compatibilityUnit: unknown
+): boolean {
+  const packageV1 = normalizePackageV1(packageValue)
+  if (!packageV1 || typeof compatibilityUnit !== "string") return false
+  const text = compatibilityUnit.replace(/\s+/g, " ").trim()
+  const typeFirst = text.match(/^(.+?)\s+\((\S+)\s+(.+)\)$/)
+  const sizeFirst = text.match(/^\((\S+)\s+(.+)\)\s+(.+)$/)
+  const match = typeFirst
+    ? {
+        type: typeFirst[1],
+        size: typeFirst[2],
+        sizeUnit: typeFirst[3],
+      }
+    : sizeFirst
+      ? {
+          type: sizeFirst[3],
+          size: sizeFirst[1],
+          sizeUnit: sizeFirst[2],
+        }
+      : null
+  if (!match) return false
+  const parsedSize = parseRationalLexeme(match.size)
+  return (
+    normalizeRecipeUnit(match.type) === packageV1.type &&
+    normalizeRecipeUnit(match.sizeUnit) === packageV1.size.unit &&
+    Boolean(parsedSize && sameRational(parsedSize, packageV1.size.value))
+  )
+}
+
 export function parseIngredientQuantityPrefix(
   input: string,
   source: QuantitySourceV1 = "authored"
@@ -1107,7 +1148,7 @@ function scaleQuantity(
     const scaled = value
       ? persistBounded(multiply(value, ratio), { positive: true })
       : null
-    if (!scaled) return quantity
+    if (!scaled) throw new RecipeQuantityScaleError()
     const lexeme =
       scaled.denominator === "1"
         ? scaled.numerator
@@ -1128,7 +1169,7 @@ function scaleQuantity(
     const scaledEnd = end
       ? persistBounded(multiply(end, ratio), { positive: true })
       : null
-    if (!scaledStart || !scaledEnd) return quantity
+    if (!scaledStart || !scaledEnd) throw new RecipeQuantityScaleError()
     const startLexeme =
       scaledStart.denominator === "1"
         ? scaledStart.numerator
@@ -1157,9 +1198,10 @@ export function scaleQuantityV1(
 ): QuantityV1 {
   const parsedQuantity = normalizeQuantityV1(quantity)
   const parsedRatio = fromPersisted(ratio, { positive: true })
-  return parsedQuantity && parsedRatio
-    ? scaleQuantity(parsedQuantity, parsedRatio)
-    : quantity
+  if (!parsedQuantity || !parsedRatio) {
+    throw new Error("Invalid structured quantity scale")
+  }
+  return scaleQuantity(parsedQuantity, parsedRatio)
 }
 
 export function normalizeScaleRatioV1(value: unknown): RationalV1 | null {
@@ -1542,12 +1584,7 @@ export function formatRecipeQuantity(
     selectedYield <= 0 ||
     selectedYield > RECIPE_QUANTITY_LIMITS.selectedYield
   ) {
-    return {
-      text: resolved.quantity.authored,
-      hardToMeasure: false,
-      approximate: false,
-      exact: resolved.quantity,
-    }
+    throw new Error("Selected yield is outside supported limits")
   }
   const basis = rational(BigInt(scalingBasis), 1n)
   const ratio = rational(BigInt(selectedYield), basis.numerator)
@@ -1587,6 +1624,30 @@ export function formatRecipeQuantity(
     resolved.authoredUnit ||
       (typeof ingredient.unit === "string" ? ingredient.unit : "")
   )
+}
+
+export function assertRecipeScalingFeasible(
+  ingredients: readonly Ingredient[],
+  scalingBasis: number,
+  selectedYield: number
+): void {
+  const ratio = selectedYieldRatio(selectedYield, scalingBasis)
+  const parsedRatio = fromPersisted(ratio, { positive: true })
+  if (!parsedRatio) {
+    throw new Error("Selected yield is outside supported limits")
+  }
+
+  for (const ingredient of ingredients) {
+    const quantity = normalizeQuantityV1(
+      resolveIngredientQuantity(ingredient).quantity
+    )
+    if (
+      quantity?.kind === "exact" ||
+      quantity?.kind === "range"
+    ) {
+      scaleQuantity(quantity, parsedRatio)
+    }
+  }
 }
 
 export function getScalingBasis(
@@ -1921,7 +1982,10 @@ export function scaleIngredientAmount(
       authored,
       rationalFromIntegers(selectedYield, originalYield)
     )
-    return scaled ? rationalToNumber(scaled) ?? amount : amount
+    if (!scaled) throw new RecipeQuantityScaleError()
+    const numeric = rationalToNumber(scaled)
+    if (numeric == null) throw new RecipeQuantityScaleError()
+    return numeric
   }
 
   const parsed = parseIngredientQuantityPrefix(amount)
