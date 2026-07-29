@@ -18,6 +18,15 @@ let isDesktopViewport = true
 const addToShoppingListMutateAsync = vi.fn()
 const deleteRecipeMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
+const routerPush = vi.fn()
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+    replace: vi.fn(),
+    back: vi.fn(),
+  }),
+}))
 
 vi.mock("@/hooks/use-is-desktop", () => ({
   useIsDesktop: () => isDesktopViewport,
@@ -166,13 +175,18 @@ vi.mock("../recipe-card", () => ({
     recipe,
     onAddToShoppingList,
     onDelete,
+    onClick,
   }: {
     recipe: Recipe
     onAddToShoppingList?: (recipe: Recipe) => void
     onDelete?: (recipe: Recipe) => void
+    onClick?: (recipe: Recipe) => void
   }) => (
     <div>
       <span>{recipe.name}</span>
+      <button type="button" onClick={() => onClick?.(recipe)}>
+        View {recipe.name}
+      </button>
       <button type="button" onClick={() => onAddToShoppingList?.(recipe)}>
         Add {recipe.name}
       </button>
@@ -185,18 +199,6 @@ vi.mock("../recipe-card", () => ({
 
 vi.mock("../recipe-dialog", () => ({
   RecipeDialog: () => null,
-}))
-
-vi.mock("../recipe-detail-dialog", () => ({
-  RecipeDetailDialog: ({
-    onDelete,
-  }: {
-    onDelete?: (recipe: Recipe) => Promise<boolean> | boolean | void
-  }) => (
-    <button type="button" onClick={() => void onDelete?.(baseRecipes[0])}>
-      Confirm detail delete
-    </button>
-  ),
 }))
 
 vi.mock("../add-to-plan-dialog", () => ({
@@ -246,7 +248,9 @@ describe("RecipeList", () => {
     addToShoppingListMutateAsync.mockReset()
     deleteRecipeMutateAsync.mockReset()
     undoToastShow.mockReset()
+    routerPush.mockReset()
     window.localStorage.clear()
+    window.sessionStorage.clear()
     vi.spyOn(window, "confirm").mockReturnValue(true)
   })
 
@@ -352,16 +356,14 @@ describe("RecipeList", () => {
     })
   })
 
-  it("does not ask for a second confirmation after the detail dialog confirms deletion", async () => {
-    deleteRecipeMutateAsync.mockResolvedValueOnce("recipe-1")
-
+  it("opens recipe results on the canonical full-page route", () => {
     render(<RecipeList />)
 
-    fireEvent.click(screen.getByRole("button", { name: "Confirm detail delete" }))
+    fireEvent.click(screen.getByRole("button", { name: "View Chicken Soup" }))
 
-    await waitFor(() => {
-      expect(deleteRecipeMutateAsync).toHaveBeenCalledWith("recipe-1")
-    })
-    expect(window.confirm).not.toHaveBeenCalled()
+    expect(routerPush).toHaveBeenCalledOnce()
+    expect(routerPush.mock.calls[0][0]).toMatch(
+      /^\/recipes\/recipe-1\?from=recipes&origin=/
+    )
   })
 })

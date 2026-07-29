@@ -1,9 +1,15 @@
 import { test, expect } from './fixtures'
 import { E2E_CONFIG } from './e2e-env'
+import {
+  formatRequestFailure,
+  isExpectedInspectionNavigationAbort,
+  type RequestFailureSnapshot,
+} from './request-failure-diagnostics'
 
 type Diagnostic = {
   kind: 'console' | 'page' | 'request' | 'response'
   detail: string
+  requestFailure?: RequestFailureSnapshot
 }
 
 const viewports = [
@@ -37,11 +43,45 @@ async function contentScrollMetrics(page: import('@playwright/test').Page) {
   })
 }
 
+async function navigateToInspectionTab(
+  page: import('@playwright/test').Page,
+  tab: 'recipes' | 'shopping' | 'planner' | 'pantry'
+) {
+  const control = tab === 'planner'
+    ? page.getByRole('button', { name: 'Go to Planner', exact: true })
+    : page
+      .getByRole('navigation', { name: 'Bottom navigation' })
+      .getByRole('button', {
+        name: new RegExp(`^${tab}$`, 'i'),
+      })
+
+  await expect(control).toBeVisible()
+  await control.click()
+
+  const activePanel = page.locator(
+    `[data-home-tab-panel="${tab}"][aria-hidden="false"]`
+  )
+  await expect(activePanel).toBeVisible()
+  return activePanel
+}
+
+function waitForPlannerHistoryPrefetch(
+  page: import('@playwright/test').Page
+) {
+  return page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return (
+      response.request().method() === 'GET' &&
+      url.origin === 'http://127.0.0.1:54321' &&
+      url.pathname === '/rest/v1/recipe_history'
+    )
+  })
+}
+
 test.describe('local authenticated browser inspection', () => {
   test('captures responsive authenticated surfaces and interaction health', async ({
     page,
     setupAuth,
-    navigateToTab,
   }, testInfo) => {
     expect(E2E_CONFIG.target).toBe('local')
     const diagnostics: Diagnostic[] = []
@@ -55,9 +95,17 @@ test.describe('local authenticated browser inspection', () => {
       diagnostics.push({ kind: 'page', detail: error.message })
     })
     page.on('requestfailed', (request) => {
+      const requestFailure = {
+        failureText: request.failure()?.errorText || 'unknown',
+        isNavigationRequest: request.isNavigationRequest(),
+        method: request.method(),
+        resourceType: request.resourceType(),
+        url: request.url(),
+      }
       diagnostics.push({
         kind: 'request',
-        detail: `${request.method()} ${new URL(request.url()).pathname} ${request.failure()?.errorText || 'unknown'}`,
+        detail: formatRequestFailure(requestFailure),
+        requestFailure,
       })
     })
     page.on('response', (response) => {
@@ -67,11 +115,15 @@ test.describe('local authenticated browser inspection', () => {
     })
 
     await page.setViewportSize({ width: 1200, height: 800 })
+    const initialPlannerHistoryPrefetch = waitForPlannerHistoryPrefetch(page)
     await setupAuth()
+    await initialPlannerHistoryPrefetch
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport)
+      const plannerHistoryPrefetch = waitForPlannerHistoryPrefetch(page)
       await page.reload({ waitUntil: 'domcontentloaded' })
+      await plannerHistoryPrefetch
       await expect(page.locator('main')).toBeVisible()
       await expect(page.getByRole('button', { name: /^planner$/i }).first())
         .toBeVisible({ timeout: 45000 })
@@ -108,22 +160,42 @@ test.describe('local authenticated browser inspection', () => {
 
     await page.setViewportSize({ width: 390, height: 844 })
     for (const tab of ['recipes', 'shopping', 'planner', 'pantry'] as const) {
-      await navigateToTab(tab)
-      await expect(page.locator('main')).toBeVisible()
+      const activePanel = await navigateToInspectionTab(page, tab)
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
         .toBeLessThanOrEqual(1)
       if (tab === 'recipes') {
-        await expect(page.getByText('Long Sunday Lasagna', { exact: true })
-          .filter({ visible: true }).first()).toBeVisible()
+        const lasagnaCard = activePanel
+          .getByRole('button')
+          .filter({
+            has: page.getByRole('heading', {
+              name: 'Long Sunday Lasagna',
+              exact: true,
+            }),
+          })
+        await expect(lasagnaCard).toHaveCount(1)
+        await expect(lasagnaCard).toBeVisible()
       } else if (tab === 'shopping') {
-        await expect(page.getByText('lemons', { exact: true })
-          .filter({ visible: true }).first()).toBeVisible()
+        const lemonsRow = activePanel
+          .getByTestId('shopping-item-row')
+          .filter({ has: page.getByText('lemons', { exact: true }) })
+        await expect(lemonsRow).toHaveCount(1)
+        await expect(lemonsRow).toBeVisible()
       } else if (tab === 'planner') {
-        await expect(page.getByText('Weeknight Lemon Chicken', { exact: true })
-          .filter({ visible: true }).first()).toBeVisible()
+        const mondaySection = activePanel.locator(
+          'section[data-day-index="0"][data-day-date]'
+        )
+        await expect(
+          mondaySection.getByRole('heading', { name: /^Monday \d+$/ })
+        ).toBeVisible()
+        await expect(
+          mondaySection.getByText('Weeknight Lemon Chicken', { exact: true })
+        ).toBeVisible()
       } else {
-        await expect(page.getByText('garlic', { exact: true })
-          .filter({ visible: true }).first()).toBeVisible()
+        const garlicItem = activePanel
+          .locator('[data-pantry-item]')
+          .filter({ has: page.getByText('garlic', { exact: true }) })
+        await expect(garlicItem).toHaveCount(1)
+        await expect(garlicItem).toBeVisible()
       }
       await page.screenshot({
         path: testInfo.outputPath(`mobile-390-${tab}.png`),
@@ -131,7 +203,7 @@ test.describe('local authenticated browser inspection', () => {
       })
     }
 
-    await navigateToTab('recipes')
+    await navigateToInspectionTab(page, 'recipes')
     const requestedScrollTop = await page.evaluate(() => {
       const scrollContainer = Array.from(document.querySelectorAll<HTMLElement>('*'))
         .find((element) => {
@@ -145,20 +217,36 @@ test.describe('local authenticated browser inspection', () => {
       scrollContainer.scrollTop = Math.min(500, scrollContainer.scrollHeight - scrollContainer.clientHeight)
       return scrollContainer.scrollTop
     })
-    await navigateToTab('shopping')
-    await navigateToTab('recipes')
+    await navigateToInspectionTab(page, 'shopping')
+    await navigateToInspectionTab(page, 'recipes')
     const restoredScroll = await contentScrollMetrics(page)
     await testInfo.attach('tab-scroll-restoration', {
       body: Buffer.from(JSON.stringify({ requestedScrollTop, restoredScroll }, null, 2)),
       contentType: 'application/json',
     })
 
-    await page.getByText('Long Sunday Lasagna', { exact: true }).first().click()
-    const detailDialog = page.getByRole('dialog').last()
-    await expect(detailDialog.getByRole('button', { name: /edit recipe/i })).toBeVisible()
-    await expect(detailDialog.getByText('Rest for 20 minutes before slicing.', { exact: true })).toBeVisible()
+    const lasagnaCard = page
+      .getByRole('button')
+      .filter({
+        has: page.getByRole('heading', {
+          name: 'Long Sunday Lasagna',
+          exact: true,
+        }),
+      })
+    await lasagnaCard.click()
+    await expect(page).toHaveURL(
+      /\/recipes\/10000000-0000-4000-8000-000000000006(?:\?|$)/
+    )
+    const detailPage = page.getByTestId('recipe-detail-page')
+    await expect(detailPage.getByRole('button', { name: /edit recipe/i })).toBeVisible()
+    await expect(detailPage.getByText('Rest for 20 minutes before slicing.', { exact: true })).toBeVisible()
     await page.screenshot({ path: testInfo.outputPath('recipe-detail-390.png') })
-    await page.keyboard.press('Escape')
+    await page.setViewportSize({ width: 1440, height: 900 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
+      .toBeLessThanOrEqual(1)
+    await page.screenshot({ path: testInfo.outputPath('recipe-detail-1440.png') })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.getByRole('button', { name: /back to recipes/i }).click()
 
     const importedName = 'Local Inspection Tomato Toast'
     await page.getByRole('button', { name: /add recipe/i }).first().click()
@@ -171,8 +259,8 @@ test.describe('local authenticated browser inspection', () => {
     await dialog.getByRole('button', { name: /review imported recipe/i }).click()
     await expect(dialog.getByRole('tab', { name: /^details$/i })).toHaveAttribute('data-state', 'active')
     await dialog.getByRole('button', { name: /^save recipe$/i }).click()
-    const importedDetail = page.getByRole('dialog').last()
-    await expect(importedDetail.locator('h1').filter({ hasText: importedName })).toBeVisible()
+    const importedDetail = page.getByTestId('recipe-detail-page')
+    await expect(importedDetail.getByRole('heading', { name: importedName, level: 1 })).toBeVisible()
     await importedDetail.getByRole('button', { name: /edit recipe/i }).click()
     dialog = page.getByRole('dialog').first()
     await dialog.locator('#name-edit').fill(`${importedName} Edited`)
@@ -181,9 +269,7 @@ test.describe('local authenticated browser inspection', () => {
     await expect(dialog).toBeHidden({ timeout: 15000 })
 
     await page.setViewportSize({ width: 390, height: 420 })
-    if (await page.getByRole('dialog').last().isVisible().catch(() => false)) {
-      await page.keyboard.press('Escape')
-    }
+    await page.getByRole('button', { name: /back to recipes/i }).click()
     await page.getByRole('button', { name: /add recipe/i }).first().click()
     dialog = page.getByRole('dialog').first()
     await dialog.getByRole('tab', { name: /^import$/i }).click()
@@ -213,8 +299,66 @@ test.describe('local authenticated browser inspection', () => {
     })
     expect(diagnostics.filter((entry) =>
       entry.kind !== 'response' &&
-      !(entry.kind === 'request' && entry.detail.includes('ERR_ABORTED'))
+      !(
+        entry.kind === 'request' &&
+        entry.requestFailure &&
+        isExpectedInspectionNavigationAbort(entry.requestFailure)
+      )
     )).toEqual([])
     expect(diagnostics.filter((entry) => entry.kind === 'response' && Number(entry.detail.split(' ')[0]) >= 500)).toEqual([])
+  })
+
+  test('keeps the direct recipe fallback on Recipes when local storage writes fail', async ({
+    page,
+    setupAuth,
+  }) => {
+    expect(E2E_CONFIG.target).toBe('local')
+    await page.setViewportSize({ width: 1200, height: 800 })
+    await setupAuth()
+
+    await page.evaluate(() => {
+      window.localStorage.setItem('recipe-genie-active-tab', 'planner')
+      document.cookie =
+        'recipe-genie-active-tab=planner; Path=/; Max-Age=31536000; SameSite=Lax'
+    })
+    await page.goto(
+      `${E2E_CONFIG.baseURL}/recipes/10000000-0000-4000-8000-000000000006`
+    )
+    await expect(page.getByTestId('recipe-detail-page')).toBeVisible()
+    await page.evaluate(() => {
+      const originalSetItem = Storage.prototype.setItem
+      Storage.prototype.setItem = function (key: string, value: string) {
+        if (
+          this === window.localStorage &&
+          key === 'recipe-genie-active-tab'
+        ) {
+          throw new Error('simulated local storage write failure')
+        }
+        return originalSetItem.call(this, key, value)
+      }
+    })
+
+    await page.getByRole('button', { name: /back to recipes/i }).click()
+
+    await expect(page).toHaveURL(`${E2E_CONFIG.baseURL}/`)
+    await expect(
+      page.locator(
+        '[data-home-tab-panel="recipes"][aria-hidden="false"]'
+      )
+    ).toBeVisible()
+    const persistedState = await page.evaluate(() => ({
+      activeTab: window.localStorage.getItem('recipe-genie-active-tab'),
+      cookie: document.cookie
+        .split('; ')
+        .find((entry) => entry.startsWith('recipe-genie-active-tab='))
+        ?.split('=')[1],
+    }))
+
+    expect(persistedState).toEqual({
+      activeTab: 'planner',
+      cookie: 'recipes',
+    })
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
   })
 })

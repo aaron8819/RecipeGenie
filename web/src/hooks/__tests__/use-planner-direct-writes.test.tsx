@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WeeklyPlan } from "@/types/database"
 import { plannerKeys } from "@/lib/query-keys"
 import {
+  toWeeklyPlanDayAssignmentsPayload,
   useRemoveRecipeFromPlan,
   useSaveDayAssignments,
   useSaveWeeklyPlan,
@@ -141,7 +142,16 @@ beforeEach(() => {
 })
 
 describe("direct weekly_plans write contract", () => {
-  it("useSaveWeeklyPlan preserves made ids while explicitly replacing recipe ids and day assignments", async () => {
+  it("normalizes nullable assignment input without mutating non-empty maps", () => {
+    const assignments = Object.freeze({ "recipe-1": 2 })
+
+    expect(toWeeklyPlanDayAssignmentsPayload(null)).toEqual({})
+    expect(toWeeklyPlanDayAssignmentsPayload(undefined)).toEqual({})
+    expect(toWeeklyPlanDayAssignmentsPayload(assignments)).toBe(assignments)
+    expect(assignments).toEqual({ "recipe-1": 2 })
+  })
+
+  it("useSaveWeeklyPlan preserves made ids while normalizing explicit null assignments", async () => {
     dbState.weeklyPlan = makeWeeklyPlan()
     const { wrapper } = createWrapper()
 
@@ -159,11 +169,51 @@ describe("direct weekly_plans write contract", () => {
       user_id: "test-user-id",
       week_date: "2026-03-02",
       recipe_uuids: ["recipe-3"],
-      day_assignment_recipe_uuids: null,
+      day_assignment_recipe_uuids: {},
       made_recipe_uuids: ["recipe-2"],
       scale: 1,
     })
     expect(typeof dbState.lastUpsert?.generated_at).toBe("string")
+  })
+
+  it("normalizes absent assignments for a new direct plan write", async () => {
+    const { wrapper } = createWrapper()
+    const { result } = renderHook(() => useSaveWeeklyPlan(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        weekDate: "2026-03-02",
+        recipeIds: ["recipe-3"],
+      })
+    })
+
+    expect(dbState.lastUpsert).toMatchObject({
+      user_id: "test-user-id",
+      week_date: "2026-03-02",
+      recipe_uuids: ["recipe-3"],
+      day_assignment_recipe_uuids: {},
+      made_recipe_uuids: [],
+      scale: 1,
+    })
+  })
+
+  it("preserves a non-empty assignment map and its caller-owned value", async () => {
+    const { wrapper } = createWrapper()
+    const { result } = renderHook(() => useSaveWeeklyPlan(), { wrapper })
+    const dayAssignments = Object.freeze({ "recipe-3": 5 })
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        weekDate: "2026-03-02",
+        recipeIds: ["recipe-3"],
+        dayAssignments,
+      })
+    })
+
+    expect(dbState.lastUpsert?.day_assignment_recipe_uuids).toEqual({
+      "recipe-3": 5,
+    })
+    expect(dayAssignments).toEqual({ "recipe-3": 5 })
   })
 
   it("useSaveDayAssignments creates a consistent weekly plan row when none exists", async () => {

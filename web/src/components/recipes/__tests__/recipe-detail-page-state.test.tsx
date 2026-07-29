@@ -1,0 +1,305 @@
+import React from "react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import { RecipeDetailPage } from "../recipe-detail-page"
+import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
+import type { Recipe } from "@/types/database"
+
+globalThis.React = React
+
+const router = {
+  back: vi.fn(),
+  push: vi.fn(),
+  replace: vi.fn(),
+}
+const favoriteMutateAsync = vi.fn()
+const refetch = vi.fn()
+const showToast = vi.fn()
+const originToken = "11111111-1111-4111-8111-111111111111"
+
+let isAuthenticated = true
+let authLoading = false
+let recipeResult: {
+  data: Recipe | null | undefined
+  error: unknown
+  isError: boolean
+  isLoading: boolean
+  isSuccess: boolean
+}
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => router,
+}))
+
+vi.mock("next/image", () => ({
+  default: ({
+    fill: _fill,
+    priority: _priority,
+    unoptimized: _unoptimized,
+    alt,
+    ...props
+  }: React.ImgHTMLAttributes<HTMLImageElement> & {
+    fill?: boolean
+    priority?: boolean
+    unoptimized?: boolean
+  }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img alt={alt || ""} {...props} />
+  ),
+}))
+
+vi.mock("@/lib/auth-context", () => ({
+  useAuthContext: () => ({
+    user: { id: "user-1", email: "cook@example.com" },
+    loading: authLoading,
+    signOut: vi.fn(),
+    isAuthenticated,
+  }),
+}))
+
+vi.mock("@/hooks/use-recipes", () => ({
+  useRecipe: () => ({
+    ...recipeResult,
+    refetch,
+  }),
+  useCategories: () => ({ data: ["Dinner"] }),
+  useDeleteRecipe: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useToggleFavorite: () => ({
+    mutateAsync: favoriteMutateAsync,
+    isPending: false,
+  }),
+}))
+
+vi.mock("@/hooks/use-planner", () => ({
+  useMarkRecipeAsMade: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRecipeHistoryStats: () => ({ data: [] }),
+  useUnmarkRecipeAsMade: () => ({ mutate: vi.fn() }),
+}))
+
+vi.mock("@/hooks/use-shopping", () => ({
+  useAddToShoppingList: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
+
+vi.mock("@/hooks/use-undo-toast", () => ({
+  useUndoToast: () => ({ show: showToast }),
+}))
+
+vi.mock("@/components/layout/header", () => ({
+  Header: () => <header>App header</header>,
+}))
+
+vi.mock("@/components/layout/bottom-nav", () => ({
+  BottomNav: () => <nav>App navigation</nav>,
+}))
+
+vi.mock("@/components/auth/auth-form", () => ({
+  AuthForm: () => <div>Sign in form</div>,
+}))
+
+vi.mock("../recipe-dialog", () => ({
+  RecipeDialog: ({ open }: { open: boolean }) =>
+    open ? <div>Edit recipe dialog</div> : null,
+}))
+
+vi.mock("../share-recipe-dialog", () => ({
+  ShareRecipeDialog: () => null,
+}))
+
+vi.mock("../add-to-plan-dialog", () => ({
+  AddToPlanDialog: () => null,
+}))
+
+function makeRecipe(): Recipe {
+  return {
+    id: "recipe-1",
+    user_id: "user-1",
+    name: "Curry",
+    category: "Dinner",
+    servings: 4,
+    favorite: false,
+    tags: [],
+    ingredients: [{ item: "Onion", amount: 1, unit: "" }],
+    instructions: ["Cook it"],
+    instruction_groups: null,
+    notes: [],
+    image_url: null,
+    prep_time_minutes: null,
+    cook_time_minutes: null,
+    total_time_minutes: null,
+    created_at: null,
+    updated_at: null,
+  }
+}
+
+describe("RecipeDetailPage states", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    sessionStorage.clear()
+    localStorage.clear()
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(originToken)
+    isAuthenticated = true
+    authLoading = false
+    recipeResult = {
+      data: undefined,
+      error: null,
+      isError: false,
+      isLoading: true,
+      isSuccess: false,
+    }
+  })
+
+  it("renders an explicit loading state for direct URLs", () => {
+    render(<RecipeDetailPage recipeId="recipe-1" />)
+
+    expect(screen.getByLabelText("Loading recipe")).toBeInTheDocument()
+  })
+
+  it("renders missing-recipe state safely", () => {
+    recipeResult = {
+      data: null,
+      error: null,
+      isError: false,
+      isLoading: false,
+      isSuccess: true,
+    }
+
+    render(<RecipeDetailPage recipeId="missing" />)
+
+    expect(screen.getByRole("heading", { name: "Recipe not found" })).toBeInTheDocument()
+  })
+
+  it("renders query errors with a retry action", () => {
+    recipeResult = {
+      data: undefined,
+      error: new Error("offline"),
+      isError: true,
+      isLoading: false,
+      isSuccess: false,
+    }
+
+    render(<RecipeDetailPage recipeId="recipe-1" />)
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+
+    expect(screen.getByRole("heading", { name: "Couldn’t load recipe" })).toBeInTheDocument()
+    expect(refetch).toHaveBeenCalledOnce()
+  })
+
+  it("renders recipe data and keeps favorite and edit actions functional", async () => {
+    recipeResult = {
+      data: makeRecipe(),
+      error: null,
+      isError: false,
+      isLoading: false,
+      isSuccess: true,
+    }
+    favoriteMutateAsync.mockResolvedValueOnce(makeRecipe())
+
+    render(<RecipeDetailPage recipeId="recipe-1" />)
+
+    expect(screen.getByRole("heading", { name: "Curry", level: 1 })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Add to favorites" }))
+    fireEvent.click(screen.getByRole("button", { name: "Edit Recipe" }))
+
+    await waitFor(() => {
+      expect(favoriteMutateAsync).toHaveBeenCalledWith({
+        id: "recipe-1",
+        favorite: false,
+      })
+    })
+    expect(screen.getByText("Edit recipe dialog")).toBeInTheDocument()
+  })
+
+  it.each([
+    ["recipes", "Back to recipes"],
+    ["planner", "Back to planner"],
+    ["shopping", "Back to shopping"],
+  ] as const)(
+    "uses the validated %s origin for its visible and accessible return label",
+    async (source, label) => {
+      recipeResult = {
+        data: makeRecipe(),
+        error: null,
+        isError: false,
+        isLoading: false,
+        isSuccess: true,
+      }
+      openRecipeDetail(router, "recipe-1", source)
+      router.back.mockClear()
+      router.push.mockClear()
+
+      render(
+        <RecipeDetailPage
+          recipeId="recipe-1"
+          originToken={originToken}
+        />
+      )
+
+      const returnButton = await screen.findByRole("button", { name: label })
+      expect(returnButton).toHaveTextContent(label)
+      fireEvent.click(returnButton)
+
+      expect(router.back).toHaveBeenCalledOnce()
+      expect(router.replace).not.toHaveBeenCalled()
+    }
+  )
+
+  it("preserves validated return context across a detail-page refresh", async () => {
+    recipeResult = {
+      data: makeRecipe(),
+      error: null,
+      isError: false,
+      isLoading: false,
+      isSuccess: true,
+    }
+    openRecipeDetail(router, "recipe-1", "planner")
+    const firstRender = render(
+      <RecipeDetailPage
+        recipeId="recipe-1"
+        originToken={originToken}
+      />
+    )
+
+    expect(
+      await screen.findByRole("button", { name: "Back to planner" })
+    ).toBeInTheDocument()
+    firstRender.unmount()
+
+    render(
+      <RecipeDetailPage
+        recipeId="recipe-1"
+        originToken={originToken}
+      />
+    )
+
+    expect(
+      await screen.findByRole("button", { name: "Back to planner" })
+    ).toBeInTheDocument()
+  })
+
+  it("uses the Recipes fallback for direct URLs without valid origin context", () => {
+    recipeResult = {
+      data: makeRecipe(),
+      error: null,
+      isError: false,
+      isLoading: false,
+      isSuccess: true,
+    }
+
+    render(<RecipeDetailPage recipeId="recipe-1" />)
+    fireEvent.click(
+      screen.getByRole("button", { name: "Back to recipes" })
+    )
+
+    expect(router.back).not.toHaveBeenCalled()
+    expect(router.replace).toHaveBeenCalledWith("/")
+    expect(localStorage.getItem("recipe-genie-active-tab")).toBe("recipes")
+  })
+
+  it("shows authentication instead of leaking recipe state", () => {
+    isAuthenticated = false
+
+    render(<RecipeDetailPage recipeId="recipe-1" />)
+
+    expect(screen.getByText("Sign in form")).toBeInTheDocument()
+  })
+})

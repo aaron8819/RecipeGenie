@@ -24,6 +24,12 @@ type DirectWeeklyPlanWrite = {
   refreshGeneratedAt?: boolean
 }
 
+export function toWeeklyPlanDayAssignmentsPayload(
+  dayAssignments: Record<string, number> | null | undefined
+): Record<string, number> {
+  return dayAssignments ?? {}
+}
+
 export { useUpdateUserConfig, useUserConfig } from "@/hooks/shared/user-config"
 
 async function fetchExistingWeeklyPlan(userId: string, weekDate: string) {
@@ -47,10 +53,11 @@ async function persistWeeklyPlanDirect(userId: string, write: DirectWeeklyPlanWr
     user_id: userId,
     week_date: write.weekDate,
     recipe_uuids: write.recipeIds ?? existingPlan?.recipe_ids ?? [],
-    day_assignment_recipe_uuids:
+    day_assignment_recipe_uuids: toWeeklyPlanDayAssignmentsPayload(
       write.dayAssignments !== undefined
         ? write.dayAssignments
-        : (existingPlan?.day_assignments ?? null),
+        : existingPlan?.day_assignments
+    ),
     made_recipe_uuids: write.madeRecipeIds ?? existingPlan?.made_recipe_ids ?? [],
     scale: write.scale ?? existingPlan?.scale ?? 1.0,
     generated_at:
@@ -413,7 +420,8 @@ export function useGenerateMealPlan() {
           .update({
             recipe_uuids: allRecipeIds,
             made_recipe_uuids: madeRecipeIds,
-            day_assignment_recipe_uuids: dayAssignments,
+            day_assignment_recipe_uuids:
+              toWeeklyPlanDayAssignmentsPayload(dayAssignments),
             scale: 1.0,
             generated_at: new Date().toISOString(),
           })
@@ -426,7 +434,8 @@ export function useGenerateMealPlan() {
           user_id: user!.id,
           week_date: weekDate,
           recipe_uuids: allRecipeIds,
-          day_assignment_recipe_uuids: dayAssignments,
+          day_assignment_recipe_uuids:
+            toWeeklyPlanDayAssignmentsPayload(dayAssignments),
           scale: 1.0,
           generated_at: new Date().toISOString(),
         })

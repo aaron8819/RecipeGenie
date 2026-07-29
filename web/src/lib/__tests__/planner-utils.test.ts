@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import {
+  isCanonicalLocalDate,
   parseLocalCalendarDate,
   toLocalNoonISOString,
   dayIndexToDayOfWeek,
@@ -9,6 +10,24 @@ import {
 } from "@/lib/planner-utils"
 
 describe("planner-utils", () => {
+  it.each([
+    ["2026-04-30", true],
+    ["2024-02-29", true],
+    ["2026-02-29", false],
+    ["2026-04-31", false],
+    ["2026-00-15", false],
+    ["2026-13-15", false],
+    ["2026-99-15", false],
+    ["2026-01-00", false],
+    ["2026-01-32", false],
+    ["2026-01-99", false],
+    ["2026/01/15", false],
+    ["2026-1-15", false],
+    ["02026-01-15", false],
+  ])("validates canonical local calendar date %s", (value, expected) => {
+    expect(isCanonicalLocalDate(value)).toBe(expected)
+  })
+
   it("parses YYYY-MM-DD as a local calendar date", () => {
     const result = parseLocalCalendarDate("2026-02-04")
     expect(result).not.toBeNull()

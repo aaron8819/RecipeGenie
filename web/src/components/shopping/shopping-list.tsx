@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
+import { useRouter } from "next/navigation"
 import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles } from "lucide-react"
 import {
   DndContext,
@@ -51,7 +52,7 @@ import {
 } from "@/hooks/use-shopping"
 import { getCategoryByKey } from "@/lib/shopping-categories"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
-import type { ShoppingItem, Recipe } from "@/types/database"
+import type { ShoppingItem } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -61,9 +62,8 @@ import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
 import { createShoppingRowId } from "@/lib/shopping-row-identity"
 import { scrollNodeIntoPane } from "@/lib/pane-scroll"
-import { RecipeDetailDialog } from "@/components/recipes/recipe-detail-dialog"
-import { RecipeDialog } from "@/components/recipes/recipe-dialog"
-import { useRecipe, useRecipes, useCategories } from "@/hooks/use-recipes"
+import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
+import { useRecipes } from "@/hooks/use-recipes"
 import {
   buildCategoryViewModel,
   createDisplayShoppingList,
@@ -629,6 +629,7 @@ function useSwipeHint() {
 }
 
 export function ShoppingListView() {
+  const router = useRouter()
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === "undefined") return true
     return window.matchMedia("(min-width: 768px)").matches
@@ -640,8 +641,6 @@ export function ShoppingListView() {
   const [showSettings, setShowSettings] = useState(false)
   const [shoppingMode, setShoppingMode] = useState<ShoppingMode>("shop")
   const [categoryIntents, setCategoryIntents] = useState<CategoryIntentByKey>(new Map())
-  const [viewingRecipeId, setViewingRecipeId] = useState<string | null>(null)
-  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [editingItemRowId, setEditingItemRowId] = useState<string | null>(null)
   const [manualEditDraft, setManualEditDraft] = useState<ManualEditDraft>({
     itemName: "",
@@ -675,12 +674,8 @@ export function ShoppingListView() {
 
   const { data: shoppingList, isLoading, isFetching } = useShoppingList()
   
-  // Fetch recipe for viewing
-  const { data: viewingRecipe } = useRecipe(viewingRecipeId)
-  
   // Fetch all recipes to find by name if ID is not available
   const { data: allRecipes } = useRecipes()
-  const { data: categories } = useCategories()
   const { data: config } = useShoppingConfig()
   const updateConfig = useUpdateShoppingConfig()
 
@@ -706,16 +701,14 @@ export function ShoppingListView() {
   // Handle clicking on a recipe tag
   const handleRecipeTagClick = useCallback((recipeId: string | undefined, recipeName: string) => {
     if (recipeId) {
-      // If we have the ID, use it directly
-      setViewingRecipeId(recipeId)
+      openRecipeDetail(router, recipeId, "shopping")
     } else if (allRecipes) {
-      // Otherwise, find by name
       const recipe = allRecipes.find(r => r.name === recipeName)
       if (recipe) {
-        setViewingRecipeId(recipe.id)
+        openRecipeDetail(router, recipe.id, "shopping")
       }
     }
-  }, [allRecipes])
+  }, [allRecipes, router])
 
   const handleStartEditingManualItem = useCallback((item: ShoppingItem) => {
     const rowId = item.rowId || null
@@ -1838,30 +1831,6 @@ export function ShoppingListView() {
         isUpdating={updateConfig.isPending}
       />
 
-      {/* Recipe Detail Dialog */}
-      {viewingRecipeId && (
-        <RecipeDetailDialog
-          open={!!viewingRecipe}
-          onOpenChange={(open) => {
-            if (!open) {
-              setViewingRecipeId(null)
-            }
-          }}
-          recipe={viewingRecipe || null}
-          onEdit={(r) => {
-            setViewingRecipeId(null)
-            setEditingRecipe(r)
-          }}
-        />
-      )}
-
-      {/* Edit Recipe Dialog */}
-      <RecipeDialog
-        open={!!editingRecipe}
-        onOpenChange={(open) => !open && setEditingRecipe(null)}
-        recipe={editingRecipe || undefined}
-        categories={categories || []}
-      />
     </div>
     </>
   )

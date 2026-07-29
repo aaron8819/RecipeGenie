@@ -115,7 +115,11 @@ test('mobile import review is compact, sectioned, and state-safe', async ({
     if (message.type() === 'error') diagnostics.push(`console: ${message.text()}`)
   })
   page.on('pageerror', (error) => diagnostics.push(`page: ${error.message}`))
-  page.on('requestfailed', (request) => diagnostics.push(`request: ${request.method()} ${new URL(request.url()).pathname}`))
+  page.on('requestfailed', (request) => {
+    diagnostics.push(
+      `request: ${request.method()} ${new URL(request.url()).pathname} ${request.failure()?.errorText || 'unknown failure'}`
+    )
+  })
   page.on('response', (response) => {
     if (response.status() >= 500) diagnostics.push(`response: ${response.status()} ${new URL(response.url()).pathname}`)
   })
@@ -312,9 +316,15 @@ test('mobile import review is compact, sectioned, and state-safe', async ({
   await page.keyboard.press('Enter')
   await page.keyboard.press('Enter')
   expect((await createResponse).ok()).toBe(true)
-  await expect(page.getByRole('dialog').last().locator('h1').filter({ hasText: 'Mobile Import Review Save' })).toBeVisible()
+  await expect(
+    page.getByTestId('recipe-detail-page').getByRole('heading', {
+      name: 'Mobile Import Review Save',
+      level: 1,
+    })
+  ).toBeVisible()
   expect(createMutationCount).toBe(1)
-  await page.getByRole('dialog').last().getByRole('button', { name: /^close$/i }).click()
+  await page.getByRole('button', { name: /back to recipes/i }).click()
+  await expect(page.getByTestId('recipe-detail-page')).toHaveCount(0)
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   dialog = await openImport(page)
@@ -331,9 +341,15 @@ test('mobile import review is compact, sectioned, and state-safe', async ({
     saveButton.click()
   })
   expect((await pointerCreateResponse).ok()).toBe(true)
-  await expect(page.getByRole('dialog').last().locator('h1').filter({ hasText: 'Mobile Import Review Pointer Save' })).toBeVisible()
+  await expect(
+    page.getByTestId('recipe-detail-page').getByRole('heading', {
+      name: 'Mobile Import Review Pointer Save',
+      level: 1,
+    })
+  ).toBeVisible()
   expect(createMutationCount).toBe(2)
-  await page.getByRole('dialog').last().getByRole('button', { name: /^close$/i }).click()
+  await page.getByRole('button', { name: /back to recipes/i }).click()
+  await expect(page.getByTestId('recipe-detail-page')).toHaveCount(0)
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   await page.setViewportSize({ width: 1200, height: 800 })

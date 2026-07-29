@@ -47,9 +47,14 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
 
   await dialog.locator('textarea').first().fill(recipe.instructions)
   await dialog.getByRole('button', { name: /^add recipe$/i }).click()
-  await expect(page.getByRole('dialog').last().locator('h1').filter({ hasText: recipe.name })).toBeVisible()
-  await page.getByRole('button', { name: /^close$/i }).first().click()
-  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(
+    page.getByTestId('recipe-detail-page').getByRole('heading', {
+      name: recipe.name,
+      level: 1,
+    })
+  ).toBeVisible()
+  await page.getByRole('button', { name: /back to recipes/i }).click()
+  await expect(page.getByTestId('recipe-detail-page')).toHaveCount(0)
 }
 
 async function jumpWeeks(page: Page, count: number) {
@@ -177,9 +182,19 @@ test.describe('Meal Planner', () => {
     const assignedDayLabel = await moveRecipeToAnotherDay(page, recipe.name)
     await expectAssignedDayDisabled(page, recipe.name, assignedDayLabel)
 
+    const selectedWeekLabel = await plannerWeekLabel(page).textContent()
+    await plannerRecipeCard(page, recipe.name).click()
+    await expect(page).toHaveURL(/\/recipes\/[^/?]+\?from=planner/)
+    await expect(
+      page.getByRole('heading', { name: recipe.name, level: 1 })
+    ).toBeVisible()
+    await page.getByRole('button', { name: /back to planner/i }).click()
+    await expect(plannerWeekLabel(page)).toHaveText(selectedWeekLabel || '')
+    await expect(plannerRecipeCard(page, recipe.name)).toBeVisible()
+
     await page.reload()
     await openPlannerTab(page)
-    await jumpWeeks(page, 12)
+    await expect(plannerWeekLabel(page)).toHaveText(selectedWeekLabel || '')
     await expect(plannerRecipeCard(page, recipe.name)).toBeVisible()
     await expectAssignedDayDisabled(page, recipe.name, assignedDayLabel)
   })

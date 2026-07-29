@@ -220,16 +220,9 @@ export async function seedShoppingState(state: ShoppingSeedState): Promise<() =>
       [...(previousList.excluded || []), ...(state.excluded || [])],
       (item) => item.rowId || `${item.item}-${item.unit || ''}`
     ),
-    source_recipes: dedupeBy(
-      [
-        ...(previousList.source_recipes || []),
-        ...(state.items || []).flatMap((item) => item.sources || []).map((source) => source.recipeName),
-        ...(state.alreadyHave || []).flatMap((item) => item.sources || []).map((source) => source.recipeName),
-        ...(state.excluded || []).flatMap((item) => item.sources || []).map((source) => source.recipeName),
-      ]
-        .filter((name) => name && name !== 'Manual'),
-      (name) => name
-    ),
+    // Synthetic row provenance is historical snapshot evidence, not a live
+    // recipe membership write. Keep canonical source arrays unchanged.
+    source_recipes: previousList.source_recipes,
     generated_at: new Date().toISOString(),
   }
 

@@ -1,6 +1,7 @@
 # Recipes Domain Reference
 
-Use this doc when working on recipe CRUD, the recipe dialog, text or URL import, recipe images, tags/categories, or recipe sharing.
+Use this doc when working on recipe CRUD, recipe detail, the recipe form
+dialog, text or URL import, recipe images, tags/categories, or recipe sharing.
 
 This is a domain reference. Canonical project-wide boundaries live in [`./ARCHITECTURE_GUARDRAILS.md`](./ARCHITECTURE_GUARDRAILS.md).
 
@@ -8,7 +9,8 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - The recipe dialog presentation extraction wave is complete.
 - `recipe-dialog.tsx` still owns form/dialog orchestration, import parsing flow, and submit sequencing.
-- `recipe-list.tsx` still owns recipe browsing orchestration, including search/filter state, mobile-vs-desktop toolbar structure, and modal coordination.
+- `recipe-list.tsx` still owns recipe browsing orchestration, including
+  search/filter state and mobile-vs-desktop toolbar structure.
 - Recipe persistence now has first-class support for `prep_time_minutes`, `cook_time_minutes`, `total_time_minutes`, and `notes`, plus additive `instruction_groups` persistence.
 - Ingredient `groupLabel` metadata is preserved in the existing `ingredients`
   JSON payload. The final detail view groups only non-empty ingredients by
@@ -17,12 +19,18 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   one headingless group at their first appearance, while legacy recipes with
   only unlabeled ingredients render as one ordinary list.
 - Legacy flat `instructions` remains persisted for compatibility and the current textarea-based edit model.
-- The recipe detail dialog is query-backed and action-complete for common follow-up actions:
+- `/recipes/[id]` is the canonical, query-backed full-page detail route.
+  Recipes, Planner, and Shopping all navigate to the same detail component.
+- Recipe detail is action-complete for common follow-up actions:
   - favorite toggle
   - add to plan
   - add to shopping
   - mark made
   - share/edit/delete
+  - serving adjustment and print
+- Serving adjustment scales displayed numeric quantities locally and never
+  mutates the stored recipe. Recipe detail does not have ingredient checklist
+  or completion state.
 - The recipe image storage boundary is now explicit:
   - `getRecipeImageUrl()` is a pure helper.
   - Upload/delete behavior goes through `useRecipeImageStorage()`.
@@ -31,10 +39,12 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 | File | Responsibility |
 |------|----------------|
-| `web/src/components/recipes/recipe-list.tsx` | Main recipe browsing, filtering, sorting, and dialog orchestration. |
+| `web/src/app/recipes/[id]/page.tsx` | Canonical recipe-detail route. |
+| `web/src/components/recipes/recipe-list.tsx` | Main recipe browsing, filtering, and sorting orchestration. |
 | `web/src/components/recipes/recipe-dialog.tsx` | Main create/edit orchestration for manual entry and imports. |
 | `web/src/components/recipes/recipe-dialog-components.tsx` | Presentation-only recipe dialog sections extracted from the main dialog. |
-| `web/src/components/recipes/recipe-detail-dialog.tsx` | Query-backed cooking interface and common follow-up actions. |
+| `web/src/components/recipes/recipe-detail-page.tsx` | Shared responsive detail experience, query states, and follow-up actions. |
+| `web/src/lib/recipe-detail-navigation.ts` | Safe canonical-route and history-return helpers. |
 | `web/src/components/recipes/share-recipe-dialog.tsx` | Share a recipe with another user. |
 | `web/src/components/recipes/shared-recipes-inbox.tsx` | Inbox and sent-share status views. |
 | `web/src/hooks/use-recipes.ts` | Recipe CRUD, categories, and tag operations. |
@@ -65,6 +75,29 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - Recipe search currently matches recipe `name` and `category`.
 - Mobile recipes browsing intentionally separates primary browse controls from utility actions so `Shared` and `Settings` remain visible without horizontal scrolling.
+
+### Recipe detail navigation
+
+- Recipe detail always uses `/recipes/[id]`; do not add source-specific detail
+  components or intercepting modal routes.
+- Source navigation records only a safe home-tab enum and an opaque
+  same-session origin token. Matching origins return through browser history.
+  That validated session return context survives a refresh, so a refreshed
+  detail page can still return to Recipes, Planner, or Shopping through browser
+  history with an accurate source-aware label. A genuinely direct or shared
+  URL without matching session context ignores route text as return authority
+  and safely falls back to Recipes.
+- If browser local storage cannot record that direct/shared fallback, a
+  session cookie keeps the server-selected Recipes tab authoritative until
+  local tab persistence catches up. Ordinary home visits still restore valid
+  Planner and Shopping tab preferences.
+- Recipes restores its supported filters, sorting, view mode, and scroll
+  position from validated versioned session storage. Planner restores its
+  selected week and mobile week tab through the same kind of validated
+  session-scoped state; restored Planner dates must be real canonical
+  `YYYY-MM-DD` Gregorian calendar dates.
+- Mobile Ingredients, Instructions, and Notes controls are anchor navigation.
+  All sections remain in normal document flow.
 
 ### Recipe images
 

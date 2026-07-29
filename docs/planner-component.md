@@ -44,6 +44,15 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - Use `toLocalNoonISOString()` for `date_made` values derived from a calendar day.
 - Keep planner date handling local-calendar-safe to avoid UTC boundary drift.
+- Persisted Planner view dates are accepted only when they round-trip as real
+  Gregorian calendar dates in canonical `YYYY-MM-DD` form. Invalid state falls
+  back to the current planning week before any plan query runs.
+
+### Weekly-plan persistence
+
+- `weekly_plans.day_assignment_recipe_uuids` is non-null at the database
+  boundary. Nullable domain input is normalized to `{}` immediately before
+  create, update, or direct upsert writes.
 
 ### Templates
 
