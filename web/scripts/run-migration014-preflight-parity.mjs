@@ -152,6 +152,50 @@ const packageIngredient = {
     authoredType: "can",
   },
 }
+const rational = (numerator, denominator) => ({
+  numerator: String(numerator),
+  denominator: String(denominator),
+})
+const withoutKey = (value, key) => {
+  const result = structuredClone(value)
+  delete result[key]
+  return result
+}
+const quantityRange = {
+  version: 1,
+  kind: "range",
+  authored: "1/2–3/4",
+  source: "authored",
+  start: rational(1, 2),
+  end: rational(3, 4),
+  startLexeme: "1/2",
+  endLexeme: "3/4",
+  separator: "–",
+}
+const withQuantityRange = (
+  quantity = quantityRange,
+  amount = quantity.authored
+) => withIngredient({
+  ...ingredient,
+  amount,
+  quantityV1: quantity,
+})
+const yieldRange = {
+  start: rational(1, 2),
+  end: rational(3, 4),
+  startLexeme: "1/2",
+  endLexeme: "3/4",
+  separator: "–",
+}
+const yieldRangeMetadata = {
+  version: 1,
+  authoredText: "1/2–3/4 servings",
+  kind: "servings",
+  scalingBasis: rational(1, 2),
+  range: yieldRange,
+}
+const withYieldRange = (metadata = yieldRangeMetadata) =>
+  withValue("yield_metadata", metadata)
 const cases = [
   ["legacy empty snapshot", {}, true],
   ["top-level JSON null", null, false],
@@ -357,6 +401,658 @@ const cases = [
   ],
 ]
 
+const quantityRangeCases = [
+  [
+    "quantity range valid fractional hyphen endpoints",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "1/2-3/4",
+      separator: "-",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid mixed-number en dash endpoints",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "1 1/2–2 1/4",
+      start: rational(3, 2),
+      end: rational(9, 4),
+      startLexeme: "1 1/2",
+      endLexeme: "2 1/4",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid decimal em dash endpoints",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "0.5—1.25",
+      end: rational(5, 4),
+      startLexeme: "0.5",
+      endLexeme: "1.25",
+      separator: "—",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid Unicode-fraction endpoints",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "½–1½",
+      end: rational(3, 2),
+      startLexeme: "½",
+      endLexeme: "1½",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid authored qualifier",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "about 1/2–3/4",
+      qualifier: "about",
+    }),
+    true,
+  ],
+  [
+    "quantity range equal endpoints are permitted",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "1–1",
+      start: rational(1, 1),
+      end: rational(1, 1),
+      startLexeme: "1",
+      endLexeme: "1",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid original-text source",
+    withQuantityRange({
+      ...quantityRange,
+      source: "original-text",
+    }),
+    true,
+  ],
+  [
+    "quantity range missing version",
+    withQuantityRange(withoutKey(quantityRange, "version")),
+    false,
+  ],
+  [
+    "quantity range missing kind",
+    withQuantityRange(withoutKey(quantityRange, "kind")),
+    false,
+  ],
+  [
+    "quantity range missing authored text",
+    withQuantityRange(
+      withoutKey(quantityRange, "authored"),
+      quantityRange.authored
+    ),
+    false,
+  ],
+  [
+    "quantity range missing source",
+    withQuantityRange(withoutKey(quantityRange, "source")),
+    false,
+  ],
+  [
+    "quantity range unsupported source",
+    withQuantityRange({ ...quantityRange, source: "imported" }),
+    false,
+  ],
+  [
+    "quantity range missing start",
+    withQuantityRange(withoutKey(quantityRange, "start")),
+    false,
+  ],
+  [
+    "quantity range missing end",
+    withQuantityRange(withoutKey(quantityRange, "end")),
+    false,
+  ],
+  [
+    "quantity range missing start lexeme",
+    withQuantityRange(withoutKey(quantityRange, "startLexeme")),
+    false,
+  ],
+  [
+    "quantity range missing end lexeme",
+    withQuantityRange(withoutKey(quantityRange, "endLexeme")),
+    false,
+  ],
+  [
+    "quantity range missing separator",
+    withQuantityRange(withoutKey(quantityRange, "separator")),
+    false,
+  ],
+  [
+    "quantity range start is JSON null",
+    withQuantityRange({ ...quantityRange, start: null }),
+    false,
+  ],
+  [
+    "quantity range end has incorrect type",
+    withQuantityRange({ ...quantityRange, end: "3/4" }),
+    false,
+  ],
+  [
+    "quantity range start lexeme is JSON null",
+    withQuantityRange({ ...quantityRange, startLexeme: null }),
+    false,
+  ],
+  [
+    "quantity range end lexeme has incorrect type",
+    withQuantityRange({ ...quantityRange, endLexeme: 0.75 }),
+    false,
+  ],
+  [
+    "quantity range separator has incorrect type",
+    withQuantityRange({ ...quantityRange, separator: ["–"] }),
+    false,
+  ],
+  [
+    "quantity range unsupported separator",
+    withQuantityRange({ ...quantityRange, separator: "/" }),
+    false,
+  ],
+  [
+    "quantity range malformed start rational",
+    withQuantityRange({
+      ...quantityRange,
+      start: rational(1, 0),
+    }),
+    false,
+  ],
+  [
+    "quantity range malformed end rational",
+    withQuantityRange({
+      ...quantityRange,
+      end: { numerator: "3" },
+    }),
+    false,
+  ],
+  [
+    "quantity range malformed authored start lexeme",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "one–3/4",
+    }, quantityRange.authored),
+    false,
+  ],
+  [
+    "quantity range malformed authored end lexeme",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "1/2–three quarters",
+    }, quantityRange.authored),
+    false,
+  ],
+  [
+    "quantity range start rational disagrees with lexeme",
+    withQuantityRange({
+      ...quantityRange,
+      start: rational(1, 3),
+    }),
+    false,
+  ],
+  [
+    "quantity range end rational disagrees with lexeme",
+    withQuantityRange({
+      ...quantityRange,
+      end: rational(2, 3),
+    }),
+    false,
+  ],
+  [
+    "quantity range authored start disagrees with stored lexeme",
+    withQuantityRange({
+      ...quantityRange,
+      start: rational(1, 3),
+      startLexeme: "1/3",
+    }),
+    false,
+  ],
+  [
+    "quantity range authored separator disagrees with stored separator",
+    withQuantityRange({
+      ...quantityRange,
+      separator: "-",
+    }),
+    false,
+  ],
+  [
+    "quantity range authored end disagrees with stored lexeme",
+    withQuantityRange({
+      ...quantityRange,
+      end: rational(2, 3),
+      endLexeme: "2/3",
+    }),
+    false,
+  ],
+  [
+    "quantity range descending endpoints",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "2–1",
+      start: rational(2, 1),
+      end: rational(1, 1),
+      startLexeme: "2",
+      endLexeme: "1",
+    }),
+    false,
+  ],
+  [
+    "quantity range extra structure",
+    withQuantityRange({ ...quantityRange, midpoint: rational(5, 8) }),
+    false,
+  ],
+  [
+    "quantity range metadata is JSON null",
+    withIngredient({ ...ingredient, amount: "1/2–3/4", quantityV1: null }),
+    false,
+  ],
+  [
+    "quantity range metadata has unsupported array shape",
+    withIngredient({ ...ingredient, amount: "1/2–3/4", quantityV1: [] }),
+    false,
+  ],
+  [
+    "quantity range legacy projection is malformed",
+    withQuantityRange(quantityRange, "1/2 to 3/4"),
+    false,
+  ],
+  [
+    "quantity range legacy projection endpoints disagree",
+    withQuantityRange(quantityRange, "1/2–1"),
+    false,
+  ],
+  [
+    "quantity range qualifier disagrees with authored qualifier",
+    withQuantityRange({ ...quantityRange, qualifier: "around" }),
+    false,
+  ],
+]
+
+const yieldRangeCases = [
+  [
+    "yield range valid fractional hyphen endpoints",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "1/2-3/4 portions",
+      kind: "portions",
+      range: { ...yieldRange, separator: "-" },
+    }),
+    true,
+  ],
+  [
+    "yield range valid mixed-number en dash endpoints",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "1 1/2–2 1/4 servings",
+      scalingBasis: rational(3, 2),
+      range: {
+        ...yieldRange,
+        start: rational(3, 2),
+        end: rational(9, 4),
+        startLexeme: "1 1/2",
+        endLexeme: "2 1/4",
+      },
+    }),
+    true,
+  ],
+  [
+    "yield range valid decimal em dash endpoints",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "0.5—1.25 cups",
+      kind: "other",
+      range: {
+        ...yieldRange,
+        end: rational(5, 4),
+        startLexeme: "0.5",
+        endLexeme: "1.25",
+        separator: "—",
+      },
+    }),
+    true,
+  ],
+  [
+    "yield range valid Unicode-fraction endpoints",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "½–1½ servings",
+      range: {
+        ...yieldRange,
+        end: rational(3, 2),
+        startLexeme: "½",
+        endLexeme: "1½",
+      },
+    }),
+    true,
+  ],
+  [
+    "yield range valid authored qualifier",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "about 1/2–3/4 servings",
+    }),
+    true,
+  ],
+  [
+    "yield range equal endpoints are permitted",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "2–2 items",
+      kind: "items",
+      scalingBasis: rational(2, 1),
+      range: {
+        ...yieldRange,
+        start: rational(2, 1),
+        end: rational(2, 1),
+        startLexeme: "2",
+        endLexeme: "2",
+      },
+    }),
+    true,
+  ],
+  [
+    "yield range missing version",
+    withYieldRange(withoutKey(yieldRangeMetadata, "version")),
+    false,
+  ],
+  [
+    "yield range missing authored text",
+    withYieldRange(withoutKey(yieldRangeMetadata, "authoredText")),
+    false,
+  ],
+  [
+    "yield range missing kind",
+    withYieldRange(withoutKey(yieldRangeMetadata, "kind")),
+    false,
+  ],
+  [
+    "yield range missing scaling basis",
+    withYieldRange(withoutKey(yieldRangeMetadata, "scalingBasis")),
+    false,
+  ],
+  [
+    "yield range missing start",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: withoutKey(yieldRange, "start"),
+    }),
+    false,
+  ],
+  [
+    "yield range missing end",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: withoutKey(yieldRange, "end"),
+    }),
+    false,
+  ],
+  [
+    "yield range missing start lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: withoutKey(yieldRange, "startLexeme"),
+    }),
+    false,
+  ],
+  [
+    "yield range missing end lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: withoutKey(yieldRange, "endLexeme"),
+    }),
+    false,
+  ],
+  [
+    "yield range missing separator",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: withoutKey(yieldRange, "separator"),
+    }),
+    false,
+  ],
+  [
+    "yield range is JSON null",
+    withYieldRange({ ...yieldRangeMetadata, range: null }),
+    false,
+  ],
+  [
+    "yield range has unsupported array shape",
+    withYieldRange({ ...yieldRangeMetadata, range: [] }),
+    false,
+  ],
+  [
+    "yield range start is JSON null",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, start: null },
+    }),
+    false,
+  ],
+  [
+    "yield range end has incorrect type",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, end: "3/4" },
+    }),
+    false,
+  ],
+  [
+    "yield range start lexeme is JSON null",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, startLexeme: null },
+    }),
+    false,
+  ],
+  [
+    "yield range end lexeme has incorrect type",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, endLexeme: 0.75 },
+    }),
+    false,
+  ],
+  [
+    "yield range separator has incorrect type",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, separator: ["–"] },
+    }),
+    false,
+  ],
+  [
+    "yield range unsupported separator",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, separator: "/" },
+    }),
+    false,
+  ],
+  [
+    "yield range malformed start rational",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, start: rational(1, 0) },
+    }),
+    false,
+  ],
+  [
+    "yield range malformed end rational",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, end: { numerator: "3" } },
+    }),
+    false,
+  ],
+  [
+    "yield range malformed authored start lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "one–3/4 servings",
+    }),
+    false,
+  ],
+  [
+    "yield range malformed authored end lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "1/2–three quarters servings",
+    }),
+    false,
+  ],
+  [
+    "yield range start rational disagrees with lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, start: rational(1, 3) },
+    }),
+    false,
+  ],
+  [
+    "yield range end rational disagrees with lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, end: rational(2, 3) },
+    }),
+    false,
+  ],
+  [
+    "yield range authored start disagrees with stored lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: {
+        ...yieldRange,
+        start: rational(1, 3),
+        startLexeme: "1/3",
+      },
+    }),
+    false,
+  ],
+  [
+    "yield range authored separator disagrees with stored separator",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, separator: "-" },
+    }),
+    false,
+  ],
+  [
+    "yield range authored end disagrees with stored lexeme",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: {
+        ...yieldRange,
+        end: rational(2, 3),
+        endLexeme: "2/3",
+      },
+    }),
+    false,
+  ],
+  [
+    "yield range descending endpoints",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "2–1 servings",
+      scalingBasis: rational(2, 1),
+      range: {
+        ...yieldRange,
+        start: rational(2, 1),
+        end: rational(1, 1),
+        startLexeme: "2",
+        endLexeme: "1",
+      },
+    }),
+    false,
+  ],
+  [
+    "yield range extra nested structure",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      range: { ...yieldRange, midpoint: rational(5, 8) },
+    }),
+    false,
+  ],
+  [
+    "yield range extra top-level structure",
+    withYieldRange({ ...yieldRangeMetadata, label: "servings" }),
+    false,
+  ],
+  [
+    "yield range and exact value both present",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      value: rational(1, 2),
+    }),
+    false,
+  ],
+  [
+    "yield range and exact value both absent",
+    withYieldRange(withoutKey(yieldRangeMetadata, "range")),
+    false,
+  ],
+  [
+    "yield range object paired with exact authored text",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "1/2 servings",
+    }),
+    false,
+  ],
+  [
+    "yield range authored text paired with exact value shape",
+    withYieldRange({
+      ...withoutKey(yieldRangeMetadata, "range"),
+      value: rational(1, 2),
+    }),
+    false,
+  ],
+  [
+    "yield range label disagrees with kind",
+    withYieldRange({ ...yieldRangeMetadata, kind: "items" }),
+    false,
+  ],
+  [
+    "yield range scaling basis is JSON null",
+    withYieldRange({ ...yieldRangeMetadata, scalingBasis: null }),
+    false,
+  ],
+  [
+    "yield range endpoint is zero",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "0–3/4 servings",
+      scalingBasis: rational(1, 2),
+      range: {
+        ...yieldRange,
+        start: rational(0, 1),
+        startLexeme: "0",
+      },
+    }),
+    false,
+  ],
+  [
+    "yield range endpoint exceeds maximum",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "1/2–10001 servings",
+      range: {
+        ...yieldRange,
+        end: rational(10001, 1),
+        endLexeme: "10001",
+      },
+    }),
+    false,
+  ],
+]
+
 const requiredFields = [
   "name",
   "category",
@@ -386,6 +1082,16 @@ for (const [field, values] of Object.entries(invalidRequiredTypes)) {
       false,
     ])
   }
+}
+
+cases.push(...quantityRangeCases, ...yieldRangeCases)
+
+if (
+  cases.length !== 171 ||
+  quantityRangeCases.length !== 39 ||
+  yieldRangeCases.length !== 43
+) {
+  throw new Error("Migration 014 parity fixture count changed unexpectedly")
 }
 
 function fixtureSql(snapshot) {
