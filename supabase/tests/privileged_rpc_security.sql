@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select extensions.plan(75);
+select extensions.plan(88);
 
 insert into auth.users (id, email)
 values
@@ -132,6 +132,36 @@ values
     array[]::text[],
     '[]'::jsonb,
     '{}'::text[]
+  ),
+  (
+    'b-direct-acceptance-source',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Direct Acceptance Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
+  ),
+  (
+    'b-decline-source',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Decline Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
+  ),
+  (
+    'b-legacy-empty-source',
+    '20000000-0000-0000-0000-000000000002',
+    'User B Legacy Empty Source',
+    'security-test',
+    2,
+    array[]::text[],
+    '[]'::jsonb,
+    '{}'::text[]
   );
 
 insert into public.recipe_history (user_id, recipe_id, date_made)
@@ -253,6 +283,82 @@ values
     'b-malformed-instructions',
     '{"name":"Malformed instructions","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[],"instruction_groups":[{"steps":"not-an-array"}]}'::jsonb
   );
+
+insert into public.recipe_shares (
+  id,
+  sender_user_id,
+  sender_email,
+  recipient_user_id,
+  recipient_email,
+  source_recipe_id,
+  source_recipe_snapshot
+)
+values
+  (
+    'a1000000-0000-0000-0000-000000000010',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-direct-acceptance-source',
+    '{"name":"Direct acceptance target","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000011',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-decline-source',
+    '{"name":"Decline target","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb
+  ),
+  (
+    'a1000000-0000-0000-0000-000000000012',
+    '20000000-0000-0000-0000-000000000002',
+    'security-b@example.test',
+    '10000000-0000-0000-0000-000000000001',
+    'security-a@example.test',
+    'b-legacy-empty-source',
+    '{}'::jsonb
+  );
+
+select extensions.ok(
+  not has_table_privilege(
+    'authenticated',
+    'public.recipe_shares',
+    'UPDATE'
+  )
+  and has_column_privilege(
+    'authenticated',
+    'public.recipe_shares',
+    'status',
+    'UPDATE'
+  )
+  and has_column_privilege(
+    'authenticated',
+    'public.recipe_shares',
+    'responded_at',
+    'UPDATE'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.recipe_shares',
+    'accepted_recipe_id',
+    'UPDATE'
+  )
+  and not has_column_privilege(
+    'authenticated',
+    'public.recipe_shares',
+    'accepted_recipe_uuid',
+    'UPDATE'
+  ),
+  'authenticated callers can update only recipient response columns'
+);
+
+select extensions.ok(
+  not has_table_privilege('anon', 'public.recipe_shares', 'UPDATE'),
+  'anonymous callers have no recipe-share update privilege'
+);
 
 create temporary table snapshot_validation_cases (
   description text not null,
@@ -405,6 +511,72 @@ where recipe.id = 'b-owned';
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '10000000-0000-0000-0000-000000000001', true);
 
+select extensions.throws_ok(
+  $$
+    update public.recipe_shares
+    set status = 'accepted', responded_at = now()
+    where id = 'a1000000-0000-0000-0000-000000000010'
+  $$,
+  '42501',
+  'new row violates row-level security policy for table "recipe_shares"',
+  'a recipient cannot directly transition a pending share to accepted'
+);
+
+select extensions.throws_ok(
+  $$
+    update public.recipe_shares
+    set
+      status = 'accepted',
+      responded_at = now(),
+      accepted_recipe_uuid = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+    where id = 'a1000000-0000-0000-0000-000000000010'
+  $$,
+  '42501',
+  'permission denied for table recipe_shares',
+  'a recipient cannot directly write privileged acceptance metadata'
+);
+
+select extensions.results_eq(
+  $$
+    select
+      status,
+      responded_at is null,
+      accepted_recipe_id is null,
+      accepted_recipe_uuid is null
+    from public.recipe_shares
+    where id = 'a1000000-0000-0000-0000-000000000010'
+  $$,
+  $$ values ('pending'::text, true, true, true) $$,
+  'direct acceptance attempts leave the pending share unchanged'
+);
+
+select extensions.results_eq(
+  $$
+    update public.recipe_shares
+    set status = 'declined', responded_at = now()
+    where id = 'a1000000-0000-0000-0000-000000000011'
+    returning
+      status,
+      responded_at is not null,
+      accepted_recipe_id is null,
+      accepted_recipe_uuid is null
+  $$,
+  $$ values ('declined'::text, true, true, true) $$,
+  'a recipient can still decline a pending share without acceptance metadata'
+);
+
+select extensions.throws_ok(
+  $$
+    update public.recipe_shares
+    set status = 'declined', responded_at = now()
+    where id = 'b2000000-0000-0000-0000-000000000002'
+    returning id
+  $$,
+  '42501',
+  'new row violates row-level security policy for table "recipe_shares"',
+  'a non-recipient cannot alter another user share'
+);
+
 select extensions.results_eq(
   $$ select id from public.filter_recipes_by_tags(array['common']) $$,
   $$ values ('a-owned'::text) $$,
@@ -517,10 +689,82 @@ select extensions.ok(
 );
 
 select extensions.is(
+  public.accept_recipe_share('a1000000-0000-0000-0000-000000000001'),
+  (
+    select accepted_recipe_uuid
+    from public.recipe_shares
+    where id = 'a1000000-0000-0000-0000-000000000001'
+  ),
+  'accepted structured share retries return the existing recipe UUID'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.recipes
+    where user_id = '10000000-0000-0000-0000-000000000001'
+      and name = 'Shared for A'
+  ),
+  1::bigint,
+  'accepted structured share retries create no duplicate recipe'
+);
+
+select extensions.ok(
+  public.accept_recipe_share(
+    'a1000000-0000-0000-0000-000000000012'
+  ) is not null,
+  'User A can accept a supported legacy empty snapshot'
+);
+
+select extensions.ok(
+  (
+    select
+      share.status = 'accepted'
+      and share.responded_at is not null
+      and share.accepted_recipe_uuid is not null
+      and recipe.name = 'Shared Recipe'
+      and recipe.category = 'uncategorized'
+      and recipe.servings = 4
+      and recipe.tags = '{}'::text[]
+      and recipe.ingredients = '[]'::jsonb
+      and recipe.instructions = '{}'::text[]
+    from public.recipe_shares as share
+    join public.recipes as recipe
+      on recipe.recipe_uuid = share.accepted_recipe_uuid
+    where share.id = 'a1000000-0000-0000-0000-000000000012'
+  ),
+  'legacy empty acceptance atomically applies database defaults and share metadata'
+);
+
+select extensions.is(
+  public.accept_recipe_share('a1000000-0000-0000-0000-000000000012'),
+  (
+    select accepted_recipe_uuid
+    from public.recipe_shares
+    where id = 'a1000000-0000-0000-0000-000000000012'
+  ),
+  'accepted legacy empty share retries return the existing recipe UUID'
+);
+
+select extensions.is(
+  (
+    select count(*)
+    from public.recipes
+    where user_id = '10000000-0000-0000-0000-000000000001'
+      and name = 'Shared Recipe'
+      and category = 'uncategorized'
+      and servings = 4
+  ),
+  1::bigint,
+  'accepted legacy empty share retries create no duplicate recipe'
+);
+
+select extensions.is(
   (
     select count(*)
     from public.recipe_shares
     where id in (
+      'a1000000-0000-0000-0000-000000000003',
       'a1000000-0000-0000-0000-000000000004',
       'a1000000-0000-0000-0000-000000000005',
       'a1000000-0000-0000-0000-000000000006',
@@ -530,7 +774,7 @@ select extensions.is(
     )
       and status = 'pending'
   ),
-  6::bigint,
+  7::bigint,
   'rejected share acceptance leaves every malformed share pending'
 );
 
@@ -539,6 +783,7 @@ select extensions.is(
     select count(*)
     from public.recipes
     where name in (
+      'Malformed for A',
       'Contradictory quantity',
       'Contradictory package',
       'Oversized rational',

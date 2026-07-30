@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  isLegacyEmptyRecipeShareSnapshot,
   normalizeIngredients,
   normalizeRecipeShareSnapshot,
   normalizeShoppingItems,
@@ -9,6 +10,15 @@ import {
 import { parseIngredientLine } from "@/lib/recipe-parser"
 
 describe("structured recipe data boundaries", () => {
+  it("recognizes only the supported legacy empty share snapshot", () => {
+    expect(isLegacyEmptyRecipeShareSnapshot({})).toBe(true)
+    expect(isLegacyEmptyRecipeShareSnapshot({ version: 0 })).toBe(false)
+    expect(isLegacyEmptyRecipeShareSnapshot(null)).toBe(false)
+    expect(isLegacyEmptyRecipeShareSnapshot([])).toBe(false)
+    expect(isLegacyEmptyRecipeShareSnapshot("")).toBe(false)
+    expect(isLegacyEmptyRecipeShareSnapshot(false)).toBe(false)
+  })
+
   it("preserves valid authored ingredient metadata through persistence", () => {
     const ingredient = parseIngredientLine("0.50 (14 oz) can tomatoes")
     expect(requireIngredientsForPersistence([ingredient])).toEqual([ingredient])

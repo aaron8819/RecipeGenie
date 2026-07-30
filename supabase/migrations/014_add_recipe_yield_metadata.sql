@@ -173,6 +173,7 @@ declare
     '(?:[0-9]+[[:space:]]+[0-9]+/[0-9]+|[0-9]+[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|[0-9]+/[0-9]+|[0-9]+(?:\.[0-9]+)?)';
 begin
   if jsonb_typeof(p_value) <> 'object'
+     or not (p_value ?& array['version','kind','authored','source'])
      or jsonb_typeof(p_value->'version') <> 'number'
      or p_value->>'version' <> '1'
      or jsonb_typeof(p_value->'kind') <> 'string'
@@ -819,6 +820,29 @@ revoke all privileges on function
   private.recipe_instruction_groups_are_valid(jsonb),
   private.recipe_share_snapshot_is_valid(jsonb)
 from public, anon, authenticated, service_role;
+
+drop policy if exists recipients_respond_recipe_shares
+  on public.recipe_shares;
+create policy recipients_respond_recipe_shares
+on public.recipe_shares
+for update
+to authenticated
+using (
+  (select auth.uid()) = recipient_user_id
+  and status = 'pending'
+)
+with check (
+  (select auth.uid()) = recipient_user_id
+  and status = 'declined'
+  and responded_at is not null
+  and accepted_recipe_id is null
+  and accepted_recipe_uuid is null
+);
+
+revoke update on table public.recipe_shares from anon, authenticated;
+grant update (status, responded_at)
+  on table public.recipe_shares
+  to authenticated;
 
 create or replace function public.accept_recipe_share(p_share_id uuid)
 returns uuid

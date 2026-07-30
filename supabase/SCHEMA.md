@@ -472,12 +472,14 @@ All tables use the same pattern: users can only access rows where `auth.uid() = 
 - **recipe_shares**:
   - `users_own_recipe_shares_select` - Sender or recipient can read share rows
   - `users_create_recipe_shares` - Sender can insert rows with `sender_user_id = auth.uid()`
-  - `recipients_respond_recipe_shares` - Recipient can move `pending` → `accepted/declined`
+  - `recipients_respond_recipe_shares` - Recipient can move `pending` → `declined`
   - `senders_cancel_recipe_shares` - Sender can move `pending` → `canceled`
 
 Ordinary user-owned table policies use owner checks equivalent to
 `auth.uid() = user_id`. Shares use sender/recipient-specific policies, and
-contribution writes are intentionally restricted to RPC execution.
+contribution writes are intentionally restricted to RPC execution. Authenticated
+table updates on shares are limited to `status` and `responded_at`; accepted
+state and acceptance metadata can only be written by `accept_recipe_share()`.
 
 ## Functions
 
@@ -523,7 +525,11 @@ marks the share as accepted. Function is idempotent and returns the canonical
 `accepted_recipe_uuid` if called again after acceptance.
 
 The accepted snapshot now includes recipe times, notes, and `instruction_groups`
-alongside the legacy flat `instructions` payload.
+alongside the legacy flat `instructions` payload. The validator accepts the
+explicitly supported legacy `{}` snapshot and applies database-owned defaults;
+all nonempty snapshots require the complete current field set. The
+security-definer function validates, creates the recipe, and writes accepted
+state and metadata in one transaction.
 
 **Parameters:**
 - `p_share_id` (UUID) - Share request ID

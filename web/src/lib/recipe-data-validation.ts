@@ -44,6 +44,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
 }
 
+export function isLegacyEmptyRecipeShareSnapshot(value: unknown): boolean {
+  return isRecord(value) && Object.keys(value).length === 0
+}
+
 function boundedString(
   value: unknown,
   maximumLength: number,

@@ -481,6 +481,9 @@ try {
         Must ($sql -match 'rational metadata is incompatible')
         Must ($sql -match 'instruction groups are incompatible')
         Must ($sql -match '8192')
+        Must ($sql -match "\?& array\[\s*'name','category','servings','tags','ingredients','instructions'")
+        Must ($sql -match "jsonb_typeof\(source_recipe_snapshot->'tags'\)\s+is distinct from 'array'")
+        Must ($sql -match 'recipient recipe-share update predecessor is incompatible')
     }
     Case 'migration 014 installs private semantic share validators' {
         $sql = [IO.File]::ReadAllText((Join-Path $repo $migration014Path))
@@ -498,6 +501,10 @@ try {
         }
         Must ($sql -match 'revoke all privileges on function')
         Must ($sql -match 'not private\.recipe_share_snapshot_is_valid')
+        Must ($sql -match 'drop policy if exists recipients_respond_recipe_shares')
+        Must ($sql -match "and status = 'declined'")
+        Must ($sql -match 'revoke update on table public\.recipe_shares from anon, authenticated')
+        Must ($sql -match 'grant update \(status, responded_at\)')
     }
     Case 'migration 014 evidence matches the committed Git blobs' {
         Must (Test-GitPathMatchesCommit $repo $headCommit $migration014Path $gitExecutable)

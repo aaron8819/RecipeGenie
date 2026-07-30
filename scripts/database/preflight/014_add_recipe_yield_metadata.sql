@@ -48,31 +48,73 @@ begin
     raise exception 'recipe-share acceptance function security contract is incompatible with migration 014';
   end if;
 
+  if not has_table_privilege(
+    'authenticated',
+    'public.recipe_shares',
+    'UPDATE'
+  ) or not exists (
+    select 1
+    from pg_catalog.pg_policies
+    where schemaname = 'public'
+      and tablename = 'recipe_shares'
+      and policyname = 'recipients_respond_recipe_shares'
+      and cmd = 'UPDATE'
+      and qual like '%pending%'
+      and with_check like '%accepted%'
+      and with_check like '%declined%'
+  ) then
+    raise exception 'recipient recipe-share update predecessor is incompatible with migration 014';
+  end if;
+
   if exists (
     select 1
     from public.recipe_shares
     where status = 'pending'
       and source_recipe_snapshot <> '{}'::jsonb
       and (
-        jsonb_typeof(source_recipe_snapshot) <> 'object'
-        or not (source_recipe_snapshot ? 'name')
-        or not (source_recipe_snapshot ? 'category')
-        or not (source_recipe_snapshot ? 'servings')
-        or jsonb_typeof(source_recipe_snapshot->'name') <> 'string'
+        jsonb_typeof(source_recipe_snapshot) is distinct from 'object'
+        or not (
+          source_recipe_snapshot ?& array[
+            'name','category','servings','tags','ingredients','instructions'
+          ]
+        )
+        or jsonb_typeof(source_recipe_snapshot->'name')
+          is distinct from 'string'
         or length(source_recipe_snapshot->>'name') not between 1 and 512
         or nullif(trim(source_recipe_snapshot->>'name'), '') is null
-        or jsonb_typeof(source_recipe_snapshot->'category') <> 'string'
+        or jsonb_typeof(source_recipe_snapshot->'category')
+          is distinct from 'string'
         or length(source_recipe_snapshot->>'category') not between 1 and 128
         or nullif(trim(source_recipe_snapshot->>'category'), '') is null
-        or jsonb_typeof(source_recipe_snapshot->'servings') <> 'number'
+        or jsonb_typeof(source_recipe_snapshot->'servings')
+          is distinct from 'number'
         or (source_recipe_snapshot->>'servings')
           !~ '^(?:[1-9][0-9]{0,3}|10000)$'
-        or jsonb_typeof(source_recipe_snapshot->'tags') <> 'array'
-        or jsonb_array_length(source_recipe_snapshot->'tags') > 100
-        or jsonb_typeof(source_recipe_snapshot->'ingredients') <> 'array'
-        or jsonb_array_length(source_recipe_snapshot->'ingredients') > 500
-        or jsonb_typeof(source_recipe_snapshot->'instructions') <> 'array'
-        or jsonb_array_length(source_recipe_snapshot->'instructions') > 2000
+        or jsonb_typeof(source_recipe_snapshot->'tags')
+          is distinct from 'array'
+        or case
+          when jsonb_typeof(source_recipe_snapshot->'tags') = 'array'
+            then jsonb_array_length(source_recipe_snapshot->'tags') > 100
+          else false
+        end
+        or jsonb_typeof(source_recipe_snapshot->'ingredients')
+          is distinct from 'array'
+        or case
+          when jsonb_typeof(source_recipe_snapshot->'ingredients') = 'array'
+            then jsonb_array_length(
+              source_recipe_snapshot->'ingredients'
+            ) > 500
+          else false
+        end
+        or jsonb_typeof(source_recipe_snapshot->'instructions')
+          is distinct from 'array'
+        or case
+          when jsonb_typeof(source_recipe_snapshot->'instructions') = 'array'
+            then jsonb_array_length(
+              source_recipe_snapshot->'instructions'
+            ) > 2000
+          else false
+        end
       )
   ) then
     raise exception 'pending recipe-share snapshots are incompatible with migration 014 validation';
@@ -341,6 +383,10 @@ begin
           ingredient ? 'quantityV1'
           and (
             jsonb_typeof(ingredient->'quantityV1') <> 'object'
+            or not (
+              ingredient->'quantityV1'
+              ?& array['version','kind','authored','source']
+            )
             or jsonb_typeof(ingredient->'quantityV1'->'version') <> 'number'
             or ingredient->'quantityV1'->>'version' <> '1'
             or jsonb_typeof(ingredient->'quantityV1'->'kind') <> 'string'

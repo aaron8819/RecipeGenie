@@ -114,11 +114,192 @@ const validSnapshot = {
 }
 const withValue = (key, value) => ({ ...validSnapshot, [key]: value })
 const withGroup = (group) => withValue("instruction_groups", [group])
+const withoutValue = (key) => {
+  const value = { ...validSnapshot }
+  delete value[key]
+  return value
+}
+const withIngredient = (value) => withValue("ingredients", [value])
+const legacyIngredient = {
+  item: "sugar",
+  amount: 1,
+  unit: "cup",
+}
+const packageQuantity = {
+  version: 1,
+  kind: "exact",
+  authored: "1",
+  source: "authored",
+  value: { numerator: "1", denominator: "1" },
+  lexeme: "1",
+}
+const packageIngredient = {
+  item: "tomatoes",
+  amount: 1,
+  unit: "(14 oz) can",
+  authoredUnit: "(14 oz) can",
+  quantityV1: packageQuantity,
+  packageV1: {
+    version: 1,
+    count: packageQuantity,
+    size: {
+      value: { numerator: "14", denominator: "1" },
+      lexeme: "14",
+      unit: "oz",
+      authoredUnit: "oz",
+    },
+    type: "can",
+    authoredType: "can",
+  },
+}
 const cases = [
   ["legacy empty snapshot", {}, true],
+  ["top-level JSON null", null, false],
+  ["top-level array", [], false],
+  ["top-level string scalar", "snapshot", false],
+  ["top-level number scalar", 2, false],
+  ["top-level boolean", false, false],
+  ["malformed nonempty object", { name: "Incomplete" }, false],
+  [
+    "valid complete legacy structured snapshot",
+    {
+      name: "Legacy parity fixture",
+      category: "test",
+      servings: 2,
+      tags: [],
+      ingredients: [legacyIngredient],
+      instructions: [],
+    },
+    true,
+  ],
   ["valid current snapshot", validSnapshot, true],
+  [
+    "empty required arrays are permitted",
+    {
+      ...validSnapshot,
+      tags: [],
+      ingredients: [],
+      instructions: [],
+    },
+    true,
+  ],
+  ["optional yield metadata absent", withoutValue("yield_metadata"), true],
+  ["optional yield metadata null", withValue("yield_metadata", null), true],
+  ["optional quantity and package metadata absent", withIngredient(legacyIngredient), true],
+  ["valid package metadata", withIngredient(packageIngredient), true],
+  [
+    "quantity version missing",
+    withIngredient({
+      ...ingredient,
+      quantityV1: {
+        kind: "exact",
+        authored: "1",
+        source: "authored",
+        value: { numerator: "1", denominator: "1" },
+        lexeme: "1",
+      },
+    }),
+    false,
+  ],
+  [
+    "quantity version null",
+    withIngredient({
+      ...ingredient,
+      quantityV1: { ...ingredient.quantityV1, version: null },
+    }),
+    false,
+  ],
+  [
+    "quantity version unsupported",
+    withIngredient({
+      ...ingredient,
+      quantityV1: { ...ingredient.quantityV1, version: 2 },
+    }),
+    false,
+  ],
+  [
+    "package version missing",
+    withIngredient({
+      ...packageIngredient,
+      packageV1: {
+        count: packageQuantity,
+        size: packageIngredient.packageV1.size,
+        type: "can",
+        authoredType: "can",
+      },
+    }),
+    false,
+  ],
+  [
+    "package version unsupported",
+    withIngredient({
+      ...packageIngredient,
+      packageV1: { ...packageIngredient.packageV1, version: 2 },
+    }),
+    false,
+  ],
+  [
+    "package size lexeme mismatch",
+    withIngredient({
+      ...packageIngredient,
+      packageV1: {
+        ...packageIngredient.packageV1,
+        size: { ...packageIngredient.packageV1.size, lexeme: "9" },
+      },
+    }),
+    false,
+  ],
+  [
+    "yield version missing",
+    withValue("yield_metadata", {
+      authoredText: "2 servings",
+      kind: "servings",
+      scalingBasis: { numerator: "2", denominator: "1" },
+      value: { numerator: "2", denominator: "1" },
+    }),
+    false,
+  ],
+  [
+    "yield version null",
+    withValue("yield_metadata", {
+      ...validSnapshot.yield_metadata,
+      version: null,
+    }),
+    false,
+  ],
+  [
+    "yield version unsupported",
+    withValue("yield_metadata", {
+      ...validSnapshot.yield_metadata,
+      version: 2,
+    }),
+    false,
+  ],
+  [
+    "yield authored value mismatch",
+    withValue("yield_metadata", {
+      ...validSnapshot.yield_metadata,
+      authoredText: "9 servings",
+    }),
+    false,
+  ],
   ["valid null instruction groups", withValue("instruction_groups", null), true],
   ["valid empty instruction groups", withValue("instruction_groups", []), true],
+  [
+    "maximum instruction group array",
+    withValue(
+      "instruction_groups",
+      Array.from({ length: 500 }, () => ({ steps: [] }))
+    ),
+    true,
+  ],
+  [
+    "maximum instruction step array",
+    withGroup({ steps: Array.from({ length: 2000 }, () => "step") }),
+    true,
+  ],
+  ["maximum group label", withGroup({ label: "x".repeat(128), steps: [] }), true],
+  ["maximum step string", withGroup({ steps: ["x".repeat(10000)] }), true],
   ["instruction groups boolean", withValue("instruction_groups", true), false],
   ["instruction groups object", withValue("instruction_groups", {}), false],
   ["instruction groups scalar", withValue("instruction_groups", "bad"), false],
@@ -149,6 +330,8 @@ const cases = [
   ["oversized group label", withGroup({ label: "x".repeat(129), steps: [] }), false],
   ["object step", withGroup({ steps: [{}] }), false],
   ["oversized step string", withGroup({ steps: ["x".repeat(10001)] }), false],
+  ["null image URL", withValue("image_url", null), true],
+  ["maximum image URL", withValue("image_url", "x".repeat(8192)), true],
   ["invalid image URL", withValue("image_url", {}), false],
   ["oversized image URL", withValue("image_url", "x".repeat(8193)), false],
   ["invalid recipe name", withValue("name", ""), false],
@@ -157,7 +340,7 @@ const cases = [
   ["invalid time", withValue("prep_time_minutes", -1), false],
   ["invalid notes", withValue("notes", [null]), false],
   [
-    "rational and lexeme mismatch",
+    "rational 1/1 versus authored lexeme 9",
     {
       ...validSnapshot,
       ingredients: [{
@@ -173,6 +356,37 @@ const cases = [
     false,
   ],
 ]
+
+const requiredFields = [
+  "name",
+  "category",
+  "servings",
+  "tags",
+  "ingredients",
+  "instructions",
+]
+for (const field of requiredFields) {
+  cases.push([`required ${field} missing`, withoutValue(field), false])
+  cases.push([`required ${field} is JSON null`, withValue(field, null), false])
+}
+
+const invalidRequiredTypes = {
+  name: [false, [], {}],
+  category: [false, [], {}],
+  servings: ["2", [], {}],
+  tags: ["tags", [true], {}],
+  ingredients: ["ingredients", [true], {}],
+  instructions: ["instructions", [true], {}],
+}
+for (const [field, values] of Object.entries(invalidRequiredTypes)) {
+  for (const [index, value] of values.entries()) {
+    cases.push([
+      `required ${field} invalid type ${index + 1}`,
+      withValue(field, value),
+      false,
+    ])
+  }
+}
 
 function fixtureSql(snapshot) {
   const encoded = JSON.stringify(snapshot)

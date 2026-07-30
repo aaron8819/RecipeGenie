@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { normalizeRecipeShareSnapshot } from '@/lib/recipe-data-validation';
+import {
+  isLegacyEmptyRecipeShareSnapshot,
+  normalizeRecipeShareSnapshot,
+} from '@/lib/recipe-data-validation';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -47,10 +50,8 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
   if (
-    !normalizeRecipeShareSnapshot(
-      share.source_recipe_snapshot,
-      "persist"
-    )
+    !isLegacyEmptyRecipeShareSnapshot(share.source_recipe_snapshot) &&
+    !normalizeRecipeShareSnapshot(share.source_recipe_snapshot, 'persist')
   ) {
     return NextResponse.json(
       { error: 'Shared recipe data is invalid' },
