@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { readFileSync } from "node:fs"
+import { pathToFileURL } from "node:url"
 
 const isWindows = process.platform === "win32"
 const spawnOptions = {
@@ -12,14 +13,43 @@ const preflight = readFileSync(
   "../scripts/database/preflight/014_add_recipe_yield_metadata.sql",
   "utf8"
 )
+const expectedValidationRejection =
+  /^ERROR:\s+pending recipe-share (?:(?:snapshots|strings|optional fields|instruction groups|ingredients|quantities|packages|quantity projections|units|yield semantics) are|(?:rational metadata|yield metadata) is) incompatible with migration 014 validation\r?$/m
+
+export function classifyPreflightResult(result) {
+  if (result?.error || result?.signal) return "process-failure"
+  if (result?.status === 0) return "accepted"
+  if (
+    Number.isInteger(result?.status) &&
+    expectedValidationRejection.test(result?.stderr ?? "")
+  ) {
+    return "expected-validation-rejection"
+  }
+  return "unexpected-failure"
+}
+
+export function preflightResultMatchesExpectation(result, accepted) {
+  const classification = classifyPreflightResult(result)
+  return accepted
+    ? classification === "accepted"
+    : classification === "expected-validation-rejection"
+}
+
+export function formatProcessDiagnostics(result) {
+  return [
+    `status=${String(result?.status)}`,
+    `signal=${result?.signal ?? "none"}`,
+    `error=${result?.error?.message ?? "none"}`,
+    `stdout:\n${result?.stdout?.trim() || "<empty>"}`,
+    `stderr:\n${result?.stderr?.trim() || "<empty>"}`,
+  ].join("\n")
+}
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  return spawnSync(command, args, {
     ...spawnOptions,
     ...options,
   })
-  if (result.error) throw result.error
-  return result
 }
 
 function runSupabase(args) {
@@ -28,8 +58,10 @@ function runSupabase(args) {
     ["supabase", "--workdir", "..", ...args],
     { stdio: "inherit" }
   )
-  if (result.status !== 0) {
-    throw new Error(`Supabase command failed with exit code ${result.status}`)
+  if (result.error || result.signal || result.status !== 0) {
+    throw new Error(
+      `Supabase command failed\n${formatProcessDiagnostics(result)}`
+    )
   }
 }
 
@@ -45,7 +77,11 @@ function databaseContainer() {
     ],
     { shell: false }
   )
-  if (result.status !== 0) throw new Error("Could not inspect local containers")
+  if (result.error || result.signal || result.status !== 0) {
+    throw new Error(
+      `Could not inspect local containers\n${formatProcessDiagnostics(result)}`
+    )
+  }
   const names = result.stdout
     .split(/\r?\n/)
     .filter((name) => name.startsWith("supabase_db_"))
@@ -1053,6 +1089,139 @@ const yieldRangeCases = [
   ],
 ]
 
+const quantityBranchCases = [
+  [
+    "quantity range valid around qualifier",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "around 1/2–3/4",
+      qualifier: "around",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid approx qualifier",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "approx 1/2–3/4",
+      qualifier: "approximately",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid approx-dot qualifier",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "approx. 1/2–3/4",
+      qualifier: "approximately",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid approximately qualifier",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "approximately 1/2–3/4",
+      qualifier: "approximately",
+    }),
+    true,
+  ],
+  [
+    "quantity range valid legacy-synthesized source",
+    withQuantityRange({
+      ...quantityRange,
+      source: "legacy-synthesized",
+    }),
+    true,
+  ],
+  [
+    "quantity range kind has incorrect type",
+    withQuantityRange({ ...quantityRange, kind: ["range"] }),
+    false,
+  ],
+  [
+    "quantity range authored text has incorrect type",
+    withQuantityRange(
+      { ...quantityRange, authored: ["1/2–3/4"] },
+      quantityRange.authored
+    ),
+    false,
+  ],
+  [
+    "quantity range source has incorrect type",
+    withQuantityRange({ ...quantityRange, source: { type: "authored" } }),
+    false,
+  ],
+  [
+    "quantity range qualifier has incorrect type",
+    withQuantityRange({
+      ...quantityRange,
+      authored: "about 1/2–3/4",
+      qualifier: true,
+    }),
+    false,
+  ],
+  [
+    "quantity range start rational has extra key",
+    withQuantityRange({
+      ...quantityRange,
+      start: { ...quantityRange.start, reduced: true },
+    }),
+    false,
+  ],
+]
+
+const yieldBoundaryCases = [
+  [
+    "yield range scaling basis is zero",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      scalingBasis: rational(0, 1),
+    }),
+    false,
+  ],
+  [
+    "yield range scaling basis exceeds maximum",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      scalingBasis: rational(10001, 1),
+    }),
+    false,
+  ],
+  [
+    "yield range endpoint accepts inclusive maximum",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "9999–10000 servings",
+      scalingBasis: rational(9999, 1),
+      range: {
+        ...yieldRange,
+        start: rational(9999, 1),
+        end: rational(10000, 1),
+        startLexeme: "9999",
+        endLexeme: "10000",
+      },
+    }),
+    true,
+  ],
+  [
+    "yield range scaling basis accepts inclusive maximum",
+    withYieldRange({
+      ...yieldRangeMetadata,
+      authoredText: "1–2 servings",
+      scalingBasis: rational(10000, 1),
+      range: {
+        ...yieldRange,
+        start: rational(1, 1),
+        end: rational(2, 1),
+        startLexeme: "1",
+        endLexeme: "2",
+      },
+    }),
+    true,
+  ],
+]
+
 const requiredFields = [
   "name",
   "category",
@@ -1084,14 +1253,27 @@ for (const [field, values] of Object.entries(invalidRequiredTypes)) {
   }
 }
 
-cases.push(...quantityRangeCases, ...yieldRangeCases)
+cases.push(
+  ...quantityRangeCases,
+  ...yieldRangeCases,
+  ...quantityBranchCases,
+  ...yieldBoundaryCases
+)
 
 if (
-  cases.length !== 171 ||
+  cases.length !== 185 ||
   quantityRangeCases.length !== 39 ||
-  yieldRangeCases.length !== 43
+  yieldRangeCases.length !== 43 ||
+  quantityBranchCases.length !== 10 ||
+  yieldBoundaryCases.length !== 4
 ) {
   throw new Error("Migration 014 parity fixture count changed unexpectedly")
+}
+if (
+  new Set(cases.map(([name]) => name)).size !== cases.length ||
+  cases.some(([, , accepted]) => typeof accepted !== "boolean")
+) {
+  throw new Error("Migration 014 parity fixture metadata is invalid")
 }
 
 function fixtureSql(snapshot) {
@@ -1131,49 +1313,67 @@ insert into public.recipe_shares (
 `
 }
 
-let restoredLatest = false
-try {
-  runSupabase(["db", "reset", "--local", "--version", "013", "--no-seed"])
-  let container = databaseContainer()
-  for (const [name, snapshot, accepted] of cases) {
-    const fixture = psql(container, fixtureSql(snapshot))
-    if (fixture.status !== 0) {
-      throw new Error(`${name}: could not install the preflight fixture`)
+function main() {
+  let restoredLatest = false
+  try {
+    runSupabase(["db", "reset", "--local", "--version", "013", "--no-seed"])
+    let container = databaseContainer()
+    for (const [name, snapshot, accepted] of cases) {
+      const fixture = psql(container, fixtureSql(snapshot))
+      if (fixture.error || fixture.signal || fixture.status !== 0) {
+        throw new Error(
+          `${name}: could not install the preflight fixture\n` +
+          formatProcessDiagnostics(fixture)
+        )
+      }
+      const result = psql(container, preflight)
+      if (!preflightResultMatchesExpectation(result, accepted)) {
+        throw new Error(
+          `${name}: preflight result classified as ` +
+          `${classifyPreflightResult(result)}, expected ` +
+          `${accepted ? "acceptance" : "migration-014 validation rejection"}\n` +
+          formatProcessDiagnostics(result)
+        )
+      }
     }
-    const result = psql(container, preflight)
-    if ((result.status === 0) !== accepted) {
-      throw new Error(
-        `${name}: preflight ${result.status === 0 ? "accepted" : "rejected"} unexpectedly`
+
+    runSupabase(["db", "reset", "--local", "--no-seed"])
+    restoredLatest = true
+    container = databaseContainer()
+    for (const [name, snapshot, accepted] of cases) {
+      const encoded = JSON.stringify(snapshot)
+      const result = psql(
+        container,
+        `select private.recipe_share_snapshot_is_valid($snapshot$${encoded}$snapshot$::jsonb);\n`
       )
+      if (result.error || result.signal || result.status !== 0) {
+        throw new Error(
+          `${name}: installed validator query failed\n` +
+          formatProcessDiagnostics(result)
+        )
+      }
+      const actual = result.stdout.trim().split(/\r?\n/).at(-1)?.trim()
+      const expected = accepted ? "t" : "f"
+      if (actual !== expected) {
+        throw new Error(
+          `${name}: installed validator returned ${actual}, expected ${expected}`
+        )
+      }
+    }
+  } finally {
+    if (!restoredLatest) {
+      runSupabase(["db", "reset", "--local", "--no-seed"])
     }
   }
 
-  runSupabase(["db", "reset", "--local", "--no-seed"])
-  restoredLatest = true
-  container = databaseContainer()
-  for (const [name, snapshot, accepted] of cases) {
-    const encoded = JSON.stringify(snapshot)
-    const result = psql(
-      container,
-      `select private.recipe_share_snapshot_is_valid($snapshot$${encoded}$snapshot$::jsonb);\n`
-    )
-    if (result.status !== 0) {
-      throw new Error(`${name}: installed validator query failed`)
-    }
-    const actual = result.stdout.trim().split(/\r?\n/).at(-1)?.trim()
-    const expected = accepted ? "t" : "f"
-    if (actual !== expected) {
-      throw new Error(
-        `${name}: installed validator returned ${actual}, expected ${expected}`
-      )
-    }
-  }
-} finally {
-  if (!restoredLatest) {
-    runSupabase(["db", "reset", "--local", "--no-seed"])
-  }
+  console.log(
+    `Migration 014 preflight parity passed for ${cases.length} complete-snapshot fixtures.`
+  )
 }
 
-console.log(
-  `Migration 014 preflight parity passed for ${cases.length} complete-snapshot fixtures.`
-)
+if (
+  process.argv[1] &&
+  pathToFileURL(process.argv[1]).href === import.meta.url
+) {
+  main()
+}
