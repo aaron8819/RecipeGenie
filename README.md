@@ -144,7 +144,19 @@ cd web
 npm run db:preflight
 ```
 
-This checks linked migration history alignment and points you to the repair runbook if the repo's squashed-baseline case is the reason for the mismatch.
+This checks linked migration identifiers and order, and verifies every active
+local migration against `supabase/migration-checksums.json`. It points you to
+the repair runbook if the repo's squashed-baseline case is the reason for a
+mismatch. The default fails on every local-only migration. During an explicitly
+reviewed single-migration rollout, name the sole expected pending tail
+migration:
+
+```bash
+npm run db:preflight -- --expected-pending 014
+```
+
+The opt-in accepts only that exact one-migration local tail. It does not
+authorize `db push`.
 
 ## Deployment to Vercel
 

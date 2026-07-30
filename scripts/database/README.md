@@ -76,10 +76,14 @@ Storage-sensitive gate:
 
 After backup assertion and the migration-specific read-only preflight pass, stop for explicit owner authorization. Only then, in a separate command/authorization, run from web:
 
-    npm run db:preflight
+    npm run db:preflight -- --expected-pending 014
     npx supabase --workdir .. db push
 
-The assertion scripts never generate or invoke those commands.
+The migration-014 rollout must name `014` as the sole expected pending tail
+migration. Omitting the option continues to reject every local-only migration;
+an unknown, non-tail, multiple, altered, or otherwise mismatched pending set
+fails closed. The assertion scripts never generate or invoke those commands,
+and the preflight opt-in does not grant migration authorization.
 
 ## Archive contract
 

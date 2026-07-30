@@ -1,0 +1,16 @@
+{
+  "001_baseline.sql": "fe76df69862ea8a4d531dbd519529396e180adff2f12c023712d02e0d76d7688",
+  "002_recipe_structure_parity.sql": "d29b06f109e405308d3669978c10f00ecc70dd9082262cab061d1980cb2d01a5",
+  "003_shopping_item_order_preferences.sql": "e794f6046451d4cb31867c9ed02559d53a4d40d9088994b872e2d563e348c172",
+  "004_reconcile_production_schema_to_main.sql": "ba3cabceed47c53355845368d2103a19647e4781461e15c7e51750da024ec2fd",
+  "005_secure_privileged_rpcs.sql": "7826e598d53fa8aad467b5b136f1833b4254668cc904068e9a700f9929d89de5",
+  "006_authoritative_shopping_contributions.sql": "338d06c3bfc27bd739b5d7d37a3f87174f489494194e4fa4bf7861fc79cd9eac",
+  "007_add_recipe_uuid_identity.sql": "f3a6490379888dbf4c68cbe8b2c6c7526c86ab0c62c32e5dc293a4c780e8b731",
+  "008_reconcile_stale_planner_references.sql": "31a69b50bd6c633981bfbae4968d3d8360d2d850d5abad0b672f2b72dd0e3000",
+  "009_add_uuid_recipe_references.sql": "8b9771ad7a874395b2557b29960b1bcf4cb62d5939b88f7a9f64d54c4a7b5e33",
+  "010_enable_uuid_application_identity.sql": "d49a1c021bdf197c834f6835269405e7c186f0d21a7f3afa9d39f127e4810479",
+  "011_fix_uuid_made_state_date_contract.sql": "9694464834a1d4248400ebc384bd6bb179c3fa1d488361416b167e0127795db5",
+  "012_enforce_uuid_active_recipe_writes.sql": "8441cfabf997f2e8ec218d499135997496b5e6c5d985b095f384c1cda8e3c83e",
+  "013_allow_uuid_shopping_contribution_replacement.sql": "962c030ebeb57ec5f2951b7517597fe586c287c2b9a9cba87eded2a9ba0699e8",
+  "014_add_recipe_yield_metadata.sql": "b47a74d12e3eaff4e095f46a55d6e9fcba17b83befe5b269305eea443620305d"
+}

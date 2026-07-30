@@ -824,7 +824,9 @@ This section is the operational runbook for schema changes in this repository. I
 4. Regenerate local types from the local schema.
    From `web/`, run `npm run db:types:regen`.
 5. Preflight the linked remote before pushing.
-   From `web/`, run `npm run db:preflight`.
+   From `web/`, run `npm run db:preflight`. For a separately reviewed
+   single-migration rollout, pass the exact pending tail explicitly, for
+   example `npm run db:preflight -- --expected-pending 014`.
 6. Push to the intentionally linked remote project.
    Run `npx supabase --workdir .. db push`.
 7. Regenerate types from the linked remote after a successful push.
@@ -836,8 +838,17 @@ This section is the operational runbook for schema changes in this repository. I
 
 - Run `cd web && npm run db:preflight`.
 - Confirm the linked project/environment is the one you intend to change.
-- Review `supabase migration list` output and verify local and remote entries line up row-for-row.
-- Stop if a migration exists only locally, only remotely, or the IDs differ between columns.
+- Review `supabase migration list` output and verify local and remote entries
+  line up row-for-row. Preflight also verifies every active local SQL file
+  against the reviewed `supabase/migration-checksums.json` registry. This
+  preserves altered-file detection without treating the Supabase ledger's
+  historically reconciled statement payloads as canonical file hashes.
+- Stop if a migration exists only locally, only remotely, or the IDs differ
+  between columns. The only exception is an explicitly supplied
+  `--expected-pending VERSION` that identifies exactly one known local tail
+  migration.
+- Treat a missing, malformed, duplicate, unknown, non-tail, or mismatched
+  expected-pending value as invalid configuration, not permission to proceed.
 - Stop if you do not understand why the migration list differs.
 - Treat `supabase db push` as unsafe until the history mismatch is explained.
 
@@ -900,6 +911,12 @@ This updates migration bookkeeping. It does not apply missing SQL by itself.
 
 If the reason for drift is not clear, stop. Investigate the schema state and migration history instead of rewriting the ledger.
 `db:preflight` helps detect ledger drift, but it does not prove the remote schema contents are equivalent.
+Its expected-pending option is a narrow ledger/readiness assertion and never
+grants migration authorization.
+
+`supabase/migration-checksums.json` must exactly cover the active migration
+directory. Add a reviewed checksum entry with each new migration; never update
+an existing entry merely to make preflight pass.
 
 ### Post-Migration Checklist
 
@@ -913,7 +930,9 @@ If the reason for drift is not clear, stop. Investigate the schema state and mig
 ### Command Reference
 
 - Local rebuild: `npx supabase start` then `npx supabase db reset --local`
-- Preflight linked remote: `cd web && npm run db:preflight`
+- Preflight aligned linked remote: `cd web && npm run db:preflight`
+- Preflight one reviewed pending tail migration:
+  `cd web && npm run db:preflight -- --expected-pending <version>`
 - Push linked remote: `npx supabase --workdir .. db push`
 - Generate local types: `cd web && npm run db:types:regen`
 - Generate linked remote types: `cd web && npm run db:types:regen:linked`
