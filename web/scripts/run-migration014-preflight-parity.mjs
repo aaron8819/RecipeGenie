@@ -13,15 +13,59 @@ const preflight = readFileSync(
   "../scripts/database/preflight/014_add_recipe_yield_metadata.sql",
   "utf8"
 )
-const expectedValidationRejection =
-  /^ERROR:\s+pending recipe-share (?:(?:snapshots|strings|optional fields|instruction groups|ingredients|quantities|packages|quantity projections|units|yield semantics) are|(?:rational metadata|yield metadata) is) incompatible with migration 014 validation\r?$/m
+const pluralValidationCategories = [
+  "snapshots",
+  "strings",
+  "optional fields",
+  "instruction groups",
+  "ingredients",
+  "quantities",
+  "packages",
+  "quantity projections",
+  "units",
+  "yield semantics",
+]
+const singularValidationCategories = [
+  "rational metadata",
+  "yield metadata",
+]
+const validationSuffix = "incompatible with migration 014 validation"
+const expectedValidationRejections = new Set([
+  ...pluralValidationCategories.map(
+    (category) =>
+      `ERROR:  pending recipe-share ${category} are ${validationSuffix}`
+  ),
+  ...singularValidationCategories.map(
+    (category) =>
+      `ERROR:  pending recipe-share ${category} is ${validationSuffix}`
+  ),
+])
+const expectedValidationContext =
+  /^CONTEXT:  PL\/pgSQL function inline_code_block line [1-9]\d* at RAISE$/
+
+function isExpectedValidationRejection(stderr) {
+  if (typeof stderr !== "string") return false
+
+  const normalized = stderr.replace(/\r\n/g, "\n")
+  const output = normalized.endsWith("\n")
+    ? normalized.slice(0, -1)
+    : normalized
+  const lines = output.split("\n")
+
+  if (!expectedValidationRejections.has(lines[0])) return false
+  return (
+    lines.length === 1 ||
+    (lines.length === 2 && expectedValidationContext.test(lines[1]))
+  )
+}
 
 export function classifyPreflightResult(result) {
   if (result?.error || result?.signal) return "process-failure"
   if (result?.status === 0) return "accepted"
   if (
     Number.isInteger(result?.status) &&
-    expectedValidationRejection.test(result?.stderr ?? "")
+    result.status > 0 &&
+    isExpectedValidationRejection(result?.stderr)
   ) {
     return "expected-validation-rejection"
   }

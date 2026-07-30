@@ -15,12 +15,16 @@ const result = (overrides = {}) => ({
   ...overrides,
 })
 
+const singularValidation =
+  "ERROR:  pending recipe-share rational metadata is incompatible with migration 014 validation"
+const pluralValidation =
+  "ERROR:  pending recipe-share quantities are incompatible with migration 014 validation"
+const validationContext =
+  "CONTEXT:  PL/pgSQL function inline_code_block line 815 at RAISE"
+
 describe("migration 014 preflight result classification", () => {
   it("accepts a singular migration 014 validation rejection", () => {
-    const validationFailure = result({
-      stderr:
-        "ERROR:  pending recipe-share rational metadata is incompatible with migration 014 validation\n",
-    })
+    const validationFailure = result({ stderr: `${singularValidation}\n` })
 
     expect(classifyPreflightResult(validationFailure)).toBe(
       "expected-validation-rejection"
@@ -29,15 +33,82 @@ describe("migration 014 preflight result classification", () => {
   })
 
   it("accepts a plural migration 014 validation rejection", () => {
+    const validationFailure = result({ stderr: `${pluralValidation}\n` })
+
+    expect(classifyPreflightResult(validationFailure)).toBe(
+      "expected-validation-rejection"
+    )
+    expect(preflightResultMatchesExpectation(validationFailure, false)).toBe(true)
+  })
+
+  it("accepts the validation rejection with its exact PL/pgSQL context", () => {
     const validationFailure = result({
-      stderr:
-        "ERROR:  pending recipe-share quantities are incompatible with migration 014 validation\n",
+      stderr: `${pluralValidation}\n${validationContext}\n`,
     })
 
     expect(classifyPreflightResult(validationFailure)).toBe(
       "expected-validation-rejection"
     )
     expect(preflightResultMatchesExpectation(validationFailure, false)).toBe(true)
+  })
+
+  it("accepts CRLF validation output", () => {
+    const validationFailure = result({
+      stderr: `${singularValidation}\r\n${validationContext}\r\n`,
+    })
+
+    expect(classifyPreflightResult(validationFailure)).toBe(
+      "expected-validation-rejection"
+    )
+    expect(preflightResultMatchesExpectation(validationFailure, false)).toBe(true)
+  })
+
+  it.each([
+    [
+      "a following connection failure",
+      `${pluralValidation}\npsql: error: connection lost\n`,
+    ],
+    [
+      "a preceding connection failure",
+      `psql: error: connection lost\n${pluralValidation}\n`,
+    ],
+    [
+      "a following Docker failure",
+      `${pluralValidation}\nerror during connect: this error may indicate that the docker daemon is not running\n`,
+    ],
+    [
+      "a following SQL syntax error",
+      `${pluralValidation}\nERROR:  syntax error at or near "select"\n`,
+    ],
+    [
+      "a following SQL runtime error",
+      `${pluralValidation}\nERROR:  division by zero\n`,
+    ],
+    [
+      "a following permission error",
+      `${pluralValidation}\nERROR:  permission denied for schema private\n`,
+    ],
+    [
+      "an unknown diagnostic",
+      `${pluralValidation}\nDETAIL:  unexpected diagnostic\n`,
+    ],
+    [
+      "a second recognized validation rejection",
+      `${pluralValidation}\n${singularValidation}\n`,
+    ],
+    [
+      "an extra blank line",
+      `${pluralValidation}\n\n`,
+    ],
+    [
+      "an unrecognized context line",
+      `${pluralValidation}\nCONTEXT:  PL/pgSQL function other_function line 1 at RAISE\n`,
+    ],
+  ])("rejects valid validation output mixed with %s", (_name, stderr) => {
+    const mixedFailure = result({ stderr })
+
+    expect(classifyPreflightResult(mixedFailure)).toBe("unexpected-failure")
+    expect(preflightResultMatchesExpectation(mixedFailure, false)).toBe(false)
   })
 
   it.each([
@@ -87,10 +158,7 @@ describe("migration 014 preflight result classification", () => {
   })
 
   it("rejects a nonzero exit for a positive fixture", () => {
-    const validationFailure = result({
-      stderr:
-        "ERROR:  pending recipe-share snapshots are incompatible with migration 014 validation\n",
-    })
+    const validationFailure = result({ stderr: `${pluralValidation}\n` })
 
     expect(preflightResultMatchesExpectation(validationFailure, true)).toBe(false)
   })
@@ -104,16 +172,31 @@ describe("migration 014 preflight result classification", () => {
         result({
           signal: "SIGTERM",
           status: null,
-          stderr:
-            "ERROR:  pending recipe-share units are incompatible with migration 014 validation\n",
+          stderr: `${pluralValidation}\n`,
         })
       )
     ).toBe("process-failure")
+    expect(
+      preflightResultMatchesExpectation(
+        result({
+          signal: "SIGTERM",
+          status: null,
+          stderr: `${pluralValidation}\n`,
+        }),
+        false
+      )
+    ).toBe(false)
     expect(
       classifyPreflightResult(
         result({ error: new Error("spawn failed"), status: null })
       )
     ).toBe("process-failure")
+    expect(
+      preflightResultMatchesExpectation(
+        result({ error: new Error("spawn failed"), status: null }),
+        false
+      )
+    ).toBe(false)
   })
 
   it("preserves stdout and stderr in failure diagnostics", () => {
