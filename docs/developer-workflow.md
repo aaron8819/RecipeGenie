@@ -26,11 +26,108 @@ pairing each provider's CLI with its own local credential evidence.
 `POSSIBLE` means the required local evidence is present, not that remote
 authentication, authorization, or health was probed.
 
-## Local verification
+## Verification tiers
 
-Use `npm run verify` from `web/` as the comprehensive Tier 1 repository gate.
-Run focused tests while iterating, then use the full gate when the task or
-repository policy requires it.
+All verification commands run from `web/`, use the repository-pinned Node/npm
+runtime, print the checks they ran, and return nonzero on failure. Add `--json`
+for structured output. Check results use `PASS`, `FAIL`, `SKIPPED`, and
+`UNAVAILABLE`; missing evidence is never reported as success.
+
+Focused verification is an iteration aid for an explicit bounded scope:
+
+```powershell
+npm run rg:verify:focused -- --base origin/main
+npm run rg:verify:focused -- --file docs/developer-workflow.md --file web/scripts/workflow/verification.mjs
+```
+
+The auditable mapping covers documentation, workflow scripts, database
+preflight scripts, fixtures, and migration metadata. It runs migration-reference
+integrity for every mapped scope, plus the relevant workflow or preflight unit
+tests and lint checks. An application, CI, package, migration SQL, unknown path,
+or unresolved base automatically runs the PR tier instead. A focused result
+explicitly says that it is not full PR confidence.
+
+PR verification is the complete local pre-PR gate:
+
+```powershell
+npm run rg:verify:pr
+```
+
+It composes the existing `npm run verify` authority (artifact and secret
+guards, migration-reference integrity, lint, typecheck, unit tests, regression
+guards, and dependency-cycle analysis), the production build, and the existing
+PowerShell migration-tooling test suite. Database-backed migration smoke,
+pgTAP, compatibility, audit, and generated-type checks remain exact-head CI
+requirements; a local PR-tier pass never substitutes for them.
+
+Release verification delegates to the existing read-only release/status
+workflow:
+
+```powershell
+npm run rg:verify:release -- --repository aaron8819/RecipeGenie --branch main --expected-sha <sha> --production-url <url> --expected-project-ref <ref>
+```
+
+It preserves the existing commit/deployment/manifest binding. Missing external
+evidence is `UNAVAILABLE`; contradictory identity, mismatched bindings, pending
+or failed required evidence, and invalid inputs fail. It never deploys, changes
+aliases, connects to a database, or applies migrations.
+
+`npm run verify` remains the comprehensive local code-quality gate used by CI.
+`npm run check:migration-references` is its repository-backed migration
+documentation check. The check derives the active endpoint from tracked regular
+SQL files, reuses the canonical checksum loader, and verifies README and
+`supabase/SCHEMA.md` against that source rather than maintaining another active
+filename constant.
+
+## PR evidence report
+
+Use the read-only evidence reporter to reconstruct local and GitHub PR state:
+
+```powershell
+npm run rg:pr:evidence
+npm run rg:pr:evidence -- --json
+npm run rg:pr:evidence -- --local-only
+```
+
+The report includes repository identity; branch and worktree state; local,
+upstream, remote, PR, and explicit evidence heads; PR URL/base/head/state and
+mergeability; changed files; actual migration SQL versus documentation-only
+migration references; checksum-registry impact; exact-head checks, conclusions,
+and annotations; reviews and requests; top-level and inline comments; total and
+unresolved review threads; and exact-SHA deployment records. Use `--pr NUMBER`
+or `--head-sha SHA` when discovery must be explicit. Head disagreement, dirty
+state, pending/failed checks, merge conflicts, and unresolved review threads
+cannot produce a passing report. No PR, no remote branch, missing GitHub access,
+incomplete pagination, missing checks, or unavailable deployment evidence is
+reported as `SKIPPED` or `UNAVAILABLE`, while retaining the useful local report.
+
+## Proportional review
+
+- Behavioral code change: implementation, independent review, corrections,
+  focused re-review of corrected ranges when appropriate, then the final merge
+  gate.
+- A correction that changes behavior or risk requires independent re-review of
+  the changed range plus refreshed regression evidence.
+- A narrow documentation-only correction requires automated scope and integrity
+  validation plus focused re-review; it does not restart an unrelated full
+  review.
+- Full re-review is required when the approved head, behavioral scope,
+  migration/schema impact, security posture, or deployment risk materially
+  changes.
+
+Evidence may be reused only when its inputs and affected code are unchanged:
+design rationale, unchanged test results, prior discussion, and review findings
+outside the corrected range may carry forward. Worktree cleanliness, changed
+files, head bindings, migration/documentation integrity, required checks,
+mergeability, review requests, and unresolved-thread counts must always be
+refreshed at the exact head. Focused verification is sufficient only for a
+mapped bounded iteration or narrow documentation correction; PR verification
+is mandatory before publishing or after behavioral, build, package, CI,
+migration, security, or unknown-scope changes. Reviewers must expand scope when
+a correction crosses those boundaries or invalidates reused evidence. Merge is
+blocked by a dirty or mismatched reviewed head, failed/pending/incomplete
+required checks, unresolved required review, migration/schema inconsistency,
+security regression, conflict, or missing exact-head evidence.
 
 ## Release status
 
