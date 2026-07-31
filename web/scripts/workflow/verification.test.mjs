@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { dirname, join, resolve } from "node:path"
+import { delimiter, dirname, join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 import {
@@ -144,17 +144,26 @@ describe("trusted npm execution", () => {
     const hostileNodeDirectory = join(root, "hostile-node")
     const hostileNpmDirectory = join(root, "hostile-npm")
     const benign = join(root, "benign")
+    const platformSystemPath = process.platform === "win32"
+      ? `${process.env.SystemRoot}\\System32`
+      : "/usr/bin"
     mkdirSync(hostileNodeDirectory)
     mkdirSync(hostileNpmDirectory)
     mkdirSync(benign)
-    writeFileSync(join(hostileNodeDirectory, "node.exe"), "hostile")
-    writeFileSync(join(hostileNpmDirectory, "npm.cmd"), "@exit /b 0")
+    writeFileSync(
+      join(hostileNodeDirectory, process.platform === "win32" ? "node.exe" : "node"),
+      "hostile",
+    )
+    writeFileSync(
+      join(hostileNpmDirectory, process.platform === "win32" ? "npm.cmd" : "npm"),
+      "hostile",
+    )
     try {
       const env = createTrustedChildEnvironment({
         environment: {
           ...process.env,
-          PATH: `${hostileNodeDirectory};${benign}`,
-          Path: `${hostileNpmDirectory};${process.env.SystemRoot}\\System32`,
+          PATH: `${hostileNodeDirectory}${delimiter}${benign}`,
+          Path: `${hostileNpmDirectory}${delimiter}${platformSystemPath}`,
           npm_execpath: join(root, "always-success.js"),
           NPM_NODE_EXECPATH: join(root, "node.exe"),
           npm_config_script_shell: join(root, "shell.cmd"),
@@ -167,18 +176,26 @@ describe("trusted npm execution", () => {
       })
       const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path")
       expect(Object.keys(env).filter((key) => key.toLowerCase() === "path")).toHaveLength(1)
-      const pathEntries = env[pathKey].split(";")
+      const pathEntries = env[pathKey].split(delimiter)
       expect(pathEntries).not.toContain(hostileNodeDirectory)
       expect(pathEntries).not.toContain(hostileNpmDirectory)
       expect(pathEntries).toContain(benign)
       expect(env[pathKey]).toContain(dirname(process.execPath))
-      expect(env[pathKey]).toContain(`${process.env.SystemRoot}\\System32`)
+      expect(env[pathKey]).toContain(platformSystemPath)
       expect(env.npm_execpath).toBe(resolveTrustedNpmCli())
       expect(env.npm_node_execpath).toBe(process.execPath)
-      expect(env.npm_config_script_shell).toBe(`${process.env.SystemRoot}\\System32\\cmd.exe`)
+      expect(env.npm_config_script_shell).toBe(
+        process.platform === "win32"
+          ? `${process.env.SystemRoot}\\System32\\cmd.exe`
+          : "/bin/sh",
+      )
       expect(env.npm_config_ignore_scripts).toBe("false")
-      expect(env.npm_config_userconfig).toBe("NUL")
-      expect(env.ComSpec).toBe(env.npm_config_script_shell)
+      expect(env.npm_config_userconfig).toBe(process.platform === "win32" ? "NUL" : "/dev/null")
+      if (process.platform === "win32") {
+        expect(env.ComSpec).toBe(env.npm_config_script_shell)
+      } else {
+        expect(env.SHELL).toBe(env.npm_config_script_shell)
+      }
       expect(env.NODE_OPTIONS).toBeUndefined()
       expect(env.BASH_ENV).toBeUndefined()
 

@@ -7,6 +7,7 @@ import {
   parseMigrationIntegrityArgs,
   validateMigrationMetadata,
 } from "./migration-integrity.mjs"
+import { resolveTrustedNpmCli } from "./verification.mjs"
 
 const filenames = [
   "001_baseline.sql",
@@ -284,7 +285,7 @@ describe("migration-integrity CLI schema", () => {
   it("keeps documented silent npm JSON output uncontaminated", () => {
     const scriptDirectory = dirname(fileURLToPath(import.meta.url))
     const webDirectory = resolve(scriptDirectory, "..", "..")
-    const npmCli = resolve(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js")
+    const npmCli = resolveTrustedNpmCli()
     const child = spawnSync(process.execPath, [
       npmCli,
       "run",
