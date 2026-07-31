@@ -55,6 +55,7 @@ import {
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
   normalizeRecipeIngredientsForEditing,
+  updateRecipeIngredientField,
 } from "./recipe-dialog.defaults"
 import {
   getImportErrorMessage,
@@ -120,6 +121,7 @@ export function RecipeDialog({
   const [name, setName] = useState("")
   const [category, setCategory] = useState("")
   const [servings, setServings] = useState(4)
+  const [yieldText, setYieldText] = useState("4 servings")
   const [prepTimeMinutes, setPrepTimeMinutes] = useState<number | null>(null)
   const [cookTimeMinutes, setCookTimeMinutes] = useState<number | null>(null)
   const [totalTimeMinutes, setTotalTimeMinutes] = useState<number | null>(null)
@@ -170,6 +172,7 @@ export function RecipeDialog({
     setName(formValues.name)
     setCategory(formValues.category)
     setServings(formValues.servings)
+    setYieldText(formValues.yieldText ?? `${formValues.servings} servings`)
     setPrepTimeMinutes(formValues.prepTimeMinutes)
     setCookTimeMinutes(formValues.cookTimeMinutes)
     setTotalTimeMinutes(formValues.totalTimeMinutes)
@@ -234,6 +237,7 @@ export function RecipeDialog({
           name,
           defaultCategory: categories[0] || "",
           category,
+          yieldText,
           tags,
           prepTimeMinutes,
           cookTimeMinutes,
@@ -259,6 +263,7 @@ export function RecipeDialog({
     applyFormValues,
     name,
     category,
+    yieldText,
     tags,
     prepTimeMinutes,
     cookTimeMinutes,
@@ -283,10 +288,30 @@ export function RecipeDialog({
     field: keyof Ingredient,
     value: string | number | null
   ) => {
-    const newIngredients = [...ingredients]
-    newIngredients[index] = { ...newIngredients[index], [field]: value }
-    setIngredients(newIngredients)
+    setIngredients((current) => {
+      const next = [...current]
+      next[index] = updateRecipeIngredientField(next[index], field, value)
+      return next
+    })
   }
+
+  const handleIngredientParsed = useCallback((
+    index: number,
+    parsed: Ingredient
+  ) => {
+    setIngredients((current) => {
+      const next = [...current]
+      const existing = next[index]
+      const [normalized] = normalizeRecipeIngredientsForEditing([{
+        ...parsed,
+        ...(existing?.groupLabel
+          ? { groupLabel: existing.groupLabel }
+          : {}),
+      }])
+      if (normalized) next[index] = normalized
+      return next
+    })
+  }, [])
 
   const handleReorderIngredients = useCallback((event: DragEndEvent) => {
     const { active, over } = event
@@ -380,6 +405,7 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        yieldText,
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
@@ -396,6 +422,7 @@ export function RecipeDialog({
     setName(formValues.name)
     setCategory(formValues.category)
     setServings(formValues.servings)
+    setYieldText(formValues.yieldText ?? `${formValues.servings} servings`)
     setPrepTimeMinutes(formValues.prepTimeMinutes)
     setCookTimeMinutes(formValues.cookTimeMinutes)
     setTotalTimeMinutes(formValues.totalTimeMinutes)
@@ -407,6 +434,7 @@ export function RecipeDialog({
     name,
     category,
     servings,
+    yieldText,
     prepTimeMinutes,
     cookTimeMinutes,
     totalTimeMinutes,
@@ -423,6 +451,7 @@ export function RecipeDialog({
     name,
     category,
     servings,
+    yieldText,
     prepTimeMinutes,
     cookTimeMinutes,
     totalTimeMinutes,
@@ -631,6 +660,7 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        yieldText,
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
@@ -679,6 +709,7 @@ export function RecipeDialog({
         name,
         category,
         servings,
+        yieldText,
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
@@ -693,6 +724,7 @@ export function RecipeDialog({
         name,
         defaultCategory: categories[0] || "",
         category,
+        yieldText,
         tags,
         prepTimeMinutes,
         cookTimeMinutes,
@@ -932,6 +964,8 @@ export function RecipeDialog({
                 setCategory={setCategory}
                 servings={servings}
                 setServings={setServings}
+                yieldText={yieldText}
+                setYieldText={setYieldText}
                 prepTimeMinutes={prepTimeMinutes}
                 setPrepTimeMinutes={setPrepTimeMinutes}
                 cookTimeMinutes={cookTimeMinutes}
@@ -951,6 +985,7 @@ export function RecipeDialog({
                 onAddIngredient={handleAddIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
                 onIngredientChange={handleIngredientChange}
+                onIngredientParsed={handleIngredientParsed}
                 isEditing={false}
                 onReorderIngredients={handleReorderIngredients}
                 onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1006,6 +1041,8 @@ export function RecipeDialog({
                 setCategory={setCategory}
                 servings={servings}
                 setServings={setServings}
+                yieldText={yieldText}
+                setYieldText={setYieldText}
                 prepTimeMinutes={prepTimeMinutes}
                 setPrepTimeMinutes={setPrepTimeMinutes}
                 cookTimeMinutes={cookTimeMinutes}
@@ -1025,6 +1062,7 @@ export function RecipeDialog({
                 onAddIngredient={handleAddIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
                 onIngredientChange={handleIngredientChange}
+                onIngredientParsed={handleIngredientParsed}
                 isEditing={true}
                 onReorderIngredients={handleReorderIngredients}
                 onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1073,6 +1111,8 @@ export function RecipeDialog({
                   setCategory={setCategory}
                   servings={servings}
                   setServings={setServings}
+                  yieldText={yieldText}
+                  setYieldText={setYieldText}
                   prepTimeMinutes={prepTimeMinutes}
                   setPrepTimeMinutes={setPrepTimeMinutes}
                   cookTimeMinutes={cookTimeMinutes}
@@ -1092,6 +1132,7 @@ export function RecipeDialog({
                   onAddIngredient={handleAddIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
                   onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1114,6 +1155,8 @@ export function RecipeDialog({
                   setCategory={setCategory}
                   servings={servings}
                   setServings={setServings}
+                  yieldText={yieldText}
+                  setYieldText={setYieldText}
                   prepTimeMinutes={prepTimeMinutes}
                   setPrepTimeMinutes={setPrepTimeMinutes}
                   cookTimeMinutes={cookTimeMinutes}
@@ -1133,6 +1176,7 @@ export function RecipeDialog({
                   onAddIngredient={handleAddIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
                   onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1155,6 +1199,8 @@ export function RecipeDialog({
                   setCategory={setCategory}
                   servings={servings}
                   setServings={setServings}
+                  yieldText={yieldText}
+                  setYieldText={setYieldText}
                   prepTimeMinutes={prepTimeMinutes}
                   setPrepTimeMinutes={setPrepTimeMinutes}
                   cookTimeMinutes={cookTimeMinutes}
@@ -1174,6 +1220,7 @@ export function RecipeDialog({
                   onAddIngredient={handleAddIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
                   onBulkPasteIngredients={handleBulkPasteIngredients}
@@ -1296,6 +1343,8 @@ interface RecipeFormContentProps {
   setCategory: (category: string) => void
   servings: number
   setServings: (servings: number) => void
+  yieldText: string
+  setYieldText: (yieldText: string) => void
   prepTimeMinutes: number | null
   setPrepTimeMinutes: (value: number | null) => void
   cookTimeMinutes: number | null
@@ -1319,6 +1368,7 @@ interface RecipeFormContentProps {
     field: keyof Ingredient,
     value: string | number | null
   ) => void
+  onIngredientParsed: (index: number, ingredient: Ingredient) => void
   isEditing: boolean
   onReorderIngredients: (event: DragEndEvent) => void
   onBulkPasteIngredients: (index: number, text: string) => void
@@ -1346,6 +1396,8 @@ function RecipeFormContent({
   setCategory,
   servings,
   setServings,
+  yieldText,
+  setYieldText,
   prepTimeMinutes,
   setPrepTimeMinutes,
   cookTimeMinutes,
@@ -1365,6 +1417,7 @@ function RecipeFormContent({
   onAddIngredient,
   onRemoveIngredient,
   onIngredientChange,
+  onIngredientParsed,
   isEditing,
   onReorderIngredients,
   onBulkPasteIngredients,
@@ -1414,6 +1467,8 @@ function RecipeFormContent({
                 onCategoryChange={setCategory}
                 servings={servings}
                 onServingsChange={setServings}
+                yieldText={yieldText}
+                onYieldTextChange={setYieldText}
                 prepTimeMinutes={prepTimeMinutes}
                 onPrepTimeMinutesChange={setPrepTimeMinutes}
                 cookTimeMinutes={cookTimeMinutes}
@@ -1457,6 +1512,7 @@ function RecipeFormContent({
               duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
               onRemoveIngredient={onRemoveIngredient}
               onIngredientChange={onIngredientChange}
+              onIngredientParsed={onIngredientParsed}
             />
           </RecipeIngredientsSection>
         </div>
@@ -1501,6 +1557,8 @@ function RecipeFormContent({
           onCategoryChange={setCategory}
           servings={servings}
           onServingsChange={setServings}
+          yieldText={yieldText}
+          onYieldTextChange={setYieldText}
           prepTimeMinutes={prepTimeMinutes}
           onPrepTimeMinutesChange={setPrepTimeMinutes}
           cookTimeMinutes={cookTimeMinutes}
@@ -1535,6 +1593,7 @@ function RecipeFormContent({
             duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
             onRemoveIngredient={onRemoveIngredient}
             onIngredientChange={onIngredientChange}
+            onIngredientParsed={onIngredientParsed}
           />
         </RecipeIngredientsSection>
 

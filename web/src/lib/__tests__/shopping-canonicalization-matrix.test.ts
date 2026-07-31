@@ -209,10 +209,20 @@ describe("shopping canonicalization behavior matrix", () => {
   })
 
   it("preserves ranges separately from arithmetic quantities", () => {
-    const [sugar] = generatedItems("1–2 tbsp sugar", "1 tbsp sugar")
+    const sugar = generatedItems("1–2 tbsp sugar", "1 tbsp sugar")
 
-    expect(sugar).toMatchObject({ amount: 1, unit: "1-2 tbsp" })
-    expect(sugar.additionalAmounts).toEqual([{ amount: 1, unit: "tbsp" }])
+    expect(sugar).toHaveLength(2)
+    expect(sugar[0]).toMatchObject({
+      amount: null,
+      unit: "tbsp",
+      exactQuantityV1: {
+        kind: "range",
+        start: { numerator: "1", denominator: "1" },
+        end: { numerator: "2", denominator: "1" },
+      },
+    })
+    expect(sugar[0].additionalAmounts).toBeUndefined()
+    expect(sugar[1]).toMatchObject({ amount: 1, unit: "tbsp" })
   })
 
   it.each([

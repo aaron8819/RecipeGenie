@@ -60,7 +60,11 @@ jobs:
       - name: Start Local Supabase
         run: supabase start
 
-      - name: Run Stage 2C Migration 011/012 Application Matrix
+      - name: Verify Migration 014 Preflight and Acceptance Parity
+        working-directory: web
+        run: npm run test:migration014-preflight-parity
+
+      - name: Run Stage 2C Migration 011/014 Application Matrix
         working-directory: web
         run: npm run test:stage2c-compatibility
 

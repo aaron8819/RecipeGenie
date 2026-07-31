@@ -1,17 +1,23 @@
 import type { Recipe, Ingredient } from '@/types/database';
 import { getFlatRecipeInstructions } from '@/lib/recipe-structure';
 import { getIngredientDisplayUnit } from '@/lib/ingredient-units';
+import {
+  getAuthoredYieldText,
+  resolveIngredientQuantity,
+} from '@/lib/recipe-quantity';
 
 /**
  * Convert an ingredient to a display string.
  * Uses originalText if available, otherwise reconstructs.
  */
 function ingredientToString(ing: Ingredient): string {
-  if (ing.originalText) return ing.originalText;
-
+  const resolved = resolveIngredientQuantity(ing);
   const parts: string[] = [];
-  if (ing.amount != null) parts.push(String(ing.amount));
-  const displayUnit = getIngredientDisplayUnit(ing.unit);
+  if (resolved.quantity) parts.push(resolved.quantity.authored);
+  else if (ing.amount != null) parts.push(String(ing.amount));
+  const displayUnit = getIngredientDisplayUnit(
+    resolved.authoredUnit || ing.unit
+  );
   if (displayUnit) parts.push(displayUnit);
   parts.push(ing.item);
   const base = parts.join(' ');
@@ -30,7 +36,10 @@ export function recipesToSchemaOrg(
     '@type': 'Recipe',
     name: recipe.name,
     recipeCategory: recipe.category,
-    recipeYield: `${recipe.servings} servings`,
+    recipeYield: getAuthoredYieldText(
+      recipe.yield_metadata,
+      recipe.servings
+    ),
     ...(recipe.image_url
       ? { image: recipe.image_url }
       : {}),
@@ -56,6 +65,12 @@ export function recipesToSchemaOrg(
         text: step,
       })
     ),
+    recipeGenieData: {
+      version: 1,
+      servings: recipe.servings,
+      yieldMetadata: recipe.yield_metadata ?? null,
+      ingredients: recipe.ingredients ?? [],
+    },
     dateCreated: recipe.created_at,
     dateModified: recipe.updated_at,
   }));

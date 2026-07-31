@@ -60,7 +60,7 @@ for (const contract of [
 }
 
 const mapper = read("src/lib/recipe-identity.ts")
-if (!/id: legacyId, recipe_uuid: id/.test(mapper)) {
+if (!/id:\s*legacyId,\s*recipe_uuid:\s*id/.test(mapper)) {
   failures.push("Recipe row mapper does not map recipe_uuid -> Recipe.id and id -> legacyId")
 }
 if (!/const id = assertRecipeUuid\(recipeUuid\)[\s\S]*return \{[\s\S]*\bid,[\s\S]*recipe_uuid: id/.test(mapper)) {

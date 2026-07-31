@@ -427,14 +427,14 @@ Legacy uses are classified as follows:
 | `resolve_recipe_identity` | UUID or explicit alias lookup | One measured alias parameter | No normal application caller | Old external references/admin migration support | Remove after zero alias lookups for the Stage 3 observation window |
 | `get_recipe_history_stats` | UUID result | None | Planner/history query | Unresolved historical rows excluded | Keep UUID result |
 
-### Migration 011/012 application compatibility bridge
+### Migration 011/014 application compatibility matrix
 
 Classification: Stage 2C application-ahead compatibility bridge.
 
 One application build supports both rollout states without reading migration
 history in the browser:
 
-| Path | Migration 011 | Migration 012 |
+| Path | Migration 011 | Migration 014 |
 | --- | --- | --- |
 | Recipe creation | Matching `id = recipe_uuid::text` pair | Same matching pair |
 | Recipe deletion | Exact missing-RPC response enables same-owner planner/template cleanup, authoritative contribution removal, then owner-scoped `recipe_uuid` table delete | `delete_recipe(uuid)` atomically detaches active references, removes contribution authority, and deletes the recipe; no table fallback |
@@ -449,6 +449,10 @@ attempts the UUID RPC first. Fallback requires `PGRST202` plus the exact
 `public.delete_recipe(p_recipe_uuid)` schema-cache message and parameter-search
 details. Permission, validation, not-found, timeout, network, foreign-key, and
 runtime failures propagate without fallback.
+
+The latest-schema side resets the complete migration chain through 014, so it
+exercises the migration-012 authority contract together with migrations 013
+and 014 rather than relabeling a migration-012 reset.
 
 ### Stage 2C deletion-integrity prerequisite
 

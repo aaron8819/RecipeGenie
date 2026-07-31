@@ -90,7 +90,7 @@ try {
   runSupabase(["db", "reset", "--local", "--no-seed"])
   refreshLocalGateway()
   restoredToLatest = true
-  runMatrix("012")
+  runMatrix("014")
 } finally {
   if (!restoredToLatest) {
     runSupabase(["db", "reset", "--local", "--no-seed"])
@@ -98,4 +98,4 @@ try {
   }
 }
 
-console.log("Stage 2C compatibility matrix passed for migrations 011 and 012.")
+console.log("Stage 2C compatibility matrix passed for migration 011 and latest migration 014.")

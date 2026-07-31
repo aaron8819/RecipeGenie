@@ -5,7 +5,7 @@ param(
     [switch]$PreflightOnly,
     [string]$PostgreSqlBinDirectory,
     [ValidateRange(1, 60)] [int]$ManagementApiTimeoutSeconds = 10,
-    [string]$MigrationPath = 'supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql'
+    [string]$MigrationPath = 'supabase/migrations/014_add_recipe_yield_metadata.sql'
 )
 
 Set-StrictMode -Version Latest

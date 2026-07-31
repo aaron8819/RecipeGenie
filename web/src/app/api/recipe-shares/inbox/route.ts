@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { recipeShareSnapshotForDisplay } from '@/lib/recipe-data-validation';
 
 export async function GET() {
   const supabase = await createClient();
@@ -27,7 +28,13 @@ export async function GET() {
     );
   }
 
-  const response = NextResponse.json(data || []);
+  const safeRows = (data || []).map((row) => ({
+    ...row,
+    source_recipe_snapshot: recipeShareSnapshotForDisplay(
+      row.source_recipe_snapshot
+    ),
+  }));
+  const response = NextResponse.json(safeRows);
   response.headers.set('Cache-Control', 'private, max-age=15');
   return response;
 }

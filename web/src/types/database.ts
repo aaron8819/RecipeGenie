@@ -14,10 +14,82 @@ export type CustomShoppingCategory = {
   order: number
 }
 
+export type RationalV1 = {
+  numerator: string
+  denominator: string
+}
+
+export type QuantitySourceV1 =
+  | "authored"
+  | "original-text"
+  | "legacy-synthesized"
+
+type QuantityBaseV1 = {
+  version: 1
+  authored: string
+  source: QuantitySourceV1
+  qualifier?: "about" | "approximately" | "around"
+}
+
+export type QuantityV1 =
+  | (QuantityBaseV1 & {
+      kind: "exact"
+      value: RationalV1
+      lexeme: string
+    })
+  | (QuantityBaseV1 & {
+      kind: "range"
+      start: RationalV1
+      end: RationalV1
+      startLexeme: string
+      endLexeme: string
+      separator: "-" | "–" | "—"
+    })
+  | (QuantityBaseV1 & {
+      kind: "qualitative"
+    })
+  | (QuantityBaseV1 & {
+      kind: "unparsed"
+      reason?: string
+    })
+
+export type PackageV1 = {
+  version: 1
+  count: QuantityV1
+  size: {
+    value: RationalV1
+    lexeme: string
+    unit: string
+    authoredUnit: string
+  }
+  type: string
+  authoredType: string
+}
+
+export type YieldKindV1 = "servings" | "portions" | "items" | "other"
+
+export type YieldMetadataV1 = {
+  version: 1
+  authoredText: string
+  kind: YieldKindV1
+  scalingBasis: RationalV1
+  value?: RationalV1
+  range?: {
+    start: RationalV1
+    end: RationalV1
+    startLexeme: string
+    endLexeme: string
+    separator: "-" | "–" | "—"
+  }
+}
+
 export type Ingredient = {
   item: string
   amount: number | string | null
   unit: string
+  quantityV1?: QuantityV1
+  authoredUnit?: string
+  packageV1?: PackageV1
   shoppingCategory?: string
   groupLabel?: string
   modifier?: string
@@ -35,6 +107,10 @@ export type ShoppingItem = {
   item: string
   amount: number | null
   unit: string
+  exactQuantityV1?: QuantityV1
+  exactPackageV1?: PackageV1
+  exactAuthoredUnit?: string
+  structuredSourceKey?: string
   categoryKey: string
   categoryOrder: number
   sources?: {
@@ -45,6 +121,10 @@ export type ShoppingItem = {
     originalAmount?: number | null
     originalUnit?: string | null
     originalText?: string
+    exactQuantityV1?: QuantityV1
+    exactPackageV1?: PackageV1
+    exactAuthoredUnit?: string
+    exactScaleV1?: RationalV1
     prepIntent?: string
     preparationModifiers?: string[]
     optional?: boolean
@@ -77,6 +157,7 @@ export type RecipeShareSnapshot = {
   total_time_minutes?: number | null
   notes?: string[] | null
   instruction_groups?: RecipeInstructionGroup[] | null
+  yield_metadata?: YieldMetadataV1 | null
 }
 
 export interface RecipeHistoryStats {
@@ -96,6 +177,7 @@ export type Recipe = Omit<
   | "prep_time_minutes"
   | "cook_time_minutes"
   | "total_time_minutes"
+  | "yield_metadata"
 > & {
   ingredients: Ingredient[]
   notes?: string[] | null
@@ -103,6 +185,7 @@ export type Recipe = Omit<
   prep_time_minutes?: number | null
   cook_time_minutes?: number | null
   total_time_minutes?: number | null
+  yield_metadata?: YieldMetadataV1 | null
   /** Canonical application identity. */
   id: string
   /** Immutable compatibility alias, never used as application identity. */
@@ -116,10 +199,12 @@ export type RecipeInsert = Omit<
   | "notes"
   | "instruction_groups"
   | "recipe_uuid"
+  | "yield_metadata"
 > & {
   ingredients?: Ingredient[]
   notes?: string[] | null
   instruction_groups?: RecipeInstructionGroup[] | null
+  yield_metadata?: YieldMetadataV1 | null
 }
 
 type RecipeUpdateBase = Database["public"]["Tables"]["recipes"]["Update"]
@@ -129,10 +214,12 @@ export type RecipeUpdate = Omit<
   | "notes"
   | "instruction_groups"
   | "recipe_uuid"
+  | "yield_metadata"
 > & {
   ingredients?: Ingredient[]
   notes?: string[] | null
   instruction_groups?: RecipeInstructionGroup[] | null
+  yield_metadata?: YieldMetadataV1 | null
 }
 
 export type PantryItem = Database["public"]["Tables"]["pantry_items"]["Row"]

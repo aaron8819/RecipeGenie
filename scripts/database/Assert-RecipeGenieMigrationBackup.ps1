@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory)] [string]$BackupDirectory,
     [Parameter(Mandatory)] [string]$ExpectedProjectReference,
     [ValidateRange(1, 525600)] [int]$MaximumAgeMinutes = 60,
-    [string]$MigrationPath = 'supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql',
+    [string]$MigrationPath = 'supabase/migrations/014_add_recipe_yield_metadata.sql',
     [switch]$RequireRestoreVerification,
     [switch]$RequireStorageBackup
 )

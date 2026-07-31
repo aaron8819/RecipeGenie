@@ -75,6 +75,7 @@ describe("recipe shopping contribution hooks", () => {
       await result.current.mutateAsync({
         recipeIds: ["recipe-a"],
         scale: 2,
+        scaleV1: { numerator: "2", denominator: "1" },
         idempotencyKey: "request-add-a",
       })
     })
@@ -86,6 +87,7 @@ describe("recipe shopping contribution hooks", () => {
         body: JSON.stringify({
           recipeIds: ["recipe-a"],
           scale: 2,
+          scaleV1: { numerator: "2", denominator: "1" },
           idempotencyKey: "request-add-a",
         }),
       })

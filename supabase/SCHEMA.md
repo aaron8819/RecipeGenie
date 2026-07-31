@@ -59,9 +59,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/011_fix_uuid_made_state_date_contract.sql`
 - `supabase/migrations/012_enforce_uuid_active_recipe_writes.sql`
 - `supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql`
+- `supabase/migrations/014_add_recipe_yield_metadata.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 13 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 14 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -76,6 +77,10 @@ Archived files are not replacement migrations and are not part of that chain.
   UUID linkage. No UUID is invented for a deleted or unresolved recipe.
 - Migration 013 preserves UUID authority when an existing shopping
   contribution is replaced without rewriting its unchanged identity pair.
+- Migration 014 adds versioned authored-yield metadata and hardens shared
+  snapshot acceptance with private, non-executable structured quantity,
+  package, rational, unit, and yield validators while preserving the numeric
+  servings projection.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -467,12 +472,14 @@ All tables use the same pattern: users can only access rows where `auth.uid() = 
 - **recipe_shares**:
   - `users_own_recipe_shares_select` - Sender or recipient can read share rows
   - `users_create_recipe_shares` - Sender can insert rows with `sender_user_id = auth.uid()`
-  - `recipients_respond_recipe_shares` - Recipient can move `pending` → `accepted/declined`
+  - `recipients_respond_recipe_shares` - Recipient can move `pending` → `declined`
   - `senders_cancel_recipe_shares` - Sender can move `pending` → `canceled`
 
 Ordinary user-owned table policies use owner checks equivalent to
 `auth.uid() = user_id`. Shares use sender/recipient-specific policies, and
-contribution writes are intentionally restricted to RPC execution.
+contribution writes are intentionally restricted to RPC execution. Authenticated
+table updates on shares are limited to `status` and `responded_at`; accepted
+state and acceptance metadata can only be written by `accept_recipe_share()`.
 
 ## Functions
 
@@ -518,7 +525,11 @@ marks the share as accepted. Function is idempotent and returns the canonical
 `accepted_recipe_uuid` if called again after acceptance.
 
 The accepted snapshot now includes recipe times, notes, and `instruction_groups`
-alongside the legacy flat `instructions` payload.
+alongside the legacy flat `instructions` payload. The validator accepts the
+explicitly supported legacy `{}` snapshot and applies database-owned defaults;
+all nonempty snapshots require the complete current field set. The
+security-definer function validates, creates the recipe, and writes accepted
+state and metadata in one transaction.
 
 **Parameters:**
 - `p_share_id` (UUID) - Share request ID
@@ -691,11 +702,12 @@ The repository now uses a baseline-first bootstrap strategy:
 11. **011_fix_uuid_made_state_date_contract.sql** - Replaced the defective UUID/text made-state RPC with the canonical UUID/date command and retained the authenticated legacy overload.
 12. **012_enforce_uuid_active_recipe_writes.sql** - Required UUID authority for active recipe writes, derived compatibility mirrors, and added UUID-coordinated recipe deletion.
 13. **013_allow_uuid_shopping_contribution_replacement.sql** - Preserved UUID authority for content-only replacement of an existing contribution identity pair.
+14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and deep, atomic shared-snapshot validation for all copied recipe fields, including bounded instruction groups and images, exact quantities, ranges, packages, units, and yield metadata. Private validators are execution-revoked and the authenticated acceptance RPC rejects the whole snapshot before any recipient recipe or share-state mutation.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through 013. The archived pre-baseline sequence is not replayed.
+  migration through 014. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -812,7 +824,9 @@ This section is the operational runbook for schema changes in this repository. I
 4. Regenerate local types from the local schema.
    From `web/`, run `npm run db:types:regen`.
 5. Preflight the linked remote before pushing.
-   From `web/`, run `npm run db:preflight`.
+   From `web/`, run `npm run db:preflight`. For a separately reviewed
+   single-migration rollout, pass the exact pending tail explicitly, for
+   example `npm run db:preflight -- --expected-pending 014`.
 6. Push to the intentionally linked remote project.
    Run `npx supabase --workdir .. db push`.
 7. Regenerate types from the linked remote after a successful push.
@@ -824,8 +838,22 @@ This section is the operational runbook for schema changes in this repository. I
 
 - Run `cd web && npm run db:preflight`.
 - Confirm the linked project/environment is the one you intend to change.
-- Review `supabase migration list` output and verify local and remote entries line up row-for-row.
-- Stop if a migration exists only locally, only remotely, or the IDs differ between columns.
+- Review `supabase migration list` output and verify local and remote entries
+  line up row-for-row. Preflight also verifies every active local SQL file
+  against the reviewed `supabase/migration-checksums.json` registry. This
+  registry is a local-file integrity guard only. `supabase migration list`
+  provides version alignment, not remote checksums, names, or statement
+  metadata, so `db:preflight` does not claim to verify those remote fields.
+- Stop if a migration exists only locally, only remotely, or the IDs differ
+  between columns. The only exception is an explicitly supplied
+  `--expected-pending VERSION` that identifies exactly one known local tail
+  migration.
+- Treat a missing, malformed, duplicate, unknown, non-tail, or mismatched
+  expected-pending value as invalid configuration, not permission to proceed.
+- Supply the exception only as an explicit current-command argv option:
+  `npm run db:preflight -- --expected-pending VERSION`. Environment variables,
+  `.npmrc`, npm configuration, package configuration, and positional values do
+  not authorize a pending migration.
 - Stop if you do not understand why the migration list differs.
 - Treat `supabase db push` as unsafe until the history mismatch is explained.
 
@@ -842,7 +870,7 @@ Common drift signals:
 
 Concrete examples of when to stop and investigate:
 
-- The repository's tracked `001`-`013` chain and remote ledger do not align
+- The repository's tracked `001`-`014` chain and remote ledger do not align
   row-for-row after accounting for the documented baseline squash.
 - A teammate added a migration locally and you have not pulled it yet.
 - You are linked to the wrong Supabase project or environment.
@@ -888,6 +916,19 @@ This updates migration bookkeeping. It does not apply missing SQL by itself.
 
 If the reason for drift is not clear, stop. Investigate the schema state and migration history instead of rewriting the ledger.
 `db:preflight` helps detect ledger drift, but it does not prove the remote schema contents are equivalent.
+Its expected-pending option is a narrow ledger/readiness assertion and never
+grants migration authorization.
+
+The migration-specific `Backup-RecipeGenieProduction.ps1 -PreflightOnly`
+workflow independently queries the connected ledger for the exact expected
+version set and runs the commit-bound, read-only SQL preflight against remote
+schema and data invariants. Neither that workflow nor `db:preflight` compares a
+remote checksum to the local SQL file or treats remote name/statement metadata
+as a file-integrity proof.
+
+`supabase/migration-checksums.json` must exactly cover the active migration
+directory. Add a reviewed checksum entry with each new migration; never update
+an existing entry merely to make preflight pass.
 
 ### Post-Migration Checklist
 
@@ -901,7 +942,9 @@ If the reason for drift is not clear, stop. Investigate the schema state and mig
 ### Command Reference
 
 - Local rebuild: `npx supabase start` then `npx supabase db reset --local`
-- Preflight linked remote: `cd web && npm run db:preflight`
+- Preflight aligned linked remote: `cd web && npm run db:preflight`
+- Preflight one reviewed pending tail migration:
+  `cd web && npm run db:preflight -- --expected-pending <version>`
 - Push linked remote: `npx supabase --workdir .. db push`
 - Generate local types: `cd web && npm run db:types:regen`
 - Generate linked remote types: `cd web && npm run db:types:regen:linked`
@@ -913,7 +956,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 013, and the
+instructions. The current authoritative chain ends at migration 014, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

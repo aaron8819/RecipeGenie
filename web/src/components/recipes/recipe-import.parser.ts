@@ -77,6 +77,7 @@ export function toParsedRecipeImport(result: ExtractedRecipe): ParsedRecipe {
     ingredients: result.ingredients,
     instructions: result.instructions,
     servings: result.servings,
+    yieldMetadata: result.yieldMetadata,
     warnings: result.warnings,
   }
 }

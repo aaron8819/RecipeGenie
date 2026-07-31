@@ -2,6 +2,7 @@ import React from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { ShoppingItem } from "@/types/database"
+import { normalizeShoppingItem } from "@/lib/recipe-data-validation"
 import {
   formatAdditionalAmountParts,
   formatAmountPart,
@@ -418,6 +419,68 @@ describe("shopping amount formatting", () => {
     expect(
       formatShoppingItemAmount(item({ amount: 0.5, unit: "0.5-1 tsp" }))
     ).toBe("0.5–1 tsp")
+  })
+
+  it("formats exact scaled ranges and packages from structured metadata", () => {
+    expect(
+      formatShoppingItemAmount(
+        item({
+          amount: null,
+          unit: "can (14 oz)",
+          exactQuantityV1: {
+            version: 1,
+            kind: "range",
+            authored: "3/2–3",
+            source: "authored",
+            start: { numerator: "3", denominator: "2" },
+            end: { numerator: "3", denominator: "1" },
+            startLexeme: "3/2",
+            endLexeme: "3",
+            separator: "–",
+          },
+          exactAuthoredUnit: "(14 oz) cans",
+          exactPackageV1: {
+            version: 1,
+            count: {
+              version: 1,
+              kind: "range",
+              authored: "3/2–3",
+              source: "authored",
+              start: { numerator: "3", denominator: "2" },
+              end: { numerator: "3", denominator: "1" },
+              startLexeme: "3/2",
+              endLexeme: "3",
+              separator: "–",
+            },
+            size: {
+              value: { numerator: "14", denominator: "1" },
+              lexeme: "14",
+              unit: "oz",
+              authoredUnit: "oz",
+            },
+            type: "can",
+            authoredType: "cans",
+          },
+        })
+      )
+    ).toBe("1½–3 14 oz cans")
+  })
+
+  it("renders the compatibility unit after hydration strips contradictory metadata", () => {
+    const hydrated = normalizeShoppingItem({
+      ...item({ amount: 1, unit: "cup" }),
+      exactQuantityV1: {
+        version: 1,
+        kind: "exact",
+        authored: "1",
+        source: "authored",
+        value: { numerator: "1", denominator: "1" },
+        lexeme: "1",
+      },
+      exactAuthoredUnit: "lb",
+    })
+    expect(hydrated).not.toBeNull()
+    expect(formatShoppingItemAmount(hydrated!)).toBe("1 cup")
   })
 
   it("formats additional amounts independently from the primary amount", () => {

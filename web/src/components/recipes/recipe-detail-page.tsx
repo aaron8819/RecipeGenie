@@ -59,18 +59,25 @@ import {
   returnFromRecipeDetail,
   type RecipeDetailSource,
 } from "@/lib/recipe-detail-navigation"
-import { parseIngredientAmountInput } from "@/lib/recipe-parser"
-import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
+import {
+  assertRecipeScalingFeasible,
+  formatRecipeQuantity,
+  getAuthoredYieldText,
+  getScalingBasis,
+  getSelectedYieldText,
+  selectedYieldRatio,
+} from "@/lib/recipe-quantity"
+export { scaleIngredientAmount } from "@/lib/recipe-quantity"
 import { getRecipeStatsMap } from "@/lib/recipe-history-stats"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import { getTagClassName } from "@/lib/tag-colors"
 import { useAuthContext } from "@/lib/auth-context"
 import { persistHomeTab } from "@/lib/home-navigation"
-import { cn, getErrorMessage, toFraction } from "@/lib/utils"
+import { cn, getErrorMessage } from "@/lib/utils"
 import type { HomeTab } from "@/app/home-tab-state"
 import { isValidHomeTab } from "@/app/home-tab-state"
-import type { Ingredient, Recipe } from "@/types/database"
+import type { Recipe } from "@/types/database"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
 import { RecipeDialog } from "./recipe-dialog"
 import { ShareRecipeDialog } from "./share-recipe-dialog"
@@ -96,7 +103,7 @@ interface RecipeDetailContentProps {
   onFavorite: () => void
   onMarkMade: () => void
   onAddToPlan: () => void
-  onAddToShopping: () => void
+  onAddToShopping: (selectedYield: number) => void
   onShare: () => void
   isDeleting?: boolean
   isFavoritePending?: boolean
@@ -104,61 +111,10 @@ interface RecipeDetailContentProps {
   isAddingToShopping?: boolean
 }
 
-const UNICODE_QUANTITY_FRACTIONS = "½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞"
-const QUANTITY_ENDPOINT = String.raw`(?:\d+\s+\d+\/\d+|\d+[${UNICODE_QUANTITY_FRACTIONS}]|[${UNICODE_QUANTITY_FRACTIONS}]|\d+\/\d+|\d+(?:\.\d+)?)`
-const SCALABLE_QUANTITY_PATTERN = new RegExp(
-  String.raw`^(\s*(?:(?:about|approx\.?|approximately|around)\s+)?)(${QUANTITY_ENDPOINT})(?:(\s*[-–—]\s*)(${QUANTITY_ENDPOINT}))?([^\d/${UNICODE_QUANTITY_FRACTIONS}–—-]*)$`,
-  "i"
-)
-
 const RECIPE_RETURN_LABELS: Record<RecipeDetailSource, string> = {
   planner: "Back to planner",
   recipes: "Back to recipes",
   shopping: "Back to shopping",
-}
-
-function scaleQuantityEndpoint(endpoint: string, scale: number): string | null {
-  const fraction = endpoint.match(/\/(\d+)$/)
-  if (fraction && Number(fraction[1]) === 0) return null
-
-  const parsed = parseIngredientAmountInput(endpoint)
-  if (typeof parsed !== "number" || !Number.isFinite(parsed)) return null
-
-  const scaled = Math.round(parsed * scale * 10_000) / 10_000
-  return toFraction(scaled)
-}
-
-export function scaleIngredientAmount(
-  amount: Ingredient["amount"],
-  originalServings: number,
-  selectedServings: number
-): Ingredient["amount"] {
-  if (originalServings <= 0) return amount
-
-  const scale = selectedServings / originalServings
-
-  if (typeof amount === "string") {
-    const quantity = amount.match(SCALABLE_QUANTITY_PATTERN)
-    if (!quantity) return amount
-
-    const start = scaleQuantityEndpoint(quantity[2], scale)
-    if (start == null) return amount
-
-    if (!quantity[4]) {
-      return `${quantity[1]}${start}${quantity[5]}`
-    }
-
-    const end = scaleQuantityEndpoint(quantity[4], scale)
-    if (end == null) return amount
-
-    return `${quantity[1]}${start}${quantity[3]}${end}${quantity[5]}`
-  }
-
-  if (typeof amount !== "number") return amount
-
-  return Math.round(
-    amount * scale * 10_000
-  ) / 10_000
 }
 
 function RecipeDetailState({
@@ -234,7 +190,34 @@ export function RecipeDetailContent({
   isMarkingMade = false,
   isAddingToShopping = false,
 }: RecipeDetailContentProps) {
-  const [servings, setServings] = useState(recipe.servings)
+  const scalingBasis = getScalingBasis(recipe.yield_metadata, recipe.servings)
+  const [servings, setServings] = useState(scalingBasis)
+  const [scaleError, setScaleError] = useState<string | null>(null)
+  const isOriginalYield = servings === scalingBasis
+  const authoredYield = getAuthoredYieldText(
+    recipe.yield_metadata,
+    recipe.servings
+  )
+  const selectedYieldLabel = getSelectedYieldText(
+    recipe.yield_metadata,
+    recipe.servings,
+    servings
+  )
+  const selectYield = (nextYield: number) => {
+    try {
+      assertRecipeScalingFeasible(
+        recipe.ingredients || [],
+        scalingBasis,
+        nextYield
+      )
+      setServings(nextYield)
+      setScaleError(null)
+    } catch (error) {
+      setScaleError(
+        getErrorMessage(error, "The selected yield cannot be scaled safely")
+      )
+    }
+  }
 
   const handleSectionNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
@@ -344,7 +327,7 @@ export function RecipeDetailContent({
           <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-stone-600">
             <span className="inline-flex items-center gap-1.5">
               <Users className="h-4 w-4 text-secondary" aria-hidden="true" />
-              {servings} {servings === 1 ? "serving" : "servings"}
+              {selectedYieldLabel}
             </span>
             {timesMade > 0 ? (
               <span className="inline-flex items-center gap-1.5">
@@ -434,7 +417,7 @@ export function RecipeDetailContent({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={onAddToShopping}
+              onClick={() => onAddToShopping(servings)}
               disabled={isAddingToShopping}
               className="min-h-11 rounded-full px-3 text-stone-600"
               aria-label="Add to Shopping List"
@@ -518,37 +501,56 @@ export function RecipeDetailContent({
             </div>
             <div
               className="recipe-detail-print-hidden flex items-center rounded-full border border-stone-200 bg-white p-1"
-              aria-label="Adjust servings"
+              aria-label="Adjust yield"
             >
               <button
                 type="button"
-                onClick={() => setServings((value) => Math.max(1, value - 1))}
+                onClick={() => selectYield(Math.max(1, servings - 1))}
                 disabled={servings <= 1}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 disabled:opacity-35"
-                aria-label="Decrease servings"
+                aria-label="Decrease yield"
               >
                 <Minus className="h-4 w-4" />
               </button>
               <span
-                className="min-w-16 px-1 text-center text-sm font-semibold tabular-nums"
+                className="min-w-20 px-1 text-center text-sm font-semibold tabular-nums"
                 aria-live="polite"
               >
-                {servings} servings
+                {selectedYieldLabel}
               </span>
               <button
                 type="button"
-                onClick={() => setServings((value) => Math.min(99, value + 1))}
+                onClick={() => selectYield(Math.min(99, servings + 1))}
                 disabled={servings >= 99}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 disabled:opacity-35"
-                aria-label="Increase servings"
+                aria-label="Increase yield"
               >
                 <Plus className="h-4 w-4" />
               </button>
             </div>
+            {!isOriginalYield ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => selectYield(scalingBasis)}
+                className="recipe-detail-print-hidden h-9 rounded-full px-3 text-xs text-stone-500"
+              >
+                Reset to {authoredYield}
+              </Button>
+            ) : null}
             <span className="recipe-detail-print-only hidden text-sm text-stone-500">
-              {servings} servings
+              {selectedYieldLabel}
             </span>
           </div>
+          {scaleError ? (
+            <p
+              className="recipe-detail-print-hidden mt-2 text-sm text-destructive"
+              role="alert"
+            >
+              {scaleError}
+            </p>
+          ) : null}
 
           {ingredientGroups.length > 0 ? (
             <div className="space-y-7">
@@ -564,22 +566,11 @@ export function RecipeDetailContent({
                   ) : null}
                   <ul className="space-y-3">
                     {group.ingredients.map((ingredient, index) => {
-                      const scaledAmount = scaleIngredientAmount(
-                        ingredient.amount,
-                        recipe.servings,
+                      const formattedQuantity = formatRecipeQuantity(
+                        ingredient,
+                        scalingBasis,
                         servings
                       )
-                      const displayUnit = getIngredientDisplayUnit(ingredient.unit)
-                      const displayAmount =
-                        typeof scaledAmount === "string"
-                          ? scaledAmount
-                          : toFraction(scaledAmount)
-                      const quantityText =
-                        scaledAmount != null
-                          ? `${displayAmount}${
-                              displayUnit ? ` ${displayUnit}` : ""
-                            }`
-                          : "As needed"
 
                       return (
                         <li
@@ -587,7 +578,12 @@ export function RecipeDetailContent({
                           className="grid grid-cols-[minmax(4.25rem,auto)_1fr] items-start gap-x-3 border-b border-stone-100 pb-3 text-stone-700 last:border-b-0"
                         >
                           <span className="pt-0.5 text-right text-sm tabular-nums text-stone-500">
-                            {quantityText}
+                            {formattedQuantity.text}
+                            {formattedQuantity.hardToMeasure ? (
+                              <span className="block text-[10px] text-amber-700">
+                                hard to measure
+                              </span>
+                            ) : null}
                           </span>
                           <span className="min-w-0 text-sm font-semibold leading-6 text-stone-900">
                             {ingredient.item}
@@ -812,14 +808,19 @@ export function RecipeDetailPage({
     }
   }
 
-  const handleAddToShopping = async () => {
+  const handleAddToShopping = async (selectedYield: number) => {
     const recipe = recipeQuery.data
     if (!recipe) return
 
     try {
+      const scalingBasis = getScalingBasis(
+        recipe.yield_metadata,
+        recipe.servings
+      )
       const result = await addToShopping.mutateAsync({
         recipeIds: [recipe.id],
-        scale: 1,
+        scale: selectedYield / scalingBasis,
+        scaleV1: selectedYieldRatio(selectedYield, scalingBasis),
       })
       showToast({
         message: formatShoppingAddMessage(result, {
@@ -921,7 +922,9 @@ export function RecipeDetailPage({
             onFavorite={() => void handleFavorite()}
             onMarkMade={() => void handleMarkMade()}
             onAddToPlan={() => setIsAddToPlanOpen(true)}
-            onAddToShopping={() => void handleAddToShopping()}
+            onAddToShopping={(selectedYield) =>
+              void handleAddToShopping(selectedYield)
+            }
             onShare={() => setIsShareOpen(true)}
             isDeleting={deleteRecipe.isPending}
             isFavoritePending={toggleFavorite.isPending}

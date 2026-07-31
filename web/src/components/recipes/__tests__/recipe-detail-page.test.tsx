@@ -146,7 +146,7 @@ describe("RecipeDetailContent", () => {
     const originalRecipe = structuredClone(recipe)
 
     expect(scaleIngredientAmount(ingredient.amount, 4, 8)).toBe(
-      "about 2 cup"
+      "about 2 cups"
     )
     expect(ingredient).toEqual(originalIngredient)
     expect(group).toEqual(originalGroup)
@@ -219,15 +219,64 @@ describe("RecipeDetailContent", () => {
     renderDetail(recipe)
 
     for (let index = 0; index < 4; index += 1) {
-      fireEvent.click(screen.getByRole("button", { name: "Increase servings" }))
+      fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
     }
 
     expect(screen.getAllByText("8 servings").length).toBeGreaterThan(0)
-    expect(screen.getByText("about 1–2 cup")).toBeInTheDocument()
-    expect(screen.getByText("1 - 3 tsp")).toBeInTheDocument()
-    expect(screen.getByText("4 cup")).toBeInTheDocument()
+    expect(screen.getByText("about 1–2 cups")).toBeInTheDocument()
+    expect(screen.getByText("1-3 tsp")).toBeInTheDocument()
+    expect(screen.getByText("4 cups")).toBeInTheDocument()
     expect(screen.getByText("to taste")).toBeInTheDocument()
     expect(recipe).toEqual(originalRecipe)
+  })
+
+  it("keeps the selected yield unchanged after repeated overflow attempts", () => {
+    renderDetail(makeRecipe({
+      servings: 1,
+      ingredients: [
+        { item: "Flour", amount: 100000000, unit: "cup" },
+      ],
+    }))
+
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+
+    expect(screen.getAllByText("1 serving").length).toBeGreaterThan(0)
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Selected yield makes an ingredient quantity too large"
+    )
+    expect(screen.getByText("100000000 cups")).toBeInTheDocument()
+  })
+
+  it("renders the approved taco quantities exactly at three servings", () => {
+    renderDetail(makeRecipe({
+      ingredients: [
+        { item: "ground beef", amount: 1, unit: "lb" },
+        { item: "chili powder", amount: 1, unit: "tsp" },
+        { item: "smoked paprika", amount: 0.5, unit: "tsp", originalText: "½ tsp smoked paprika" },
+        { item: "water", amount: 0.25, unit: "cup", originalText: "¼ cup water" },
+        { item: "greens", amount: 6, unit: "cup" },
+        { item: "tomatoes", amount: 1, unit: "cup" },
+        { item: "onion", amount: 0.25, unit: "cup", originalText: "¼ cup onion" },
+        { item: "avocado", amount: 1, unit: "count" },
+      ],
+    }))
+
+    fireEvent.click(screen.getByRole("button", { name: "Decrease yield" }))
+
+    for (const quantity of [
+      "¾ lb",
+      "¾ tsp",
+      "⅜ tsp",
+      "3 tbsp",
+      "4½ cups",
+      "¾ cup",
+      "¾",
+    ]) {
+      expect(screen.getAllByText(quantity).length).toBeGreaterThan(0)
+    }
+    expect(screen.getAllByText("3 tbsp")).toHaveLength(2)
+    expect(screen.getAllByText("3 servings").length).toBeGreaterThan(0)
   })
 
   it("scales recognized ranges and preserves unsupported or missing amounts", () => {
@@ -239,7 +288,7 @@ describe("RecipeDetailContent", () => {
       ],
     }))
 
-    fireEvent.click(screen.getByRole("button", { name: "Increase servings" }))
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
 
     expect(screen.getByText("2½-3¾")).toBeInTheDocument()
     expect(screen.getByText("a pinch")).toBeInTheDocument()

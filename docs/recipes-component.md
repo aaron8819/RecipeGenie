@@ -28,9 +28,10 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   - mark made
   - share/edit/delete
   - serving adjustment and print
-- Serving adjustment scales displayed numeric quantities locally and never
-  mutates the stored recipe. Recipe detail does not have ingredient checklist
-  or completion state.
+- Yield adjustment scales displayed quantities locally with exact rational
+  arithmetic and never mutates the stored recipe. The selected yield is also
+  used when adding that recipe to Shopping. Recipe detail does not have an
+  ingredient checklist or completion state.
 - The recipe image storage boundary is now explicit:
   - `getRecipeImageUrl()` is a pure helper.
   - Upload/delete behavior goes through `useRecipeImageStorage()`.
@@ -52,6 +53,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/hooks/use-recipe-shares.ts` | Share lifecycle data access and mutations. |
 | `web/src/hooks/use-recipe-image-storage.ts` | Upload/delete boundary for Supabase-backed recipe image storage. |
 | `web/src/lib/recipe-parser.ts` | Plain-text recipe parsing. |
+| `web/src/lib/recipe-quantity.ts` | Canonical exact quantity/yield parsing, legacy adaptation, scaling, and display formatting. |
 | `web/src/lib/recipe-structure.ts` | Compatibility helpers for notes, grouped instructions, and flat/grouped rendering. |
 | `web/src/lib/recipe-url-parser.ts` | Server-side URL fetch and recipe extraction. |
 | `web/src/lib/supabase/storage.ts` | Storage helpers including pure `getRecipeImageUrl()`. |
@@ -118,10 +120,14 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   recipe form's existing fallback. Paste-to-replace continues to preserve the
   current recipe category.
   Markdown ingredient groups are persisted through each ingredient's
-  `groupLabel`; Markdown notes use the existing first-class notes array. Because
-  the recipe schema stores one integer serving count, a Markdown servings range
-  is shown losslessly in preview and saved using its lower bound with a parser
-  warning.
+  `groupLabel`; Markdown notes use the existing first-class notes array.
+- Imported and manually entered quantities preserve an additive `quantityV1`
+  exact/range/qualitative representation, authored unit, and fixed-package
+  metadata alongside the legacy amount/unit fields. Existing rows are adapted
+  at read time; there is no ingredient JSON rewrite migration.
+- Authored yields such as `4 servings`, `4–5 servings`, `12 cookies`, and
+  `about 1 loaf` are preserved in nullable `yield_metadata`. The legacy integer
+  `servings` column remains the compatibility scaling basis.
 - URL import remains server-side because it needs SSRF protection, rate limiting, and HTML/JSON-LD extraction.
 - Below the desktop breakpoint, pasted-text import uses a compact input phase followed by a full-height sectioned review inside the same create dialog. The raw source, latest parsed candidate, and canonical editable draft have separate ownership; returning to the source preserves draft corrections, and applying changed source requires confirmation when the draft was corrected.
 - Mobile import review reuses the Details, Ingredients, and Instructions section bodies with a sticky Back/Save footer. Desktop keeps the two-column paste preview and stacked create form.
@@ -133,7 +139,42 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - Share acceptance creates a recipient-owned copy from the snapshot payload.
 - Sharing is not a live-sync relationship between users.
-- Share snapshots now include recipe times, notes, and grouped instructions.
+- Share snapshots now include recipe times, notes, grouped instructions, yield
+  metadata, and structured ingredient quantities.
+
+### Quantity and yield compatibility
+
+- `recipe-quantity.ts` is the only scaling and quantity-formatting authority.
+  Detail, Shopping, import, manual entry, and export must use it rather than
+  converting through floating-point ingredient amounts.
+- Valid structured quantity data wins. Legacy `amount`/`unit` and
+  `originalText` are adapted only when structured data is absent or invalid.
+- Display formatting is contextual: common kitchen units may convert to a more
+  readable exact unit, fixed packages retain their package wording, and
+  genuinely impractical quantities receive an approximation or
+  hard-to-measure cue.
+- Export keeps broad schema.org compatibility and includes a Recipe Genie
+  extension so a Recipe Genie export/import round trip retains structured
+  quantities and yield metadata.
+- URL import consumes structured Recipe Genie extension fields only when the
+  complete envelope is a non-array object with numeric `version: 1`, valid
+  structured ingredients, and valid yield metadata. Extra properties are
+  ignored for forward compatibility. Missing, malformed, or unsupported
+  versions or fields reject the extension atomically; import falls back to
+  standard schema.org fields without producing a structured/standard hybrid.
+- Edit hydration presents a valid structured quantity's authored text in the
+  amount control. Saving continues to emit the normalized legacy amount/unit
+  projection alongside unchanged authored metadata, while a deliberate amount
+  edit rebuilds the affected quantity and invalidates stale original text.
+- Package amount and unit edits rebuild count, qualifier, fixed size, canonical
+  size unit, and package type together. An edit that no longer describes a
+  package deliberately drops package metadata and becomes a coherent ordinary
+  ingredient; stale `originalText` cannot overwrite the edit.
+- Yield selection is prevalidated across the whole recipe. If any exact,
+  ranged, or package-count quantity would exceed the persisted bound, the
+  selected yield remains unchanged and Detail shows a bounded error. Shopping
+  returns the same controlled error before generating or persisting any
+  replacement contribution.
 
 ### Recipe structure compatibility
 
@@ -175,4 +216,4 @@ part of the fast general `npm run verify` command.
 The local inspection suite covers mobile import state transitions at 360x800,
 390x844, 430x932, and 390x420, plus the preserved desktop flow at 1200x800.
 
-Last updated: 2026-07-27
+Last updated: 2026-07-29

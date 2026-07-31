@@ -2,12 +2,12 @@
 
 This directory provides a small PostgreSQL logical-backup gate. It creates one ownership-neutral custom archive, validates its table of contents, records SHA-256 and size, and keeps dump, archive validation, restore verification, Storage backup, and migration authorization as separate states. Every entry point requires PowerShell Core 7.4 or later; Windows PowerShell 5.1 is rejected.
 
-## Repository findings (2026-07-18)
+## Repository findings (2026-07-29)
 
 - The app uses @supabase/supabase-js and @supabase/ssr. Supabase SQL files under supabase/migrations are the migration source, and supabase_migrations.schema_migrations is the authoritative remote ledger.
 - The linked repository project reference is eyaoahwzixqetjgfghsh. Treat this repository value as configuration evidence only; the backup command still requires an explicit expected reference.
-- Migration 013_allow_uuid_shopping_contribution_replacement.sql exists at the authorized application commit. Backup evidence hashes the exact Git blob at the executing commit and uses Git's clean-filter comparison to reject worktree drift without treating a platform-specific CRLF checkout as different source content.
-- The migration-013 production pre-state is ledger versions exactly 001 through 012, with 013 and every unexpected version absent. This document records the required contract; it is not a fresh production observation.
+- Migration 014_add_recipe_yield_metadata.sql is the current backup-gate default. Backup evidence hashes the exact Git blob at the executing commit and uses Git's clean-filter comparison to reject worktree drift without treating a platform-specific CRLF checkout as different source content.
+- The migration-014 production pre-state is ledger versions exactly 001 through 013, with 014 and every unexpected version absent. This document records the required contract; it is not a fresh production observation.
 - Migration 012 changes active-write authority: it requires UUID recipe creation, makes planner/template/history/share/shopping synchronization UUID-authoritative, restricts legacy RPC/table privileges, replaces active shopping and deletion paths, adds triggers/functions and a compatibility-use counter, and tightens catalog/data invariants. It is provisionally elevated risk and must not be downgraded without explicit human review.
 - The current remote schema command is npx supabase --workdir .. db push from web, preceded by npm run db:preflight. Vercel has no repository migration hook and deployment does not automatically apply SQL migrations. CI starts/resets a local Supabase stack only.
 - Existing database tooling includes the pinned Supabase CLI, local reset/pgTAP workflow, db-preflight, generated-type checks, Stage 2A/2C audits, and active-planner audit. PowerShell is used for operator work, but the existing checked-in database scripts are mainly SQL/Node.
@@ -30,7 +30,7 @@ Never paste the database URL or Management API token into chat, a command argume
 
 The token is required because database-schema evidence alone cannot identify a Supabase project. Before any database connection or output directory is created, the script makes exactly one TLS Management API metadata read to `GET /v1/projects/{expected-ref}`. It requires an exact returned `ref`, `ACTIVE_HEALTHY` status, a present and internally consistent `database.host`, and endpoint compatibility. API errors, timeouts, malformed or duplicate JSON fields, redirects, missing fields, inactive status, and contradictions fail closed; Management API unavailability is never downgraded to a warning. The token is sent only in the Authorization header, is never a child-process argument, and is included in in-memory redaction inputs. No full response, token, database URL, or raw credential-bearing username is recorded in the manifest or summary.
 
-The checkout must also have been linked independently with the Supabase CLI. The script reads `supabase/.temp/project-ref` and requires both it and `RECIPE_GENIE_PRODUCTION_PROJECT_REF` to equal `eyaoahwzixqetjgfghsh`. The separate read-only database probe requires `current_database() = postgres`, the permitted current-user policy, a server version, `public.recipes`, `public.pantry_items`, `public.user_config`, and the definition-specific exact migration ledger. Migration 013 requires `001` through `012`; migration 012 remains supported and requires `001` through `011`. Missing or contradictory local or control-plane evidence fails closed; connected schema/ledger disagreement stops before `pg_dump`.
+The checkout must also have been linked independently with the Supabase CLI. The script reads `supabase/.temp/project-ref` and requires both it and `RECIPE_GENIE_PRODUCTION_PROJECT_REF` to equal `eyaoahwzixqetjgfghsh`. The separate read-only database probe requires `current_database() = postgres`, the permitted current-user policy, a server version, `public.recipes`, `public.pantry_items`, `public.user_config`, and the definition-specific exact migration ledger. Migration 014 requires `001` through `013`; migrations 012 and 013 remain supported with their exact earlier ledgers. Missing or contradictory local or control-plane evidence fails closed; connected schema/ledger disagreement stops before `pg_dump`.
 
 In Supabase Dashboard, obtain the project reference from Project Settings / General, the direct connection string from Connect / Direct connection, and the database password from the project database credentials (reset it if it is not available). Check the server major version in Dashboard or with the documented read-only select version() query. The repository local major is 17, but the script queries the connected server and requires matching pg_dump major version.
 
@@ -44,7 +44,7 @@ Recommended external root:
 
     C:\Users\<user>\RecipeGenieBackups
 
-Run the migration-013 identity and SQL preflight without creating a backup:
+Run the migration-014 identity and SQL preflight without creating a backup:
 
     pwsh -File .\scripts\database\Backup-RecipeGenieProduction.ps1 -DestinationRoot 'C:\Users\<user>\RecipeGenieBackups' -PreflightOnly
 
@@ -66,7 +66,7 @@ Routine gate:
 
     pwsh -File .\scripts\database\Assert-RecipeGenieMigrationBackup.ps1 -BackupDirectory '<backup-directory>' -ExpectedProjectReference '<project-ref>'
 
-Elevated/high-risk gate, including migrations 012 and 013:
+Elevated/high-risk gate, including migrations 012, 013, and 014:
 
     pwsh -File .\scripts\database\Assert-RecipeGenieMigrationBackup.ps1 -BackupDirectory '<backup-directory>' -ExpectedProjectReference '<project-ref>' -RequireRestoreVerification
 
@@ -76,10 +76,19 @@ Storage-sensitive gate:
 
 After backup assertion and the migration-specific read-only preflight pass, stop for explicit owner authorization. Only then, in a separate command/authorization, run from web:
 
-    npm run db:preflight
+    npm run db:preflight -- --expected-pending 014
     npx supabase --workdir .. db push
 
-The assertion scripts never generate or invoke those commands.
+The migration-014 rollout must name `014` as the sole expected pending tail
+migration. Omitting the option continues to reject every local-only migration;
+an unknown, non-tail, multiple, altered, or otherwise mismatched pending set
+fails closed. Only the explicit argv option in the command shown above is
+accepted; npm configuration, environment variables, `.npmrc`, package
+configuration, and positional values cannot supply the exception. The command
+compares row-aligned local/remote versions and verifies local files against the
+repository checksum registry. It does not receive or verify remote checksums,
+names, or statement metadata. The assertion scripts never generate or invoke
+those commands, and the preflight opt-in does not grant migration authorization.
 
 ## Archive contract
 
@@ -91,11 +100,11 @@ The destination must be outside every worktree registered in the repository, not
 
 The database URL is parsed once and supplied to PostgreSQL tools through temporary PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, and PGSSLMODE process environment values. It is never a command argument. Logs, manifest, summary, and emitted failures redact literal/URL-encoded passwords, full PostgreSQL URLs and query strings, Supabase tokens/service-role-like keys, JWTs, and temporary CLI-login credential patterns.
 
-Each backup is bound to one supported migration definition and its matching read-only preflight. A definition fixes the expected applied migration range, pending migration number and path, production project reference, and restore policy. SHA-256 values are computed from the exact Git blobs at `gitCommitSha`; the manifest records both paths, hashes, and commit identity. The migration assertion requires the current HEAD, clean-filter worktree content, manifest commit, migration hash, and preflight hash all to agree. Migrations 012 and 013 always require `restoreVerified=true`, even if the caller omits `-RequireRestoreVerification`.
+Each backup is bound to one supported migration definition and its matching read-only preflight. A definition fixes the expected applied migration range, pending migration number and path, production project reference, and restore policy. SHA-256 values are computed from the exact Git blobs at `gitCommitSha`; the manifest records both paths, hashes, and commit identity. The migration assertion requires the current HEAD, clean-filter worktree content, manifest commit, migration hash, and preflight hash all to agree. Migrations 012, 013, and 014 always require `restoreVerified=true`, even if the caller omits `-RequireRestoreVerification`.
 
-For migration 013, hard stops include any missing required process variable; any project reference other than `eyaoahwzixqetjgfghsh`; missing or contradictory repository link or Management API identity; transaction pooling on port 6543; a Session Pooler without explicit opt-in; any endpoint or login mismatch; a ledger shorter than, longer than, or different from exactly 001 through 012; migration 013 already applied; missing or changed migration/preflight files; failed PostgreSQL commands; archive marker, size, or SHA mismatch; stale/failed/quarantined artifacts; and missing disposable-restore evidence at the assertion gate.
+For migration 014, hard stops include any missing required process variable; any project reference other than `eyaoahwzixqetjgfghsh`; missing or contradictory repository link or Management API identity; transaction pooling on port 6543; a Session Pooler without explicit opt-in; any endpoint or login mismatch; a ledger shorter than, longer than, or different from exactly 001 through 013; migration 014 already applied; an existing `recipes.yield_metadata` column; incompatible pending share snapshots; missing or changed migration/preflight files; failed PostgreSQL commands; archive marker, size, or SHA mismatch; stale/failed/quarantined artifacts; and missing disposable-restore evidence at the assertion gate.
 
-A successful backup directory contains `database.dump`, `manifest.json`, `summary.txt`, and sanitized command logs under `logs/`. The manifest keeps `migrationAuthorizationGranted=false`; the scripts print that migration authorization is not granted. Backup creation, verification, assertion, and `PreflightOnly` never execute migration 013. Migration execution remains a separate, explicitly authorized operation.
+A successful backup directory contains `database.dump`, `manifest.json`, `summary.txt`, and sanitized command logs under `logs/`. The manifest keeps `migrationAuthorizationGranted=false`; the scripts print that migration authorization is not granted. Backup creation, verification, assertion, and `PreflightOnly` never execute migration 014. Migration execution remains a separate, explicitly authorized operation.
 
 Manifest schema version 3 makes control-plane identity evidence mandatory. Offline verification rejects all version 1 and version 2 manifests, as well as version 3 manifests missing the project-ref match, acceptable status, database-host match, repository-link match, connected database evidence, or final `identityVerification.verified=true`. This is an intentional compatibility break: older backups must not silently satisfy the stronger production identity gate.
 
@@ -103,7 +112,7 @@ Manifest schema version 3 makes control-plane identity evidence mandatory. Offli
 
 Routine examples are additive nullable columns, safe additive indexes/tables, backward-compatible functions, and additive constraints already proven by preflight. Require a fresh verified logical backup, archive/project/age/size/hash/ledger/marker checks, migration-specific preflight when applicable, and explicit human authorization. Disposable restore is optional unless the owner requires it.
 
-Elevated examples include nontrivial backfills, uniqueness/null tightening, UUID conversion, active-write/RPC/trigger/RLS changes, authority replacement, integrity repair, and migrations 012 and 013. Require every routine item, data-shape preflight, documented forward repair, verified application compatibility, successful disposable restore, and explicit owner authorization.
+Elevated examples include nontrivial backfills, uniqueness/null tightening, UUID conversion, active-write/RPC/trigger/RLS changes, authority replacement, integrity repair, and migrations 012 through 014. Require every routine item, data-shape preflight, documented forward repair, verified application compatibility, successful disposable restore, and explicit owner authorization.
 
 High-risk examples include destructive removal, irreversible transforms, primary-key replacement, mass rewrites, auth-ownership changes, destructive RLS, broad ledger repair, or rollback requiring full restoration. Require every elevated item, rehearsal on the restored copy, tested repair/rollback, post-migration invariants, and explicit authorization.
 

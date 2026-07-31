@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeDialog } from "../recipe-dialog"
 import type { Ingredient, Recipe } from "@/types/database"
+import { parseIngredientLine } from "@/lib/recipe-parser"
+import { parseIngredientAmountLexeme } from "@/lib/recipe-parser"
 
 globalThis.React = React
 
@@ -31,6 +33,7 @@ vi.mock("next/dynamic", () => ({
     function MockSortableIngredientList({
       ingredients,
       onIngredientChange,
+      onIngredientParsed,
     }: {
       ingredients: Ingredient[]
       onIngredientChange: (
@@ -38,16 +41,39 @@ vi.mock("next/dynamic", () => ({
         field: keyof Ingredient,
         value: string | number | null
       ) => void
+      onIngredientParsed: (index: number, ingredient: Ingredient) => void
     }) {
       return (
         <div>
           {ingredients.map((ingredient, index) => (
-            <input
-              key={index}
-              aria-label={`Ingredient ${index + 1}`}
-              value={ingredient.item}
-              onChange={(event) => onIngredientChange(index, "item", event.target.value)}
-            />
+            <React.Fragment key={index}>
+              <input
+                aria-label={`Ingredient ${index + 1}`}
+                value={ingredient.item}
+                onChange={(event) => onIngredientChange(index, "item", event.target.value)}
+                onBlur={(event) =>
+                  onIngredientParsed(index, parseIngredientLine(event.target.value))
+                }
+              />
+              <input
+                aria-label={`Amount ${index + 1}`}
+                defaultValue={ingredient.amount ?? ""}
+                onBlur={(event) =>
+                  onIngredientChange(
+                    index,
+                    "amount",
+                    parseIngredientAmountLexeme(event.currentTarget.value)
+                  )
+                }
+              />
+              <input
+                aria-label={`Unit ${index + 1}`}
+                value={ingredient.unit}
+                onChange={(event) =>
+                  onIngredientChange(index, "unit", event.target.value)
+                }
+              />
+            </React.Fragment>
           ))}
         </div>
       )
@@ -429,6 +455,161 @@ describe("RecipeDialog image orchestration", () => {
     )
     expect(onRecipeCreated).toHaveBeenCalledWith(currentCreatedRecipe)
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("submits the complete parsed ingredient after single-line manual entry", async () => {
+    renderCreateDialog()
+
+    fireEvent.change(screen.getByLabelText("Recipe Name"), {
+      target: { value: "Tomato Soup" },
+    })
+    const ingredient = screen.getByLabelText("Ingredient 1")
+    fireEvent.change(ingredient, {
+      target: { value: "about 0.50–1 (14 oz) cans tomatoes" },
+    })
+    fireEvent.blur(ingredient, {
+      target: { value: "about 0.50–1 (14 oz) cans tomatoes" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Add Recipe" }))
+
+    await waitFor(() => {
+      expect(createRecipeMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ingredients: [
+            expect.objectContaining({
+              item: "tomatoes",
+              amount: "0.5–1",
+              unit: "(14 oz) cans",
+              originalText: "about 0.50–1 (14 oz) cans tomatoes",
+              quantityV1: expect.objectContaining({
+                kind: "range",
+                authored: "about 0.50–1",
+                qualifier: "about",
+                startLexeme: "0.50",
+                endLexeme: "1",
+              }),
+              packageV1: expect.objectContaining({
+                type: "can",
+                authoredType: "cans",
+              }),
+            }),
+          ],
+        })
+      )
+    })
+  })
+
+  it("preserves authored amount text through hydrate, save, reopen, edit, and resave", async () => {
+    const ingredient = parseIngredientLine("0.50 cup sugar")
+    const recipe = recipeFixture({
+      id: "authored-amount",
+      ingredients: [ingredient],
+    })
+    const first = renderEditDialog(recipe)
+
+    expect(screen.getByLabelText("Amount 1")).toHaveValue("0.50")
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+    await waitFor(() => {
+      expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updates: expect.objectContaining({
+            ingredients: [
+              expect.objectContaining({
+                amount: 0.5,
+                quantityV1: expect.objectContaining({
+                  authored: "0.50",
+                  lexeme: "0.50",
+                  value: { numerator: "1", denominator: "2" },
+                }),
+              }),
+            ],
+          }),
+        })
+      )
+    })
+
+    const persisted = (
+      updateRecipeMutateAsync.mock.calls.at(-1)?.[0] as {
+        updates: Partial<Recipe>
+      }
+    ).updates
+    first.unmount()
+    renderEditDialog(recipeFixture({
+      id: "authored-amount",
+      ...persisted,
+    }))
+
+    const reopenedAmount = screen.getByLabelText("Amount 1")
+    expect(reopenedAmount).toHaveValue("0.50")
+    fireEvent.change(reopenedAmount, { target: { value: "1/2" } })
+    fireEvent.blur(reopenedAmount, { target: { value: "1/2" } })
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+    await waitFor(() => {
+      expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updates: expect.objectContaining({
+            ingredients: [
+              expect.objectContaining({
+                amount: 0.5,
+                originalText: undefined,
+                quantityV1: expect.objectContaining({
+                  authored: "1/2",
+                  lexeme: "1/2",
+                  value: { numerator: "1", denominator: "2" },
+                }),
+              }),
+            ],
+          }),
+        })
+      )
+    })
+  })
+
+  it("rebuilds sized-package metadata from the actual unit edit callback", async () => {
+    const recipe = recipeFixture({
+      id: "sized-package",
+      ingredients: [parseIngredientLine("1 (14 oz) can tomatoes")],
+    })
+    renderEditDialog(recipe)
+
+    fireEvent.change(screen.getByLabelText("Unit 1"), {
+      target: { value: "(28 oz) cans" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }))
+
+    await waitFor(() => {
+      expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          updates: expect.objectContaining({
+            ingredients: [
+              expect.objectContaining({
+                item: "tomatoes",
+                amount: 1,
+                unit: "(28 oz) cans",
+                originalText: undefined,
+                quantityV1: expect.objectContaining({
+                  kind: "exact",
+                  authored: "1",
+                }),
+                packageV1: expect.objectContaining({
+                  count: expect.objectContaining({ authored: "1" }),
+                  size: {
+                    value: { numerator: "28", denominator: "1" },
+                    lexeme: "28",
+                    unit: "oz",
+                    authoredUnit: "oz",
+                  },
+                  type: "can",
+                  authoredType: "cans",
+                }),
+              }),
+            ],
+          }),
+        })
+      )
+    })
   })
 
   it("preserves the create submit flow and shows the existing toast when image upload fails", async () => {

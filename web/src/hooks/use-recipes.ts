@@ -269,6 +269,7 @@ export function useCreateRecipe() {
         name: recipe.name,
         category: recipe.category,
         servings: recipe.servings ?? 4,
+        yield_metadata: recipe.yield_metadata ?? null,
         prep_time_minutes: recipe.prep_time_minutes ?? null,
         cook_time_minutes: recipe.cook_time_minutes ?? null,
         total_time_minutes: recipe.total_time_minutes ?? null,
