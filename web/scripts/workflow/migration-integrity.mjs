@@ -21,6 +21,7 @@ const MIGRATION_AUTHORITY_PATHS = new Set([
   "AGENTS.md",
   "README.md",
   "docs/developer-workflow.md",
+  "scripts/rg-verify.ps1",
   "supabase/config.toml",
   "supabase/SCHEMA.md",
   "supabase/migration-checksums.json",
@@ -61,6 +62,15 @@ const MIGRATION_AUTHORITY_PREFIXES = [
 
 function normalizePath(value) {
   return value.replaceAll("\\", "/")
+}
+
+function validRepositoryPath(value) {
+  return typeof value === "string"
+    && value.length > 0
+    && !value.startsWith("/")
+    && !/^[A-Za-z]:\//u.test(value)
+    && !/[\0\r\n]/u.test(value)
+    && !value.split("/").includes("..")
 }
 
 function directMigrationFilename(path) {
@@ -311,12 +321,48 @@ function migrationSensitivePath(path) {
   )
 }
 
+function completeUnifiedPatch(patch) {
+  if (typeof patch !== "string" || !patch) return false
+  const lines = patch.split(/\r?\n/u)
+  let hunkFound = false
+  let expectedOld = 0
+  let expectedNew = 0
+  let actualOld = 0
+  let actualNew = 0
+  const hunkComplete = () => actualOld === expectedOld && actualNew === expectedNew
+  for (const line of lines) {
+    const header = line.match(/^@@ -(?:\d+)(?:,(\d+))? \+(?:\d+)(?:,(\d+))? @@/u)
+    if (header) {
+      if (hunkFound && !hunkComplete()) return false
+      hunkFound = true
+      expectedOld = header[1] === undefined ? 1 : Number(header[1])
+      expectedNew = header[2] === undefined ? 1 : Number(header[2])
+      actualOld = 0
+      actualNew = 0
+      continue
+    }
+    if (!hunkFound || line.startsWith("\\ No newline at end of file")) continue
+    if (line === "" && hunkComplete()) continue
+    if (line.startsWith("+")) actualNew += 1
+    else if (line.startsWith("-")) actualOld += 1
+    else if (line.startsWith(" ")) {
+      actualOld += 1
+      actualNew += 1
+    } else {
+      return false
+    }
+    if (actualOld > expectedOld || actualNew > expectedNew) return false
+  }
+  return hunkFound && hunkComplete()
+}
+
 export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
   const records = changedFiles.map(normalizeChangedFile)
   const normalizedFiles = [...new Set(records.map((item) => item.filename))].sort()
   const malformedFileRecords = records.filter((item) => (
-    !item.filename
+    !validRepositoryPath(item.filename)
     || !GITHUB_FILE_STATUSES.has(item.status)
+    || (item.previousFilename !== null && !validRepositoryPath(item.previousFilename))
     || (["renamed", "copied"].includes(item.status) && !item.previousFilename)
   ))
   const involvedPaths = [...new Set(records.flatMap(
@@ -326,7 +372,9 @@ export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
   const referenceFiles = normalizedFiles.filter((path) => {
     if (migrationFiles.includes(path)) return false
     const record = records.find((item) => item.filename === path)
-    const contents = contentsByPath[path] ?? record?.patch ?? ""
+    const contents = Object.hasOwn(contentsByPath, path)
+      ? contentsByPath[path]
+      : record?.patch ?? ""
     return /(?:supabase\/migrations\/)?\d{3}_[a-z0-9_]+\.sql/iu.test(contents)
       || /supabase\/migrations\//iu.test(contents)
   })
@@ -338,22 +386,40 @@ export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
   )
 
   const sensitivePaths = involvedPaths.filter(migrationSensitivePath)
-  const conservativelyImpactful = malformedFileRecords.length > 0
-  return {
-    fileRecords: records.map(({ patch, ...item }) => ({
+  const fileRecords = records.map(({ patch, ...item }) => {
+    const completeContent = Object.hasOwn(contentsByPath, item.filename)
+      && typeof contentsByPath[item.filename] === "string"
+    const patchComplete = completeUnifiedPatch(patch)
+    return {
       ...item,
       patchAvailable: patch !== null,
-      evidenceComplete: patch !== null,
-    })),
+      patchComplete,
+      evidenceComplete: completeContent || patchComplete,
+    }
+  })
+  const incompleteEvidencePaths = [...new Set(fileRecords
+    .filter((item) => !item.evidenceComplete)
+    .flatMap((item) => [item.filename, item.previousFilename].filter(Boolean)))]
+    .sort()
+  const contentDetectedPaths = [...referenceFiles]
+  const conservativelyImpactful = malformedFileRecords.length > 0
+    || incompleteEvidencePaths.length > 0
+  return {
+    fileRecords,
     migrationFiles,
     sensitivePaths,
+    contentDetectedPaths,
+    incompleteEvidencePaths,
+    conservativelyImpactful,
     malformedFileRecords,
     checksumRegistryChanged: sensitivePaths.includes("supabase/migration-checksums.json"),
     referenceFiles,
     documentationReferences,
     toolingReferences,
     migrationChanged: migrationFiles.length > 0 || conservativelyImpactful,
-    potentiallyImpactful: sensitivePaths.length > 0 || conservativelyImpactful,
+    potentiallyImpactful: sensitivePaths.length > 0
+      || contentDetectedPaths.length > 0
+      || conservativelyImpactful,
     documentationOnly: migrationFiles.length === 0
       && !conservativelyImpactful
       && documentationReferences.length > 0

@@ -47,7 +47,14 @@ function commitStatus(overrides = {}) {
 }
 
 function combinedStatus(overrides = {}) {
-  return { sha: SHA, state: "success", totalCount: 1, recordsReturned: 1, ...overrides }
+  return {
+    sha: SHA,
+    state: "success",
+    totalCount: 1,
+    recordsReturned: 1,
+    statuses: [commitStatus()],
+    ...overrides,
+  }
 }
 
 function deployment(overrides = {}) {
@@ -81,16 +88,16 @@ describe("PR evidence identity", () => {
 
 describe("exact-head check classification", () => {
   it.each([
-    ["successful check lacking headSha", [checkRun({ headSha: null })], [], "malformed/unbound"],
-    ["check bound to another SHA", [checkRun({ headSha: OTHER_SHA })], [], "not bound"],
-    ["empty check object", [{}], [], "malformed/unbound"],
+    ["successful check lacking headSha", [checkRun({ headSha: null })], [commitStatus()], "malformed/unbound"],
+    ["check bound to another SHA", [checkRun({ headSha: OTHER_SHA })], [commitStatus()], "not bound"],
+    ["empty check object", [{}], [commitStatus()], "malformed/unbound"],
     ["empty status object", [], [{}], "malformed/unbound"],
     ["status lacking SHA without endpoint binding", [], [commitStatus({ sha: null })], "endpoint", null],
     ["status bound to another SHA", [], [commitStatus({ sha: OTHER_SHA })], "not bound"],
-    ["pending check", [checkRun({ status: "in_progress", conclusion: null })], [], "pending"],
-    ["failed check", [checkRun({ conclusion: "failure" })], [], "failed"],
-    ["unknown lifecycle", [checkRun({ status: "mystery" })], [], "malformed/unbound"],
-    ["unknown conclusion", [checkRun({ conclusion: "maybe" })], [], "malformed/unbound"],
+    ["pending check", [checkRun({ status: "in_progress", conclusion: null })], [commitStatus()], "pending"],
+    ["failed check", [checkRun({ conclusion: "failure" })], [commitStatus()], "failed"],
+    ["unknown lifecycle", [checkRun({ status: "mystery" })], [commitStatus()], "malformed/unbound"],
+    ["unknown conclusion", [checkRun({ conclusion: "maybe" })], [commitStatus()], "malformed/unbound"],
     ["unknown commit state", [], [commitStatus({ state: "maybe" })], "malformed/unbound"],
   ])("rejects %s", (_label, checkRuns, statuses, detail, endpoint = combinedStatus()) => {
     expect(classifyCheckEvidence({
@@ -133,14 +140,14 @@ describe("exact-head check classification", () => {
     }).status).toBe("FAIL")
   })
 
-  it("reports missing evidence as unavailable", () => {
+  it("blocks a pending combined state even when no individual evidence exists", () => {
     expect(classifyCheckEvidence({
       expectedSha: SHA,
       totalCount: 0,
       checkRuns: [],
       statuses: [],
-      statusEndpoint: combinedStatus({ totalCount: 0, recordsReturned: 0, state: "pending" }),
-    })).toMatchObject({ status: "UNAVAILABLE" })
+      statusEndpoint: combinedStatus({ totalCount: 0, recordsReturned: 0, state: "pending", statuses: [] }),
+    })).toMatchObject({ status: "FAIL", detail: expect.stringContaining("pending") })
   })
 
   it.each([
@@ -149,6 +156,16 @@ describe("exact-head check classification", () => {
     ["missing SHA", combinedStatus({ sha: null }), "FAIL"],
     ["malformed SHA", combinedStatus({ sha: "abc" }), "FAIL"],
     ["unknown state", combinedStatus({ state: "mystery" }), "FAIL"],
+    ["missing state", combinedStatus({ state: null }), "FAIL"],
+    ["pending state", combinedStatus({ state: "pending" }), "FAIL"],
+    ["failure state", combinedStatus({ state: "failure" }), "FAIL"],
+    ["error state", combinedStatus({ state: "error" }), "FAIL"],
+    ["missing count", combinedStatus({ totalCount: null }), "FAIL"],
+    ["negative count", combinedStatus({ totalCount: -1 }), "FAIL"],
+    ["fractional count", combinedStatus({ totalCount: 0.5 }), "FAIL"],
+    ["malformed count", combinedStatus({ totalCount: "1" }), "FAIL"],
+    ["count disagreement", combinedStatus({ totalCount: 2 }), "FAIL"],
+    ["count claims a missing record", combinedStatus({ totalCount: 1, recordsReturned: 0, statuses: [] }), "FAIL"],
     ["malformed response", null, "FAIL"],
   ])("validates combined-status endpoint binding for %s", (_label, endpoint, status) => {
     expect(validateCombinedStatusEndpoint(endpoint, SHA).status).toBe(status)
@@ -214,7 +231,19 @@ describe("check and annotation collection", () => {
         })
       }
       if (endpoint.endsWith("/status")) {
-        return result({ sha: SHA, state: "success", total_count: 1, statuses: [{}] })
+        const allStatuses = Array.from({ length: 101 }, (_, index) => ({
+          id: index + 1,
+          context: index === 100 ? "missing-sha" : `status-${index}`,
+          state: "success",
+          sha: index === 100 ? null : SHA,
+          created_at: NOW,
+        }))
+        return result({
+          sha: SHA,
+          state: "success",
+          total_count: 101,
+          statuses: page === 1 ? allStatuses.slice(0, 100) : allStatuses.slice(100),
+        })
       }
       if (endpoint.endsWith("/annotations")) {
         return result(page === 1
@@ -243,9 +272,11 @@ describe("check and annotation collection", () => {
     const evidence = collectExactHeadChecks(runner, "aaron8819/RecipeGenie", SHA)
     expect(evidence.checkRuns[0].annotations).toHaveLength(101)
     expect(evidence.statuses).toHaveLength(101)
+    expect(evidence.statusEndpoint.statuses).toHaveLength(101)
     expect(evidence.statuses.at(-1).sha).toBeNull()
     expect(evidence.statusEndpoint.sha).toBe(SHA)
     expect(evidence.statusEndpointBinding).toMatchObject({ status: "PASS", returnedSha: SHA })
+    expect(evidence.statusEndpointEvaluation).toMatchObject({ status: "PASS", consistency: true, totalCount: 101 })
     expect(classifyCheckEvidence({ ...evidence, expectedSha: SHA }).status).toBe("PASS")
   })
 
@@ -262,29 +293,83 @@ describe("check and annotation collection", () => {
 
   it("never copies the requested SHA into a combined response that omits it", () => {
     const response = { sha: null, state: "success", total_count: 0, statuses: [] }
-    const runner = (_command, args) => args[3].endsWith("/status")
-      ? result(response)
-      : result([])
+    const runner = (_command, args) => {
+      const endpoint = args[3]
+      if (endpoint.endsWith("/status")) return result(response)
+      if (endpoint.endsWith("/check-runs")) return result({ total_count: 0, check_runs: [] })
+      return result([])
+    }
     expect(() => collectExactHeadChecks(
       runner,
       "aaron8819/RecipeGenie",
       SHA,
-    )).toThrow(/missing its own SHA/iu)
+    )).toThrow(/metadata is malformed/iu)
     expect(response.sha).toBeNull()
   })
 
   it("uses the latest validated status per context without hiding history", () => {
+    const history = [
+      commitStatus({ id: 1, state: "pending", createdAt: "2026-07-31T10:00:00Z" }),
+      commitStatus({ id: 2, state: "success", createdAt: "2026-07-31T10:01:00Z" }),
+    ]
     const value = classifyCheckEvidence({
       expectedSha: SHA,
       totalCount: 0,
       checkRuns: [],
-      statuses: [
-        commitStatus({ id: 1, state: "pending", createdAt: "2026-07-31T10:00:00Z" }),
-        commitStatus({ id: 2, state: "success", createdAt: "2026-07-31T10:01:00Z" }),
-      ],
-      statusEndpoint: combinedStatus(),
+      statuses: history,
+      statusEndpoint: combinedStatus({ statuses: [history[1]] }),
     })
     expect(value).toMatchObject({ status: "PASS", detail: expect.stringContaining("2 status-history") })
+  })
+
+  it("blocks a latest pending status after an earlier success", () => {
+    const history = [
+      commitStatus({ id: 1, state: "success", createdAt: "2026-07-31T10:00:00Z" }),
+      commitStatus({ id: 2, state: "pending", createdAt: "2026-07-31T10:01:00Z" }),
+    ]
+    const value = classifyCheckEvidence({
+      expectedSha: SHA,
+      totalCount: 1,
+      checkRuns: [checkRun()],
+      statuses: history,
+      statusEndpoint: combinedStatus({
+        state: "pending",
+        statuses: [history[1]],
+      }),
+    })
+    expect(value).toMatchObject({ status: "FAIL", detail: expect.stringContaining("pending") })
+  })
+
+  it("blocks a failure appearing in the second page of complete status history", () => {
+    const history = Array.from({ length: 101 }, (_, index) => commitStatus({
+      id: index + 1,
+      context: `context-${index}`,
+      state: index === 100 ? "failure" : "success",
+    }))
+    const endpoint = combinedStatus({
+      state: "failure",
+      totalCount: 101,
+      recordsReturned: 101,
+      statuses: history,
+    })
+    const value = classifyCheckEvidence({
+      expectedSha: SHA,
+      totalCount: 1,
+      checkRuns: [checkRun()],
+      statuses: history,
+      statusEndpoint: endpoint,
+    })
+    expect(value).toMatchObject({ status: "FAIL", detail: expect.stringContaining("failure") })
+  })
+
+  it("rejects endpoint count/history disagreement and conflicting duplicate contexts", () => {
+    const history = [commitStatus(), commitStatus({ id: 3, context: "security" })]
+    expect(validateCombinedStatusEndpoint(combinedStatus(), SHA, history)).toMatchObject({ status: "FAIL", consistency: false })
+    expect(validateCombinedStatusEndpoint(combinedStatus({
+      totalCount: 2,
+      recordsReturned: 2,
+      statuses: [commitStatus(), commitStatus({ id: 3 })],
+    }), SHA, history)).toMatchObject({ status: "FAIL", consistency: false })
   })
 })
 

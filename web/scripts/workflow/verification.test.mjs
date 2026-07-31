@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { delimiter, dirname, join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -12,9 +12,13 @@ import {
   runFocusedVerification,
   runPrVerification,
   runReleaseVerification,
+  renderVerificationText,
 } from "./verification.mjs"
 
 const SHA = "a".repeat(40)
+const NODE_DISTRIBUTION = process.platform === "win32"
+  ? dirname(process.execPath)
+  : resolve(dirname(process.execPath), "..")
 const UNSUPPORTED_NODE = process.platform === "win32"
   ? "C:\\Program Files\\nodejs\\node.exe"
   : null
@@ -170,8 +174,17 @@ describe("trusted npm execution", () => {
           npm_config_ignore_scripts: "true",
           npm_config_userconfig: join(root, ".npmrc"),
           ComSpec: join(root, "shell.cmd"),
+          SystemRoot: join(root, "hostile-windows"),
+          ProgramFiles: join(root, "hostile-program-files"),
           NODE_OPTIONS: `--require=${join(root, "preload.js")}`,
           BASH_ENV: join(root, "bash-env"),
+          RG_DATABASE_URL: "sentinel-rg-database",
+          DATABASE_URL: "sentinel-database",
+          SUPABASE_SERVICE_ROLE_KEY: "sentinel-supabase",
+          VERCEL_TOKEN: "sentinel-vercel",
+          GITHUB_TOKEN: "sentinel-github",
+          AWS_SECRET_ACCESS_KEY: "sentinel-aws",
+          UNRELATED_SECRET: "sentinel-unrelated",
         },
       })
       const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path")
@@ -179,7 +192,7 @@ describe("trusted npm execution", () => {
       const pathEntries = env[pathKey].split(delimiter)
       expect(pathEntries).not.toContain(hostileNodeDirectory)
       expect(pathEntries).not.toContain(hostileNpmDirectory)
-      expect(pathEntries).toContain(benign)
+      expect(pathEntries).not.toContain(benign)
       expect(env[pathKey]).toContain(dirname(process.execPath))
       expect(env[pathKey]).toContain(platformSystemPath)
       expect(env.npm_execpath).toBe(resolveTrustedNpmCli())
@@ -198,6 +211,18 @@ describe("trusted npm execution", () => {
       }
       expect(env.NODE_OPTIONS).toBeUndefined()
       expect(env.BASH_ENV).toBeUndefined()
+      for (const name of [
+        "RG_DATABASE_URL",
+        "DATABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "VERCEL_TOKEN",
+        "GITHUB_TOKEN",
+        "AWS_SECRET_ACCESS_KEY",
+        "UNRELATED_SECRET",
+      ]) expect(env[name]).toBeUndefined()
+      expect(env.TEMP).toBe(process.env.TEMP)
+      expect(env.SystemRoot).toBe(process.env.SystemRoot)
+      expect(env.ProgramFiles).toBe("C:\\Program Files")
 
       const nested = spawnSync("node", ["--eval", "process.stdout.write(process.versions.node)"], {
         encoding: "utf8",
@@ -228,6 +253,126 @@ describe("trusted npm execution", () => {
     expect(calls.every((call) => Array.isArray(call.args))).toBe(true)
     expect(calls.every((call) => typeof call.env === "object")).toBe(true)
   })
+
+  it("passes only the minimum ordinary environment to tests, builds, lifecycles, and migration tooling", () => {
+    const sentinels = {
+      RG_DATABASE_URL: "sentinel-rg-database",
+      DATABASE_URL: "sentinel-database",
+      SUPABASE_SERVICE_ROLE_KEY: "sentinel-supabase",
+      VERCEL_TOKEN: "sentinel-vercel",
+      GITHUB_TOKEN: "sentinel-github",
+      AWS_SECRET_ACCESS_KEY: "sentinel-aws",
+      UNRELATED_SECRET: "sentinel-unrelated",
+    }
+    const childEnvironment = createTrustedChildEnvironment({ environment: { ...process.env, ...sentinels } })
+    const calls = []
+    runPrVerification({
+      childEnvironment,
+      commandRunner(command, args, cwd, env) {
+        calls.push({ command, args, cwd, env })
+        return passingRunner()
+      },
+    })
+    expect(calls).toHaveLength(4)
+    for (const call of calls) {
+      for (const name of Object.keys(sentinels)) expect(call.env[name]).toBeUndefined()
+      expect(call.env.TEMP).toBe(process.env.TEMP)
+      expect(call.env.npm_node_execpath).toBe(process.execPath)
+    }
+  })
+
+  it("starts through the trusted launcher despite hostile path, npm, and shell replacements", { timeout: 60_000 }, () => {
+    if (process.platform !== "win32") return
+    const root = mkdtempSync(join(tmpdir(), "rg-launcher-hostile-"))
+    const launcher = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "rg-verify.ps1")
+    const pwsh = "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+    for (const name of ["node.cmd", "npm.cmd", "npx.cmd", "shell.cmd"]) {
+      writeFileSync(join(root, name), "@exit /b 0\r\n")
+    }
+    try {
+      const child = spawnSync(pwsh, [
+        "-NoProfile", "-File", launcher,
+        "-NodeDistribution", NODE_DISTRIBUTION,
+        "pr", "--json", "--wat",
+      ], {
+        encoding: "utf8",
+        shell: false,
+        env: {
+          ...process.env,
+          PATH: root,
+          Path: root,
+          npm_execpath: join(root, "npm.cmd"),
+          npm_node_execpath: join(root, "node.cmd"),
+          npm_config_script_shell: join(root, "shell.cmd"),
+          ComSpec: join(root, "shell.cmd"),
+        },
+      })
+      expect(child.status).not.toBe(0)
+      expect(child.stderr).toBe("")
+      expect(JSON.parse(child.stdout)).toMatchObject({ command: "verification", status: "FAIL", error: { category: "ARGUMENT" } })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it("replaces verifier startup contamination with one launcher JSON document", { timeout: 60_000 }, () => {
+    if (process.platform !== "win32") return
+    const root = mkdtempSync(join(tmpdir(), "rg-launcher-startup-"))
+    const source = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "rg-verify.ps1")
+    const scripts = join(root, "scripts")
+    const web = join(root, "web")
+    mkdirSync(scripts)
+    mkdirSync(web)
+    writeFileSync(join(scripts, "rg-verify.ps1"), readFileSync(source, "utf8"))
+    writeFileSync(join(web, ".nvmrc"), "22.23.1\n")
+    writeFileSync(join(web, "package.json"), JSON.stringify({ packageManager: "npm@10.9.8" }))
+    try {
+      const child = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", [
+        "-NoProfile", "-File", join(scripts, "rg-verify.ps1"),
+        "-NodeDistribution", NODE_DISTRIBUTION,
+        "pr", "--json",
+      ], { encoding: "utf8", shell: false })
+      expect(child.status).not.toBe(0)
+      expect(child.stderr).toBe("")
+      expect(JSON.parse(child.stdout)).toMatchObject({ command: "verification-launcher", status: "FAIL" })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it("runs a normal focused lifecycle through the trusted launcher with the approved nested identity", { timeout: 60_000 }, () => {
+    const pwsh = process.platform === "win32"
+      ? "C:\\Program Files\\PowerShell\\7\\pwsh.exe"
+      : "/usr/bin/pwsh"
+    if (!existsSync(pwsh)) return
+    const launcher = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "rg-verify.ps1")
+    const child = spawnSync(pwsh, [
+      "-NoProfile", "-File", launcher,
+      "-NodeDistribution", NODE_DISTRIBUTION,
+      "focused", "--file", "docs/developer-workflow.md", "--json",
+    ], {
+      encoding: "utf8",
+      shell: false,
+      env: {
+        ...process.env,
+        RG_DATABASE_URL: "sentinel-rg-database",
+        DATABASE_URL: "sentinel-database",
+        SUPABASE_SERVICE_ROLE_KEY: "sentinel-supabase",
+        VERCEL_TOKEN: "sentinel-vercel",
+        GITHUB_TOKEN: "sentinel-github",
+        AWS_SECRET_ACCESS_KEY: "sentinel-aws",
+        UNRELATED_SECRET: "sentinel-unrelated",
+      },
+    })
+    expect(child.status).toBe(0)
+    expect(child.stderr).toBe("")
+    const report = JSON.parse(child.stdout)
+    expect(report).toMatchObject({ status: "PASS", requestedTier: "FOCUSED" })
+    expect(report.checks).toContainEqual(expect.objectContaining({ name: "nested-runtime-authority", status: "PASS" }))
+    for (const sentinel of ["sentinel-rg-database", "sentinel-database", "sentinel-supabase", "sentinel-vercel", "sentinel-github", "sentinel-aws", "sentinel-unrelated"]) {
+      expect(child.stdout).not.toContain(sentinel)
+    }
+  })
 })
 
 describe("release verification composition", () => {
@@ -239,7 +384,7 @@ describe("release verification composition", () => {
     expect(report.checks[0].status).toBe("PASS")
   })
 
-  it("classifies explicit optional evidence gaps as unavailable and non-passing", () => {
+  it("keeps explicit optional corroborative warnings visible without blocking PASS", () => {
     const value = completeReleaseReport({
       warnings: ["Optional deployment evidence is unavailable."],
       checks: [
@@ -250,8 +395,29 @@ describe("release verification composition", () => {
     const report = runReleaseVerification({
       commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
     })
-    expect(report.status).toBe("UNAVAILABLE")
-    expect(report.checks[0].status).toBe("UNAVAILABLE")
+    expect(report.status).toBe("PASS")
+    expect(report.checks[0].status).toBe("PASS")
+    expect(report.releaseAuthorityEvaluation.at(-1)).toMatchObject({ required: false, authority: "CORROBORATIVE", effect: "NO_EFFECT" })
+    expect(renderVerificationText(report)).toContain("Optional deployment evidence is unavailable.")
+  })
+
+  it.each([
+    ["optional corroborative skip", { name: "deployment-record", status: "SKIP", authority: "CORROBORATIVE", detail: "optional skip" }, "PASS"],
+    ["optional corroborative unavailable", { name: "deployment-record", status: "UNAVAILABLE", authority: "CORROBORATIVE", detail: "optional unavailable" }, "PASS"],
+    ["optional corroborative failure", { name: "deployment-record", status: "FAIL", authority: "CORROBORATIVE", detail: "contradictory outcome" }, "FAIL"],
+    ["required authoritative warning", { ...completeReleaseReport().checks[0], status: "WARN" }, "FAIL"],
+    ["required authoritative skip", { ...completeReleaseReport().checks[0], status: "SKIP" }, "FAIL"],
+    ["required authoritative unavailable", { ...completeReleaseReport().checks[0], status: "UNAVAILABLE" }, "FAIL"],
+    ["fabricated optional label on required check", { ...completeReleaseReport().checks[0], authority: "CORROBORATIVE", status: "WARN" }, "FAIL"],
+  ])("enforces %s", (_label, replacement, expected) => {
+    const value = completeReleaseReport()
+    const requiredIndex = value.checks.findIndex((item) => item.name === replacement.name)
+    if (requiredIndex >= 0) value.checks[requiredIndex] = replacement
+    else value.checks.push(replacement)
+    const report = runReleaseVerification({
+      commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+    })
+    expect(report.status).toBe(expected)
   })
 
   it.each([

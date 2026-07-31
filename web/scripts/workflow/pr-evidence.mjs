@@ -217,9 +217,6 @@ export function classifyCheckEvidence({
   if (totalCount !== checkRuns.length) {
     return { status: "FAIL", detail: `Expected ${totalCount} check runs but collected ${checkRuns.length}.` }
   }
-  if (totalCount === 0 && statuses.length === 0) {
-    return { status: "UNAVAILABLE", detail: "No exact-head checks or commit statuses were reported." }
-  }
   const malformedRuns = checkRuns.filter((item) => (
     !item
     || typeof item !== "object"
@@ -265,20 +262,18 @@ export function classifyCheckEvidence({
       detail: `${mismatchedRuns.length} check run(s) and ${mismatchedStatuses.length} commit status(es) are not bound to the explicit head SHA.`,
     }
   }
+  const endpointEvaluation = validateCombinedStatusEndpoint(
+    statusEndpoint,
+    expectedSha,
+    statuses,
+  )
+  if (endpointEvaluation.status !== "PASS") {
+    return { status: "FAIL", detail: endpointEvaluation.detail }
+  }
   const pendingRuns = checkRuns.filter(
     (item) => item.status !== "completed",
   )
-  const latestStatusesByContext = new Map()
-  for (const item of statuses) {
-    const current = latestStatusesByContext.get(item.context)
-    if (
-      !current
-      || comparableTime(item.createdAt) > comparableTime(current.createdAt)
-      || (item.createdAt === current.createdAt && item.id > current.id)
-    ) {
-      latestStatusesByContext.set(item.context, item)
-    }
-  }
+  const latestStatusesByContext = latestCommitStatuses(statuses)
   const latestStatuses = [...latestStatusesByContext.values()]
   const pendingStatuses = latestStatuses.filter(
     (item) => ["pending", "expected"].includes(item.state),
@@ -305,7 +300,53 @@ export function classifyCheckEvidence({
   }
 }
 
-export function validateCombinedStatusEndpoint(endpoint, expectedSha) {
+function latestCommitStatuses(statuses) {
+  const latest = new Map()
+  for (const item of statuses) {
+    const current = latest.get(item.context)
+    if (
+      !current
+      || comparableTime(item.createdAt) > comparableTime(current.createdAt)
+      || (item.createdAt === current.createdAt && item.id > current.id)
+    ) {
+      latest.set(item.context, item)
+    }
+  }
+  return latest
+}
+
+function combinedStatusResult(status, endpoint, expectedSha, detail, consistency) {
+  return {
+    status,
+    requestedSha: expectedSha ?? null,
+    returnedSha: endpoint?.sha ?? null,
+    state: endpoint?.state ?? null,
+    totalCount: endpoint?.totalCount ?? null,
+    recordsReturned: endpoint?.recordsReturned ?? null,
+    consistency,
+    verdictEffect: status === "PASS" ? "SUPPORTS_PASS" : "BLOCKS_PASS",
+    detail,
+  }
+}
+
+function validateCombinedStatusBinding(endpoint, expectedSha) {
+  const returnedSha = endpoint?.sha ?? null
+  const valid = SHA_PATTERN.test(expectedSha ?? "")
+    && SHA_PATTERN.test(returnedSha)
+    && returnedSha === expectedSha
+  return {
+    status: valid ? "PASS" : "FAIL",
+    requestedSha: expectedSha ?? null,
+    returnedSha,
+    state: endpoint?.state ?? null,
+    totalCount: endpoint?.totalCount ?? null,
+    detail: valid
+      ? "Combined commit-status endpoint returned the requested exact-head SHA."
+      : "Combined commit-status endpoint SHA is missing, malformed, or does not match the requested exact head.",
+  }
+}
+
+export function validateCombinedStatusEndpoint(endpoint, expectedSha, statusHistory = null) {
   if (
     !endpoint
     || typeof endpoint !== "object"
@@ -316,31 +357,118 @@ export function validateCombinedStatusEndpoint(endpoint, expectedSha) {
     || endpoint.totalCount < 0
     || !Number.isSafeInteger(endpoint.recordsReturned)
     || endpoint.recordsReturned < 0
+    || !Array.isArray(endpoint.statuses)
   ) {
-    return {
-      status: "FAIL",
-      requestedSha: expectedSha ?? null,
-      returnedSha: endpoint?.sha ?? null,
-      state: endpoint?.state ?? null,
-      detail: "Combined commit-status endpoint evidence is malformed or missing its own SHA.",
-    }
+    return combinedStatusResult(
+      "FAIL",
+      endpoint,
+      expectedSha,
+      "Combined commit-status endpoint evidence is malformed or missing its own SHA, state, count, or records.",
+      false,
+    )
   }
   if (!SHA_PATTERN.test(expectedSha ?? "") || endpoint.sha !== expectedSha) {
-    return {
-      status: "FAIL",
-      requestedSha: expectedSha ?? null,
-      returnedSha: endpoint.sha,
-      state: endpoint.state,
-      detail: "Combined commit-status endpoint SHA does not match the requested exact head.",
-    }
+    return combinedStatusResult(
+      "FAIL",
+      endpoint,
+      expectedSha,
+      "Combined commit-status endpoint SHA does not match the requested exact head.",
+      false,
+    )
   }
-  return {
-    status: "PASS",
-    requestedSha: expectedSha,
-    returnedSha: endpoint.sha,
-    state: endpoint.state,
-    detail: "Combined commit-status endpoint returned and validated the requested exact-head SHA.",
+  const malformedEndpointStatuses = endpoint.statuses.filter((item) => (
+    !item
+    || typeof item !== "object"
+    || Array.isArray(item)
+    || !Number.isSafeInteger(item.id)
+    || typeof item.context !== "string"
+    || !item.context.trim()
+    || !COMMIT_STATES.has(item.state)
+    || !Number.isFinite(Date.parse(item.createdAt ?? ""))
+    || (item.sha !== null && item.sha !== undefined && item.sha !== expectedSha)
+  ))
+  const endpointContexts = endpoint.statuses.map((item) => item?.context)
+  const endpointIds = endpoint.statuses.map((item) => item?.id)
+  if (
+    malformedEndpointStatuses.length > 0
+    || endpoint.totalCount !== endpoint.recordsReturned
+    || endpoint.recordsReturned !== endpoint.statuses.length
+    || new Set(endpointContexts).size !== endpointContexts.length
+    || new Set(endpointIds).size !== endpointIds.length
+  ) {
+    return combinedStatusResult(
+      "FAIL",
+      endpoint,
+      expectedSha,
+      "Combined commit-status endpoint count or latest-context records are malformed, duplicated, or inconsistent.",
+      false,
+    )
   }
+  if (statusHistory === null) {
+    const successful = endpoint.state === "success"
+    return combinedStatusResult(
+      successful ? "PASS" : "FAIL",
+      endpoint,
+      expectedSha,
+      successful
+        ? "Combined commit-status endpoint returned a successful exact-head state with internally consistent response metadata."
+        : `Combined commit-status endpoint state ${endpoint.state} blocks PASS.`,
+      true,
+    )
+  }
+  if (!Array.isArray(statusHistory)) {
+    return combinedStatusResult("FAIL", endpoint, expectedSha, "Complete commit-status history is unavailable.", false)
+  }
+  const latestByContext = latestCommitStatuses(statusHistory)
+  if (endpoint.totalCount !== latestByContext.size) {
+    return combinedStatusResult(
+      "FAIL",
+      endpoint,
+      expectedSha,
+      `Combined commit-status count ${endpoint.totalCount} disagrees with ${latestByContext.size} latest context(s) in complete status history.`,
+      false,
+    )
+  }
+  const endpointRecordsMatchHistory = endpoint.statuses.every((item) => {
+    const latest = latestByContext.get(item.context)
+    return latest
+      && latest.id === item.id
+      && latest.state === item.state
+      && latest.createdAt === item.createdAt
+  })
+  if (!endpointRecordsMatchHistory) {
+    return combinedStatusResult(
+      "FAIL",
+      endpoint,
+      expectedSha,
+      "Combined commit-status records contradict the latest records in complete status history.",
+      false,
+    )
+  }
+  const latestStates = [...latestByContext.values()].map((item) => item.state)
+  const calculatedState = latestStates.some((state) => ["failure", "error"].includes(state))
+    ? "failure"
+    : latestStates.length === 0 || latestStates.includes("pending")
+      ? "pending"
+      : "success"
+  if (endpoint.state !== calculatedState) {
+    return combinedStatusResult(
+      "FAIL",
+      endpoint,
+      expectedSha,
+      `Combined commit-status state ${endpoint.state} contradicts calculated state ${calculatedState}.`,
+      false,
+    )
+  }
+  return combinedStatusResult(
+    endpoint.state === "success" ? "PASS" : "FAIL",
+    endpoint,
+    expectedSha,
+    endpoint.state === "success"
+      ? `Combined commit-status state success and count ${endpoint.totalCount} agree with complete status history.`
+      : `Combined commit-status endpoint state ${endpoint.state} blocks PASS.`,
+    true,
+  )
 }
 
 function collectLocalGit(commandRunner) {
@@ -694,27 +822,68 @@ export function collectReviewThreads(commandRunner, repository, prNumber) {
 }
 
 export function collectExactHeadChecks(commandRunner, repository, headSha) {
-  const combinedResponse = githubApi(
-    commandRunner,
-    `repos/${repository}/commits/${headSha}/status`,
-  )
-  const combinedStatuses = assertObjectArray(
-    combinedResponse?.statuses,
-    "combined commit statuses",
-  )
-  const statusEndpoint = {
-    sha: combinedResponse?.sha ?? null,
-    state: combinedResponse?.state ?? null,
-    totalCount: combinedResponse?.total_count ?? null,
-    recordsReturned: combinedStatuses.length,
+  const combinedStatuses = []
+  const combinedFingerprints = new Set()
+  let combinedSha = null
+  let combinedState = null
+  let combinedTotalCount = null
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const combinedResponse = githubApi(
+      commandRunner,
+      `repos/${repository}/commits/${headSha}/status`,
+      [["per_page", String(PAGE_SIZE)], ["page", String(page)]],
+    )
+    const current = assertObjectArray(
+      combinedResponse?.statuses,
+      "combined commit statuses",
+    )
+    if (
+      !SHA_PATTERN.test(combinedResponse?.sha ?? "")
+      || !COMMIT_STATES.has(combinedResponse?.state)
+      || !Number.isSafeInteger(combinedResponse?.total_count)
+      || combinedResponse.total_count < 0
+    ) throw new Error("Combined commit-status response metadata is malformed.")
+    if (combinedTotalCount !== null && (
+      combinedResponse.sha !== combinedSha
+      || combinedResponse.state !== combinedState
+      || combinedResponse.total_count !== combinedTotalCount
+    )) throw new Error("Combined commit-status response metadata changed during pagination.")
+    combinedSha = combinedResponse.sha
+    combinedState = combinedResponse.state
+    combinedTotalCount = combinedResponse.total_count
+    const fingerprint = pageFingerprint(current)
+    if (current.length > 0 && combinedFingerprints.has(fingerprint)) {
+      throw new Error("Combined commit-status pagination repeated a page.")
+    }
+    combinedFingerprints.add(fingerprint)
+    combinedStatuses.push(...current)
+    if (combinedStatuses.length > combinedTotalCount) {
+      throw new Error("Combined commit-status pagination exceeded its total count.")
+    }
+    if (combinedStatuses.length === combinedTotalCount) break
+    if (current.length < PAGE_SIZE) throw new Error("Combined commit-status collection is truncated.")
+    if (page === MAX_PAGES) throw new Error(`Combined commit-status pagination exceeded ${MAX_PAGES} pages.`)
   }
-  const statusEndpointBinding = validateCombinedStatusEndpoint(
+  if (combinedStatuses.length !== combinedTotalCount) {
+    throw new Error("Combined commit-status collection is incomplete.")
+  }
+  const statusEndpoint = {
+    sha: combinedSha,
+    state: combinedState,
+    totalCount: combinedTotalCount,
+    recordsReturned: combinedStatuses.length,
+    statuses: combinedStatuses.map((item) => ({
+      id: item.id ?? null,
+      context: item.context ?? null,
+      state: item.state ?? null,
+      sha: item.sha ?? null,
+      createdAt: item.created_at ?? null,
+    })),
+  }
+  const statusEndpointBinding = validateCombinedStatusBinding(
     statusEndpoint,
     headSha,
   )
-  if (statusEndpointBinding.status !== "PASS") {
-    throw new Error(statusEndpointBinding.detail)
-  }
   const rawRuns = []
   let totalCount = null
   const fingerprints = new Set()
@@ -786,20 +955,26 @@ export function collectExactHeadChecks(commandRunner, repository, headSha) {
       message: annotation.message ?? "",
     }))
   }
+  const statuses = rawStatuses.map((item) => ({
+    id: item.id,
+    context: item.context ?? null,
+    state: item.state ?? null,
+    url: item.target_url ?? null,
+    sha: item.sha ?? null,
+    createdAt: item.created_at ?? null,
+  }))
   return {
     headSha,
     totalCount,
     checkRuns,
-    statuses: rawStatuses.map((item) => ({
-      id: item.id,
-      context: item.context ?? null,
-      state: item.state ?? null,
-      url: item.target_url ?? null,
-      sha: item.sha ?? null,
-      createdAt: item.created_at ?? null,
-    })),
+    statuses,
     statusEndpoint,
     statusEndpointBinding,
+    statusEndpointEvaluation: validateCombinedStatusEndpoint(
+      statusEndpoint,
+      headSha,
+      statuses,
+    ),
     annotationsComplete: true,
   }
 }
@@ -1115,13 +1290,8 @@ export async function collectPrEvidence(options = {}) {
       }))
       assertUnique(records, (item) => item.filename, "pull request files")
       report.changedFiles = records.map((item) => item.filename).sort()
-      report.changedFileRecords = records.map((item) => ({
-        filename: item.filename,
-        previousFilename: item.previous_filename,
-        status: item.status,
-        patchAvailable: item.patch !== null,
-      }))
       report.migrationImpact = classifyMigrationImpact(records)
+      report.changedFileRecords = report.migrationImpact.fileRecords
       const malformed = report.migrationImpact.malformedFileRecords.length
       addCheck(
         report,
@@ -1286,12 +1456,12 @@ export function renderPrEvidenceText(report) {
       ? `PR: #${pr.number} ${pr.state}${pr.draft ? " DRAFT" : ""} ${pr.url}`
       : "PR: UNAVAILABLE",
     `Changed files: ${report.changedFiles.length}`,
-    `Migration impact: files=${report.migrationImpact.migrationFiles.length} potentially-impactful=${report.migrationImpact.potentiallyImpactful ? "YES" : "NO"} authority-paths=${report.migrationImpact.sensitivePaths.length} documentation-only=${report.migrationImpact.documentationOnly ? "YES" : "NO"} checksum-registry=${report.migrationImpact.checksumRegistryChanged ? "CHANGED" : "UNCHANGED"}`,
+    `Migration impact: files=${report.migrationImpact.migrationFiles.length} potentially-impactful=${report.migrationImpact.potentiallyImpactful ? "YES" : "NO"} authority-paths=${report.migrationImpact.sensitivePaths.length} content-detected=${report.migrationImpact.contentDetectedPaths.length} incomplete-evidence=${report.migrationImpact.incompleteEvidencePaths.length} conservative=${report.migrationImpact.conservativelyImpactful ? "YES" : "NO"} documentation-only=${report.migrationImpact.documentationOnly ? "YES" : "NO"} checksum-registry=${report.migrationImpact.checksumRegistryChanged ? "CHANGED" : "UNCHANGED"}`,
     `Reviews: ${report.reviews.length}; requests=${report.reviewRequests.users.length + report.reviewRequests.teams.length}`,
     `Comments: top-level=${report.comments.topLevel.length}; inline=${report.comments.inline.length}`,
     `Review threads: total=${report.reviewThreads?.total ?? "UNAVAILABLE"}; unresolved=${report.reviewThreads?.unresolved ?? "UNAVAILABLE"}`,
     `Deployments returned: ${report.deployments.length}; binding=${report.deploymentEvidence.binding.status}; latest outcome=${report.deploymentEvidence.outcome.status}${report.deploymentEvidence.latestStatus ? ` (${report.deploymentEvidence.latestStatus})` : ""}`,
-    `Combined status endpoint: returned=${report.exactHeadChecks?.statusEndpointBinding?.returnedSha ?? "UNAVAILABLE"}; binding=${report.exactHeadChecks?.statusEndpointBinding?.status ?? "UNAVAILABLE"}; state=${report.exactHeadChecks?.statusEndpointBinding?.state ?? "UNAVAILABLE"}`,
+    `Combined status endpoint: returned=${report.exactHeadChecks?.statusEndpointEvaluation?.returnedSha ?? "UNAVAILABLE"}; state=${report.exactHeadChecks?.statusEndpointEvaluation?.state ?? "UNAVAILABLE"}; count=${report.exactHeadChecks?.statusEndpointEvaluation?.totalCount ?? "UNAVAILABLE"}; returned-records=${report.exactHeadChecks?.statusEndpointEvaluation?.recordsReturned ?? "UNAVAILABLE"}; consistent=${report.exactHeadChecks?.statusEndpointEvaluation?.consistency === true ? "YES" : "NO"}; effect=${report.exactHeadChecks?.statusEndpointEvaluation?.verdictEffect ?? "BLOCKS_PASS"}`,
     ...report.checks.map((item) => `- ${item.name}: ${item.status} [${item.required ? "required" : "optional"}; effect=${item.effect}] - ${item.detail}`),
     ...report.warnings.map((warning) => `WARNING: ${warning}`),
   ].join("\n")

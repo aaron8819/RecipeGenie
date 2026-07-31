@@ -16,24 +16,16 @@ const RELEASE_VALUE_OPTIONS = new Set([
   "--production-url",
   "--expected-project-ref",
 ])
+const REQUIRED_RELEASE_CHECKS = [
+  "github-repository",
+  "branch-head",
+  "exact-sha-ci",
+  "production-manifest",
+  "deployed-sha",
+  "supabase-project-ref",
+]
+const OPTIONAL_RELEASE_CHECKS = new Set(["deployment-record"])
 const VERIFICATION_USAGE = "verification.mjs focused (--base REF | --file PATH...) [--json] | pr [--json] | release [--json] [release options]"
-const EXECUTABLE_OVERRIDE_KEYS = new Set([
-  "bash_env",
-  "cdpath",
-  "comspec",
-  "env",
-  "node",
-  "node_options",
-  "node_path",
-  "npm_execpath",
-  "npm_node_execpath",
-  "npm_config_node_gyp",
-  "npm_config_node_options",
-  "npm_config_script_shell",
-  "prompt_command",
-  "shell",
-  "z dot dir",
-].map((value) => value.replaceAll(" ", "")))
 const RUNTIME_SHIM_NAMES = process.platform === "win32"
   ? [
     "node", "node.com", "node.exe", "node.cmd", "node.bat", "node.ps1",
@@ -71,6 +63,52 @@ function environmentValue(environment, name) {
   return entry?.[1]
 }
 
+const PLATFORM_ENVIRONMENT_KEYS = [
+  "APPDATA",
+  "CI",
+  "COLORTERM",
+  "FORCE_COLOR",
+  "GITHUB_ACTIONS",
+  "HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOCALAPPDATA",
+  "NEXT_TELEMETRY_DISABLED",
+  "NO_COLOR",
+  "NUMBER_OF_PROCESSORS",
+  "OS",
+  "PROCESSOR_ARCHITECTURE",
+  "PROCESSOR_IDENTIFIER",
+  "PROCESSOR_LEVEL",
+  "PROCESSOR_REVISION",
+  "ProgramData",
+  "ProgramFiles",
+  "ProgramFiles(x86)",
+  "ProgramW6432",
+  "SystemDrive",
+  "SystemRoot",
+  "TEMP",
+  "TERM",
+  "TMP",
+  "TMPDIR",
+  "TZ",
+  "USERPROFILE",
+  "windir",
+]
+const RELEASE_ENVIRONMENT_KEYS = [
+  "GH_TOKEN",
+  "GITHUB_TOKEN",
+  "RG_BRANCH",
+  "RG_EXPECTED_GIT_SHA",
+  "RG_EXPECTED_SUPABASE_PROJECT_REF",
+  "RG_PRODUCTION_URL",
+  "RG_REPOSITORY",
+  "RECIPE_GENIE_PRODUCTION_PROJECT_REF",
+]
+
 function containsRuntimeShim(directory) {
   return RUNTIME_SHIM_NAMES.some((name) => existsSync(join(directory, name)))
 }
@@ -80,48 +118,48 @@ export function createTrustedChildEnvironment({
   nodeExecutable = process.execPath,
   npmExecutable = resolveTrustedNpmCli(nodeExecutable),
   platform = process.platform,
+  mode = "ordinary",
 } = {}) {
   const runtimeDirectory = dirname(nodeExecutable)
   const localBinDirectory = resolve(webDirectory, "node_modules", ".bin")
   if (containsRuntimeShim(localBinDirectory)) {
     throw new Error("The project-local executable directory contains an unexpected Node/npm runtime shim.")
   }
-  const pathValue = Object.entries(environment)
-    .filter(([key]) => key.toLowerCase() === "path")
-    .map(([, value]) => value)
-    .filter(Boolean)
-    .join(platform === "win32" ? ";" : delimiter)
   const comparison = (value) => platform === "win32"
     ? resolve(value).toLowerCase()
     : resolve(value)
-  const runtimeIdentity = comparison(runtimeDirectory)
-  const retainedPaths = pathValue
-    .split(platform === "win32" ? ";" : delimiter)
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .filter((value) => {
-      try {
-        return comparison(value) === runtimeIdentity || !containsRuntimeShim(value)
-      } catch {
-        return false
-      }
-    })
-  const trustedPaths = [runtimeDirectory, ...retainedPaths]
+  const systemRoot = "C:\\Windows"
+  const programFiles = "C:\\Program Files"
+  const trustedSystemPaths = platform === "win32"
+    ? [
+      join(systemRoot, "System32"),
+      systemRoot,
+      join(systemRoot, "System32", "Wbem"),
+      join(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
+      join(programFiles, "PowerShell", "7"),
+      join(programFiles, "Git", "cmd"),
+    ]
+    : ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"]
+  const trustedPaths = [runtimeDirectory, localBinDirectory, ...trustedSystemPaths]
+    .filter(existsSync)
     .filter((value, index, values) => (
       values.findIndex((candidate) => comparison(candidate) === comparison(value)) === index
     ))
   const sanitized = {}
-  for (const [key, value] of Object.entries(environment)) {
-    const normalized = key.toLowerCase()
-    if (
-      normalized === "path"
-      || normalized.startsWith("npm_")
-      || EXECUTABLE_OVERRIDE_KEYS.has(normalized)
-    ) continue
-    sanitized[key] = value
+  const allowedKeys = mode === "release"
+    ? [...PLATFORM_ENVIRONMENT_KEYS, ...RELEASE_ENVIRONMENT_KEYS]
+    : PLATFORM_ENVIRONMENT_KEYS
+  for (const key of allowedKeys) {
+    const value = environmentValue(environment, key)
+    if (value !== undefined) sanitized[key] = value
+  }
+  if (platform === "win32") {
+    sanitized.SystemRoot = systemRoot
+    sanitized.windir = systemRoot
+    sanitized.ProgramFiles = programFiles
   }
   const shell = platform === "win32"
-    ? join(environmentValue(environment, "SystemRoot") ?? "C:\\Windows", "System32", "cmd.exe")
+    ? join(systemRoot, "System32", "cmd.exe")
     : "/bin/sh"
   if (!existsSync(shell)) {
     throw new Error("The trusted platform script shell is unavailable.")
@@ -172,8 +210,7 @@ function resolveTrustedPowerShell() {
   const candidates = process.platform === "win32"
     ? [
       resolve("C:\\Program Files", "PowerShell", "7", "pwsh.exe"),
-      resolve(process.env.ProgramFiles ?? "C:\\Program Files", "PowerShell", "7", "pwsh.exe"),
-      resolve(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+      resolve("C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
     ]
     : ["/usr/bin/pwsh", "/usr/local/bin/pwsh", "/opt/microsoft/powershell/7/pwsh"]
   const executable = candidates.find(existsSync)
@@ -187,6 +224,7 @@ const MIGRATION_CHECK = Object.freeze({
   name: "migration-reference-integrity",
   command: process.execPath,
   args: [resolve(scriptDirectory, "migration-integrity.mjs")],
+  commandLabel: "<node> migration-integrity.mjs",
   coverage: "Validated tracked migration files, checksum coverage, checksums, active endpoint, and documented chain.",
 })
 
@@ -210,6 +248,7 @@ function prChecks() {
         "-File",
         resolve(repositoryRoot, "scripts", "database", "tests", "Run-Tests.ps1"),
       ],
+      commandLabel: "<trusted-powershell> -NoProfile -File <migration-tooling-tests>",
       coverage: "Ran the repository's PowerShell migration backup, assertion, and preflight tooling tests.",
     },
   ]
@@ -560,7 +599,7 @@ export function runReleaseVerification({
   commandRunner = defaultCommandRunner,
 } = {}) {
   const releaseScript = resolve(scriptDirectory, "release-status.mjs")
-  const childEnvironment = createTrustedChildEnvironment()
+  const childEnvironment = createTrustedChildEnvironment({ mode: "release" })
   const result = commandRunner(
     process.execPath,
     [releaseScript, "--json", ...args],
@@ -588,16 +627,12 @@ export function runReleaseVerification({
       `<node> release-status.mjs --json ${args.join(" ")}`.trim(),
     )
   } else {
-    const unavailable = releaseReport.warnings?.length > 0
-      || releaseReport.checks?.some(
-        (item) => ["WARN", "SKIP"].includes(item.status),
-      )
     releaseCheck = check(
       "release-status",
-      unavailable ? "UNAVAILABLE" : "PASS",
-      unavailable
-        ? "Release status passed with explicitly unavailable or inconclusive external evidence."
-        : "Existing release/status workflow passed with complete required evidence.",
+      "PASS",
+      validation.optionalNonPassing > 0
+        ? `All required authoritative release evidence passed; ${validation.optionalNonPassing} optional corroborative result(s) remain visible but do not affect the verdict.`
+        : "Existing release/status workflow passed with complete required authoritative evidence.",
       `<node> release-status.mjs --json ${args.join(" ")}`.trim(),
     )
   }
@@ -615,6 +650,7 @@ export function runReleaseVerification({
       required: "AUTHORITATIVE",
     },
     releaseAuthorityIdentities: validation?.authorities ?? {},
+    releaseAuthorityEvaluation: validation?.evaluatedChecks ?? [],
     note: "Release verification is read-only and delegates commit, deployment, manifest, project, and exact-SHA CI binding to rg:release:status.",
   })
 }
@@ -659,7 +695,7 @@ export function validateReleaseReport(report) {
   ) {
     return { valid: false, detail: "Release PASS has incomplete or contradictory binding evidence." }
   }
-  const recognizedStatuses = new Set(["PASS", "WARN", "SKIP", "FAIL"])
+  const recognizedStatuses = new Set(["PASS", "WARN", "SKIP", "UNAVAILABLE", "FAIL"])
   const recognizedAuthorities = new Set(["AUTHORITATIVE", "CORROBORATIVE"])
   const validChecks = report.checks.every((item) => (
     item
@@ -671,8 +707,12 @@ export function validateReleaseReport(report) {
     && recognizedAuthorities.has(item.authority)
     && typeof item.detail === "string"
   ))
-  if (!validChecks || report.checks.some((item) => item.status === "FAIL")) {
-    return { valid: false, detail: "Release PASS contains malformed or failed evidence." }
+  if (!validChecks) {
+    return { valid: false, detail: "Release PASS contains malformed evidence." }
+  }
+  const checkNames = report.checks.map((item) => item.name)
+  if (new Set(checkNames).size !== checkNames.length) {
+    return { valid: false, detail: "Release PASS contains duplicate check identities." }
   }
   const suppliedReportIdentities = report.checks
     .filter((item) => Object.hasOwn(item, "identity"))
@@ -685,24 +725,44 @@ export function validateReleaseReport(report) {
   if (new Set(suppliedReportIdentities).size !== suppliedReportIdentities.length) {
     return { valid: false, detail: "Release PASS reuses an authority identity." }
   }
-  const requiredNames = [
-    "github-repository",
-    "branch-head",
-    "exact-sha-ci",
-    "production-manifest",
-    "deployed-sha",
-    "supabase-project-ref",
-  ]
-  if (!requiredNames.every((name) => report.checks.filter((item) => item.name === name).length === 1)) {
+  if (!REQUIRED_RELEASE_CHECKS.every((name) => report.checks.filter((item) => item.name === name).length === 1)) {
     return { valid: false, detail: "Release PASS is missing required authoritative checks." }
   }
-  const requiredChecks = requiredNames.map(
+  const requiredChecks = REQUIRED_RELEASE_CHECKS.map(
     (name) => report.checks.find((item) => item.name === name),
   )
   if (requiredChecks.some((item) => (
     item.status !== "PASS" || item.authority !== "AUTHORITATIVE"
   ))) {
     return { valid: false, detail: "Release PASS is missing recognized authoritative PASS evidence." }
+  }
+  const evaluatedChecks = report.checks.map((item) => {
+    const required = REQUIRED_RELEASE_CHECKS.includes(item.name)
+      || item.authority === "AUTHORITATIVE"
+    return {
+      name: item.name,
+      status: item.status,
+      authority: item.authority,
+      required,
+      warning: item.status === "WARN",
+      skipReason: ["SKIP", "UNAVAILABLE"].includes(item.status) ? item.detail : null,
+      effect: required
+        ? item.status === "PASS" ? "SATISFIES_REQUIRED" : "BLOCKS_PASS"
+        : item.status === "FAIL" ? "BLOCKS_PASS" : "NO_EFFECT",
+    }
+  })
+  if (evaluatedChecks.some((item) => item.required && (
+    item.authority !== "AUTHORITATIVE" || item.status !== "PASS"
+  ))) {
+    return { valid: false, detail: "Release PASS contains non-passing or mislabeled required authoritative evidence." }
+  }
+  if (evaluatedChecks.some((item) => !item.required && !OPTIONAL_RELEASE_CHECKS.has(item.name))) {
+    return { valid: false, detail: "Release PASS contains an unknown optional check identity." }
+  }
+  if (evaluatedChecks.some((item) => !item.required && (
+    item.authority !== "CORROBORATIVE" || item.status === "FAIL"
+  ))) {
+    return { valid: false, detail: "Optional release evidence is malformed, mislabeled, or explicitly failed." }
   }
   const authorityIdentities = [
     `github-repository:${binding.repository.toLowerCase()}`,
@@ -738,9 +798,13 @@ export function validateReleaseReport(report) {
   return {
     valid: true,
     detail: "Release report contract is complete.",
-    authorities: Object.fromEntries(requiredNames.map(
+    authorities: Object.fromEntries(REQUIRED_RELEASE_CHECKS.map(
       (name, index) => [name, authorityIdentities[index]],
     )),
+    evaluatedChecks,
+    optionalNonPassing: evaluatedChecks.filter((item) => (
+      !item.required && item.status !== "PASS"
+    )).length,
   }
 }
 
@@ -757,6 +821,12 @@ export function renderVerificationText(report) {
     if (item.status === "FAIL" && item.output?.trim()) {
       lines.push(`Failure output (${item.name}):`, item.output.trim())
     }
+  }
+  if (report.requestedTier === "RELEASE") {
+    lines.push(...report.releaseAuthorityEvaluation.map((item) => (
+      `- release ${item.name}: ${item.status} [${item.required ? "required" : "optional"}; ${item.authority}; effect=${item.effect}]${item.skipReason ? ` - ${item.skipReason}` : ""}`
+    )))
+    lines.push(...(report.releaseReport?.warnings ?? []).map((warning) => `WARNING: ${warning}`))
   }
   return lines.join("\n")
 }

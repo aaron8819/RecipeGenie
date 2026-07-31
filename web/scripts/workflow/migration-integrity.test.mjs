@@ -198,7 +198,7 @@ describe("migration PR impact", () => {
     ],
     [
       "ordinary unrelated rename",
-      [{ filename: "docs/new.md", previous_filename: "docs/old.md", status: "renamed" }],
+      [{ filename: "docs/new.md", previous_filename: "docs/old.md", status: "renamed", patch: "@@ -1 +1 @@\n-old\n+ordinary prose" }],
       false,
     ],
   ])("classifies %s using source and destination paths", (_label, files, expected) => {
@@ -221,6 +221,7 @@ describe("migration PR impact", () => {
     ["migration implementation without patch", [{ filename: "web/scripts/workflow/migration-integrity.mjs", status: "modified" }]],
     ["migration tests without patch", [{ filename: "web/scripts/workflow/migration-integrity.test.mjs", status: "modified" }]],
     ["package migration entry point", [{ filename: "web/package.json", status: "modified", patch: '"check:migration-references"' }]],
+    ["trusted launcher", [{ filename: "scripts/rg-verify.ps1", status: "modified", patch: "@@ -1 +1 @@\n-old\n+new" }]],
     ["authority renamed out", [{ filename: "archive/workflow.md", previous_filename: "docs/developer-workflow.md", status: "renamed" }]],
     ["authority renamed in", [{ filename: "docs/developer-workflow.md", previous_filename: "drafts/workflow.md", status: "renamed" }]],
     ["sensitive file with absent patch", [{ filename: "web/scripts/db-preflight-core.mjs", status: "modified" }]],
@@ -231,15 +232,39 @@ describe("migration PR impact", () => {
   })
 
   it.each([
-    [{ filename: "docs/design-notes.md", status: "modified", patch: "ordinary prose" }],
-    [{ filename: "web/scripts/workflow/state.mjs", status: "modified", patch: "ordinary workflow logic" }],
+    [{ filename: "docs/design-notes.md", status: "modified", patch: "@@ -1 +1 @@\n-old\n+ordinary prose" }],
+    [{ filename: "web/scripts/workflow/state.mjs", status: "modified", patch: "@@ -1 +1 @@\n-old\n+ordinary workflow logic" }],
   ])("keeps unrelated files outside migration authority", (file) => {
-    expect(classifyMigrationImpact([file]).potentiallyImpactful).toBe(false)
+    const report = classifyMigrationImpact([file])
+    expect(report.potentiallyImpactful).toBe(false)
+    expect(report.fileRecords[0]).toMatchObject({ evidenceComplete: true, patchComplete: true })
+  })
+
+  it.each([
+    ["unknown documentation file without a patch", { filename: "docs/design-notes.md", status: "modified" }],
+    ["unknown workflow file with a truncated patch", { filename: "web/scripts/workflow/state.mjs", status: "modified", patch: "@@ -1,2 +1,2 @@\n-old\n+new" }],
+    ["known authority file without a patch", { filename: "web/scripts/workflow/migration-integrity.mjs", status: "modified" }],
+  ])("treats %s as conservatively impactful", (_label, file) => {
+    const report = classifyMigrationImpact([file])
+    expect(report).toMatchObject({ conservativelyImpactful: true, potentiallyImpactful: true })
+    expect(report.incompleteEvidencePaths.length).toBeGreaterThan(0)
+  })
+
+  it("distinguishes authority, content, and incomplete-evidence impact reasons", () => {
+    const report = classifyMigrationImpact([
+      { filename: "README.md", status: "modified", patch: "@@ -1 +1 @@\n-old\n+supabase/migrations/014_example.sql" },
+      { filename: "docs/unknown.md", status: "modified" },
+    ])
+    expect(report.sensitivePaths).toEqual(["README.md"])
+    expect(report.contentDetectedPaths).toEqual(["README.md"])
+    expect(report.incompleteEvidencePaths).toEqual(["docs/unknown.md"])
   })
 
   it.each([
     ["rename missing previous filename", [{ filename: "docs/new.md", status: "renamed" }]],
     ["unknown status", [{ filename: "src/example.ts", status: "mystery" }]],
+    ["malformed current path", [{ filename: "../outside.md", status: "modified", patch: "@@ -1 +1 @@\n-old\n+new" }]],
+    ["malformed previous path", [{ filename: "docs/new.md", previous_filename: "C:\\outside.md", status: "renamed", patch: "@@ -1 +1 @@\n-old\n+new" }]],
   ])("fails closed for %s", (_label, files) => {
     const result = classifyMigrationImpact(files)
     expect(result.malformedFileRecords).toHaveLength(1)

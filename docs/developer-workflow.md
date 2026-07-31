@@ -34,10 +34,35 @@ authentication, authorization, or health was probed.
 
 ## Verification tiers
 
-All verification commands run from `web/`, use the repository-pinned Node/npm
-runtime, print the checks they ran, and return nonzero on failure. Add `--json`
-for structured output. Check results use `PASS`, `FAIL`, `SKIPPED`, and
-`UNAVAILABLE`; missing evidence is never reported as success.
+Automation must enter verification through the repository-root trusted
+launcher, not through ambient npm:
+
+```powershell
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 pr
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 pr --json
+```
+
+On POSIX, invoke the same launcher through an absolute trusted PowerShell 7
+path, for example `/usr/bin/pwsh -NoProfile -File ./scripts/rg-verify.ps1 pr`.
+When the exact runtime is outside a discoverable approved location, pass its
+absolute distribution directory with `-NodeDistribution`. The launcher
+resolves the repository from its own file location, so it supports isolated
+worktrees.
+
+The launcher runs before npm or npm's selected script shell. It validates exact
+Node `22.23.1` and bundled npm `10.9.8`, clears the child environment, rebuilds
+trusted executable and system paths, replaces lifecycle Node/npm/shell
+authority, and invokes `verification.mjs` with a direct argument array and no
+shell interpolation. In JSON mode, a launcher or verifier startup failure is
+replaced with exactly one sanitized JSON error document. It never prints
+environment contents, credential values, or runtime paths.
+
+The `rg:verify:*` npm package scripts remain available from `web/` for
+interactive convenience, but they are not a trusted launch boundary: ambient
+npm and its script-shell selection run before repository sanitization.
+Verification prints its checks and returns nonzero on failure. Check results
+use `PASS`, `FAIL`, `SKIPPED`, and `UNAVAILABLE`; missing required evidence is
+never reported as success.
 
 The command lines are strict: unknown or positional arguments, duplicate
 single-use options, repeated value options, missing values, malformed refs,
@@ -46,25 +71,33 @@ another tier are rejected before verification runs. `--file` is the only
 repeatable value option because it intentionally defines a multi-file focused
 scope.
 
-Focused and PR checks invoke npm through the CLI bundled with the active pinned
-Node distribution and verify its version against `packageManager`. They build
-one sanitized environment for the complete child tree: the pinned runtime is
-first in the executable path, directories containing competing Node/npm shims
-are removed, mixed-case Windows path variables are collapsed, lifecycle Node,
-npm, script-shell, `ComSpec`, and Node preload overrides are replaced or
-removed, and unrelated platform paths remain available. Before required work,
-a real npm lifecycle probe must report the pinned Node/npm identities and
-trusted shell without exposing their paths. Every child receives an argument
-array without application-level shell interpolation. The PowerShell migration
-tooling entry point is resolved from a trusted platform installation rather
-than ambient path order.
+Focused and PR checks invoke npm through the CLI bundled with the validated
+pinned Node distribution. The launcher and verifier each start from an empty
+environment and copy only named operating-system, temporary-directory,
+locale/encoding, terminal, CI, and telemetry-control variables. They construct
+`PATH`/`Path` from the pinned runtime, project-local binaries, and fixed normal
+Windows or POSIX system/tool locations; ambient path entries are never copied.
+They replace lifecycle Node/npm, script-shell, `ComSpec`, npm configuration,
+and Node preload authority. A real nested npm lifecycle probe must report the
+pinned Node/npm identities and trusted shell without exposing their paths.
+
+Ordinary focused and PR children do not receive database URLs, Supabase or
+Vercel credentials, GitHub tokens, cloud credentials, authorization headers,
+private keys, unrelated `RG_*` values, or generic secret/token variables.
+Release mode additionally permits only the named non-secret `RG_REPOSITORY`,
+`RG_BRANCH`, `RG_EXPECTED_GIT_SHA`, `RG_PRODUCTION_URL`,
+`RG_EXPECTED_SUPABASE_PROJECT_REF`, and
+`RECIPE_GENIE_PRODUCTION_PROJECT_REF` inputs, plus `GH_TOKEN` or
+`GITHUB_TOKEN` solely for the read-only release-status child. Vercel,
+Supabase, database, provider, and cloud credentials remain excluded. Prefer
+explicit release CLI options over environment inputs.
 
 Focused verification is an iteration aid for an explicit bounded scope:
 
 ```powershell
-npm run rg:verify:focused -- --base origin/main
-npm run rg:verify:focused -- --file docs/developer-workflow.md --file web/scripts/workflow/verification.mjs
-npm run --silent rg:verify:focused -- --json --base origin/main
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 focused --base origin/main
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 focused --file docs/developer-workflow.md --file web/scripts/workflow/verification.mjs
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 focused --json --base origin/main
 ```
 
 The auditable mapping covers documentation, workflow scripts, database
@@ -77,8 +110,8 @@ explicitly says that it is not full PR confidence.
 PR verification is the complete local pre-PR gate:
 
 ```powershell
-npm run rg:verify:pr
-npm run --silent rg:verify:pr -- --json
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 pr
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 pr --json
 ```
 
 It composes the existing `npm run verify` authority (artifact and secret
@@ -92,8 +125,8 @@ Release verification delegates to the existing read-only release/status
 workflow:
 
 ```powershell
-npm run rg:verify:release -- --repository aaron8819/RecipeGenie --branch main --expected-sha <sha> --production-url <url> --expected-project-ref <ref>
-npm run --silent rg:verify:release -- --json --repository aaron8819/RecipeGenie --branch main --expected-sha <sha> --production-url <url> --expected-project-ref <ref>
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 release --repository aaron8819/RecipeGenie --branch main --expected-sha <sha> --production-url <url> --expected-project-ref <ref>
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 release --json --repository aaron8819/RecipeGenie --branch main --expected-sha <sha> --production-url <url> --expected-project-ref <ref>
 ```
 
 It preserves the existing commit/deployment/manifest binding. Missing external
@@ -109,8 +142,14 @@ action. Required release checks accept only the existing `AUTHORITATIVE` type.
 Their stable identities are composed from the bound repository, branch, exact
 SHA, production manifest tuple, deployed SHA, and Supabase project—not from
 display labels—and must be complete and unique. `INFERRED`, unknown, missing,
-duplicate, conflicting, failed, warned, or skipped required evidence cannot
-produce a passing wrapper result even when the child exits zero.
+duplicate, conflicting, failed, warned, skipped, unavailable, pending, or
+incomplete required evidence cannot produce a passing wrapper result even when
+the child exits zero. Required check names cannot relabel themselves as
+corroborative. Optional `CORROBORATIVE` deployment evidence remains explicit in
+human and JSON output and may be `WARN`, `SKIP`, or `UNAVAILABLE` without
+blocking overall `PASS`; an explicit corroborative `FAIL` blocks because it
+contradicts the otherwise authoritative release conclusion. Optional evidence
+is never presented as release proof.
 
 `npm run verify` remains the comprehensive local code-quality gate used by CI.
 `npm run check:migration-references` is its repository-backed migration
@@ -127,8 +166,16 @@ package/CI entry points, database preflight tooling and fixtures, database
 operator tooling, and migration tests as authority paths. Current and previous
 rename paths plus GitHub file status are validated. A known authority path is
 potentially impactful even when its patch is absent or truncated; malformed
-path, status, or rename metadata also fails closed. Unrelated documentation and
-unrelated workflow modules remain outside that authority set.
+path, status, or rename metadata also fails closed. A favorable unrelated
+classification additionally requires valid current and previous paths,
+recognized status metadata, and a structurally complete unified patch or
+explicit complete file content. Missing, malformed, or truncated patch evidence
+is conservatively potentially impactful even for an otherwise unknown
+documentation or workflow path. Reports distinguish known authority-path
+impact, content-detected migration references, and conservative impact caused
+by incomplete evidence. Unrelated documentation and unrelated workflow modules
+remain outside the authority set only when that complete evidence proves them
+unrelated.
 
 ## PR evidence report
 
@@ -172,8 +219,17 @@ retrieved combined commit-status endpoint's valid returned SHA. That endpoint
 must return a recognized state, a valid SHA exactly equal to the requested
 head, and valid response metadata before it can bind records that omit their
 own SHA. The requested SHA is never copied into endpoint or record evidence.
-The returned SHA, state, and binding verdict remain explicit in human and JSON
-output. PR-file evidence preserves
+The complete status-history endpoint is paginated independently. Combined
+`total_count` must be a nonnegative integer equal to both the returned combined
+records and the number of latest unique contexts in that complete history.
+Combined records must match the latest history record for each context. GitHub's
+aggregate semantics are recomputed: any latest failure/error produces
+`failure`, otherwise an empty set or latest pending context produces `pending`,
+and only all-latest-success produces `success`. Missing/malformed counts or
+states, duplicate contexts, count/history disagreements, endpoint/history
+contradictions, and any non-success combined state block `PASS`. The returned
+SHA, state, count, consistency result, and verdict effect remain explicit in
+human and JSON output, separate from raw endpoint records. PR-file evidence preserves
 GitHub status and both rename endpoints, so renames, copies, and deletions that
 cross a migration-sensitive path remain migration impact even without a patch.
 Deployment record binding and deployment outcome are separate checks. A record
