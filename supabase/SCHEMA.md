@@ -841,14 +841,19 @@ This section is the operational runbook for schema changes in this repository. I
 - Review `supabase migration list` output and verify local and remote entries
   line up row-for-row. Preflight also verifies every active local SQL file
   against the reviewed `supabase/migration-checksums.json` registry. This
-  preserves altered-file detection without treating the Supabase ledger's
-  historically reconciled statement payloads as canonical file hashes.
+  registry is a local-file integrity guard only. `supabase migration list`
+  provides version alignment, not remote checksums, names, or statement
+  metadata, so `db:preflight` does not claim to verify those remote fields.
 - Stop if a migration exists only locally, only remotely, or the IDs differ
   between columns. The only exception is an explicitly supplied
   `--expected-pending VERSION` that identifies exactly one known local tail
   migration.
 - Treat a missing, malformed, duplicate, unknown, non-tail, or mismatched
   expected-pending value as invalid configuration, not permission to proceed.
+- Supply the exception only as an explicit current-command argv option:
+  `npm run db:preflight -- --expected-pending VERSION`. Environment variables,
+  `.npmrc`, npm configuration, package configuration, and positional values do
+  not authorize a pending migration.
 - Stop if you do not understand why the migration list differs.
 - Treat `supabase db push` as unsafe until the history mismatch is explained.
 
@@ -913,6 +918,13 @@ If the reason for drift is not clear, stop. Investigate the schema state and mig
 `db:preflight` helps detect ledger drift, but it does not prove the remote schema contents are equivalent.
 Its expected-pending option is a narrow ledger/readiness assertion and never
 grants migration authorization.
+
+The migration-specific `Backup-RecipeGenieProduction.ps1 -PreflightOnly`
+workflow independently queries the connected ledger for the exact expected
+version set and runs the commit-bound, read-only SQL preflight against remote
+schema and data invariants. Neither that workflow nor `db:preflight` compares a
+remote checksum to the local SQL file or treats remote name/statement metadata
+as a file-integrity proof.
 
 `supabase/migration-checksums.json` must exactly cover the active migration
 directory. Add a reviewed checksum entry with each new migration; never update

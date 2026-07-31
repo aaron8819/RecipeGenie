@@ -82,8 +82,13 @@ After backup assertion and the migration-specific read-only preflight pass, stop
 The migration-014 rollout must name `014` as the sole expected pending tail
 migration. Omitting the option continues to reject every local-only migration;
 an unknown, non-tail, multiple, altered, or otherwise mismatched pending set
-fails closed. The assertion scripts never generate or invoke those commands,
-and the preflight opt-in does not grant migration authorization.
+fails closed. Only the explicit argv option in the command shown above is
+accepted; npm configuration, environment variables, `.npmrc`, package
+configuration, and positional values cannot supply the exception. The command
+compares row-aligned local/remote versions and verifies local files against the
+repository checksum registry. It does not receive or verify remote checksums,
+names, or statement metadata. The assertion scripts never generate or invoke
+those commands, and the preflight opt-in does not grant migration authorization.
 
 ## Archive contract
 

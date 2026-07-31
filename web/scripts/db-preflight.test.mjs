@@ -1,30 +1,106 @@
-import { describe, expect, it } from "vitest"
+import { createHash } from "node:crypto"
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { afterEach, describe, expect, it } from "vitest"
+import * as preflightCore from "./db-preflight-core.mjs"
 import {
   MigrationPreflightError,
-  analyzeMigrationState,
   parseExpectedPendingOption,
   parseMigrationList,
 } from "./db-preflight-core.mjs"
+import { runMigrationPreflight } from "./db-preflight.mjs"
 
-function migration(version, overrides = {}) {
+const fixtureRoots = []
+
+afterEach(async () => {
+  await Promise.all(fixtureRoots.splice(0).map((directory) => (
+    rm(directory, { force: true, recursive: true })
+  )))
+})
+
+function checksum(contents) {
+  return createHash("sha256")
+    .update(contents.replace(/\r\n/gu, "\n"))
+    .digest("hex")
+}
+
+async function createMigrationFixture(last = 14) {
+  const root = await mkdtemp(join(tmpdir(), "recipe-genie-preflight-"))
+  fixtureRoots.push(root)
+  const migrationDirectory = join(root, "migrations")
+  const checksumRegistryPath = join(root, "migration-checksums.json")
+  await mkdir(migrationDirectory)
+
+  const registry = {}
+  for (let number = 1; number <= last; number += 1) {
+    const version = String(number).padStart(3, "0")
+    const filename = `${version}_migration_${version}.sql`
+    const contents = `select ${number};\n`
+    await writeFile(join(migrationDirectory, filename), contents, "utf8")
+    registry[filename] = checksum(contents)
+  }
+  await writeFile(
+    checksumRegistryPath,
+    `${JSON.stringify(registry, null, 2)}\n`,
+    "utf8",
+  )
+
   return {
-    version,
-    name: `migration_${version}`,
-    checksum: `checksum-${version}`,
-    statementCount: 1,
-    ...overrides,
+    checksumRegistryPath,
+    migrationDirectory,
   }
 }
 
-function chain(last) {
-  return Array.from({ length: last }, (_, index) => (
-    migration(String(index + 1).padStart(3, "0"))
-  ))
+function migrationRow(local, remote, time = local || remote) {
+  return { local, remote, time }
 }
 
-function expectFailure(run, category, message) {
+function migrationRows(localLast, remoteLast) {
+  const rows = []
+  const last = Math.max(localLast, remoteLast)
+  for (let number = 1; number <= last; number += 1) {
+    const version = String(number).padStart(3, "0")
+    rows.push(migrationRow(
+      number <= localLast ? version : "",
+      number <= remoteLast ? version : "",
+      version,
+    ))
+  }
+  return rows
+}
+
+function migrationListJson(rows, overrides = {}) {
+  return JSON.stringify({
+    migrations: rows,
+    message: "Migrations listed",
+    ...overrides,
+  })
+}
+
+async function runComposed({
+  argv = [],
+  fixture,
+  output,
+  migrationListRunner,
+}) {
+  const resolvedFixture = fixture ?? await createMigrationFixture()
+  return runMigrationPreflight({
+    argv,
+    ...resolvedFixture,
+    migrationListRunner: migrationListRunner ?? (() => output),
+  })
+}
+
+async function expectFailure(run, category, message) {
   try {
-    run()
+    await run()
     throw new Error("expected migration preflight failure")
   } catch (error) {
     expect(error).toBeInstanceOf(MigrationPreflightError)
@@ -33,160 +109,260 @@ function expectFailure(run, category, message) {
   }
 }
 
-describe("migration preflight expected-pending contract", () => {
-  it("accepts remote 001-013 versus local 001-014 only with expectation 014", () => {
-    expect(analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: chain(13),
-      expectedPending: "014",
-    })).toEqual({
+describe("composed preflight authorization", () => {
+  const pending014 = () => migrationListJson(migrationRows(14, 13))
+
+  it("accepts remote 001-013 versus local 001-014 with explicit argv", async () => {
+    await expect(runComposed({
+      argv: ["--expected-pending", "014"],
+      output: pending014(),
+    })).resolves.toEqual({
       status: "expected-pending",
       expectedPending: "014",
       latestRemote: "013",
     })
   })
 
-  it("rejects the same local-only migration without explicit opt-in", () => {
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: chain(13),
+  it("rejects the same state with empty argv", async () => {
+    await expectFailure(() => runComposed({
+      output: pending014(),
     }), "drift", "local-only migrations detected: 014")
   })
 
-  it("rejects an unexpected 015 and multiple pending migrations", () => {
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(15),
-      remoteMigrations: chain(13),
-      expectedPending: "014",
+  it("ignores ambient npm configuration when argv is empty", async () => {
+    const previous = process.env.npm_config_expected_pending
+    process.env.npm_config_expected_pending = "014"
+    try {
+      await expectFailure(() => runComposed({
+        output: pending014(),
+      }), "drift", "local-only migrations detected: 014")
+    } finally {
+      if (previous === undefined) {
+        delete process.env.npm_config_expected_pending
+      } else {
+        process.env.npm_config_expected_pending = previous
+      }
+    }
+  })
+
+  it("does not combine or conflict explicit and ambient values", async () => {
+    const previous = process.env.npm_config_expected_pending
+    process.env.npm_config_expected_pending = "015"
+    try {
+      await expect(runComposed({
+        argv: ["--expected-pending=014"],
+        output: pending014(),
+      })).resolves.toMatchObject({
+        status: "expected-pending",
+        expectedPending: "014",
+      })
+      await expectFailure(() => runComposed({
+        argv: ["014"],
+        output: pending014(),
+      }), "invalid-configuration", "unexpected argument: 014")
+      await expectFailure(() => runComposed({
+        argv: ["--expected-pending", "014", "015"],
+        output: pending014(),
+      }), "invalid-configuration", "unexpected argument: 015")
+    } finally {
+      if (previous === undefined) {
+        delete process.env.npm_config_expected_pending
+      } else {
+        process.env.npm_config_expected_pending = previous
+      }
+    }
+  })
+
+  it("strictly rejects malformed, duplicate, missing, and unknown options", () => {
+    expect(() => parseExpectedPendingOption([
+      "--expected-pending",
+      "not-a-version",
+    ])).toThrow("must be one numeric migration version")
+    expect(() => parseExpectedPendingOption([
+      "--expected-pending",
+      "014",
+      "--expected-pending=014",
+    ])).toThrow("at most once")
+    expect(() => parseExpectedPendingOption([
+      "--expected-pending",
+    ])).toThrow("requires one migration version")
+    expect(() => parseExpectedPendingOption([
+      "--unknown",
+    ])).toThrow("unexpected argument")
+  })
+})
+
+describe("composed row-preserving migration-list handling", () => {
+  it("rejects split blank rows instead of compacting columns", async () => {
+    const rows = migrationRows(12, 12)
+    rows.push(
+      migrationRow("013", "", "013"),
+      migrationRow("", "013", "013"),
+      migrationRow("014", "", "014"),
+    )
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      output: migrationListJson(rows),
+    }), "drift", "remote-only migrations detected: 013")
+  })
+
+  it("rejects missing cells and extra columns in JSON rows", async () => {
+    const missing = migrationRows(14, 13)
+    delete missing[5].remote
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      output: migrationListJson(missing),
+    }), "drift", "must contain exactly three cells")
+
+    const extra = migrationRows(14, 13)
+    extra[5].checksum = "fabricated"
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      output: migrationListJson(extra),
+    }), "drift", "must contain exactly three cells")
+  })
+
+  it("rejects malformed and ambiguous table output", async () => {
+    const missingCell = `
+      Local | Remote | Time (UTC)
+      ----- | ------ | ----------
+      001   | 001
+    `
+    await expectFailure(() => runComposed({
+      output: missingCell,
+    }), "drift", "must contain exactly three cells")
+
+    const extraColumn = `
+      Local | Remote | Time (UTC)
+      ----- | ------ | ----------
+      001   | 001    | 001 | extra
+    `
+    await expectFailure(() => runComposed({
+      output: extraColumn,
+    }), "drift", "must contain exactly three cells")
+
+    const ambiguousHeader = `
+      Local | Remote | Time (UTC)
+      ----- | ------ | ----------
+      Local | Remote | Time (UTC)
+    `
+    await expectFailure(() => runComposed({
+      output: ambiguousHeader,
+    }), "drift", "malformed local version")
+  })
+
+  it("rejects duplicated, reordered, and gapped rows", async () => {
+    const duplicated = migrationRows(14, 13)
+    duplicated.splice(5, 0, { ...duplicated[5] })
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      output: migrationListJson(duplicated),
+    }), "drift", "local versions")
+
+    const reordered = migrationRows(14, 13)
+    ;[reordered[4], reordered[5]] = [reordered[5], reordered[4]]
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      output: migrationListJson(reordered),
+    }), "drift", "local versions")
+
+    const gapped = migrationRows(14, 13)
+    gapped.splice(5, 1)
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      output: migrationListJson(gapped),
+    }), "drift", "local versions")
+  })
+
+  it("rejects unexpected 015 and multiple pending migrations", async () => {
+    const unexpectedFixture = await createMigrationFixture(15)
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      fixture: unexpectedFixture,
+      output: migrationListJson(migrationRows(15, 13)),
     }), "invalid-configuration", "is not the local tail")
 
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(15),
-      remoteMigrations: chain(13),
-      expectedPending: "015",
+    const multipleFixture = await createMigrationFixture(15)
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "015"],
+      fixture: multipleFixture,
+      output: migrationListJson(migrationRows(15, 13)),
     }), "drift", "local-only migrations are 014, 015")
   })
 
-  it("rejects a remote-only migration", () => {
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: chain(15),
+  it("rejects remote-only migrations", async () => {
+    await expectFailure(() => runComposed({
+      output: migrationListJson(migrationRows(14, 15)),
     }), "drift", "remote-only migrations detected: 015")
   })
 
-  it("rejects checksum drift in a shared migration", () => {
-    const remote = chain(13)
-    remote[7] = migration("008", { checksum: "altered" })
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: remote,
-      expectedPending: "014",
-    }), "drift", "migration 008 has checksum drift")
-  })
-
-  it("rejects gaps, reordered entries, and duplicates", () => {
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: [migration("001"), migration("003")],
-      remoteMigrations: [migration("001"), migration("003")],
-    }), "drift", "gap between 001 and 003")
-
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: [migration("002"), migration("001")],
-      remoteMigrations: [migration("001"), migration("002")],
-    }), "drift", "reordered")
-
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: [migration("001"), migration("001")],
-      remoteMigrations: [migration("001")],
-    }), "drift", "duplicate migration 001")
-  })
-
-  it("rejects malformed, duplicate, zero, unknown, and non-tail expectations", () => {
-    expectFailure(
-      () => parseExpectedPendingOption(["--expected-pending", "not-a-version"]),
-      "invalid-configuration",
-      "must be one numeric migration version",
+  it("rejects a local checksum-registry mismatch before ledger analysis", async () => {
+    const fixture = await createMigrationFixture()
+    const registry = JSON.parse(await readFile(
+      fixture.checksumRegistryPath,
+      "utf8",
+    ))
+    registry["008_migration_008.sql"] = "0".repeat(64)
+    await writeFile(
+      fixture.checksumRegistryPath,
+      `${JSON.stringify(registry, null, 2)}\n`,
+      "utf8",
     )
-    expectFailure(
-      () => parseExpectedPendingOption([
-        "--expected-pending",
-        "014",
-        "--expected-pending=014",
-      ]),
-      "invalid-configuration",
-      "at most once",
+    let listCalled = false
+
+    await expectFailure(() => runComposed({
+      argv: ["--expected-pending", "014"],
+      fixture,
+      migrationListRunner: () => {
+        listCalled = true
+        return migrationListJson(migrationRows(14, 13))
+      },
+    }), "drift", "checksum drift from the repository registry")
+    expect(listCalled).toBe(false)
+  })
+
+  it("never creates remote checksum, name, or statement metadata", async () => {
+    const rows = parseMigrationList(
+      migrationListJson(migrationRows(14, 14)),
     )
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: chain(13),
-      expectedPending: "000",
-    }), "invalid-configuration", "must identify exactly one local migration")
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: chain(13),
-      expectedPending: "999",
-    }), "invalid-configuration", "must identify exactly one local migration")
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: chain(13),
-      expectedPending: "013",
-    }), "invalid-configuration", "is not the local tail")
-  })
-
-  it("rejects a partially recorded or partially applied 014", () => {
-    const partialRemote = chain(14)
-    partialRemote[13] = migration("014", { checksum: "partial-014" })
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: partialRemote,
-      expectedPending: "014",
-    }), "drift", "migration 014 has checksum drift")
-
-    const missingStatements = chain(13)
-    missingStatements[12] = migration("013", { statementCount: 0 })
-    expectFailure(() => analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: missingStatements,
-      expectedPending: "014",
-    }), "drift", "migration 013 is partially recorded")
-  })
-
-  it("keeps exact alignment passing without an expectation", () => {
-    expect(analyzeMigrationState({
-      localMigrations: chain(14),
-      remoteMigrations: chain(14),
-    })).toEqual({ status: "aligned", latest: "014" })
-  })
-})
-
-describe("npm option forwarding", () => {
-  it("accepts npm's positional and npm_config forms without weakening direct parsing", () => {
-    expect(parseExpectedPendingOption(["014"])).toEqual({
-      expectedPending: "014",
-      help: false,
+    expect(rows[0]).toEqual({
+      local: "001",
+      remote: "001",
+      time: "001",
     })
-    expect(parseExpectedPendingOption([], "014")).toEqual({
-      expectedPending: "014",
-      help: false,
+    expect(Object.keys(rows[0]).sort()).toEqual(["local", "remote", "time"])
+    expect(preflightCore.migrationsFromList).toBeUndefined()
+
+    await expect(runComposed({
+      output: migrationListJson(rows),
+    })).resolves.toEqual({
+      status: "aligned",
+      latest: "014",
     })
-    expect(parseExpectedPendingOption(["014"], "true")).toEqual({
-      expectedPending: "014",
-      help: false,
+  })
+
+  it("keeps exact row alignment passing by default", async () => {
+    await expect(runComposed({
+      output: migrationListJson(migrationRows(14, 14)),
+    })).resolves.toEqual({
+      status: "aligned",
+      latest: "014",
     })
   })
 })
 
-describe("Supabase migration-list parsing", () => {
-  it("preserves missing local and remote cells in captured table output", () => {
+describe("documented table parsing", () => {
+  it("preserves explicit blank cells row by row", () => {
     expect(parseMigrationList(`
       Local | Remote | Time (UTC)
+      ----- | ------ | ----------
       001   | 001    | 001
             | 002    | 002
       003   |        | 003
     `)).toEqual([
-      { local: "001", remote: "001" },
-      { local: "", remote: "002" },
-      { local: "003", remote: "" },
+      migrationRow("001", "001", "001"),
+      migrationRow("", "002", "002"),
+      migrationRow("003", "", "003"),
     ])
   })
 })

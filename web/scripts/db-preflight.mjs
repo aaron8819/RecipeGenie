@@ -7,7 +7,6 @@ import {
   MigrationPreflightError,
   analyzeMigrationState,
   loadMigrationDirectory,
-  migrationsFromList,
   parseExpectedPendingOption,
   parseMigrationList,
 } from "./db-preflight-core.mjs"
@@ -58,40 +57,50 @@ function runSupabase(args, { print = false } = {}) {
   return result.stdout ?? ""
 }
 
-async function main() {
-  const options = parseExpectedPendingOption(
-    process.argv.slice(2),
-    process.env.npm_config_expected_pending,
-  )
-  if (options.help) {
-    console.log("Usage: npm run db:preflight -- [--expected-pending VERSION]")
-    console.log("Example rollout opt-in: npm run db:preflight -- --expected-pending 014")
-    return
-  }
-
-  const checksumRegistry = JSON.parse(await readFile(
-    join(supabaseDirectory, "migration-checksums.json"),
-    "utf8",
-  ))
-  const localMigrations = await loadMigrationDirectory(
-    join(supabaseDirectory, "migrations"),
-    checksumRegistry,
-  )
-  const listOutput = runSupabase([
+export async function runMigrationPreflight({
+  argv = [],
+  checksumRegistryPath = join(
+    supabaseDirectory,
+    "migration-checksums.json",
+  ),
+  migrationDirectory = join(supabaseDirectory, "migrations"),
+  migrationListRunner = () => runSupabase([
     "--workdir",
     repositoryRoot,
     "migration",
     "list",
     "--linked",
-  ], { print: true })
-  const listRows = parseMigrationList(listOutput)
-  const remoteMigrations = migrationsFromList(listRows, localMigrations)
+  ], { print: true }),
+}) {
+  const options = parseExpectedPendingOption(argv)
+  if (options.help) return { status: "help" }
 
-  const result = analyzeMigrationState({
+  const checksumRegistry = JSON.parse(await readFile(
+    checksumRegistryPath,
+    "utf8",
+  ))
+  const localMigrations = await loadMigrationDirectory(
+    migrationDirectory,
+    checksumRegistry,
+  )
+  const listRows = parseMigrationList(await migrationListRunner())
+
+  return analyzeMigrationState({
     localMigrations,
-    remoteMigrations,
+    migrationRows: listRows,
     expectedPending: options.expectedPending,
   })
+}
+
+async function main() {
+  const result = await runMigrationPreflight({
+    argv: process.argv.slice(2),
+  })
+  if (result.status === "help") {
+    console.log("Usage: npm run db:preflight -- [--expected-pending VERSION]")
+    console.log("Example rollout opt-in: npm run db:preflight -- --expected-pending 014")
+    return
+  }
 
   if (result.status === "expected-pending") {
     console.log(
@@ -100,16 +109,23 @@ async function main() {
     )
     console.log("Migration preflight status: EXPECTED PENDING.")
   } else {
-    console.log("Migration histories and registered checksums are aligned for the linked project.")
+    console.log(
+      "Migration version ledgers are aligned; active local migration files "
+      + "match the repository checksum registry.",
+    )
     console.log("Migration preflight status: ALIGNED.")
   }
+  console.log(
+    "Remote migration names, statements, and checksums are not exposed by "
+    + "`supabase migration list` and are not verified by this command.",
+  )
   console.log(
     "Next steps: verify you linked the intended environment, then run "
     + "`npx supabase --workdir .. db push` only under separate migration authorization.",
   )
 }
 
-main().catch((error) => {
+function handleError(error) {
   if (error instanceof MigrationPreflightError) {
     const prefix = error.category === "invalid-configuration"
       ? "Invalid expected-pending configuration"
@@ -128,4 +144,11 @@ main().catch((error) => {
 
   console.error(error instanceof Error ? error.message : String(error))
   process.exitCode = 1
-})
+}
+
+if (
+  process.argv[1]
+  && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main().catch(handleError)
+}
