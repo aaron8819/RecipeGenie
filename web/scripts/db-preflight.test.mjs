@@ -15,9 +15,19 @@ import {
   parseExpectedPendingOption,
   parseMigrationList,
 } from "./db-preflight-core.mjs"
-import { runMigrationPreflight } from "./db-preflight.mjs"
+import {
+  main as runMigrationPreflightCli,
+  runMigrationPreflight,
+} from "./db-preflight.mjs"
 
 const fixtureRoots = []
+const pinnedCliFixtureDirectory = join(
+  process.cwd(),
+  "scripts",
+  "fixtures",
+  "db-preflight",
+  "supabase-cli-2.109.0",
+)
 
 afterEach(async () => {
   await Promise.all(fixtureRoots.splice(0).map((directory) => (
@@ -82,6 +92,14 @@ function migrationListJson(rows, overrides = {}) {
     message: "Migrations listed",
     ...overrides,
   })
+}
+
+async function readPinnedCliFixture(filename) {
+  const lines = JSON.parse(await readFile(
+    join(pinnedCliFixtureDirectory, filename),
+    "utf8",
+  ))
+  return lines.join("\n")
 }
 
 async function runComposed({
@@ -348,6 +366,56 @@ describe("composed row-preserving migration-list handling", () => {
       status: "aligned",
       latest: "014",
     })
+  })
+})
+
+describe("Supabase CLI 2.109.0 migration-list fixtures", () => {
+  it("accepts exact local and remote alignment from the pinned renderer", async () => {
+    await expect(runComposed({
+      output: await readPinnedCliFixture("aligned-001-014.json"),
+    })).resolves.toEqual({
+      status: "aligned",
+      latest: "014",
+    })
+  })
+
+  it("fails closed for the renderer's blank remote 014 cell by default", async () => {
+    const output = await readPinnedCliFixture("pending-014.json")
+    await expectFailure(() => runComposed({
+      output,
+    }), "drift", "local-only migrations detected: 014")
+  })
+
+  it("accepts the blank remote 014 cell only with explicit argv", async () => {
+    const output = await readPinnedCliFixture("pending-014.json")
+    await expect(runComposed({
+      argv: ["--expected-pending", "014"],
+      output,
+    })).resolves.toEqual({
+      status: "expected-pending",
+      expectedPending: "014",
+      latestRemote: "013",
+    })
+  })
+
+  it("emits the remote-integrity disclaimer from the CLI entrypoint", async () => {
+    const fixture = await createMigrationFixture()
+    const messages = []
+    await runMigrationPreflightCli({
+      argv: ["--expected-pending", "014"],
+      ...fixture,
+      migrationListRunner: async () => (
+        readPinnedCliFixture("pending-014.json")
+      ),
+      log: (message) => messages.push(message),
+    })
+
+    expect(messages.join("\n")).toContain(
+      "`db:preflight` compares row-aligned local and remote migration versions only. "
+      + "`migration-checksums.json` guards local migration files only; this command "
+      + "does not verify remote migration names, SQL statements, checksums, or exact "
+      + "remote file equivalence.",
+    )
   })
 })
 

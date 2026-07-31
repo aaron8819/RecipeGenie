@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { readFile } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -92,34 +91,41 @@ export async function runMigrationPreflight({
   })
 }
 
-async function main() {
+export async function main({
+  argv = process.argv.slice(2),
+  log = (message) => console.log(message),
+  ...preflightOptions
+} = {}) {
   const result = await runMigrationPreflight({
-    argv: process.argv.slice(2),
+    argv,
+    ...preflightOptions,
   })
   if (result.status === "help") {
-    console.log("Usage: npm run db:preflight -- [--expected-pending VERSION]")
-    console.log("Example rollout opt-in: npm run db:preflight -- --expected-pending 014")
+    log("Usage: npm run db:preflight -- [--expected-pending VERSION]")
+    log("Example rollout opt-in: npm run db:preflight -- --expected-pending 014")
     return
   }
 
   if (result.status === "expected-pending") {
-    console.log(
+    log(
       `Migration histories match through ${result.latestRemote}; `
       + `local migration ${result.expectedPending} is the sole explicitly expected pending tail migration.`,
     )
-    console.log("Migration preflight status: EXPECTED PENDING.")
+    log("Migration preflight status: EXPECTED PENDING.")
   } else {
-    console.log(
+    log(
       "Migration version ledgers are aligned; active local migration files "
       + "match the repository checksum registry.",
     )
-    console.log("Migration preflight status: ALIGNED.")
+    log("Migration preflight status: ALIGNED.")
   }
-  console.log(
-    "Remote migration names, statements, and checksums are not exposed by "
-    + "`supabase migration list` and are not verified by this command.",
+  log(
+    "`db:preflight` compares row-aligned local and remote migration versions only. "
+    + "`migration-checksums.json` guards local migration files only; this command "
+    + "does not verify remote migration names, SQL statements, checksums, or exact "
+    + "remote file equivalence.",
   )
-  console.log(
+  log(
     "Next steps: verify you linked the intended environment, then run "
     + "`npx supabase --workdir .. db push` only under separate migration authorization.",
   )
