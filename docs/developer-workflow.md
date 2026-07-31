@@ -12,7 +12,13 @@ restores, or operational incidents:
 npm run rg:doctor
 ```
 
-Use `npm run rg:doctor -- --json` for machine-readable output. The command performs local filesystem and Git discovery only. It makes no network calls, writes no files, and never prints environment values, credential contents, database URLs, or credential-bearing usernames. A missing local Supabase link is a warning when the explicit project identity is otherwise consistent; contradictory repository, project, link, or endpoint identity is blocking.
+Use `npm run --silent rg:doctor -- --json` for machine-readable output. The
+command performs local filesystem and Git discovery only. It makes no network
+calls, writes no files, and never prints environment values, credential
+contents, database URLs, or credential-bearing usernames. A missing local
+Supabase link is a warning when the explicit project identity is otherwise
+consistent; contradictory repository, project, link, or endpoint identity is
+blocking.
 
 Do not require it for ordinary writing, documentation-only edits, or clearly
 local low-risk code changes unless environment capability matters. The report
@@ -41,15 +47,24 @@ repeatable value option because it intentionally defines a multi-file focused
 scope.
 
 Focused and PR checks invoke npm through the CLI bundled with the active pinned
-Node distribution and verify its version against `packageManager`. Ambient
-`npm_execpath`, `npm_node_execpath`, and similar environment overrides are not
-executable authority. Child processes receive argument arrays without a shell.
+Node distribution and verify its version against `packageManager`. They build
+one sanitized environment for the complete child tree: the pinned runtime is
+first in the executable path, directories containing competing Node/npm shims
+are removed, mixed-case Windows path variables are collapsed, lifecycle Node,
+npm, script-shell, `ComSpec`, and Node preload overrides are replaced or
+removed, and unrelated platform paths remain available. Before required work,
+a real npm lifecycle probe must report the pinned Node/npm identities and
+trusted shell without exposing their paths. Every child receives an argument
+array without application-level shell interpolation. The PowerShell migration
+tooling entry point is resolved from a trusted platform installation rather
+than ambient path order.
 
 Focused verification is an iteration aid for an explicit bounded scope:
 
 ```powershell
 npm run rg:verify:focused -- --base origin/main
 npm run rg:verify:focused -- --file docs/developer-workflow.md --file web/scripts/workflow/verification.mjs
+npm run --silent rg:verify:focused -- --json --base origin/main
 ```
 
 The auditable mapping covers documentation, workflow scripts, database
@@ -63,6 +78,7 @@ PR verification is the complete local pre-PR gate:
 
 ```powershell
 npm run rg:verify:pr
+npm run --silent rg:verify:pr -- --json
 ```
 
 It composes the existing `npm run verify` authority (artifact and secret
@@ -77,6 +93,7 @@ workflow:
 
 ```powershell
 npm run rg:verify:release -- --repository aaron8819/RecipeGenie --branch main --expected-sha <sha> --production-url <url> --expected-project-ref <ref>
+npm run --silent rg:verify:release -- --json --repository aaron8819/RecipeGenie --branch main --expected-sha <sha> --production-url <url> --expected-project-ref <ref>
 ```
 
 It preserves the existing commit/deployment/manifest binding. Missing external
@@ -88,8 +105,12 @@ The release composition boundary accepts exactly one uncontaminated JSON
 document from `rg:release:status`. A passing document must identify its schema,
 explicit `PASS` verdict, complete expected/deployed SHA and Supabase project
 bindings, expected migration, required authoritative checks, warnings, and next
-action. Exit-zero failed, blocked, skipped, incomplete, contradictory, unknown,
-or malformed output cannot produce a passing wrapper result.
+action. Required release checks accept only the existing `AUTHORITATIVE` type.
+Their stable identities are composed from the bound repository, branch, exact
+SHA, production manifest tuple, deployed SHA, and Supabase project—not from
+display labels—and must be complete and unique. `INFERRED`, unknown, missing,
+duplicate, conflicting, failed, warned, or skipped required evidence cannot
+produce a passing wrapper result even when the child exits zero.
 
 `npm run verify` remains the comprehensive local code-quality gate used by CI.
 `npm run check:migration-references` is its repository-backed migration
@@ -98,13 +119,24 @@ SQL files, reuses the canonical checksum loader, and verifies README and
 `supabase/SCHEMA.md` against that source rather than maintaining another active
 filename constant.
 
+Use `npm run --silent check:migration-references -- --json` for its
+machine-readable form. Migration-impact classification treats migrations, the
+checksum registry, schema/README chain authority, this developer workflow,
+repository operating policy, migration-integrity implementation and tests,
+package/CI entry points, database preflight tooling and fixtures, database
+operator tooling, and migration tests as authority paths. Current and previous
+rename paths plus GitHub file status are validated. A known authority path is
+potentially impactful even when its patch is absent or truncated; malformed
+path, status, or rename metadata also fails closed. Unrelated documentation and
+unrelated workflow modules remain outside that authority set.
+
 ## PR evidence report
 
 Use the read-only evidence reporter to reconstruct local and GitHub PR state:
 
 ```powershell
 npm run rg:pr:evidence
-npm run rg:pr:evidence -- --json
+npm run --silent rg:pr:evidence -- --json
 npm run rg:pr:evidence -- --local-only
 npm run rg:pr:evidence -- --repository aaron8819/RecipeGenie --pr 35 --head-sha <40-character-sha>
 ```
@@ -124,19 +156,43 @@ head option. Head disagreement, dirty state, pending/failed checks, merge
 conflicts, and unresolved review threads cannot produce a passing report. No
 PR, no remote branch, missing GitHub access, incomplete pagination, missing
 checks, or unavailable deployment status is reported as `SKIPPED` or
-`UNAVAILABLE`, while retaining the useful local report.
+`UNAVAILABLE`, while retaining the useful local report. Every check states
+whether it is required, why it was skipped, and whether it blocks the verdict.
+Full PR evidence requires the remote branch and both deployment binding and
+outcome; required `SKIPPED`, `UNAVAILABLE`, malformed, pending, missing, or
+failed evidence blocks overall `PASS`. Local-only omissions are explicitly
+optional, while the report remains incomplete because GitHub evidence is
+required and unavailable.
 
 Check runs and commit statuses are validated independently. Each contributing
 record must have a stable identifier/name or context, a recognized lifecycle
 and successful state. Check runs require their own explicit matching SHA;
 commit statuses require either their own matching SHA or the separately
-reported full-SHA REST endpoint binding. The reporter never fills a record's
-missing SHA with the requested value. PR-file evidence preserves
+retrieved combined commit-status endpoint's valid returned SHA. That endpoint
+must return a recognized state, a valid SHA exactly equal to the requested
+head, and valid response metadata before it can bind records that omit their
+own SHA. The requested SHA is never copied into endpoint or record evidence.
+The returned SHA, state, and binding verdict remain explicit in human and JSON
+output. PR-file evidence preserves
 GitHub status and both rename endpoints, so renames, copies, and deletions that
 cross a migration-sensitive path remain migration impact even without a patch.
 Deployment record binding and deployment outcome are separate checks. A record
 alone does not pass: the reporter selects the latest deployment and latest
 status by timestamp and stable ID and requires a successful terminal status.
+
+Mergeability is evaluated independently from open/draft state. The only
+passing combination is boolean `mergeable: true` with
+`mergeable_state: clean`. `mergeable: null` with `unknown` is
+unavailable/pending; missing, null, malformed, unknown, conflicting, dirty,
+blocked, behind, unstable, draft, or hook-dependent combinations do not pass.
+
+All three workflow CLIs detect `--json` before strict parsing. Argument or
+runtime validation failure emits exactly one JSON document to stdout with
+`schemaVersion`, `command`, failure `status`, error `code`, `category`, concise
+`message`, and accepted `usage`; it exits nonzero and leaves stderr empty.
+Duplicate `--json` is a deterministic JSON argument error. Human failures stay
+concise on stderr. Always use `npm run --silent ... -- --json` so npm lifecycle
+headers cannot contaminate machine output.
 
 ## Proportional review
 

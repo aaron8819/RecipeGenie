@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises"
-import { dirname, basename, join, resolve } from "node:path"
+import { readFileSync } from "node:fs"
+import { dirname, join, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { loadMigrationDirectory } from "../db-preflight-core.mjs"
@@ -14,6 +15,49 @@ const checksumRegistryPath = join(
   "supabase",
   "migration-checksums.json",
 )
+const MIGRATION_INTEGRITY_USAGE = "migration-integrity.mjs [--json]"
+const MIGRATION_AUTHORITY_PATHS = new Set([
+  ".github/workflows/ci.yml",
+  "AGENTS.md",
+  "README.md",
+  "docs/developer-workflow.md",
+  "supabase/config.toml",
+  "supabase/SCHEMA.md",
+  "supabase/migration-checksums.json",
+  "web/package.json",
+  "web/scripts/db-preflight-core.mjs",
+  "web/scripts/db-preflight.mjs",
+  "web/scripts/db-preflight.test.mjs",
+  "web/scripts/operational/production-checks.mjs",
+  "web/scripts/operational/production-checks.test.mjs",
+  "web/scripts/verify-production.mjs",
+  "web/scripts/verify-production.test.mjs",
+  "web/scripts/workflow/context.mjs",
+  "web/scripts/workflow/context.test.mjs",
+  "web/scripts/workflow/doctor.mjs",
+  "web/scripts/workflow/doctor.test.mjs",
+  "web/scripts/workflow/migration-integrity.mjs",
+  "web/scripts/workflow/migration-integrity.test.mjs",
+  "web/scripts/workflow/policy.mjs",
+  "web/scripts/workflow/policy.test.mjs",
+  "web/scripts/workflow/pr-evidence.mjs",
+  "web/scripts/workflow/pr-evidence.test.mjs",
+  "web/scripts/workflow/release-status.mjs",
+  "web/scripts/workflow/release-status.test.mjs",
+  "web/scripts/workflow/verification.mjs",
+  "web/scripts/workflow/verification.test.mjs",
+  "web/src/app/api/version/route.ts",
+  "web/src/app/api/version/route.test.ts",
+  "web/src/lib/deployment-manifest.ts",
+  "web/src/lib/__tests__/deployment-manifest.test.ts",
+])
+const MIGRATION_AUTHORITY_PREFIXES = [
+  "scripts/database/",
+  "supabase/migrations/",
+  "supabase/tests/",
+  "supabase/verification/",
+  "web/scripts/fixtures/db-preflight/",
+]
 
 function normalizePath(value) {
   return value.replaceAll("\\", "/")
@@ -39,6 +83,36 @@ function addCheck(checks, name, status, detail) {
 function exactSetDifference(left, right) {
   const rightSet = new Set(right)
   return left.filter((value) => !rightSet.has(value))
+}
+
+function runtimeIdentity() {
+  const npmExecPath = process.env.npm_execpath
+  const npmNodeExecPath = process.env.npm_node_execpath
+  const expectedNpmLocations = [
+    resolve(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    resolve(dirname(process.execPath), "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+  ]
+  let npm = null
+  try {
+    npm = JSON.parse(
+      readFileSync(resolve(dirname(npmExecPath), "..", "package.json"), "utf8"),
+    ).version
+  } catch {
+    // Runtime validation reports a null npm version.
+  }
+  const platformShell = process.platform === "win32"
+    ? resolve(process.env.SystemRoot ?? "C:\\Windows", "System32", "cmd.exe")
+    : "/bin/sh"
+  return {
+    node: process.versions.node,
+    npm,
+    nodeExecutableMatchesLifecycle: Boolean(npmNodeExecPath)
+      && resolve(npmNodeExecPath) === resolve(process.execPath),
+    npmExecutableBundledWithNode: Boolean(npmExecPath)
+      && expectedNpmLocations.some((candidate) => resolve(npmExecPath) === candidate),
+    scriptShellTrusted: Boolean(process.env.npm_config_script_shell)
+      && resolve(process.env.npm_config_script_shell) === resolve(platformShell),
+  }
 }
 
 export function validateMigrationMetadata({
@@ -215,10 +289,14 @@ function normalizeChangedFile(value) {
   if (typeof value === "string") {
     return { filename: normalizePath(value), previousFilename: null, status: "modified", patch: null }
   }
+  const filename = typeof value?.filename === "string"
+    ? normalizePath(value.filename)
+    : ""
+  const rawPreviousFilename = value?.previous_filename ?? value?.previousFilename
   return {
-    filename: normalizePath(value?.filename ?? ""),
-    previousFilename: value?.previous_filename || value?.previousFilename
-      ? normalizePath(value.previous_filename ?? value.previousFilename)
+    filename,
+    previousFilename: typeof rawPreviousFilename === "string" && rawPreviousFilename
+      ? normalizePath(rawPreviousFilename)
       : null,
     status: value?.status ?? null,
     patch: typeof value?.patch === "string" ? value.patch : null,
@@ -227,10 +305,9 @@ function normalizeChangedFile(value) {
 
 function migrationSensitivePath(path) {
   return Boolean(path) && (
-    path.startsWith("supabase/migrations/")
-    || path === "supabase/migration-checksums.json"
-    || path === "supabase/SCHEMA.md"
-    || path === "README.md"
+    MIGRATION_AUTHORITY_PATHS.has(path)
+    || MIGRATION_AUTHORITY_PREFIXES.some((prefix) => path.startsWith(prefix))
+    || /^web\/scripts\/run-migration\d+-preflight-parity(?:\.test)?\.mjs$/u.test(path)
   )
 }
 
@@ -266,6 +343,7 @@ export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
     fileRecords: records.map(({ patch, ...item }) => ({
       ...item,
       patchAvailable: patch !== null,
+      evidenceComplete: patch !== null,
     })),
     migrationFiles,
     sensitivePaths,
@@ -343,6 +421,7 @@ export async function collectMigrationIntegrity(options = {}) {
   }
 
   report.schemaVersion = 1
+  report.runtime = runtimeIdentity()
   assertSecretSafe(report, "migration integrity report")
   return report
 }
@@ -365,28 +444,46 @@ export function renderMigrationIntegrityJson(report) {
 
 export function parseMigrationIntegrityArgs(argv) {
   if (argv.some((argument) => argument !== "--json") || argv.filter((argument) => argument === "--json").length > 1) {
-    throw new Error("Usage: npm run check:migration-references -- [--json]")
+    throw new Error(`Usage: ${MIGRATION_INTEGRITY_USAGE}`)
   }
   return { json: argv.includes("--json") }
 }
 
 async function main(argv = process.argv.slice(2)) {
-  const options = parseMigrationIntegrityArgs(argv)
-  const report = await collectMigrationIntegrity()
-  process.stdout.write(
-    options.json
-      ? renderMigrationIntegrityJson(report)
-      : `${renderMigrationIntegrityText(report)}\n`,
-  )
-  if (report.status === "FAIL") process.exitCode = 1
+  const jsonRequested = argv.includes("--json")
+  try {
+    const options = parseMigrationIntegrityArgs(argv)
+    const report = await collectMigrationIntegrity()
+    process.stdout.write(
+      options.json
+        ? renderMigrationIntegrityJson(report)
+        : `${renderMigrationIntegrityText(report)}\n`,
+    )
+    if (report.status === "FAIL") process.exitCode = 1
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Migration integrity failed."
+    if (jsonRequested) {
+      process.stdout.write(`${JSON.stringify({
+        schemaVersion: 1,
+        command: "migration-integrity",
+        status: "FAIL",
+        error: {
+          code: message.startsWith("Usage:") ? "ARGUMENT_ERROR" : "RUNTIME_ERROR",
+          category: message.startsWith("Usage:") ? "ARGUMENT" : "RUNTIME",
+          message,
+          usage: MIGRATION_INTEGRITY_USAGE,
+        },
+      }, null, 2)}\n`)
+    } else {
+      process.stderr.write(`${message}\n`)
+    }
+    process.exitCode = 1
+  }
 }
 
 if (
   process.argv[1]
   && pathToFileURL(resolve(process.argv[1])).href === import.meta.url
 ) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error))
-    process.exitCode = 1
-  })
+  main()
 }

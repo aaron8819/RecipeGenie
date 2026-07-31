@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import {
+  createTrustedChildEnvironment,
   parseVerificationArgs,
   planFocusedVerification,
   resolveTrustedNpmCli,
@@ -9,9 +15,32 @@ import {
 } from "./verification.mjs"
 
 const SHA = "a".repeat(40)
+const UNSUPPORTED_NODE = process.platform === "win32"
+  ? "C:\\Program Files\\nodejs\\node.exe"
+  : null
+const RELEASE_IDENTITIES = {
+  "github-repository": "github-repository:aaron8819/recipegenie",
+  "branch-head": `github-branch:aaron8819/recipegenie:main:${SHA}`,
+  "exact-sha-ci": `github-checks:aaron8819/recipegenie:${SHA}`,
+  "production-manifest": `production-manifest:${SHA}:eyaoahwzixqetjgfghsh:014_add_recipe_yield_metadata`,
+  "deployed-sha": `deployed-sha:${SHA}`,
+  "supabase-project-ref": "supabase-project:eyaoahwzixqetjgfghsh",
+}
 
 function passingRunner() {
-  return { exitCode: 0, stdout: "passed", stderr: "" }
+  return {
+    exitCode: 0,
+    stdout: JSON.stringify({
+      runtime: {
+        node: process.versions.node,
+        npm: "10.9.8",
+        nodeExecutableMatchesLifecycle: true,
+        npmExecutableBundledWithNode: true,
+        scriptShellTrusted: true,
+      },
+    }),
+    stderr: "",
+  }
 }
 
 function completeReleaseReport(overrides = {}) {
@@ -110,20 +139,77 @@ describe("trusted npm execution", () => {
     }
   })
 
+  it("removes hostile executable and shell authority from the complete child environment", () => {
+    const root = mkdtempSync(join(tmpdir(), "rg-hostile-runtime-"))
+    const hostileNodeDirectory = join(root, "hostile-node")
+    const hostileNpmDirectory = join(root, "hostile-npm")
+    const benign = join(root, "benign")
+    mkdirSync(hostileNodeDirectory)
+    mkdirSync(hostileNpmDirectory)
+    mkdirSync(benign)
+    writeFileSync(join(hostileNodeDirectory, "node.exe"), "hostile")
+    writeFileSync(join(hostileNpmDirectory, "npm.cmd"), "@exit /b 0")
+    try {
+      const env = createTrustedChildEnvironment({
+        environment: {
+          ...process.env,
+          PATH: `${hostileNodeDirectory};${benign}`,
+          Path: `${hostileNpmDirectory};${process.env.SystemRoot}\\System32`,
+          npm_execpath: join(root, "always-success.js"),
+          NPM_NODE_EXECPATH: join(root, "node.exe"),
+          npm_config_script_shell: join(root, "shell.cmd"),
+          npm_config_ignore_scripts: "true",
+          npm_config_userconfig: join(root, ".npmrc"),
+          ComSpec: join(root, "shell.cmd"),
+          NODE_OPTIONS: `--require=${join(root, "preload.js")}`,
+          BASH_ENV: join(root, "bash-env"),
+        },
+      })
+      const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path")
+      expect(Object.keys(env).filter((key) => key.toLowerCase() === "path")).toHaveLength(1)
+      const pathEntries = env[pathKey].split(";")
+      expect(pathEntries).not.toContain(hostileNodeDirectory)
+      expect(pathEntries).not.toContain(hostileNpmDirectory)
+      expect(pathEntries).toContain(benign)
+      expect(env[pathKey]).toContain(dirname(process.execPath))
+      expect(env[pathKey]).toContain(`${process.env.SystemRoot}\\System32`)
+      expect(env.npm_execpath).toBe(resolveTrustedNpmCli())
+      expect(env.npm_node_execpath).toBe(process.execPath)
+      expect(env.npm_config_script_shell).toBe(`${process.env.SystemRoot}\\System32\\cmd.exe`)
+      expect(env.npm_config_ignore_scripts).toBe("false")
+      expect(env.npm_config_userconfig).toBe("NUL")
+      expect(env.ComSpec).toBe(env.npm_config_script_shell)
+      expect(env.NODE_OPTIONS).toBeUndefined()
+      expect(env.BASH_ENV).toBeUndefined()
+
+      const nested = spawnSync("node", ["--eval", "process.stdout.write(process.versions.node)"], {
+        encoding: "utf8",
+        env,
+        shell: false,
+      })
+      expect(nested.status).toBe(0)
+      expect(nested.stdout).toBe(process.versions.node)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it("invokes every PR check with its intended argument array", () => {
     const calls = []
     const report = runPrVerification({
-      commandRunner(command, args, cwd) {
-        calls.push({ command, args, cwd })
+      commandRunner(command, args, cwd, env) {
+        calls.push({ command, args, cwd, env })
         return passingRunner()
       },
     })
     expect(report.status).toBe("PASS")
-    expect(calls[0].args.slice(-2)).toEqual(["run", "verify"])
-    expect(calls[1].args.slice(-2)).toEqual(["run", "build"])
-    expect(calls[2].command).toBe("pwsh")
-    expect(calls[2].args).toContain("-File")
+    expect(calls[0].args).toContain("check:migration-references")
+    expect(calls[1].args.slice(-2)).toEqual(["run", "verify"])
+    expect(calls[2].args.slice(-2)).toEqual(["run", "build"])
+    expect(calls[3].command).toMatch(/[\\/](?:pwsh|powershell)(?:\.exe)?$/iu)
+    expect(calls[3].args).toContain("-File")
     expect(calls.every((call) => Array.isArray(call.args))).toBe(true)
+    expect(calls.every((call) => typeof call.env === "object")).toBe(true)
   })
 })
 
@@ -139,9 +225,10 @@ describe("release verification composition", () => {
   it("classifies explicit optional evidence gaps as unavailable and non-passing", () => {
     const value = completeReleaseReport({
       warnings: ["Optional deployment evidence is unavailable."],
-      checks: completeReleaseReport().checks.map((item) => (
-        item.name === "exact-sha-ci" ? { ...item, status: "WARN" } : item
-      )),
+      checks: [
+        ...completeReleaseReport().checks,
+        { name: "deployment-record", status: "WARN", authority: "CORROBORATIVE", detail: "optional" },
+      ],
     })
     const report = runReleaseVerification({
       commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
@@ -175,6 +262,46 @@ describe("release verification composition", () => {
     })
     expect(report.status).toBe("FAIL")
   })
+
+  it.each([
+    ["inferred authority", (value) => ({ ...value, checks: value.checks.map((item, index) => index === 0 ? { ...item, authority: "INFERRED" } : item) })],
+    ["unknown authority", (value) => ({ ...value, checks: value.checks.map((item, index) => index === 0 ? { ...item, authority: "CUSTOM" } : item) })],
+    ["missing authority", (value) => ({ ...value, checks: value.checks.map((item, index) => index === 0 ? { ...item, authority: undefined } : item) })],
+    ["duplicate authority identity", (value) => ({ ...value, checks: [...value.checks, { ...value.checks[0] }] })],
+    ["conflicting duplicate identity", (value) => ({ ...value, checks: [...value.checks, { ...value.checks[0], detail: "conflict" }] })],
+    ["missing explicit identity", (value) => ({
+      ...value,
+      checks: value.checks.map((item, index) => index === 0
+        ? { ...item, identity: RELEASE_IDENTITIES[item.name] }
+        : item),
+    })],
+    ["same explicit identity reused", (value) => ({
+      ...value,
+      checks: value.checks.map((item) => ({ ...item, identity: "same-authority" })),
+    })],
+    ["explicit identity conflicting with binding", (value) => ({
+      ...value,
+      checks: value.checks.map((item) => ({ ...item, identity: `${RELEASE_IDENTITIES[item.name]}-conflict` })),
+    })],
+  ])("rejects %s", (_label, mutate) => {
+    const report = runReleaseVerification({
+      commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(mutate(completeReleaseReport())) }),
+    })
+    expect(report.status).toBe("FAIL")
+  })
+
+  it("accepts complete recognized evidence with explicit unique identities", () => {
+    const value = completeReleaseReport()
+    value.checks = value.checks.map((item) => ({
+      ...item,
+      identity: RELEASE_IDENTITIES[item.name],
+    }))
+    const report = runReleaseVerification({
+      commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+    })
+    expect(report.status).toBe("PASS")
+    expect(report.releaseAuthorityIdentities).toEqual(RELEASE_IDENTITIES)
+  })
 })
 
 describe("verification CLI schema", () => {
@@ -203,5 +330,57 @@ describe("verification CLI schema", () => {
     ["positional", ["pr", "unexpected"]],
   ])("rejects %s", (_label, argv) => {
     expect(() => parseVerificationArgs(argv)).toThrow()
+  })
+
+  it.each([
+    ["unknown option", ["pr", "--json", "--wat"]],
+    ["duplicate json", ["pr", "--json", "--json"]],
+    ["missing value", ["focused", "--json", "--base"]],
+    ["conflicting scopes", ["focused", "--json", "--base", "main", "--file", "README.md"]],
+    ["unexpected positional", ["pr", "--json", "unexpected"]],
+    ["malformed ref", ["focused", "--json", "--base", "../main"]],
+    ["malformed path", ["focused", "--json", "--file", "C:\\secret.txt"]],
+    ["tier-inapplicable option", ["pr", "--json", "--repository", "aaron8819/RecipeGenie"]],
+  ])("emits one JSON error document for %s", (_label, args) => {
+    const script = resolve(dirname(fileURLToPath(import.meta.url)), "verification.mjs")
+    const child = spawnSync(process.execPath, [script, ...args], {
+      encoding: "utf8",
+      shell: false,
+    })
+    expect(child.status).not.toBe(0)
+    expect(child.stderr).toBe("")
+    expect(JSON.parse(child.stdout)).toMatchObject({
+      schemaVersion: 1,
+      command: "verification",
+      status: "FAIL",
+      error: { category: "ARGUMENT" },
+    })
+  })
+
+  it.runIf(Boolean(UNSUPPORTED_NODE && existsSync(UNSUPPORTED_NODE)))("emits JSON for a runtime validation failure after successful parsing", () => {
+    const script = resolve(dirname(fileURLToPath(import.meta.url)), "verification.mjs")
+    const child = spawnSync(UNSUPPORTED_NODE, [script, "pr", "--json"], {
+      encoding: "utf8",
+      shell: false,
+    })
+    expect(child.status).not.toBe(0)
+    expect(child.stderr).toBe("")
+    expect(JSON.parse(child.stdout)).toMatchObject({
+      command: "verification",
+      status: "FAIL",
+      error: { code: "RUNTIME_ERROR", category: "RUNTIME" },
+    })
+  })
+
+  it("keeps human-mode argument failures concise", () => {
+    const script = resolve(dirname(fileURLToPath(import.meta.url)), "verification.mjs")
+    const child = spawnSync(process.execPath, [script, "pr", "--wat"], {
+      encoding: "utf8",
+      shell: false,
+    })
+    expect(child.status).not.toBe(0)
+    expect(child.stdout).toBe("")
+    expect(child.stderr.trim()).toMatch(/^Unexpected pr-verification argument:/u)
+    expect(child.stderr).not.toContain("Error:")
   })
 })

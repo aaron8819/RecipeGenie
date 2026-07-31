@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import { spawnSync } from "node:child_process"
 import {
   classifyMigrationImpact,
   parseMigrationIntegrityArgs,
@@ -213,6 +216,27 @@ describe("migration PR impact", () => {
   })
 
   it.each([
+    ["developer workflow deletion", [{ filename: "docs/developer-workflow.md", status: "removed" }]],
+    ["migration implementation without patch", [{ filename: "web/scripts/workflow/migration-integrity.mjs", status: "modified" }]],
+    ["migration tests without patch", [{ filename: "web/scripts/workflow/migration-integrity.test.mjs", status: "modified" }]],
+    ["package migration entry point", [{ filename: "web/package.json", status: "modified", patch: '"check:migration-references"' }]],
+    ["authority renamed out", [{ filename: "archive/workflow.md", previous_filename: "docs/developer-workflow.md", status: "renamed" }]],
+    ["authority renamed in", [{ filename: "docs/developer-workflow.md", previous_filename: "drafts/workflow.md", status: "renamed" }]],
+    ["sensitive file with absent patch", [{ filename: "web/scripts/db-preflight-core.mjs", status: "modified" }]],
+  ])("conservatively classifies %s", (_label, files) => {
+    const report = classifyMigrationImpact(files)
+    expect(report.potentiallyImpactful).toBe(true)
+    expect(report.sensitivePaths.length).toBeGreaterThan(0)
+  })
+
+  it.each([
+    [{ filename: "docs/design-notes.md", status: "modified", patch: "ordinary prose" }],
+    [{ filename: "web/scripts/workflow/state.mjs", status: "modified", patch: "ordinary workflow logic" }],
+  ])("keeps unrelated files outside migration authority", (file) => {
+    expect(classifyMigrationImpact([file]).potentiallyImpactful).toBe(false)
+  })
+
+  it.each([
     ["rename missing previous filename", [{ filename: "docs/new.md", status: "renamed" }]],
     ["unknown status", [{ filename: "src/example.ts", status: "mystery" }]],
   ])("fails closed for %s", (_label, files) => {
@@ -235,5 +259,47 @@ describe("migration-integrity CLI schema", () => {
     [["positional"]],
   ])("rejects %j", (argv) => {
     expect(() => parseMigrationIntegrityArgs(argv)).toThrow()
+  })
+
+  it.each([
+    ["unknown option", ["--json", "--unknown"]],
+    ["duplicate json", ["--json", "--json"]],
+    ["unexpected positional", ["--json", "unexpected"]],
+  ])("emits one JSON error document for %s", (_label, args) => {
+    const scriptDirectory = dirname(fileURLToPath(import.meta.url))
+    const child = spawnSync(process.execPath, [resolve(scriptDirectory, "migration-integrity.mjs"), ...args], {
+      encoding: "utf8",
+      shell: false,
+    })
+    expect(child.status).not.toBe(0)
+    expect(child.stderr).toBe("")
+    expect(JSON.parse(child.stdout)).toMatchObject({
+      schemaVersion: 1,
+      command: "migration-integrity",
+      status: "FAIL",
+      error: { category: "ARGUMENT" },
+    })
+  })
+
+  it("keeps documented silent npm JSON output uncontaminated", () => {
+    const scriptDirectory = dirname(fileURLToPath(import.meta.url))
+    const webDirectory = resolve(scriptDirectory, "..", "..")
+    const npmCli = resolve(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js")
+    const child = spawnSync(process.execPath, [
+      npmCli,
+      "run",
+      "--silent",
+      "check:migration-references",
+      "--",
+      "--json",
+    ], {
+      cwd: webDirectory,
+      encoding: "utf8",
+      shell: false,
+      env: process.env,
+    })
+    expect(child.status).toBe(0)
+    expect(child.stderr).toBe("")
+    expect(JSON.parse(child.stdout)).toMatchObject({ schemaVersion: 1, status: "PASS" })
   })
 })

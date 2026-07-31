@@ -23,6 +23,10 @@ const COMMIT_STATES = new Set(["error", "failure", "pending", "success"])
 const DEPLOYMENT_STATES = new Set([
   "error", "failure", "inactive", "in_progress", "pending", "queued", "success",
 ])
+const MERGEABLE_STATES = new Set([
+  "behind", "blocked", "clean", "dirty", "draft", "has_hooks", "unknown", "unstable",
+])
+const PR_EVIDENCE_USAGE = "pr-evidence.mjs [--json] [--local-only | [--repository OWNER/REPO] [--pr NUMBER] [--head-sha SHA]]"
 
 function normalizePath(value) {
   return value.replaceAll("\\", "/")
@@ -124,18 +128,42 @@ function assertUnique(items, key, label) {
   }
 }
 
-function addCheck(report, name, status, detail) {
-  report.checks.push({ name, status, detail })
+function addCheck(report, name, status, detail, {
+  required = true,
+  skipReason = null,
+} = {}) {
+  report.checks.push({
+    name,
+    status,
+    required,
+    skipReason: status === "SKIPPED" ? skipReason ?? detail : null,
+    effect: required
+      ? status === "PASS" ? "SATISFIES_REQUIRED" : "BLOCKS_PASS"
+      : "NO_EFFECT",
+    detail,
+  })
+}
+
+function annotateEvidence(item, required) {
+  return {
+    ...item,
+    required,
+    skipReason: item.status === "SKIPPED" ? item.detail : null,
+    effect: required
+      ? item.status === "PASS" ? "SATISFIES_REQUIRED" : "BLOCKS_PASS"
+      : "NO_EFFECT",
+  }
 }
 
 function addWarning(report, message) {
   if (!report.warnings.includes(message)) report.warnings.push(message)
 }
 
-function recomputeStatus(report) {
-  if (report.checks.some((item) => item.status === "FAIL")) {
+export function recomputeStatus(report) {
+  const required = report.checks.filter((item) => item.required)
+  if (required.some((item) => item.status === "FAIL")) {
     report.status = "FAIL"
-  } else if (report.checks.some((item) => item.status === "UNAVAILABLE")) {
+  } else if (required.some((item) => item.status !== "PASS")) {
     report.status = "UNAVAILABLE"
   } else {
     report.status = "PASS"
@@ -181,7 +209,7 @@ export function classifyCheckEvidence({
   totalCount,
   statuses,
   expectedSha = null,
-  statusEndpointSha = null,
+  statusEndpoint = null,
 }) {
   if (!Array.isArray(checkRuns) || !Number.isSafeInteger(totalCount) || !Array.isArray(statuses)) {
     return { status: "FAIL", detail: "Exact-head check evidence is structurally malformed." }
@@ -204,13 +232,20 @@ export function classifyCheckEvidence({
       ? !CHECK_CONCLUSIONS.has(item.conclusion)
       : item.conclusion !== null)
   ))
+  const endpointBinding = validateCombinedStatusEndpoint(
+    statusEndpoint,
+    expectedSha,
+  )
+  if (endpointBinding.status !== "PASS") {
+    return { status: "FAIL", detail: endpointBinding.detail }
+  }
   const malformedStatuses = statuses.filter((item) => (
     !item
     || typeof item !== "object"
     || !Number.isSafeInteger(item.id)
     || typeof item.context !== "string"
     || !item.context.trim()
-    || (!SHA_PATTERN.test(item.sha ?? "") && !SHA_PATTERN.test(statusEndpointSha ?? ""))
+    || (!SHA_PATTERN.test(item.sha ?? "") && endpointBinding.status !== "PASS")
     || !COMMIT_STATES.has(item.state)
     || !Number.isFinite(Date.parse(item.createdAt ?? ""))
   ))
@@ -222,7 +257,7 @@ export function classifyCheckEvidence({
   }
   const mismatchedRuns = checkRuns.filter((item) => expectedSha && item.headSha !== expectedSha)
   const mismatchedStatuses = statuses.filter((item) => (
-    expectedSha && (item.sha ?? statusEndpointSha) !== expectedSha
+    expectedSha && (item.sha ?? endpointBinding.returnedSha) !== expectedSha
   ))
   if (mismatchedRuns.length || mismatchedStatuses.length) {
     return {
@@ -267,6 +302,44 @@ export function classifyCheckEvidence({
   return {
     status: "PASS",
     detail: `All ${totalCount} check run(s) and ${latestStatuses.length} latest commit context(s) passed; ${statuses.length} status-history record(s) were validated.`,
+  }
+}
+
+export function validateCombinedStatusEndpoint(endpoint, expectedSha) {
+  if (
+    !endpoint
+    || typeof endpoint !== "object"
+    || Array.isArray(endpoint)
+    || !SHA_PATTERN.test(endpoint.sha ?? "")
+    || !COMMIT_STATES.has(endpoint.state)
+    || !Number.isSafeInteger(endpoint.totalCount)
+    || endpoint.totalCount < 0
+    || !Number.isSafeInteger(endpoint.recordsReturned)
+    || endpoint.recordsReturned < 0
+  ) {
+    return {
+      status: "FAIL",
+      requestedSha: expectedSha ?? null,
+      returnedSha: endpoint?.sha ?? null,
+      state: endpoint?.state ?? null,
+      detail: "Combined commit-status endpoint evidence is malformed or missing its own SHA.",
+    }
+  }
+  if (!SHA_PATTERN.test(expectedSha ?? "") || endpoint.sha !== expectedSha) {
+    return {
+      status: "FAIL",
+      requestedSha: expectedSha ?? null,
+      returnedSha: endpoint.sha,
+      state: endpoint.state,
+      detail: "Combined commit-status endpoint SHA does not match the requested exact head.",
+    }
+  }
+  return {
+    status: "PASS",
+    requestedSha: expectedSha,
+    returnedSha: endpoint.sha,
+    state: endpoint.state,
+    detail: "Combined commit-status endpoint returned and validated the requested exact-head SHA.",
   }
 }
 
@@ -417,6 +490,47 @@ function validPullRequest(pullRequest) {
     && SHA_PATTERN.test(pullRequest.base?.sha ?? "")
     && typeof pullRequest.head?.ref === "string"
     && SHA_PATTERN.test(pullRequest.head?.sha ?? "")
+}
+
+export function evaluateMergeability(pullRequest) {
+  const mergeablePresent = Boolean(pullRequest)
+    && Object.hasOwn(pullRequest, "mergeable")
+  const mergeStatePresent = Boolean(pullRequest)
+    && Object.hasOwn(pullRequest, "mergeable_state")
+  const mergeable = pullRequest?.mergeable
+  const mergeState = pullRequest?.mergeable_state
+  const raw = {
+    mergeablePresent,
+    mergeStatePresent,
+    mergeable: mergeable ?? null,
+    mergeableState: mergeState ?? null,
+  }
+  if (mergeable === null && mergeState === "unknown") {
+    return {
+      ...raw,
+      status: "UNAVAILABLE",
+      detail: "PR mergeability is pending authoritative GitHub computation.",
+    }
+  }
+  if (typeof mergeable !== "boolean" || !MERGEABLE_STATES.has(mergeState)) {
+    return {
+      ...raw,
+      status: "FAIL",
+      detail: "PR mergeability fields are missing, malformed, null, or unknown.",
+    }
+  }
+  if (mergeable === true && mergeState === "clean") {
+    return {
+      ...raw,
+      status: "PASS",
+      detail: "PR mergeability is explicitly true with a clean merge state.",
+    }
+  }
+  return {
+    ...raw,
+    status: "FAIL",
+    detail: `PR mergeability combination is not accepted: mergeable=${mergeable}; state=${mergeState}.`,
+  }
 }
 
 function blockingReviewState(reviews, requested) {
@@ -580,6 +694,27 @@ export function collectReviewThreads(commandRunner, repository, prNumber) {
 }
 
 export function collectExactHeadChecks(commandRunner, repository, headSha) {
+  const combinedResponse = githubApi(
+    commandRunner,
+    `repos/${repository}/commits/${headSha}/status`,
+  )
+  const combinedStatuses = assertObjectArray(
+    combinedResponse?.statuses,
+    "combined commit statuses",
+  )
+  const statusEndpoint = {
+    sha: combinedResponse?.sha ?? null,
+    state: combinedResponse?.state ?? null,
+    totalCount: combinedResponse?.total_count ?? null,
+    recordsReturned: combinedStatuses.length,
+  }
+  const statusEndpointBinding = validateCombinedStatusEndpoint(
+    statusEndpoint,
+    headSha,
+  )
+  if (statusEndpointBinding.status !== "PASS") {
+    throw new Error(statusEndpointBinding.detail)
+  }
   const rawRuns = []
   let totalCount = null
   const fingerprints = new Set()
@@ -663,7 +798,8 @@ export function collectExactHeadChecks(commandRunner, repository, headSha) {
       sha: item.sha ?? null,
       createdAt: item.created_at ?? null,
     })),
-    statusEndpointSha: headSha,
+    statusEndpoint,
+    statusEndpointBinding,
     annotationsComplete: true,
   }
 }
@@ -841,8 +977,14 @@ export async function collectPrEvidence(options = {}) {
     reviewThreads: null,
     deployments: [],
     deploymentEvidence: {
-      binding: { status: "SKIPPED", detail: "Deployment evidence was not collected." },
-      outcome: { status: "SKIPPED", detail: "Deployment evidence was not collected." },
+      binding: annotateEvidence(
+        { status: "SKIPPED", detail: "Deployment evidence was not collected." },
+        !options.localOnly,
+      ),
+      outcome: annotateEvidence(
+        { status: "SKIPPED", detail: "Deployment evidence was not collected." },
+        !options.localOnly,
+      ),
       latestDeploymentId: null,
       latestStatus: null,
     },
@@ -856,7 +998,10 @@ export async function collectPrEvidence(options = {}) {
     git.dirty ? "FAIL" : "PASS",
     git.dirty ? "Worktree is dirty." : "Worktree is clean.",
   )
-  addCheck(report, "remote-branch", remote.status, remote.detail)
+  addCheck(report, "remote-branch", remote.status, remote.detail, {
+    required: !options.localOnly,
+    skipReason: options.localOnly ? "Remote branch evidence is outside local-only mode." : null,
+  })
 
   if (options.localOnly) {
     addCheck(
@@ -866,6 +1011,20 @@ export async function collectPrEvidence(options = {}) {
       "GitHub evidence was intentionally skipped by --local-only.",
     )
     addWarning(report, "GitHub, PR, checks, reviews, comments, threads, and deployments were not queried.")
+    addCheck(
+      report,
+      "deployment-binding",
+      "SKIPPED",
+      "Deployment binding is outside local-only mode.",
+      { required: false, skipReason: "Deployment evidence is outside local-only mode." },
+    )
+    addCheck(
+      report,
+      "deployment-status",
+      "SKIPPED",
+      "Deployment outcome is outside local-only mode.",
+      { required: false, skipReason: "Deployment evidence is outside local-only mode." },
+    )
     const heads = evaluateHeadConsistency({
       localHead: git.head,
       evidenceHead,
@@ -917,6 +1076,7 @@ export async function collectPrEvidence(options = {}) {
   }
 
   if (pullRequest) {
+    const mergeability = evaluateMergeability(pullRequest)
     report.pullRequest = {
       number: pullRequest.number,
       url: pullRequest.html_url,
@@ -926,22 +1086,14 @@ export async function collectPrEvidence(options = {}) {
       headSha: pullRequest.head?.sha ?? null,
       state: pullRequest.merged_at ? "MERGED" : String(pullRequest.state ?? "UNKNOWN").toUpperCase(),
       draft: pullRequest.draft ?? null,
-      mergeable: pullRequest.mergeable ?? null,
-      mergeStateStatus: pullRequest.mergeable_state?.toUpperCase?.() ?? null,
+      mergeable: mergeability.mergeable,
+      mergeStateStatus: mergeability.mergeableState?.toUpperCase?.() ?? null,
+      mergeableFieldPresent: mergeability.mergeablePresent,
+      mergeStateFieldPresent: mergeability.mergeStatePresent,
+      mergeabilityEvaluation: mergeability.status,
     }
     addCheck(report, "pull-request", "PASS", `PR #${pullRequest.number} metadata is available.`)
-    if (
-      pullRequest.mergeable === false
-      || ["blocked", "behind", "dirty", "unstable"].includes(
-        pullRequest.mergeable_state,
-      )
-    ) {
-      addCheck(report, "mergeability", "FAIL", `PR mergeability is ${pullRequest.mergeable_state ?? "conflicting"}.`)
-    } else if (pullRequest.mergeable === null || pullRequest.mergeable_state === "unknown") {
-      addCheck(report, "mergeability", "UNAVAILABLE", "PR mergeability has not been determined.")
-    } else {
-      addCheck(report, "mergeability", "PASS", `PR merge state is ${pullRequest.mergeable_state}.`)
-    }
+    addCheck(report, "mergeability", mergeability.status, mergeability.detail)
 
     try {
       const files = githubApiArrayPages(
@@ -1080,7 +1232,7 @@ export async function collectPrEvidence(options = {}) {
       totalCount: report.exactHeadChecks.totalCount,
       statuses: report.exactHeadChecks.statuses,
       expectedSha: evidenceHead,
-      statusEndpointSha: report.exactHeadChecks.statusEndpointSha,
+      statusEndpoint: report.exactHeadChecks.statusEndpoint,
     })
     addCheck(report, "exact-head-checks", classified.status, classified.detail)
   } catch {
@@ -1095,8 +1247,9 @@ export async function collectPrEvidence(options = {}) {
     )
     const classified = classifyDeploymentEvidence(report.deployments, evidenceHead)
     report.deploymentEvidence = {
-      binding: classified.binding,
-      outcome: classified.outcome,
+      binding: annotateEvidence(classified.binding, true),
+      outcome: annotateEvidence(classified.outcome, true),
+      required: true,
       latestDeploymentId: classified.latestDeployment?.id ?? null,
       latestStatus: classified.latestStatus?.state ?? null,
     }
@@ -1133,12 +1286,13 @@ export function renderPrEvidenceText(report) {
       ? `PR: #${pr.number} ${pr.state}${pr.draft ? " DRAFT" : ""} ${pr.url}`
       : "PR: UNAVAILABLE",
     `Changed files: ${report.changedFiles.length}`,
-    `Migration impact: files=${report.migrationImpact.migrationFiles.length} documentation-only=${report.migrationImpact.documentationOnly ? "YES" : "NO"} checksum-registry=${report.migrationImpact.checksumRegistryChanged ? "CHANGED" : "UNCHANGED"}`,
+    `Migration impact: files=${report.migrationImpact.migrationFiles.length} potentially-impactful=${report.migrationImpact.potentiallyImpactful ? "YES" : "NO"} authority-paths=${report.migrationImpact.sensitivePaths.length} documentation-only=${report.migrationImpact.documentationOnly ? "YES" : "NO"} checksum-registry=${report.migrationImpact.checksumRegistryChanged ? "CHANGED" : "UNCHANGED"}`,
     `Reviews: ${report.reviews.length}; requests=${report.reviewRequests.users.length + report.reviewRequests.teams.length}`,
     `Comments: top-level=${report.comments.topLevel.length}; inline=${report.comments.inline.length}`,
     `Review threads: total=${report.reviewThreads?.total ?? "UNAVAILABLE"}; unresolved=${report.reviewThreads?.unresolved ?? "UNAVAILABLE"}`,
     `Deployments returned: ${report.deployments.length}; binding=${report.deploymentEvidence.binding.status}; latest outcome=${report.deploymentEvidence.outcome.status}${report.deploymentEvidence.latestStatus ? ` (${report.deploymentEvidence.latestStatus})` : ""}`,
-    ...report.checks.map((item) => `- ${item.name}: ${item.status} - ${item.detail}`),
+    `Combined status endpoint: returned=${report.exactHeadChecks?.statusEndpointBinding?.returnedSha ?? "UNAVAILABLE"}; binding=${report.exactHeadChecks?.statusEndpointBinding?.status ?? "UNAVAILABLE"}; state=${report.exactHeadChecks?.statusEndpointBinding?.state ?? "UNAVAILABLE"}`,
+    ...report.checks.map((item) => `- ${item.name}: ${item.status} [${item.required ? "required" : "optional"}; effect=${item.effect}] - ${item.detail}`),
     ...report.warnings.map((warning) => `WARNING: ${warning}`),
   ].join("\n")
 }
@@ -1195,22 +1349,44 @@ export function parsePrEvidenceArgs(argv) {
 }
 
 async function main(argv = process.argv.slice(2)) {
-  const options = parsePrEvidenceArgs(argv)
-  const report = await collectPrEvidence(options)
-  process.stdout.write(
-    options.json
-      ? renderPrEvidenceJson(report)
-      : `${renderPrEvidenceText(report)}\n`,
-  )
-  if (report.status !== "PASS") process.exitCode = 1
+  const jsonRequested = argv.includes("--json")
+  try {
+    const options = parsePrEvidenceArgs(argv)
+    const report = await collectPrEvidence(options)
+    process.stdout.write(
+      options.json
+        ? renderPrEvidenceJson(report)
+        : `${renderPrEvidenceText(report)}\n`,
+    )
+    if (report.status !== "PASS") process.exitCode = 1
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "PR evidence failed."
+    if (jsonRequested) {
+      process.stdout.write(`${JSON.stringify({
+        schemaVersion: 1,
+        command: "pr-evidence",
+        status: "FAIL",
+        error: {
+          code: /argument|option|requires|must|cannot|unexpected/iu.test(message)
+            ? "ARGUMENT_ERROR"
+            : "RUNTIME_ERROR",
+          category: /argument|option|requires|must|cannot|unexpected/iu.test(message)
+            ? "ARGUMENT"
+            : "RUNTIME",
+          message,
+          usage: PR_EVIDENCE_USAGE,
+        },
+      }, null, 2)}\n`)
+    } else {
+      process.stderr.write(`${message}\n`)
+    }
+    process.exitCode = 1
+  }
 }
 
 if (
   process.argv[1]
   && pathToFileURL(resolve(process.argv[1])).href === import.meta.url
 ) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error))
-    process.exitCode = 1
-  })
+  main()
 }

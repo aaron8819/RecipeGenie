@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import { spawnSync } from "node:child_process"
 import {
   classifyCheckEvidence,
   classifyDeploymentEvidence,
@@ -7,9 +10,12 @@ import {
   collectReviewRequests,
   collectReviewThreads,
   evaluateHeadConsistency,
+  evaluateMergeability,
   githubApiArrayPages,
   parsePrEvidenceArgs,
+  recomputeStatus,
   repositoryFromRemoteUrl,
+  validateCombinedStatusEndpoint,
 } from "./pr-evidence.mjs"
 
 const SHA = "a".repeat(40)
@@ -38,6 +44,10 @@ function checkRun(overrides = {}) {
 
 function commitStatus(overrides = {}) {
   return { id: 2, context: "ci", state: "success", sha: SHA, createdAt: NOW, ...overrides }
+}
+
+function combinedStatus(overrides = {}) {
+  return { sha: SHA, state: "success", totalCount: 1, recordsReturned: 1, ...overrides }
 }
 
 function deployment(overrides = {}) {
@@ -75,19 +85,20 @@ describe("exact-head check classification", () => {
     ["check bound to another SHA", [checkRun({ headSha: OTHER_SHA })], [], "not bound"],
     ["empty check object", [{}], [], "malformed/unbound"],
     ["empty status object", [], [{}], "malformed/unbound"],
-    ["status lacking SHA", [], [commitStatus({ sha: null })], "malformed/unbound"],
+    ["status lacking SHA without endpoint binding", [], [commitStatus({ sha: null })], "endpoint", null],
     ["status bound to another SHA", [], [commitStatus({ sha: OTHER_SHA })], "not bound"],
     ["pending check", [checkRun({ status: "in_progress", conclusion: null })], [], "pending"],
     ["failed check", [checkRun({ conclusion: "failure" })], [], "failed"],
     ["unknown lifecycle", [checkRun({ status: "mystery" })], [], "malformed/unbound"],
     ["unknown conclusion", [checkRun({ conclusion: "maybe" })], [], "malformed/unbound"],
     ["unknown commit state", [], [commitStatus({ state: "maybe" })], "malformed/unbound"],
-  ])("rejects %s", (_label, checkRuns, statuses, detail) => {
+  ])("rejects %s", (_label, checkRuns, statuses, detail, endpoint = combinedStatus()) => {
     expect(classifyCheckEvidence({
       expectedSha: SHA,
       totalCount: checkRuns.length,
       checkRuns,
       statuses,
+      statusEndpoint: endpoint,
     })).toMatchObject({ status: "FAIL", detail: expect.stringContaining(detail) })
   })
 
@@ -97,13 +108,14 @@ describe("exact-head check classification", () => {
       totalCount: 1,
       checkRuns: [checkRun()],
       statuses: [commitStatus()],
+      statusEndpoint: combinedStatus(),
     })).toMatchObject({ status: "PASS" })
   })
 
   it("accepts a status without a record SHA only when a validated exact-SHA endpoint binds the response", () => {
     const value = classifyCheckEvidence({
       expectedSha: SHA,
-      statusEndpointSha: SHA,
+      statusEndpoint: combinedStatus(),
       totalCount: 0,
       checkRuns: [],
       statuses: [commitStatus({ sha: null })],
@@ -117,11 +129,39 @@ describe("exact-head check classification", () => {
       totalCount: 2,
       checkRuns: [checkRun(), {}],
       statuses: [commitStatus()],
+      statusEndpoint: combinedStatus(),
     }).status).toBe("FAIL")
   })
 
   it("reports missing evidence as unavailable", () => {
-    expect(classifyCheckEvidence({ totalCount: 0, checkRuns: [], statuses: [] })).toMatchObject({ status: "UNAVAILABLE" })
+    expect(classifyCheckEvidence({
+      expectedSha: SHA,
+      totalCount: 0,
+      checkRuns: [],
+      statuses: [],
+      statusEndpoint: combinedStatus({ totalCount: 0, recordsReturned: 0, state: "pending" }),
+    })).toMatchObject({ status: "UNAVAILABLE" })
+  })
+
+  it.each([
+    ["exact returned SHA", combinedStatus(), "PASS"],
+    ["another SHA", combinedStatus({ sha: OTHER_SHA }), "FAIL"],
+    ["missing SHA", combinedStatus({ sha: null }), "FAIL"],
+    ["malformed SHA", combinedStatus({ sha: "abc" }), "FAIL"],
+    ["unknown state", combinedStatus({ state: "mystery" }), "FAIL"],
+    ["malformed response", null, "FAIL"],
+  ])("validates combined-status endpoint binding for %s", (_label, endpoint, status) => {
+    expect(validateCombinedStatusEndpoint(endpoint, SHA).status).toBe(status)
+  })
+
+  it("rejects a conflicting explicit status SHA even with a valid enclosing binding", () => {
+    expect(classifyCheckEvidence({
+      expectedSha: SHA,
+      totalCount: 0,
+      checkRuns: [],
+      statuses: [commitStatus({ sha: OTHER_SHA })],
+      statusEndpoint: combinedStatus(),
+    }).status).toBe("FAIL")
   })
 })
 
@@ -173,6 +213,9 @@ describe("check and annotation collection", () => {
           check_runs: [{ id: 1, name: "quality", status: "completed", conclusion: "success", head_sha: SHA }],
         })
       }
+      if (endpoint.endsWith("/status")) {
+        return result({ sha: SHA, state: "success", total_count: 1, statuses: [{}] })
+      }
       if (endpoint.endsWith("/annotations")) {
         return result(page === 1
           ? Array.from({ length: 100 }, (_, index) => ({
@@ -201,7 +244,33 @@ describe("check and annotation collection", () => {
     expect(evidence.checkRuns[0].annotations).toHaveLength(101)
     expect(evidence.statuses).toHaveLength(101)
     expect(evidence.statuses.at(-1).sha).toBeNull()
+    expect(evidence.statusEndpoint.sha).toBe(SHA)
+    expect(evidence.statusEndpointBinding).toMatchObject({ status: "PASS", returnedSha: SHA })
     expect(classifyCheckEvidence({ ...evidence, expectedSha: SHA }).status).toBe("PASS")
+  })
+
+  it("rejects an unavailable combined-status endpoint before collecting synthetic bindings", () => {
+    const runner = (_command, args) => args[3].endsWith("/status")
+      ? result({}, 1)
+      : result([])
+    expect(() => collectExactHeadChecks(
+      runner,
+      "aaron8819/RecipeGenie",
+      SHA,
+    )).toThrow(/query failed/iu)
+  })
+
+  it("never copies the requested SHA into a combined response that omits it", () => {
+    const response = { sha: null, state: "success", total_count: 0, statuses: [] }
+    const runner = (_command, args) => args[3].endsWith("/status")
+      ? result(response)
+      : result([])
+    expect(() => collectExactHeadChecks(
+      runner,
+      "aaron8819/RecipeGenie",
+      SHA,
+    )).toThrow(/missing its own SHA/iu)
+    expect(response.sha).toBeNull()
   })
 
   it("uses the latest validated status per context without hiding history", () => {
@@ -213,8 +282,41 @@ describe("check and annotation collection", () => {
         commitStatus({ id: 1, state: "pending", createdAt: "2026-07-31T10:00:00Z" }),
         commitStatus({ id: 2, state: "success", createdAt: "2026-07-31T10:01:00Z" }),
       ],
+      statusEndpoint: combinedStatus(),
     })
     expect(value).toMatchObject({ status: "PASS", detail: expect.stringContaining("2 status-history") })
+  })
+})
+
+describe("required evidence policy", () => {
+  it.each([
+    ["all required pass", [{ status: "PASS", required: true }], "PASS"],
+    ["required skipped", [{ status: "PASS", required: true }, { status: "SKIPPED", required: true }], "UNAVAILABLE"],
+    ["required unavailable", [{ status: "UNAVAILABLE", required: true }], "UNAVAILABLE"],
+    ["required failure", [{ status: "FAIL", required: true }], "FAIL"],
+    ["optional skipped", [{ status: "PASS", required: true }, { status: "SKIPPED", required: false }], "PASS"],
+  ])("computes %s", (_label, checks, status) => {
+    const report = { status: "PASS", checks }
+    recomputeStatus(report)
+    expect(report.status).toBe(status)
+  })
+})
+
+describe("mergeability schema", () => {
+  it.each([
+    ["missing mergeable", { mergeable_state: "clean" }, "FAIL"],
+    ["missing state", { mergeable: true }, "FAIL"],
+    ["both missing", {}, "FAIL"],
+    ["null fields", { mergeable: null, mergeable_state: null }, "FAIL"],
+    ["string boolean", { mergeable: "true", mergeable_state: "clean" }, "FAIL"],
+    ["unknown state", { mergeable: true, mergeable_state: "mystery" }, "FAIL"],
+    ["conflicting combination", { mergeable: false, mergeable_state: "clean" }, "FAIL"],
+    ["pending computation", { mergeable: null, mergeable_state: "unknown" }, "UNAVAILABLE"],
+    ["dirty", { mergeable: false, mergeable_state: "dirty" }, "FAIL"],
+    ["blocked", { mergeable: true, mergeable_state: "blocked" }, "FAIL"],
+    ["valid clean", { mergeable: true, mergeable_state: "clean" }, "PASS"],
+  ])("classifies %s", (_label, value, status) => {
+    expect(evaluateMergeability(value).status).toBe(status)
   })
 })
 
@@ -322,5 +424,51 @@ describe("PR evidence CLI schema", () => {
     ["positional", ["unexpected"]],
   ])("rejects %s", (_label, argv) => {
     expect(() => parsePrEvidenceArgs(argv)).toThrow()
+  })
+
+  it.each([
+    ["unknown option", ["--json", "--wat"]],
+    ["duplicate json", ["--json", "--json"]],
+    ["missing value", ["--json", "--pr"]],
+    ["conflicting options", ["--json", "--local-only", "--pr", "35"]],
+    ["positional", ["--json", "unexpected"]],
+    ["malformed PR", ["--json", "--pr", "1e2"]],
+    ["malformed SHA", ["--json", "--head-sha", "abc"]],
+  ])("emits one JSON error document for %s", (_label, args) => {
+    const script = resolve(dirname(fileURLToPath(import.meta.url)), "pr-evidence.mjs")
+    const child = spawnSync(process.execPath, [script, ...args], {
+      encoding: "utf8",
+      shell: false,
+    })
+    expect(child.status).not.toBe(0)
+    expect(child.stderr).toBe("")
+    const document = JSON.parse(child.stdout)
+    expect(document).toMatchObject({
+      schemaVersion: 1,
+      command: "pr-evidence",
+      status: "FAIL",
+      error: { category: "ARGUMENT" },
+    })
+    expect(child.stdout.trim().split(/\n(?=\s*\{)/u)).toHaveLength(1)
+  })
+
+  it("emits one JSON runtime error after successful parsing", () => {
+    const script = resolve(dirname(fileURLToPath(import.meta.url)), "pr-evidence.mjs")
+    const env = Object.fromEntries(Object.entries(process.env).filter(
+      ([key]) => key.toLowerCase() !== "path",
+    ))
+    env[process.platform === "win32" ? "Path" : "PATH"] = dirname(process.execPath)
+    const child = spawnSync(process.execPath, [script, "--json", "--local-only"], {
+      encoding: "utf8",
+      shell: false,
+      env,
+    })
+    expect(child.status).not.toBe(0)
+    expect(child.stderr).toBe("")
+    expect(JSON.parse(child.stdout)).toMatchObject({
+      command: "pr-evidence",
+      status: "FAIL",
+      error: { code: "RUNTIME_ERROR", category: "RUNTIME" },
+    })
   })
 })

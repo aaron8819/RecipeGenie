@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { delimiter, dirname, join, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { assertSafeOutput, assertSecretSafe } from "./state.mjs"
 
@@ -16,6 +16,31 @@ const RELEASE_VALUE_OPTIONS = new Set([
   "--production-url",
   "--expected-project-ref",
 ])
+const VERIFICATION_USAGE = "verification.mjs focused (--base REF | --file PATH...) [--json] | pr [--json] | release [--json] [release options]"
+const EXECUTABLE_OVERRIDE_KEYS = new Set([
+  "bash_env",
+  "cdpath",
+  "comspec",
+  "env",
+  "node",
+  "node_options",
+  "node_path",
+  "npm_execpath",
+  "npm_node_execpath",
+  "npm_config_node_gyp",
+  "npm_config_node_options",
+  "npm_config_script_shell",
+  "prompt_command",
+  "shell",
+  "z dot dir",
+].map((value) => value.replaceAll(" ", "")))
+const RUNTIME_SHIM_NAMES = process.platform === "win32"
+  ? [
+    "node", "node.com", "node.exe", "node.cmd", "node.bat", "node.ps1",
+    "npm", "npm.com", "npm.exe", "npm.cmd", "npm.bat", "npm.ps1",
+    "npx", "npx.com", "npx.exe", "npx.cmd", "npx.bat", "npx.ps1",
+  ]
+  : ["node", "npm", "npx"]
 
 export function resolveTrustedNpmCli(nodeExecutable = process.execPath) {
   const runtimeDirectory = dirname(nodeExecutable)
@@ -39,9 +64,93 @@ export function resolveTrustedNpmCli(nodeExecutable = process.execPath) {
   throw new Error("The repository-pinned npm CLI is unavailable beside the active Node runtime.")
 }
 
-const npmCli = resolveTrustedNpmCli()
+function environmentValue(environment, name) {
+  const entry = Object.entries(environment).find(
+    ([key]) => key.toLowerCase() === name.toLowerCase(),
+  )
+  return entry?.[1]
+}
+
+function containsRuntimeShim(directory) {
+  return RUNTIME_SHIM_NAMES.some((name) => existsSync(join(directory, name)))
+}
+
+export function createTrustedChildEnvironment({
+  environment = process.env,
+  nodeExecutable = process.execPath,
+  npmExecutable = resolveTrustedNpmCli(nodeExecutable),
+  platform = process.platform,
+} = {}) {
+  const runtimeDirectory = dirname(nodeExecutable)
+  const localBinDirectory = resolve(webDirectory, "node_modules", ".bin")
+  if (containsRuntimeShim(localBinDirectory)) {
+    throw new Error("The project-local executable directory contains an unexpected Node/npm runtime shim.")
+  }
+  const pathValue = Object.entries(environment)
+    .filter(([key]) => key.toLowerCase() === "path")
+    .map(([, value]) => value)
+    .filter(Boolean)
+    .join(platform === "win32" ? ";" : delimiter)
+  const comparison = (value) => platform === "win32"
+    ? resolve(value).toLowerCase()
+    : resolve(value)
+  const runtimeIdentity = comparison(runtimeDirectory)
+  const retainedPaths = pathValue
+    .split(platform === "win32" ? ";" : delimiter)
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((value) => {
+      try {
+        return comparison(value) === runtimeIdentity || !containsRuntimeShim(value)
+      } catch {
+        return false
+      }
+    })
+  const trustedPaths = [runtimeDirectory, ...retainedPaths]
+    .filter((value, index, values) => (
+      values.findIndex((candidate) => comparison(candidate) === comparison(value)) === index
+    ))
+  const sanitized = {}
+  for (const [key, value] of Object.entries(environment)) {
+    const normalized = key.toLowerCase()
+    if (
+      normalized === "path"
+      || normalized.startsWith("npm_")
+      || EXECUTABLE_OVERRIDE_KEYS.has(normalized)
+    ) continue
+    sanitized[key] = value
+  }
+  const shell = platform === "win32"
+    ? join(environmentValue(environment, "SystemRoot") ?? "C:\\Windows", "System32", "cmd.exe")
+    : "/bin/sh"
+  if (!existsSync(shell)) {
+    throw new Error("The trusted platform script shell is unavailable.")
+  }
+  sanitized[platform === "win32" ? "Path" : "PATH"] = trustedPaths.join(
+    platform === "win32" ? ";" : delimiter,
+  )
+  sanitized.npm_execpath = npmExecutable
+  sanitized.npm_node_execpath = nodeExecutable
+  sanitized.npm_config_script_shell = shell
+  sanitized.npm_config_node_options = ""
+  sanitized.npm_config_ignore_scripts = "false"
+  sanitized.npm_config_if_present = "false"
+  sanitized.npm_config_scripts_prepend_node_path = "true"
+  sanitized.npm_config_userconfig = platform === "win32" ? "NUL" : "/dev/null"
+  sanitized.npm_config_globalconfig = resolve(dirname(npmExecutable), "..", ".npmrc")
+  if (platform === "win32") {
+    sanitized.ComSpec = shell
+    sanitized.PATHEXT = ".COM;.EXE;.BAT;.CMD"
+  } else {
+    sanitized.SHELL = shell
+  }
+  return sanitized
+}
+
+const expectedRuntime = readFileSync(resolve(webDirectory, ".nvmrc"), "utf8").trim()
 
 function npmCheck(name, args, coverage) {
+  const npmCli = resolveTrustedNpmCli()
   return {
     name,
     command: process.execPath,
@@ -51,6 +160,29 @@ function npmCheck(name, args, coverage) {
   }
 }
 
+function runtimeProbe() {
+  return npmCheck(
+    "nested-runtime-authority",
+    ["run", "--silent", "check:migration-references", "--", "--json"],
+    "Verified the effective nested Node and npm executable identities.",
+  )
+}
+
+function resolveTrustedPowerShell() {
+  const candidates = process.platform === "win32"
+    ? [
+      resolve("C:\\Program Files", "PowerShell", "7", "pwsh.exe"),
+      resolve(process.env.ProgramFiles ?? "C:\\Program Files", "PowerShell", "7", "pwsh.exe"),
+      resolve(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ]
+    : ["/usr/bin/pwsh", "/usr/local/bin/pwsh", "/opt/microsoft/powershell/7/pwsh"]
+  const executable = candidates.find(existsSync)
+  if (!executable) {
+    throw new Error("A trusted PowerShell executable is unavailable for migration-tooling tests.")
+  }
+  return executable
+}
+
 const MIGRATION_CHECK = Object.freeze({
   name: "migration-reference-integrity",
   command: process.execPath,
@@ -58,28 +190,30 @@ const MIGRATION_CHECK = Object.freeze({
   coverage: "Validated tracked migration files, checksum coverage, checksums, active endpoint, and documented chain.",
 })
 
-const PR_CHECKS = Object.freeze([
-  npmCheck(
-    "repository-verification",
-    ["run", "verify"],
-    "Ran artifact and secret guards, migration-reference integrity, lint, typecheck, unit tests, error/skip guards, identity/write guards, and cycle analysis.",
-  ),
-  npmCheck(
-    "production-build",
-    ["run", "build"],
-    "Ran the production Next.js build.",
-  ),
-  {
-    name: "migration-tooling-tests",
-    command: "pwsh",
-    args: [
-      "-NoProfile",
-      "-File",
-      resolve(repositoryRoot, "scripts", "database", "tests", "Run-Tests.ps1"),
-    ],
-    coverage: "Ran the repository's PowerShell migration backup, assertion, and preflight tooling tests.",
-  },
-])
+function prChecks() {
+  return [
+    npmCheck(
+      "repository-verification",
+      ["run", "verify"],
+      "Ran artifact and secret guards, migration-reference integrity, lint, typecheck, unit tests, error/skip guards, identity/write guards, and cycle analysis.",
+    ),
+    npmCheck(
+      "production-build",
+      ["run", "build"],
+      "Ran the production Next.js build.",
+    ),
+    {
+      name: "migration-tooling-tests",
+      command: resolveTrustedPowerShell(),
+      args: [
+        "-NoProfile",
+        "-File",
+        resolve(repositoryRoot, "scripts", "database", "tests", "Run-Tests.ps1"),
+      ],
+      coverage: "Ran the repository's PowerShell migration backup, assertion, and preflight tooling tests.",
+    },
+  ]
+}
 
 function normalizePath(value) {
   return value.replaceAll("\\", "/").replace(/^\.\//u, "")
@@ -93,13 +227,19 @@ function commandLabel(command, args) {
   return [command, ...args].join(" ")
 }
 
-function defaultCommandRunner(command, args, cwd) {
+function defaultCommandRunner(
+  command,
+  args,
+  cwd,
+  childEnvironment = createTrustedChildEnvironment(),
+) {
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
     shell: false,
     windowsHide: true,
     timeout: 30 * 60 * 1000,
+    env: childEnvironment,
   })
   return {
     exitCode: typeof result.status === "number" ? result.status : 1,
@@ -109,12 +249,45 @@ function defaultCommandRunner(command, args, cwd) {
   }
 }
 
-function runCheck(definition, commandRunner, cwd = webDirectory) {
+function runRuntimeProbe(commandRunner, childEnvironment) {
+  const probe = runtimeProbe()
+  const npmCli = resolveTrustedNpmCli()
+  const result = commandRunner(
+    probe.command,
+    probe.args,
+    webDirectory,
+    childEnvironment,
+  )
+  let identity = null
+  try {
+    identity = JSON.parse(result.stdout)
+  } catch {
+    // The result below fails closed without exposing child output.
+  }
+  const valid = result.exitCode === 0
+    && !result.error
+    && identity?.runtime?.node === expectedRuntime
+    && identity?.runtime?.npm === JSON.parse(readFileSync(resolve(dirname(npmCli), "..", "package.json"), "utf8")).version
+    && identity?.runtime?.nodeExecutableMatchesLifecycle === true
+    && identity?.runtime?.npmExecutableBundledWithNode === true
+    && identity?.runtime?.scriptShellTrusted === true
+  return check(
+    probe.name,
+    valid ? "PASS" : "FAIL",
+    valid
+      ? `Nested executors use Node ${expectedRuntime} and npm ${JSON.parse(readFileSync(resolve(dirname(npmCli), "..", "package.json"), "utf8")).version}.`
+      : "Nested runtime identity is missing, malformed, or does not match the pinned Node/npm distribution.",
+    probe.commandLabel,
+  )
+}
+
+function runCheck(definition, commandRunner, cwd = webDirectory, childEnvironment = createTrustedChildEnvironment()) {
   const startedAt = Date.now()
   const result = commandRunner(
     definition.command,
     definition.args,
     definition.cwd ?? cwd,
+    childEnvironment,
   )
   const label = definition.commandLabel
     ?? commandLabel(definition.command, definition.args)
@@ -182,7 +355,7 @@ export function planFocusedVerification(changedFiles) {
       files,
       escalated: true,
       categories: [...new Set(categories.filter(Boolean))].sort(),
-      checks: PR_CHECKS,
+      checks: prChecks(),
       detail: `Scope includes paths without a safe focused mapping: ${unknownFiles.join(", ")}.`,
     }
   }
@@ -281,10 +454,25 @@ function finishReport(report) {
 
 export function runPrVerification(options = {}) {
   const commandRunner = options.commandRunner ?? defaultCommandRunner
-  const checks = PR_CHECKS.map((definition) => runCheck(
-    definition,
-    commandRunner,
-  ))
+  const childEnvironment = options.childEnvironment ?? createTrustedChildEnvironment()
+  const runtimeAuthority = runRuntimeProbe(commandRunner, childEnvironment)
+  const definitions = prChecks()
+  const checks = [runtimeAuthority]
+  if (runtimeAuthority.status === "PASS") {
+    checks.push(...definitions.map((definition) => runCheck(
+      definition,
+      commandRunner,
+      webDirectory,
+      childEnvironment,
+    )))
+  } else {
+    checks.push(...definitions.map((definition) => check(
+      definition.name,
+      "SKIPPED",
+      "Required execution was not started because nested runtime authority failed.",
+      definition.commandLabel ?? commandLabel(definition.command, definition.args),
+    )))
+  }
   return finishReport({
     schemaVersion: 1,
     requestedTier: "PR",
@@ -300,6 +488,7 @@ export function runFocusedVerification({
   files,
   base,
   commandRunner = defaultCommandRunner,
+  childEnvironment = createTrustedChildEnvironment(),
 } = {}) {
   let scope
   if (files?.length) {
@@ -314,7 +503,7 @@ export function runFocusedVerification({
       files: [],
       escalated: true,
       categories: [],
-      checks: PR_CHECKS,
+      checks: prChecks(),
       detail: `${scope.detail} Escalating to PR verification.`,
     }
   } else {
@@ -329,10 +518,25 @@ export function runFocusedVerification({
     scopeStatus,
     plan.detail,
   )]
-  checks.push(...plan.checks.map((definition) => runCheck(
-    definition,
-    commandRunner,
-  )))
+  if (plan.checks.length > 0) {
+    const runtimeAuthority = runRuntimeProbe(commandRunner, childEnvironment)
+    checks.push(runtimeAuthority)
+    if (runtimeAuthority.status === "PASS") {
+      checks.push(...plan.checks.map((definition) => runCheck(
+        definition,
+        commandRunner,
+        webDirectory,
+        childEnvironment,
+      )))
+    } else {
+      checks.push(...plan.checks.map((definition) => check(
+        definition.name,
+        "SKIPPED",
+        "Required execution was not started because nested runtime authority failed.",
+        definition.commandLabel ?? commandLabel(definition.command, definition.args),
+      )))
+    }
+  }
 
   return finishReport({
     schemaVersion: 1,
@@ -356,10 +560,12 @@ export function runReleaseVerification({
   commandRunner = defaultCommandRunner,
 } = {}) {
   const releaseScript = resolve(scriptDirectory, "release-status.mjs")
+  const childEnvironment = createTrustedChildEnvironment()
   const result = commandRunner(
     process.execPath,
     [releaseScript, "--json", ...args],
     webDirectory,
+    childEnvironment,
   )
   let releaseReport = null
   let validation = null
@@ -404,6 +610,11 @@ export function runReleaseVerification({
     scope: null,
     checks: [releaseCheck],
     releaseReport,
+    releaseAuthorityPolicy: {
+      recognized: ["AUTHORITATIVE", "CORROBORATIVE"],
+      required: "AUTHORITATIVE",
+    },
+    releaseAuthorityIdentities: validation?.authorities ?? {},
     note: "Release verification is read-only and delegates commit, deployment, manifest, project, and exact-SHA CI binding to rg:release:status.",
   })
 }
@@ -449,6 +660,7 @@ export function validateReleaseReport(report) {
     return { valid: false, detail: "Release PASS has incomplete or contradictory binding evidence." }
   }
   const recognizedStatuses = new Set(["PASS", "WARN", "SKIP", "FAIL"])
+  const recognizedAuthorities = new Set(["AUTHORITATIVE", "CORROBORATIVE"])
   const validChecks = report.checks.every((item) => (
     item
     && typeof item === "object"
@@ -456,12 +668,22 @@ export function validateReleaseReport(report) {
     && typeof item.name === "string"
     && item.name.trim()
     && recognizedStatuses.has(item.status)
-    && typeof item.authority === "string"
-    && item.authority.trim()
+    && recognizedAuthorities.has(item.authority)
     && typeof item.detail === "string"
   ))
   if (!validChecks || report.checks.some((item) => item.status === "FAIL")) {
     return { valid: false, detail: "Release PASS contains malformed or failed evidence." }
+  }
+  const suppliedReportIdentities = report.checks
+    .filter((item) => Object.hasOwn(item, "identity"))
+    .map((item) => item.identity)
+  if (suppliedReportIdentities.some((identity) => (
+    typeof identity !== "string" || !identity.trim()
+  ))) {
+    return { valid: false, detail: "Release PASS contains a malformed authority identity." }
+  }
+  if (new Set(suppliedReportIdentities).size !== suppliedReportIdentities.length) {
+    return { valid: false, detail: "Release PASS reuses an authority identity." }
   }
   const requiredNames = [
     "github-repository",
@@ -471,20 +693,55 @@ export function validateReleaseReport(report) {
     "deployed-sha",
     "supabase-project-ref",
   ]
-  if (!requiredNames.every((name) => report.checks.some((item) => item.name === name))) {
+  if (!requiredNames.every((name) => report.checks.filter((item) => item.name === name).length === 1)) {
     return { valid: false, detail: "Release PASS is missing required authoritative checks." }
   }
-  const bindingChecksPassed = [
-    "production-manifest",
-    "deployed-sha",
-    "supabase-project-ref",
-  ].every((name) => report.checks.some((item) => (
-    item.name === name && item.status === "PASS"
-  )))
-  if (!bindingChecksPassed) {
-    return { valid: false, detail: "Release PASS is missing required deployment binding evidence." }
+  const requiredChecks = requiredNames.map(
+    (name) => report.checks.find((item) => item.name === name),
+  )
+  if (requiredChecks.some((item) => (
+    item.status !== "PASS" || item.authority !== "AUTHORITATIVE"
+  ))) {
+    return { valid: false, detail: "Release PASS is missing recognized authoritative PASS evidence." }
   }
-  return { valid: true, detail: "Release report contract is complete." }
+  const authorityIdentities = [
+    `github-repository:${binding.repository.toLowerCase()}`,
+    `github-branch:${binding.repository.toLowerCase()}:${binding.branch}:${binding.expectedSha}`,
+    `github-checks:${binding.repository.toLowerCase()}:${binding.expectedSha}`,
+    `production-manifest:${binding.deployedSha}:${binding.deployedProjectRef}:${binding.expectedMigration}`,
+    `deployed-sha:${binding.deployedSha}`,
+    `supabase-project:${binding.deployedProjectRef}`,
+  ]
+  if (authorityIdentities.some((identity) => !identity.trim())) {
+    return { valid: false, detail: "Release PASS contains an authority without a stable identity." }
+  }
+  if (new Set(authorityIdentities).size !== authorityIdentities.length) {
+    return { valid: false, detail: "Release PASS reuses an authority identity." }
+  }
+  const explicitIdentityMode = requiredChecks.some(
+    (item) => Object.hasOwn(item, "identity"),
+  )
+  if (explicitIdentityMode) {
+    const suppliedIdentities = requiredChecks.map((item) => item.identity)
+    if (suppliedIdentities.some((identity) => (
+      typeof identity !== "string" || !identity.trim()
+    ))) {
+      return { valid: false, detail: "Release PASS contains an authority without a stable identity." }
+    }
+    if (new Set(suppliedIdentities).size !== suppliedIdentities.length) {
+      return { valid: false, detail: "Release PASS reuses an authority identity." }
+    }
+    if (suppliedIdentities.some((identity, index) => identity !== authorityIdentities[index])) {
+      return { valid: false, detail: "Release PASS contains an authority identity that conflicts with its binding." }
+    }
+  }
+  return {
+    valid: true,
+    detail: "Release report contract is complete.",
+    authorities: Object.fromEntries(requiredNames.map(
+      (name, index) => [name, authorityIdentities[index]],
+    )),
+  }
 }
 
 export function renderVerificationText(report) {
@@ -532,7 +789,7 @@ export function parseVerificationArgs(argv) {
   const [tier, ...rest] = argv
   if (!["focused", "pr", "release"].includes(tier)) {
     throw new Error(
-      "Usage: verification.mjs focused (--base REF | --file PATH...) [--json] | pr [--json] | release [--json] [release options]",
+      `Usage: ${VERIFICATION_USAGE}`,
     )
   }
   const seen = new Set()
@@ -611,26 +868,48 @@ export function parseVerificationArgs(argv) {
 }
 
 async function main(argv = process.argv.slice(2)) {
-  const options = parseVerificationArgs(argv)
-  const report = options.tier === "focused"
-    ? runFocusedVerification(options)
-    : options.tier === "pr"
-      ? runPrVerification()
-      : runReleaseVerification({ args: options.args })
-  process.stdout.write(
-    options.json
-      ? renderVerificationJson(report)
-      : `${renderVerificationText(report)}\n`,
-  )
-  if (report.status !== "PASS") process.exitCode = 1
+  const jsonRequested = argv.includes("--json")
+  try {
+    const options = parseVerificationArgs(argv)
+    const report = options.tier === "focused"
+      ? runFocusedVerification(options)
+      : options.tier === "pr"
+        ? runPrVerification()
+        : runReleaseVerification({ args: options.args })
+    process.stdout.write(
+      options.json
+        ? renderVerificationJson(report)
+        : `${renderVerificationText(report)}\n`,
+    )
+    if (report.status !== "PASS") process.exitCode = 1
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Verification failed."
+    if (jsonRequested) {
+      process.stdout.write(`${JSON.stringify({
+        schemaVersion: 1,
+        command: "verification",
+        status: "FAIL",
+        error: {
+          code: message.startsWith("Usage:") || /argument|option|requires|must|scope/iu.test(message)
+            ? "ARGUMENT_ERROR"
+            : "RUNTIME_ERROR",
+          category: message.startsWith("Usage:") || /argument|option|requires|must|scope/iu.test(message)
+            ? "ARGUMENT"
+            : "RUNTIME",
+          message,
+          usage: VERIFICATION_USAGE,
+        },
+      }, null, 2)}\n`)
+    } else {
+      process.stderr.write(`${message}\n`)
+    }
+    process.exitCode = 1
+  }
 }
 
 if (
   process.argv[1]
   && pathToFileURL(resolve(process.argv[1])).href === import.meta.url
 ) {
-  main().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error))
-    process.exitCode = 1
-  })
+  main()
 }
