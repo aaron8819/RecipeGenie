@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   classifyMigrationImpact,
+  parseMigrationIntegrityArgs,
   validateMigrationMetadata,
 } from "./migration-integrity.mjs"
 
@@ -163,5 +164,76 @@ describe("migration PR impact", () => {
       migrationChanged: false,
       documentationOnly: false,
     })
+  })
+
+  it.each([
+    [
+      "migration renamed out",
+      [{ filename: "archive/014.sql", previous_filename: "supabase/migrations/014_add_recipe_yield_metadata.sql", status: "renamed" }],
+      true,
+    ],
+    [
+      "migration renamed in",
+      [{ filename: "supabase/migrations/015_added.sql", previous_filename: "drafts/015_added.sql", status: "renamed" }],
+      true,
+    ],
+    [
+      "migration renamed within",
+      [{ filename: "supabase/migrations/014_renamed.sql", previous_filename: "supabase/migrations/014_add_recipe_yield_metadata.sql", status: "renamed" }],
+      true,
+    ],
+    [
+      "deleted migration",
+      [{ filename: "supabase/migrations/014_add_recipe_yield_metadata.sql", status: "removed" }],
+      true,
+    ],
+    [
+      "copied migration",
+      [{ filename: "supabase/migrations/015_copy.sql", previous_filename: "supabase/migrations/014_add_recipe_yield_metadata.sql", status: "copied" }],
+      true,
+    ],
+    [
+      "ordinary unrelated rename",
+      [{ filename: "docs/new.md", previous_filename: "docs/old.md", status: "renamed" }],
+      false,
+    ],
+  ])("classifies %s using source and destination paths", (_label, files, expected) => {
+    const result = classifyMigrationImpact(files)
+    expect(result.migrationChanged).toBe(expected)
+    expect(result.potentiallyImpactful).toBe(expected)
+  })
+
+  it.each([
+    ["registry delete", [{ filename: "supabase/migration-checksums.json", status: "removed" }]],
+    ["registry rename", [{ filename: "archive/checksums.json", previous_filename: "supabase/migration-checksums.json", status: "renamed" }]],
+    ["schema authority", [{ filename: "supabase/SCHEMA.md", status: "modified", patch: "migration 014" }]],
+    ["README endpoint", [{ filename: "README.md", status: "modified", patch: "014_add_recipe_yield_metadata.sql" }]],
+  ])("treats %s as migration-sensitive impact", (_label, files) => {
+    expect(classifyMigrationImpact(files).potentiallyImpactful).toBe(true)
+  })
+
+  it.each([
+    ["rename missing previous filename", [{ filename: "docs/new.md", status: "renamed" }]],
+    ["unknown status", [{ filename: "src/example.ts", status: "mystery" }]],
+  ])("fails closed for %s", (_label, files) => {
+    const result = classifyMigrationImpact(files)
+    expect(result.malformedFileRecords).toHaveLength(1)
+    expect(result.migrationChanged).toBe(true)
+    expect(result.potentiallyImpactful).toBe(true)
+  })
+})
+
+describe("migration-integrity CLI schema", () => {
+  it("accepts only the documented optional JSON flag", () => {
+    expect(parseMigrationIntegrityArgs([])).toEqual({ json: false })
+    expect(parseMigrationIntegrityArgs(["--json"])).toEqual({ json: true })
+  })
+
+  it.each([
+    [["--json", "--json"]],
+    [["--unknown"]],
+    [["positional"]],
+  ])("rejects %j", (argv) => {
+    expect(() => parseMigrationIntegrityArgs(argv)).toThrow()
   })
 })

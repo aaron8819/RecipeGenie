@@ -10,6 +10,19 @@ const webDirectory = resolve(scriptDirectory, "..", "..")
 const repositoryRoot = resolve(webDirectory, "..")
 const SHA_PATTERN = /^[0-9a-f]{40}$/u
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u
+const PAGE_SIZE = 100
+const MAX_PAGES = 100
+const CHECK_LIFECYCLES = new Set([
+  "completed", "in_progress", "pending", "queued", "requested", "waiting",
+])
+const CHECK_CONCLUSIONS = new Set([
+  "action_required", "cancelled", "failure", "neutral", "skipped",
+  "stale", "startup_failure", "success", "timed_out",
+])
+const COMMIT_STATES = new Set(["error", "failure", "pending", "success"])
+const DEPLOYMENT_STATES = new Set([
+  "error", "failure", "inactive", "in_progress", "pending", "queued", "success",
+])
 
 function normalizePath(value) {
   return value.replaceAll("\\", "/")
@@ -62,6 +75,53 @@ function githubGraphql(commandRunner, query, fields) {
     args.push(typeof value === "number" ? "-F" : "-f", `${name}=${value}`)
   }
   return parseJson(run(commandRunner, "gh", args))
+}
+
+function assertObjectArray(value, label) {
+  if (!Array.isArray(value) || value.some((item) => (
+    !item || typeof item !== "object" || Array.isArray(item)
+  ))) {
+    throw new Error(`${label} page is malformed.`)
+  }
+  return value
+}
+
+function pageFingerprint(value) {
+  return JSON.stringify(value)
+}
+
+export function githubApiArrayPages(commandRunner, endpoint, fields = [], label = "GitHub collection") {
+  const items = []
+  const pageFingerprints = new Set()
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const current = assertObjectArray(githubApi(
+      commandRunner,
+      endpoint,
+      [...fields, ["per_page", String(PAGE_SIZE)], ["page", String(page)]],
+    ), label)
+    const fingerprint = pageFingerprint(current)
+    if (current.length > 0 && pageFingerprints.has(fingerprint)) {
+      throw new Error(`${label} pagination repeated a page.`)
+    }
+    pageFingerprints.add(fingerprint)
+    items.push(...current)
+    if (current.length < PAGE_SIZE) return items
+  }
+  throw new Error(`${label} pagination exceeded ${MAX_PAGES} pages.`)
+}
+
+function assertUnique(items, key, label) {
+  const seen = new Map()
+  for (const item of items) {
+    const value = key(item)
+    if (value === null || value === undefined || value === "") continue
+    const fingerprint = JSON.stringify(item)
+    if (seen.has(value)) {
+      const conflict = seen.get(value) !== fingerprint
+      throw new Error(`${label} contains ${conflict ? "conflicting" : "duplicate"} stable identifiers.`)
+    }
+    seen.set(value, fingerprint)
+  }
 }
 
 function addCheck(report, name, status, detail) {
@@ -121,41 +181,77 @@ export function classifyCheckEvidence({
   totalCount,
   statuses,
   expectedSha = null,
+  statusEndpointSha = null,
 }) {
-  if (
-    !Array.isArray(checkRuns)
-    || !Number.isSafeInteger(totalCount)
-    || totalCount < checkRuns.length
-    || !Array.isArray(statuses)
-  ) {
-    return { status: "UNAVAILABLE", detail: "Exact-head check evidence is structurally incomplete." }
+  if (!Array.isArray(checkRuns) || !Number.isSafeInteger(totalCount) || !Array.isArray(statuses)) {
+    return { status: "FAIL", detail: "Exact-head check evidence is structurally malformed." }
   }
-  if (totalCount > checkRuns.length) {
-    return { status: "UNAVAILABLE", detail: `Only ${checkRuns.length} of ${totalCount} exact-head check runs were returned.` }
+  if (totalCount !== checkRuns.length) {
+    return { status: "FAIL", detail: `Expected ${totalCount} check runs but collected ${checkRuns.length}.` }
   }
   if (totalCount === 0 && statuses.length === 0) {
     return { status: "UNAVAILABLE", detail: "No exact-head checks or commit statuses were reported." }
   }
-  if (
-    expectedSha
-    && (
-      checkRuns.some((item) => item.headSha && item.headSha !== expectedSha)
-      || statuses.some((item) => item.sha && item.sha !== expectedSha)
-    )
-  ) {
-    return { status: "FAIL", detail: "Returned check evidence is not bound to the explicit head SHA." }
+  const malformedRuns = checkRuns.filter((item) => (
+    !item
+    || typeof item !== "object"
+    || !Number.isSafeInteger(item.id)
+    || typeof item.name !== "string"
+    || !item.name.trim()
+    || !SHA_PATTERN.test(item.headSha ?? "")
+    || !CHECK_LIFECYCLES.has(item.status)
+    || (item.status === "completed"
+      ? !CHECK_CONCLUSIONS.has(item.conclusion)
+      : item.conclusion !== null)
+  ))
+  const malformedStatuses = statuses.filter((item) => (
+    !item
+    || typeof item !== "object"
+    || !Number.isSafeInteger(item.id)
+    || typeof item.context !== "string"
+    || !item.context.trim()
+    || (!SHA_PATTERN.test(item.sha ?? "") && !SHA_PATTERN.test(statusEndpointSha ?? ""))
+    || !COMMIT_STATES.has(item.state)
+    || !Number.isFinite(Date.parse(item.createdAt ?? ""))
+  ))
+  if (malformedRuns.length || malformedStatuses.length) {
+    return {
+      status: "FAIL",
+      detail: `${malformedRuns.length} malformed/unbound check run(s); ${malformedStatuses.length} malformed/unbound commit status(es).`,
+    }
+  }
+  const mismatchedRuns = checkRuns.filter((item) => expectedSha && item.headSha !== expectedSha)
+  const mismatchedStatuses = statuses.filter((item) => (
+    expectedSha && (item.sha ?? statusEndpointSha) !== expectedSha
+  ))
+  if (mismatchedRuns.length || mismatchedStatuses.length) {
+    return {
+      status: "FAIL",
+      detail: `${mismatchedRuns.length} check run(s) and ${mismatchedStatuses.length} commit status(es) are not bound to the explicit head SHA.`,
+    }
   }
   const pendingRuns = checkRuns.filter(
-    (item) => item.status !== "completed" || !item.conclusion,
+    (item) => item.status !== "completed",
   )
-  const pendingStatuses = statuses.filter(
+  const latestStatusesByContext = new Map()
+  for (const item of statuses) {
+    const current = latestStatusesByContext.get(item.context)
+    if (
+      !current
+      || comparableTime(item.createdAt) > comparableTime(current.createdAt)
+      || (item.createdAt === current.createdAt && item.id > current.id)
+    ) {
+      latestStatusesByContext.set(item.context, item)
+    }
+  }
+  const latestStatuses = [...latestStatusesByContext.values()]
+  const pendingStatuses = latestStatuses.filter(
     (item) => ["pending", "expected"].includes(item.state),
   )
-  const failedRuns = checkRuns.filter(
-    (item) => item.status === "completed"
-      && !["success", "neutral", "skipped"].includes(item.conclusion),
-  )
-  const failedStatuses = statuses.filter((item) => item.state === "failure" || item.state === "error")
+  const failedRuns = checkRuns.filter((item) => (
+    item.status === "completed" && item.conclusion !== "success"
+  ))
+  const failedStatuses = latestStatuses.filter((item) => ["failure", "error"].includes(item.state))
   if (pendingRuns.length || pendingStatuses.length) {
     return {
       status: "FAIL",
@@ -168,18 +264,9 @@ export function classifyCheckEvidence({
       detail: `${failedRuns.length + failedStatuses.length} exact-head check(s) failed.`,
     }
   }
-  const inconclusive = checkRuns.filter(
-    (item) => ["neutral", "skipped"].includes(item.conclusion),
-  )
-  if (inconclusive.length) {
-    return {
-      status: "UNAVAILABLE",
-      detail: `${inconclusive.length} exact-head check run(s) were neutral or skipped; success is not claimed.`,
-    }
-  }
   return {
     status: "PASS",
-    detail: `All ${totalCount + statuses.length} exact-head checks and statuses passed.`,
+    detail: `All ${totalCount} check run(s) and ${latestStatuses.length} latest commit context(s) passed; ${statuses.length} status-history record(s) were validated.`,
   }
 }
 
@@ -290,6 +377,48 @@ function simplifyComment(comment) {
   }
 }
 
+function validReview(review) {
+  return Number.isSafeInteger(review.id)
+    && ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"].includes(review.state)
+    && typeof review.body === "string"
+    && (review.submitted_at === null || review.submitted_at === undefined || Number.isFinite(Date.parse(review.submitted_at)))
+}
+
+function validComment(comment) {
+  return Number.isSafeInteger(comment.id)
+    && typeof comment.body === "string"
+    && typeof comment.html_url === "string"
+    && Number.isFinite(Date.parse(comment.created_at ?? ""))
+}
+
+function validAnnotation(annotation) {
+  return typeof annotation.path === "string"
+    && annotation.path.length > 0
+    && Number.isSafeInteger(annotation.start_line)
+    && annotation.start_line > 0
+    && Number.isSafeInteger(annotation.end_line)
+    && annotation.end_line >= annotation.start_line
+    && ["failure", "notice", "warning"].includes(annotation.annotation_level)
+    && typeof annotation.message === "string"
+}
+
+function validPullRequest(pullRequest) {
+  return pullRequest
+    && typeof pullRequest === "object"
+    && !Array.isArray(pullRequest)
+    && Number.isSafeInteger(pullRequest.number)
+    && pullRequest.number > 0
+    && Number.isSafeInteger(pullRequest.changed_files)
+    && pullRequest.changed_files >= 0
+    && typeof pullRequest.html_url === "string"
+    && ["open", "closed"].includes(pullRequest.state)
+    && typeof pullRequest.draft === "boolean"
+    && typeof pullRequest.base?.ref === "string"
+    && SHA_PATTERN.test(pullRequest.base?.sha ?? "")
+    && typeof pullRequest.head?.ref === "string"
+    && SHA_PATTERN.test(pullRequest.head?.sha ?? "")
+}
+
 function blockingReviewState(reviews, requested) {
   const latestByAuthor = new Map()
   for (const review of reviews) {
@@ -307,6 +436,40 @@ function blockingReviewState(reviews, requested) {
     status: changesRequested || requestedCount ? "FAIL" : "PASS",
     detail: `${changesRequested} active changes-requested review(s); ${requestedCount} outstanding review request(s).`,
   }
+}
+
+export function collectReviewRequests(commandRunner, repository, prNumber) {
+  const users = []
+  const teams = []
+  const fingerprints = new Set()
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const response = githubApi(
+      commandRunner,
+      `repos/${repository}/pulls/${prNumber}/requested_reviewers`,
+      [["per_page", String(PAGE_SIZE)], ["page", String(page)]],
+    )
+    const currentUsers = assertObjectArray(response?.users, "requested reviewers")
+    const currentTeams = assertObjectArray(response?.teams, "requested teams")
+    const fingerprint = pageFingerprint({ users: currentUsers, teams: currentTeams })
+    if ((currentUsers.length || currentTeams.length) && fingerprints.has(fingerprint)) {
+      throw new Error("Review-request pagination repeated a page.")
+    }
+    fingerprints.add(fingerprint)
+    users.push(...currentUsers)
+    teams.push(...currentTeams)
+    if (currentUsers.length < PAGE_SIZE && currentTeams.length < PAGE_SIZE) {
+      assertUnique(users, (item) => item.id, "requested reviewers")
+      assertUnique(teams, (item) => item.id, "requested teams")
+      if (users.some((item) => !Number.isSafeInteger(item.id) || typeof item.login !== "string")) {
+        throw new Error("Requested reviewer evidence is malformed.")
+      }
+      if (teams.some((item) => !Number.isSafeInteger(item.id) || typeof item.slug !== "string")) {
+        throw new Error("Requested team evidence is malformed.")
+      }
+      return { users, teams }
+    }
+  }
+  throw new Error(`Review-request pagination exceeded ${MAX_PAGES} pages.`)
 }
 
 async function localChangedFiles(commandRunner, git) {
@@ -352,48 +515,109 @@ function queryPullRequest(commandRunner, repository, branch, number) {
   if (number) return githubApi(commandRunner, `repos/${repository}/pulls/${number}`)
   if (!branch) return null
   const owner = repository.split("/")[0]
-  const pulls = githubApi(
+  const pulls = githubApiArrayPages(
     commandRunner,
     `repos/${repository}/pulls`,
-    [["state", "all"], ["head", `${owner}:${branch}`], ["per_page", "100"]],
+    [["state", "all"], ["head", `${owner}:${branch}`]],
+    "pull requests",
   )
   return selectPullRequest(pulls)
 }
 
-function collectReviewThreads(commandRunner, repository, prNumber) {
+export function collectReviewThreads(commandRunner, repository, prNumber) {
   const [owner, name] = repository.split("/")
   const query = `
-    query($owner: String!, $name: String!, $number: Int!) {
+    query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
       repository(owner: $owner, name: $name) {
         pullRequest(number: $number) {
-          reviewThreads(first: 100) {
+          reviewThreads(first: 100, after: $cursor) {
             totalCount
-            nodes { isResolved path line }
+            nodes { id isResolved path line }
+            pageInfo { hasNextPage endCursor }
           }
         }
       }
     }
   `
-  const response = githubGraphql(commandRunner, query, [
-    ["owner", owner],
-    ["name", name],
-    ["number", prNumber],
-  ])
-  return response?.data?.repository?.pullRequest?.reviewThreads ?? null
+  const nodes = []
+  const cursors = new Set()
+  let cursor = ""
+  let totalCount = null
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const fields = [
+      ["owner", owner],
+      ["name", name],
+      ["number", prNumber],
+    ]
+    if (cursor) fields.push(["cursor", cursor])
+    const response = githubGraphql(commandRunner, query, fields)
+    const connection = response?.data?.repository?.pullRequest?.reviewThreads
+    const current = assertObjectArray(connection?.nodes, "review threads")
+    if (!Number.isSafeInteger(connection?.totalCount) || connection.totalCount < 0) {
+      throw new Error("Review-thread total count is malformed.")
+    }
+    if (totalCount !== null && totalCount !== connection.totalCount) {
+      throw new Error("Review-thread total count changed during pagination.")
+    }
+    totalCount = connection.totalCount
+    nodes.push(...current)
+    const pageInfo = connection.pageInfo
+    if (!pageInfo || typeof pageInfo.hasNextPage !== "boolean") {
+      throw new Error("Review-thread pagination metadata is malformed.")
+    }
+    if (!pageInfo.hasNextPage) {
+      if (nodes.length !== totalCount) throw new Error("Review-thread collection is truncated.")
+      assertUnique(nodes, (item) => item.id, "review threads")
+      return { totalCount, nodes }
+    }
+    if (typeof pageInfo.endCursor !== "string" || !pageInfo.endCursor || cursors.has(pageInfo.endCursor)) {
+      throw new Error("Review-thread pagination repeated or omitted a cursor.")
+    }
+    cursors.add(pageInfo.endCursor)
+    cursor = pageInfo.endCursor
+  }
+  throw new Error(`Review-thread pagination exceeded ${MAX_PAGES} pages.`)
 }
 
-function collectExactHeadChecks(commandRunner, repository, headSha) {
-  const response = githubApi(
+export function collectExactHeadChecks(commandRunner, repository, headSha) {
+  const rawRuns = []
+  let totalCount = null
+  const fingerprints = new Set()
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const response = githubApi(
+      commandRunner,
+      `repos/${repository}/commits/${headSha}/check-runs`,
+      [["per_page", String(PAGE_SIZE)], ["page", String(page)]],
+    )
+    if (!Number.isSafeInteger(response?.total_count) || response.total_count < 0) {
+      throw new Error("Check-run total count is malformed.")
+    }
+    const current = assertObjectArray(response.check_runs, "check runs")
+    if (totalCount !== null && response.total_count !== totalCount) {
+      throw new Error("Check-run total count changed during pagination.")
+    }
+    totalCount = response.total_count
+    const fingerprint = pageFingerprint(current)
+    if (current.length > 0 && fingerprints.has(fingerprint)) {
+      throw new Error("Check-run pagination repeated a page.")
+    }
+    fingerprints.add(fingerprint)
+    rawRuns.push(...current)
+    if (rawRuns.length > totalCount) throw new Error("Check-run pagination exceeded its total count.")
+    if (rawRuns.length === totalCount) break
+    if (current.length < PAGE_SIZE) throw new Error("Check-run collection is truncated.")
+    if (page === MAX_PAGES) throw new Error(`Check-run pagination exceeded ${MAX_PAGES} pages.`)
+  }
+  if (rawRuns.length !== totalCount) throw new Error("Check-run collection is incomplete.")
+  assertUnique(rawRuns, (item) => item.id, "check runs")
+  const rawStatuses = githubApiArrayPages(
     commandRunner,
-    `repos/${repository}/commits/${headSha}/check-runs`,
-    [["per_page", "100"]],
+    `repos/${repository}/commits/${headSha}/statuses`,
+    [],
+    "commit statuses",
   )
-  const combinedStatus = githubApi(
-    commandRunner,
-    `repos/${repository}/commits/${headSha}/status`,
-    [["per_page", "100"]],
-  )
-  const checkRuns = (response.check_runs ?? []).map((item) => ({
+  assertUnique(rawStatuses, (item) => item.id, "commit statuses")
+  const checkRuns = rawRuns.map((item) => ({
     id: item.id,
     name: item.name ?? null,
     status: item.status ?? null,
@@ -404,19 +628,20 @@ function collectExactHeadChecks(commandRunner, repository, headSha) {
     headSha: item.head_sha ?? null,
     annotations: [],
   }))
-  let annotationsComplete = true
   for (const item of checkRuns) {
-    if (!Number.isSafeInteger(item.id)) continue
-    const annotations = githubApi(
-      commandRunner,
-      `repos/${repository}/check-runs/${item.id}/annotations`,
-      [["per_page", "100"]],
-    )
-    if (!Array.isArray(annotations)) {
-      annotationsComplete = false
+    if (!Number.isSafeInteger(item.id)) {
+      item.annotations = []
       continue
     }
-    if (annotations.length === 100) annotationsComplete = false
+    const annotations = githubApiArrayPages(
+      commandRunner,
+      `repos/${repository}/check-runs/${item.id}/annotations`,
+      [],
+      `check-run ${item.id} annotations`,
+    )
+    if (annotations.some((annotation) => !validAnnotation(annotation))) {
+      throw new Error(`Check-run ${item.id} annotations are malformed.`)
+    }
     item.annotations = annotations.map((annotation) => ({
       path: annotation.path ?? null,
       startLine: annotation.start_line ?? null,
@@ -428,34 +653,141 @@ function collectExactHeadChecks(commandRunner, repository, headSha) {
   }
   return {
     headSha,
-    totalCount: response.total_count,
+    totalCount,
     checkRuns,
-    statuses: (combinedStatus.statuses ?? []).map((item) => ({
+    statuses: rawStatuses.map((item) => ({
+      id: item.id,
       context: item.context ?? null,
       state: item.state ?? null,
       url: item.target_url ?? null,
-      sha: item.sha ?? headSha,
+      sha: item.sha ?? null,
+      createdAt: item.created_at ?? null,
     })),
-    annotationsComplete,
+    statusEndpointSha: headSha,
+    annotationsComplete: true,
   }
 }
 
-function collectDeployments(commandRunner, repository, headSha) {
-  const deployments = githubApi(
+export function collectDeployments(commandRunner, repository, headSha) {
+  const deployments = githubApiArrayPages(
     commandRunner,
     `repos/${repository}/deployments`,
-    [["sha", headSha], ["per_page", "100"]],
+    [["sha", headSha]],
+    "deployments",
   )
-  if (!Array.isArray(deployments)) throw new Error("Deployment evidence is malformed.")
-  return deployments.map((item) => ({
-    id: item.id ?? null,
-    sha: item.sha ?? null,
-    ref: item.ref ?? null,
-    environment: item.environment ?? null,
-    task: item.task ?? null,
-    createdAt: item.created_at ?? null,
-    url: item.statuses_url ?? null,
-  }))
+  assertUnique(deployments, (item) => item.id, "deployments")
+  return deployments.map((item) => {
+    const rawStatuses = Number.isSafeInteger(item.id)
+      ? githubApiArrayPages(
+        commandRunner,
+        `repos/${repository}/deployments/${item.id}/statuses`,
+        [],
+        `deployment ${item.id} statuses`,
+      )
+      : []
+    assertUnique(rawStatuses, (status) => status.id, `deployment ${item.id} statuses`)
+    return {
+      id: item.id ?? null,
+      sha: item.sha ?? null,
+      ref: item.ref ?? null,
+      environment: item.environment ?? null,
+      task: item.task ?? null,
+      createdAt: item.created_at ?? null,
+      url: item.statuses_url ?? null,
+      statuses: rawStatuses.map((status) => ({
+        id: status.id ?? null,
+        state: status.state ?? null,
+        createdAt: status.created_at ?? null,
+        updatedAt: status.updated_at ?? null,
+        environment: status.environment ?? null,
+        url: status.target_url ?? null,
+      })),
+    }
+  })
+}
+
+function comparableTime(value) {
+  const parsed = Date.parse(value ?? "")
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY
+}
+
+function latestByAuthority(items) {
+  return [...items].sort((left, right) => (
+    comparableTime(right.createdAt) - comparableTime(left.createdAt)
+    || (right.id ?? 0) - (left.id ?? 0)
+  ))[0] ?? null
+}
+
+export function classifyDeploymentEvidence(deployments, expectedSha) {
+  if (!Array.isArray(deployments)) {
+    return {
+      binding: { status: "FAIL", detail: "Deployment records are malformed." },
+      outcome: { status: "FAIL", detail: "Deployment outcomes are malformed." },
+      latestDeployment: null,
+      latestStatus: null,
+    }
+  }
+  if (deployments.length === 0) {
+    return {
+      binding: { status: "SKIPPED", detail: `No deployment record is bound to ${expectedSha}.` },
+      outcome: { status: "SKIPPED", detail: "No deployment outcome exists." },
+      latestDeployment: null,
+      latestStatus: null,
+    }
+  }
+  const malformed = deployments.filter((item) => (
+    !item
+    || typeof item !== "object"
+    || !Number.isSafeInteger(item.id)
+    || !SHA_PATTERN.test(item.sha ?? "")
+    || !Number.isFinite(Date.parse(item.createdAt ?? ""))
+    || !Array.isArray(item.statuses)
+  ))
+  const mismatched = deployments.filter((item) => item?.sha !== expectedSha)
+  const latestDeployment = latestByAuthority(deployments)
+  const binding = malformed.length
+    ? { status: "FAIL", detail: `${malformed.length} deployment record(s) are malformed or unbound.` }
+    : mismatched.length
+      ? { status: "FAIL", detail: `${mismatched.length} deployment record(s) target another SHA.` }
+      : { status: "PASS", detail: `All ${deployments.length} deployment record(s) are explicitly bound to ${expectedSha}.` }
+  if (!latestDeployment || !Array.isArray(latestDeployment.statuses)) {
+    return {
+      binding,
+      outcome: { status: "FAIL", detail: "The latest deployment outcome is malformed." },
+      latestDeployment,
+      latestStatus: null,
+    }
+  }
+  if (latestDeployment.statuses.length === 0) {
+    return {
+      binding,
+      outcome: { status: "UNAVAILABLE", detail: "The latest deployment has no status." },
+      latestDeployment,
+      latestStatus: null,
+    }
+  }
+  const malformedStatuses = latestDeployment.statuses.filter((item) => (
+    !item
+    || typeof item !== "object"
+    || !Number.isSafeInteger(item.id)
+    || !DEPLOYMENT_STATES.has(item.state)
+    || !Number.isFinite(Date.parse(item.createdAt ?? ""))
+  ))
+  if (malformedStatuses.length) {
+    return {
+      binding,
+      outcome: { status: "FAIL", detail: `${malformedStatuses.length} deployment status record(s) are malformed.` },
+      latestDeployment,
+      latestStatus: null,
+    }
+  }
+  const latestStatus = latestByAuthority(latestDeployment.statuses)
+  const outcome = latestStatus.state === "success"
+    ? { status: "PASS", detail: "The latest exact-head deployment status is successful." }
+    : ["pending", "queued", "in_progress"].includes(latestStatus.state)
+      ? { status: "FAIL", detail: `The latest exact-head deployment status is ${latestStatus.state}.` }
+      : { status: "FAIL", detail: `The latest exact-head deployment status is ${latestStatus.state}.` }
+  return { binding, outcome, latestDeployment, latestStatus }
 }
 
 export async function collectPrEvidence(options = {}) {
@@ -468,7 +800,9 @@ export async function collectPrEvidence(options = {}) {
   if (!REPOSITORY_PATTERN.test(repository ?? "")) {
     throw new Error("Repository identity could not be derived as owner/repo.")
   }
-  const remote = collectRemoteHead(commandRunner, git.branch, git.topLevel)
+  const remote = options.localOnly
+    ? { status: "SKIPPED", head: null, detail: "Remote branch evidence was skipped by --local-only." }
+    : collectRemoteHead(commandRunner, git.branch, git.topLevel)
   const localChanges = await localChangedFiles(commandRunner, git)
   const report = {
     schemaVersion: 1,
@@ -490,6 +824,12 @@ export async function collectPrEvidence(options = {}) {
     },
     pullRequest: null,
     changedFiles: localChanges.files,
+    changedFileRecords: localChanges.files.map((filename) => ({
+      filename,
+      previousFilename: null,
+      status: "modified",
+      patchAvailable: false,
+    })),
     migrationImpact: classifyMigrationImpact(
       localChanges.files,
       localChanges.contentsByPath,
@@ -500,6 +840,12 @@ export async function collectPrEvidence(options = {}) {
     comments: { topLevel: [], inline: [] },
     reviewThreads: null,
     deployments: [],
+    deploymentEvidence: {
+      binding: { status: "SKIPPED", detail: "Deployment evidence was not collected." },
+      outcome: { status: "SKIPPED", detail: "Deployment evidence was not collected." },
+      latestDeploymentId: null,
+      latestStatus: null,
+    },
     checks: [],
     warnings: [],
   }
@@ -564,6 +910,13 @@ export async function collectPrEvidence(options = {}) {
       "No pull request was found for the current branch.",
     )
   } else {
+    if (!validPullRequest(pullRequest)) {
+      addCheck(report, "pull-request", "FAIL", "Pull-request metadata is malformed or incomplete.")
+      pullRequest = null
+    }
+  }
+
+  if (pullRequest) {
     report.pullRequest = {
       number: pullRequest.number,
       url: pullRequest.html_url,
@@ -591,38 +944,55 @@ export async function collectPrEvidence(options = {}) {
     }
 
     try {
-      const files = githubApi(
+      const files = githubApiArrayPages(
         commandRunner,
         `repos/${repository}/pulls/${pullRequest.number}/files`,
-        [["per_page", "100"]],
+        [],
+        "pull request files",
       )
-      if (!Array.isArray(files) || files.length < pullRequest.changed_files) {
+      if (!Number.isSafeInteger(pullRequest.changed_files) || files.length !== pullRequest.changed_files) {
         throw new Error("Changed-file evidence is incomplete.")
       }
-      report.changedFiles = files.map((item) => normalizePath(item.filename)).sort()
-      report.migrationImpact = classifyMigrationImpact(
-        report.changedFiles,
-        Object.fromEntries(files.map((item) => [
-          normalizePath(item.filename),
-          item.patch ?? "",
-        ])),
+      const records = files.map((item) => ({
+        filename: normalizePath(item.filename ?? ""),
+        previous_filename: item.previous_filename
+          ? normalizePath(item.previous_filename)
+          : null,
+        status: item.status ?? null,
+        patch: typeof item.patch === "string" ? item.patch : null,
+      }))
+      assertUnique(records, (item) => item.filename, "pull request files")
+      report.changedFiles = records.map((item) => item.filename).sort()
+      report.changedFileRecords = records.map((item) => ({
+        filename: item.filename,
+        previousFilename: item.previous_filename,
+        status: item.status,
+        patchAvailable: item.patch !== null,
+      }))
+      report.migrationImpact = classifyMigrationImpact(records)
+      const malformed = report.migrationImpact.malformedFileRecords.length
+      addCheck(
+        report,
+        "changed-files",
+        malformed ? "FAIL" : "PASS",
+        malformed
+          ? `${malformed} PR file record(s) have malformed status or rename metadata.`
+          : `All ${files.length} PR changed files and rename endpoints were reported.`,
       )
-      addCheck(report, "changed-files", "PASS", `All ${files.length} PR changed files were reported.`)
     } catch {
       addCheck(report, "changed-files", "UNAVAILABLE", "Complete PR changed-file evidence is unavailable.")
     }
 
     try {
-      const reviews = githubApi(
+      const reviews = githubApiArrayPages(
         commandRunner,
         `repos/${repository}/pulls/${pullRequest.number}/reviews`,
-        [["per_page", "100"]],
+        [],
+        "reviews",
       )
-      const requested = githubApi(
-        commandRunner,
-        `repos/${repository}/pulls/${pullRequest.number}/requested_reviewers`,
-      )
-      if (!Array.isArray(reviews) || reviews.length === 100) throw new Error("Review evidence is incomplete.")
+      assertUnique(reviews, (item) => item.id, "reviews")
+      if (reviews.some((item) => !validReview(item))) throw new Error("Review evidence is malformed.")
+      const requested = collectReviewRequests(commandRunner, repository, pullRequest.number)
       report.reviews = reviews.map(simplifyReview)
       report.reviewRequests = {
         users: (requested.users ?? []).map(simplifyUser),
@@ -639,18 +1009,22 @@ export async function collectPrEvidence(options = {}) {
     }
 
     try {
-      const topLevel = githubApi(
+      const topLevel = githubApiArrayPages(
         commandRunner,
         `repos/${repository}/issues/${pullRequest.number}/comments`,
-        [["per_page", "100"]],
+        [],
+        "top-level comments",
       )
-      const inline = githubApi(
+      const inline = githubApiArrayPages(
         commandRunner,
         `repos/${repository}/pulls/${pullRequest.number}/comments`,
-        [["per_page", "100"]],
+        [],
+        "inline comments",
       )
-      if (!Array.isArray(topLevel) || !Array.isArray(inline) || topLevel.length === 100 || inline.length === 100) {
-        throw new Error("Comment evidence is incomplete.")
+      assertUnique(topLevel, (item) => item.id, "top-level comments")
+      assertUnique(inline, (item) => item.id, "inline comments")
+      if (topLevel.some((item) => !validComment(item)) || inline.some((item) => !validComment(item))) {
+        throw new Error("Comment evidence is malformed.")
       }
       report.comments = {
         topLevel: topLevel.map(simplifyComment),
@@ -669,6 +1043,14 @@ export async function collectPrEvidence(options = {}) {
       )
       if (!threads || !Array.isArray(threads.nodes) || threads.totalCount > threads.nodes.length) {
         throw new Error("Review-thread evidence is incomplete.")
+      }
+      if (threads.nodes.some((item) => (
+        typeof item.id !== "string"
+        || typeof item.isResolved !== "boolean"
+        || (item.path !== null && item.path !== undefined && typeof item.path !== "string")
+        || (item.line !== null && item.line !== undefined && !Number.isSafeInteger(item.line))
+      ))) {
+        throw new Error("Review-thread evidence is malformed.")
       }
       const unresolved = threads.nodes.filter((item) => !item.isResolved)
       report.reviewThreads = {
@@ -698,11 +1080,8 @@ export async function collectPrEvidence(options = {}) {
       totalCount: report.exactHeadChecks.totalCount,
       statuses: report.exactHeadChecks.statuses,
       expectedSha: evidenceHead,
+      statusEndpointSha: report.exactHeadChecks.statusEndpointSha,
     })
-    if (!report.exactHeadChecks.annotationsComplete) {
-      classified.status = "UNAVAILABLE"
-      classified.detail += " Check annotations may be incomplete."
-    }
     addCheck(report, "exact-head-checks", classified.status, classified.detail)
   } catch {
     addCheck(report, "exact-head-checks", "UNAVAILABLE", "Exact-head checks or annotations are unavailable.")
@@ -714,23 +1093,18 @@ export async function collectPrEvidence(options = {}) {
       repository,
       evidenceHead,
     )
-    const deploymentMismatch = report.deployments.some(
-      (deployment) => deployment.sha !== evidenceHead,
-    )
-    addCheck(
-      report,
-      "deployments",
-      deploymentMismatch
-        ? "FAIL"
-        : report.deployments.length ? "PASS" : "SKIPPED",
-      deploymentMismatch
-        ? "A returned deployment record is not bound to the explicit head SHA."
-        : report.deployments.length
-        ? `${report.deployments.length} deployment record(s) are explicitly bound to ${evidenceHead}.`
-        : `No deployment record is bound to ${evidenceHead}.`,
-    )
+    const classified = classifyDeploymentEvidence(report.deployments, evidenceHead)
+    report.deploymentEvidence = {
+      binding: classified.binding,
+      outcome: classified.outcome,
+      latestDeploymentId: classified.latestDeployment?.id ?? null,
+      latestStatus: classified.latestStatus?.state ?? null,
+    }
+    addCheck(report, "deployment-binding", classified.binding.status, classified.binding.detail)
+    addCheck(report, "deployment-status", classified.outcome.status, classified.outcome.detail)
   } catch {
-    addCheck(report, "deployments", "UNAVAILABLE", "Deployment evidence is unavailable.")
+    addCheck(report, "deployment-binding", "UNAVAILABLE", "Complete deployment records are unavailable.")
+    addCheck(report, "deployment-status", "UNAVAILABLE", "Complete deployment statuses are unavailable.")
   }
 
   const heads = evaluateHeadConsistency({
@@ -763,7 +1137,7 @@ export function renderPrEvidenceText(report) {
     `Reviews: ${report.reviews.length}; requests=${report.reviewRequests.users.length + report.reviewRequests.teams.length}`,
     `Comments: top-level=${report.comments.topLevel.length}; inline=${report.comments.inline.length}`,
     `Review threads: total=${report.reviewThreads?.total ?? "UNAVAILABLE"}; unresolved=${report.reviewThreads?.unresolved ?? "UNAVAILABLE"}`,
-    `Deployments bound to evidence head: ${report.deployments.length}`,
+    `Deployments returned: ${report.deployments.length}; binding=${report.deploymentEvidence.binding.status}; latest outcome=${report.deploymentEvidence.outcome.status}${report.deploymentEvidence.latestStatus ? ` (${report.deploymentEvidence.latestStatus})` : ""}`,
     ...report.checks.map((item) => `- ${item.name}: ${item.status} - ${item.detail}`),
     ...report.warnings.map((warning) => `WARNING: ${warning}`),
   ].join("\n")
@@ -775,7 +1149,7 @@ export function renderPrEvidenceJson(report) {
   return output
 }
 
-function parseArgs(argv) {
+export function parsePrEvidenceArgs(argv) {
   const options = {
     json: false,
     localOnly: false,
@@ -783,19 +1157,26 @@ function parseArgs(argv) {
     prNumber: null,
     headSha: null,
   }
+  const seen = new Set()
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
+    if (!["--json", "--local-only", "--repository", "--pr", "--head-sha"].includes(argument)) {
+      throw new Error(`Unexpected PR-evidence argument: ${argument}`)
+    }
+    if (seen.has(argument)) throw new Error(`Duplicate option: ${argument}`)
+    seen.add(argument)
     if (argument === "--json") options.json = true
     else if (argument === "--local-only") options.localOnly = true
     else if (["--repository", "--pr", "--head-sha"].includes(argument)) {
       const value = argv[index + 1]
       if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value`)
       if (argument === "--repository") options.repository = value
-      if (argument === "--pr") options.prNumber = Number(value)
+      if (argument === "--pr") {
+        if (!/^[1-9]\d*$/u.test(value)) throw new Error("--pr must be a positive integer")
+        options.prNumber = Number(value)
+      }
       if (argument === "--head-sha") options.headSha = value.toLowerCase()
       index += 1
-    } else {
-      throw new Error(`Unexpected PR-evidence argument: ${argument}`)
     }
   }
   if (options.repository && !REPOSITORY_PATTERN.test(options.repository)) {
@@ -807,18 +1188,21 @@ function parseArgs(argv) {
   if (options.headSha && !SHA_PATTERN.test(options.headSha)) {
     throw new Error("--head-sha must be a full 40-character Git SHA")
   }
+  if (options.localOnly && (options.repository || options.prNumber || options.headSha)) {
+    throw new Error("--local-only cannot be combined with GitHub or PR-specific options")
+  }
   return options
 }
 
 async function main(argv = process.argv.slice(2)) {
-  const options = parseArgs(argv)
+  const options = parsePrEvidenceArgs(argv)
   const report = await collectPrEvidence(options)
   process.stdout.write(
     options.json
       ? renderPrEvidenceJson(report)
       : `${renderPrEvidenceText(report)}\n`,
   )
-  if (report.status === "FAIL") process.exitCode = 1
+  if (report.status !== "PASS") process.exitCode = 1
 }
 
 if (

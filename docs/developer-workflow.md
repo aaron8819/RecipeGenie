@@ -33,6 +33,18 @@ runtime, print the checks they ran, and return nonzero on failure. Add `--json`
 for structured output. Check results use `PASS`, `FAIL`, `SKIPPED`, and
 `UNAVAILABLE`; missing evidence is never reported as success.
 
+The command lines are strict: unknown or positional arguments, duplicate
+single-use options, repeated value options, missing values, malformed refs,
+SHAs, paths, PR numbers, repositories, project refs, or URLs, and options from
+another tier are rejected before verification runs. `--file` is the only
+repeatable value option because it intentionally defines a multi-file focused
+scope.
+
+Focused and PR checks invoke npm through the CLI bundled with the active pinned
+Node distribution and verify its version against `packageManager`. Ambient
+`npm_execpath`, `npm_node_execpath`, and similar environment overrides are not
+executable authority. Child processes receive argument arrays without a shell.
+
 Focused verification is an iteration aid for an explicit bounded scope:
 
 ```powershell
@@ -72,6 +84,13 @@ evidence is `UNAVAILABLE`; contradictory identity, mismatched bindings, pending
 or failed required evidence, and invalid inputs fail. It never deploys, changes
 aliases, connects to a database, or applies migrations.
 
+The release composition boundary accepts exactly one uncontaminated JSON
+document from `rg:release:status`. A passing document must identify its schema,
+explicit `PASS` verdict, complete expected/deployed SHA and Supabase project
+bindings, expected migration, required authoritative checks, warnings, and next
+action. Exit-zero failed, blocked, skipped, incomplete, contradictory, unknown,
+or malformed output cannot produce a passing wrapper result.
+
 `npm run verify` remains the comprehensive local code-quality gate used by CI.
 `npm run check:migration-references` is its repository-backed migration
 documentation check. The check derives the active endpoint from tracked regular
@@ -87,6 +106,7 @@ Use the read-only evidence reporter to reconstruct local and GitHub PR state:
 npm run rg:pr:evidence
 npm run rg:pr:evidence -- --json
 npm run rg:pr:evidence -- --local-only
+npm run rg:pr:evidence -- --repository aaron8819/RecipeGenie --pr 35 --head-sha <40-character-sha>
 ```
 
 The report includes repository identity; branch and worktree state; local,
@@ -94,12 +114,29 @@ upstream, remote, PR, and explicit evidence heads; PR URL/base/head/state and
 mergeability; changed files; actual migration SQL versus documentation-only
 migration references; checksum-registry impact; exact-head checks, conclusions,
 and annotations; reviews and requests; top-level and inline comments; total and
-unresolved review threads; and exact-SHA deployment records. Use `--pr NUMBER`
-or `--head-sha SHA` when discovery must be explicit. Head disagreement, dirty
-state, pending/failed checks, merge conflicts, and unresolved review threads
-cannot produce a passing report. No PR, no remote branch, missing GitHub access,
-incomplete pagination, missing checks, or unavailable deployment evidence is
-reported as `SKIPPED` or `UNAVAILABLE`, while retaining the useful local report.
+unresolved review threads; and exact-SHA deployment records plus their latest
+statuses. Every potentially multi-page GitHub collection is retrieved to a
+validated end condition, with repeated pages/cursors, changed totals, malformed
+records, later-page failures, truncation, conflicting stable identifiers, and a
+100-page safety bound failing closed. Use `--pr NUMBER` or `--head-sha SHA` when
+discovery must be explicit. `--local-only` accepts no repository, PR, or explicit
+head option. Head disagreement, dirty state, pending/failed checks, merge
+conflicts, and unresolved review threads cannot produce a passing report. No
+PR, no remote branch, missing GitHub access, incomplete pagination, missing
+checks, or unavailable deployment status is reported as `SKIPPED` or
+`UNAVAILABLE`, while retaining the useful local report.
+
+Check runs and commit statuses are validated independently. Each contributing
+record must have a stable identifier/name or context, a recognized lifecycle
+and successful state. Check runs require their own explicit matching SHA;
+commit statuses require either their own matching SHA or the separately
+reported full-SHA REST endpoint binding. The reporter never fills a record's
+missing SHA with the requested value. PR-file evidence preserves
+GitHub status and both rename endpoints, so renames, copies, and deletions that
+cross a migration-sensitive path remain migration impact even without a patch.
+Deployment record binding and deployment outcome are separate checks. A record
+alone does not pass: the reporter selects the latest deployment and latest
+status by timestamp and stable ID and requires a successful terminal status.
 
 ## Proportional review
 

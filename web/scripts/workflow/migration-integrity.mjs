@@ -207,12 +207,49 @@ export function validateMigrationMetadata({
   }
 }
 
+const GITHUB_FILE_STATUSES = new Set([
+  "added", "changed", "copied", "modified", "removed", "renamed", "unchanged",
+])
+
+function normalizeChangedFile(value) {
+  if (typeof value === "string") {
+    return { filename: normalizePath(value), previousFilename: null, status: "modified", patch: null }
+  }
+  return {
+    filename: normalizePath(value?.filename ?? ""),
+    previousFilename: value?.previous_filename || value?.previousFilename
+      ? normalizePath(value.previous_filename ?? value.previousFilename)
+      : null,
+    status: value?.status ?? null,
+    patch: typeof value?.patch === "string" ? value.patch : null,
+  }
+}
+
+function migrationSensitivePath(path) {
+  return Boolean(path) && (
+    path.startsWith("supabase/migrations/")
+    || path === "supabase/migration-checksums.json"
+    || path === "supabase/SCHEMA.md"
+    || path === "README.md"
+  )
+}
+
 export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
-  const normalizedFiles = [...new Set(changedFiles.map(normalizePath))].sort()
-  const migrationFiles = normalizedFiles.filter(directMigrationFilename)
+  const records = changedFiles.map(normalizeChangedFile)
+  const normalizedFiles = [...new Set(records.map((item) => item.filename))].sort()
+  const malformedFileRecords = records.filter((item) => (
+    !item.filename
+    || !GITHUB_FILE_STATUSES.has(item.status)
+    || (["renamed", "copied"].includes(item.status) && !item.previousFilename)
+  ))
+  const involvedPaths = [...new Set(records.flatMap(
+    (item) => [item.filename, item.previousFilename].filter(Boolean),
+  ))].sort()
+  const migrationFiles = involvedPaths.filter(directMigrationFilename)
   const referenceFiles = normalizedFiles.filter((path) => {
     if (migrationFiles.includes(path)) return false
-    const contents = contentsByPath[path] ?? ""
+    const record = records.find((item) => item.filename === path)
+    const contents = contentsByPath[path] ?? record?.patch ?? ""
     return /(?:supabase\/migrations\/)?\d{3}_[a-z0-9_]+\.sql/iu.test(contents)
       || /supabase\/migrations\//iu.test(contents)
   })
@@ -223,16 +260,24 @@ export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
     (path) => !path.endsWith(".md"),
   )
 
+  const sensitivePaths = involvedPaths.filter(migrationSensitivePath)
+  const conservativelyImpactful = malformedFileRecords.length > 0
   return {
+    fileRecords: records.map(({ patch, ...item }) => ({
+      ...item,
+      patchAvailable: patch !== null,
+    })),
     migrationFiles,
-    checksumRegistryChanged: normalizedFiles.includes(
-      "supabase/migration-checksums.json",
-    ),
+    sensitivePaths,
+    malformedFileRecords,
+    checksumRegistryChanged: sensitivePaths.includes("supabase/migration-checksums.json"),
     referenceFiles,
     documentationReferences,
     toolingReferences,
-    migrationChanged: migrationFiles.length > 0,
+    migrationChanged: migrationFiles.length > 0 || conservativelyImpactful,
+    potentiallyImpactful: sensitivePaths.length > 0 || conservativelyImpactful,
     documentationOnly: migrationFiles.length === 0
+      && !conservativelyImpactful
       && documentationReferences.length > 0
       && normalizedFiles.every((path) => path.endsWith(".md")),
   }
@@ -318,13 +363,18 @@ export function renderMigrationIntegrityJson(report) {
   return output
 }
 
-async function main(argv = process.argv.slice(2)) {
-  if (argv.some((argument) => !["--json"].includes(argument))) {
+export function parseMigrationIntegrityArgs(argv) {
+  if (argv.some((argument) => argument !== "--json") || argv.filter((argument) => argument === "--json").length > 1) {
     throw new Error("Usage: npm run check:migration-references -- [--json]")
   }
+  return { json: argv.includes("--json") }
+}
+
+async function main(argv = process.argv.slice(2)) {
+  const options = parseMigrationIntegrityArgs(argv)
   const report = await collectMigrationIntegrity()
   process.stdout.write(
-    argv.includes("--json")
+    options.json
       ? renderMigrationIntegrityJson(report)
       : `${renderMigrationIntegrityText(report)}\n`,
   )
