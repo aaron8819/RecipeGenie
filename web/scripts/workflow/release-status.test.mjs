@@ -5,11 +5,50 @@ import {
   parseReleaseStatusArgs,
   renderReleaseStatusJson,
   renderReleaseStatusText,
+  resolveTrustedGitHubCliCommand,
 } from "./release-status.mjs"
 
 const SHA = "7ebbad86970bee4389fe870df260ca126132637b"
 const OTHER_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const PROJECT_REF = "eyaoahwzixqetjgfghsh"
+
+function windowsGitHubFileSystem({
+  programFiles = "D:\\Program Files",
+  canonicalProgramFiles = programFiles,
+  canonicalRoot = `${canonicalProgramFiles}\\GitHub CLI`,
+  canonicalExecutable = `${canonicalRoot}\\gh.exe`,
+} = {}) {
+  const root = `${programFiles}\\GitHub CLI`
+  const executable = `${root}\\gh.exe`
+  const canonicalPaths = new Map([
+    [programFiles.toLowerCase(), canonicalProgramFiles],
+    [root.toLowerCase(), canonicalRoot],
+    [executable.toLowerCase(), canonicalExecutable],
+  ])
+  const directories = new Set([
+    programFiles,
+    root,
+    canonicalProgramFiles,
+    canonicalRoot,
+  ].map((value) => value.toLowerCase()))
+  const files = new Set(
+    [executable, canonicalExecutable].map((value) => value.toLowerCase()),
+  )
+  return {
+    environment: {
+      PATH: "D:\\Hostile",
+      RG_VERIFICATION_WINDOWS_PROGRAM_FILES: programFiles,
+      RG_VERIFICATION_GITHUB_CLI: canonicalExecutable,
+    },
+    canonicalize: (value) => canonicalPaths.get(value.toLowerCase()) || value,
+    pathType(value) {
+      const normalized = value.toLowerCase()
+      if (directories.has(normalized)) return "directory"
+      if (files.has(normalized)) return "file"
+      return null
+    },
+  }
+}
 
 function manifest(overrides = {}) {
   return {
@@ -72,11 +111,53 @@ function fixture(overrides = {}) {
     return underlyingFetch(...args)
   }
   const manifestSignal = overrides.manifestSignal || { fixture: "timeout-signal" }
-  return collectReleaseStatus(input, { context, commandRunner, fetchImpl, manifestSignal, cwd: overrides.cwd || "C:/fixture" })
+  return collectReleaseStatus(input, {
+    context,
+    commandRunner,
+    fetchImpl,
+    manifestSignal,
+    githubCli: overrides.githubCli,
+    cwd: overrides.cwd || "C:/fixture",
+  })
     .then((report) => ({ report, commands, fetchCalls, manifestSignal }))
 }
 
 describe("release status", () => {
+  it("invokes the exact absolute GitHub CLI without a bare-name fallback", async () => {
+    const githubCli = "D:\\Program Files\\GitHub CLI\\gh.exe"
+    const { report, commands } = await fixture({
+      githubCli,
+      ghAvailable: false,
+    })
+    expect(report.status).toBe("PASS")
+    expect(commands.length).toBeGreaterThan(0)
+    expect(commands.every((call) => call.command === githubCli)).toBe(true)
+    expect(commands.some((call) => call.command === "gh")).toBe(false)
+  })
+
+  it("validates the canonical executable independently of ambient PATH", () => {
+    const fileSystem = windowsGitHubFileSystem()
+    expect(resolveTrustedGitHubCliCommand({
+      platform: "win32",
+      ...fileSystem,
+    })).toBe("D:\\Program Files\\GitHub CLI\\gh.exe")
+  })
+
+  it.each([
+    ["installation root redirected outside", windowsGitHubFileSystem({
+      canonicalRoot: "D:\\Outside\\GitHub CLI",
+      canonicalExecutable: "D:\\Outside\\GitHub CLI\\gh.exe",
+    })],
+    ["executable redirected outside", windowsGitHubFileSystem({
+      canonicalExecutable: "D:\\Outside\\gh.exe",
+    })],
+  ])("rejects %s at the release-status consumption boundary", (_label, fileSystem) => {
+    expect(() => resolveTrustedGitHubCliCommand({
+      platform: "win32",
+      ...fileSystem,
+    })).toThrow(/approved root/iu)
+  })
+
   it("correlates exact-SHA CI with the authoritative production manifest", async () => {
     const { report } = await fixture({ deployments: [{ id: 42 }] })
     expect(report.status).toBe("PASS")

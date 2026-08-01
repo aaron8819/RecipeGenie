@@ -1,4 +1,6 @@
 import { spawnSync } from "node:child_process"
+import { realpathSync, statSync } from "node:fs"
+import { posix, win32 } from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   isFullGitSha,
@@ -20,6 +22,7 @@ const SUCCESSFUL_CONCLUSIONS = new Set(["success"])
 const NON_BLOCKING_CONCLUSIONS = new Set(["neutral", "skipped"])
 const FAILED_CONCLUSIONS = new Set(["failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"])
 const DEPLOYMENT_STATES = new Set(["error", "failure", "inactive", "in_progress", "queued", "pending", "success"])
+const GITHUB_CLI_ENVIRONMENT_KEY = "RG_VERIFICATION_GITHUB_CLI"
 
 function defaultCommandRunner(command, args, cwd) {
   const result = spawnSync(command, args, { cwd, encoding: "utf8", windowsHide: true, timeout: 30_000 })
@@ -27,6 +30,90 @@ function defaultCommandRunner(command, args, cwd) {
     exitCode: typeof result.status === "number" ? result.status : 1,
     stdout: result.stdout || "",
   }
+}
+
+function environmentValue(environment, name) {
+  const entry = Object.entries(environment).find(
+    ([key]) => key.toLowerCase() === name.toLowerCase(),
+  )
+  return entry?.[1]
+}
+
+function defaultPathType(value) {
+  try {
+    const stat = statSync(value)
+    if (stat.isDirectory()) return "directory"
+    if (stat.isFile()) return "file"
+  } catch {
+    // The caller fails closed below.
+  }
+  return null
+}
+
+function canonicalPathEqual(left, right, platform) {
+  return platform === "win32"
+    ? win32.resolve(left).toLowerCase() === win32.resolve(right).toLowerCase()
+    : posix.resolve(left) === posix.resolve(right)
+}
+
+function canonicalPathContained(root, candidate, platform) {
+  const pathApi = platform === "win32" ? win32 : posix
+  const relativePath = pathApi.relative(root, candidate)
+  if (!relativePath || pathApi.isAbsolute(relativePath)) return false
+  return relativePath !== ".." && !relativePath.startsWith(`..${pathApi.sep}`)
+}
+
+export function resolveTrustedGitHubCliCommand({
+  environment = process.env,
+  platform = process.platform,
+  pathType = defaultPathType,
+  canonicalize = realpathSync.native,
+} = {}) {
+  const suppliedPath = environmentValue(environment, GITHUB_CLI_ENVIRONMENT_KEY)
+  if (!suppliedPath) return null
+  const pathApi = platform === "win32" ? win32 : posix
+  if (!pathApi.isAbsolute(suppliedPath) || pathType(suppliedPath) !== "file") {
+    throw new Error("Trusted GitHub CLI path is missing or malformed.")
+  }
+  const canonicalExecutable = canonicalize(suppliedPath)
+  if (
+    !pathApi.isAbsolute(canonicalExecutable)
+    || pathType(canonicalExecutable) !== "file"
+    || !canonicalPathEqual(suppliedPath, canonicalExecutable, platform)
+  ) {
+    throw new Error("Trusted GitHub CLI path is not canonical.")
+  }
+  if (platform !== "win32") return canonicalExecutable
+
+  const programFiles = environmentValue(
+    environment,
+    "RG_VERIFICATION_WINDOWS_PROGRAM_FILES",
+  )
+  if (!programFiles || !win32.isAbsolute(programFiles)) {
+    throw new Error("Trusted GitHub CLI root is unavailable.")
+  }
+  const installationRoot = win32.join(programFiles, "GitHub CLI")
+  const expectedExecutable = win32.join(installationRoot, "gh.exe")
+  if (
+    pathType(programFiles) !== "directory"
+    || pathType(installationRoot) !== "directory"
+    || pathType(expectedExecutable) !== "file"
+  ) {
+    throw new Error("Trusted GitHub CLI installation is unavailable.")
+  }
+  const canonicalProgramFiles = canonicalize(programFiles)
+  const canonicalRoot = canonicalize(installationRoot)
+  const canonicalExpectedExecutable = canonicalize(expectedExecutable)
+  if (
+    pathType(canonicalProgramFiles) !== "directory"
+    || pathType(canonicalRoot) !== "directory"
+    || !canonicalPathContained(canonicalProgramFiles, canonicalRoot, platform)
+    || !canonicalPathContained(canonicalRoot, canonicalExpectedExecutable, platform)
+    || !canonicalPathEqual(canonicalExecutable, canonicalExpectedExecutable, platform)
+  ) {
+    throw new Error("Trusted GitHub CLI executable escapes its approved root.")
+  }
+  return canonicalExecutable
 }
 
 function isSafeBranch(value) {
@@ -59,8 +146,8 @@ function check(name, status, authority, detail) {
   return { name, status, authority, detail }
 }
 
-function runJson(commandRunner, cwd, args) {
-  const result = commandRunner("gh", args, cwd)
+function runJson(commandRunner, cwd, githubCli, args) {
+  const result = commandRunner(githubCli, args, cwd)
   if (result.exitCode !== 0) throw new Error("GitHub evidence is unavailable")
   try {
     return JSON.parse(result.stdout)
@@ -69,10 +156,10 @@ function runJson(commandRunner, cwd, args) {
   }
 }
 
-function githubApi(commandRunner, cwd, endpoint, fields = []) {
+function githubApi(commandRunner, cwd, githubCli, endpoint, fields = []) {
   const args = ["api", endpoint]
   if (fields.length) args.push("-X", "GET", ...fields.flatMap(([name, value]) => ["-f", `${name}=${value}`]))
-  return runJson(commandRunner, cwd, args)
+  return runJson(commandRunner, cwd, githubCli, args)
 }
 
 function addWarning(report, message) {
@@ -199,6 +286,7 @@ export async function collectReleaseStatus(rawInput, options = {}) {
   const fetchImpl = options.fetchImpl || fetch
   const manifestSignal = options.manifestSignal || AbortSignal.timeout(10_000)
   const cwd = options.cwd || process.cwd()
+  const githubCli = options.githubCli || "gh"
   const context = options.context || collectDoctorReport({ cwd, commandRunner })
   const report = {
     schemaVersion: 1,
@@ -231,11 +319,11 @@ export async function collectReleaseStatus(rawInput, options = {}) {
     return report
   }
 
-  let githubAvailable = context.tools?.gh?.available !== false
+  let githubAvailable = githubCli !== "gh" || context.tools?.gh?.available !== false
   let repositoryMetadata
   if (githubAvailable) {
     try {
-      repositoryMetadata = githubApi(commandRunner, cwd, `repos/${input.repository}`)
+      repositoryMetadata = githubApi(commandRunner, cwd, githubCli, `repos/${input.repository}`)
       const actual = repositoryMetadata.full_name
       if (typeof actual !== "string" || actual.toLowerCase() !== input.repository.toLowerCase()) {
         report.checks.push(check("github-repository", "FAIL", "AUTHORITATIVE", "GitHub repository identity contradicts the explicit repository."))
@@ -261,7 +349,7 @@ export async function collectReleaseStatus(rawInput, options = {}) {
     report.binding.branch = branch
     if (githubAvailable) {
       try {
-        const ref = githubApi(commandRunner, cwd, `repos/${input.repository}/git/ref/heads/${encodeURIComponent(branch)}`)
+        const ref = githubApi(commandRunner, cwd, githubCli, `repos/${input.repository}/git/ref/heads/${encodeURIComponent(branch)}`)
         const headSha = ref?.object?.sha?.toLowerCase()
         if (!isFullGitSha(headSha)) throw new Error("invalid branch evidence")
         if (headSha !== input.expectedSha && !input.historical) {
@@ -284,7 +372,7 @@ export async function collectReleaseStatus(rawInput, options = {}) {
 
   if (githubAvailable) {
     try {
-      const evidence = githubApi(commandRunner, cwd, `repos/${input.repository}/commits/${input.expectedSha}/check-runs`, [["per_page", "100"]])
+      const evidence = githubApi(commandRunner, cwd, githubCli, `repos/${input.repository}/commits/${input.expectedSha}/check-runs`, [["per_page", "100"]])
       const ci = classifyCi(evidence)
       report.checks.push(check("exact-sha-ci", ci.status, "AUTHORITATIVE", ci.detail))
       if (ci.status === "FAIL" && report.status !== "BLOCKED") report.status = "ACTION_REQUIRED"
@@ -299,7 +387,7 @@ export async function collectReleaseStatus(rawInput, options = {}) {
 
   if (githubAvailable) {
     try {
-      const deployments = githubApi(commandRunner, cwd, `repos/${input.repository}/deployments`, [["sha", input.expectedSha], ["per_page", "1"]])
+      const deployments = githubApi(commandRunner, cwd, githubCli, `repos/${input.repository}/deployments`, [["sha", input.expectedSha], ["per_page", "1"]])
       if (!Array.isArray(deployments) || deployments.length === 0) {
         report.checks.push(check("deployment-record", "WARN", "CORROBORATIVE", "No GitHub deployment record was found for the expected SHA."))
         addWarning(report, "Optional GitHub/Vercel deployment evidence is absent.")
@@ -308,7 +396,7 @@ export async function collectReleaseStatus(rawInput, options = {}) {
         let detail = "GitHub has a deployment record for the expected SHA."
         if (Number.isSafeInteger(deploymentId) && deploymentId > 0) {
           try {
-            const statuses = githubApi(commandRunner, cwd, `repos/${input.repository}/deployments/${deploymentId}/statuses`, [["per_page", "1"]])
+            const statuses = githubApi(commandRunner, cwd, githubCli, `repos/${input.repository}/deployments/${deploymentId}/statuses`, [["per_page", "1"]])
             const state = statuses?.[0]?.state
             if (DEPLOYMENT_STATES.has(state)) detail = `GitHub deployment record latest state is ${state}.`
           } catch {
@@ -431,7 +519,10 @@ function configuredSecrets(environment) {
 async function main() {
   try {
     const input = parseReleaseStatusArgs(process.argv.slice(2))
-    const report = await collectReleaseStatus(input)
+    const trustedGitHubCli = resolveTrustedGitHubCliCommand()
+    const report = await collectReleaseStatus(input, {
+      githubCli: trustedGitHubCli || "gh",
+    })
     const output = input.json ? renderReleaseStatusJson(report, configuredSecrets(process.env)) : renderReleaseStatusText(report, configuredSecrets(process.env))
     process.stdout.write(output)
     process.exitCode = report.status === "PASS" ? 0 : report.status === "ACTION_REQUIRED" ? 1 : 2

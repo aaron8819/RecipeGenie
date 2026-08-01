@@ -78,6 +78,82 @@ function Add-ExistingPath([Collections.Generic.List[string]]$Paths, [string]$Can
   }
 }
 
+function Resolve-CanonicalPath([string]$Path) {
+  if (-not $IsWindows) {
+    return (Resolve-Path -LiteralPath $Path -ErrorAction Stop).ProviderPath
+  }
+  if ($null -eq ('RecipeGenieNativePath' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+public static class RecipeGenieNativePath {
+  private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  private static extern SafeFileHandle CreateFile(
+    string fileName,
+    uint desiredAccess,
+    FileShare shareMode,
+    IntPtr securityAttributes,
+    FileMode creationDisposition,
+    uint flagsAndAttributes,
+    IntPtr templateFile
+  );
+
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  private static extern uint GetFinalPathNameByHandle(
+    SafeFileHandle file,
+    StringBuilder path,
+    uint pathLength,
+    uint flags
+  );
+
+  public static string Resolve(string path) {
+    using (SafeFileHandle handle = CreateFile(
+      path,
+      0,
+      FileShare.ReadWrite | FileShare.Delete,
+      IntPtr.Zero,
+      FileMode.Open,
+      FILE_FLAG_BACKUP_SEMANTICS,
+      IntPtr.Zero
+    )) {
+      if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+      StringBuilder buffer = new StringBuilder(512);
+      uint length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
+      if (length == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+      if (length >= buffer.Capacity) {
+        buffer = new StringBuilder((int)length + 1);
+        length = GetFinalPathNameByHandle(handle, buffer, (uint)buffer.Capacity, 0);
+        if (length == 0) throw new Win32Exception(Marshal.GetLastWin32Error());
+      }
+      string resolved = buffer.ToString();
+      if (resolved.StartsWith(@"\\?\UNC\", StringComparison.OrdinalIgnoreCase)) {
+        return @"\\" + resolved.Substring(8);
+      }
+      return resolved.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase)
+        ? resolved.Substring(4)
+        : resolved;
+    }
+  }
+}
+'@
+  }
+  return [RecipeGenieNativePath]::Resolve($Path)
+}
+
+function Test-CanonicalContainment([string]$Root, [string]$Candidate) {
+  $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+  $separator = [IO.Path]::DirectorySeparatorChar
+  $prefix = $Root.TrimEnd([char[]]@('/', '\')) + $separator
+  return $Candidate.StartsWith($prefix, $comparison)
+}
+
 function Test-RuntimeShim([string]$Directory) {
   $names = if ($IsWindows) {
     @('node', 'node.com', 'node.exe', 'node.cmd', 'node.bat', 'node.ps1', 'npm', 'npm.com', 'npm.exe', 'npm.cmd', 'npm.bat', 'npm.ps1', 'npx', 'npx.com', 'npx.exe', 'npx.cmd', 'npx.bat', 'npx.ps1')
@@ -164,6 +240,7 @@ try {
     $value = Get-EnvironmentValue $key
     if ($null -ne $value) { $environment[$key] = $value }
   }
+  $trustedGitHubCli = $null
   if ($IsWindows) {
     $systemRoot = [IO.Path]::GetDirectoryName([Environment]::SystemDirectory)
     $programFiles = [Environment]::GetFolderPath('ProgramFiles')
@@ -177,6 +254,25 @@ try {
       -not (Test-Path -LiteralPath $trustedPowerShell -PathType Leaf) -or
       [IO.Path]::GetFileName($trustedPowerShell) -ine 'pwsh.exe'
     ) { throw 'Trusted Windows runtime locations are unavailable.' }
+    if ($isRelease) {
+      $githubCliRoot = Join-Path $programFiles 'GitHub CLI'
+      $githubCliExecutable = Join-Path $githubCliRoot 'gh.exe'
+      if (
+        -not (Test-Path -LiteralPath $githubCliRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $githubCliExecutable -PathType Leaf)
+      ) { throw 'Trusted GitHub CLI installation is unavailable.' }
+      $canonicalProgramFiles = Resolve-CanonicalPath $programFiles
+      $canonicalGitHubCliRoot = Resolve-CanonicalPath $githubCliRoot
+      $canonicalGitHubCli = Resolve-CanonicalPath $githubCliExecutable
+      if (
+        -not (Test-Path -LiteralPath $canonicalProgramFiles -PathType Container) -or
+        -not (Test-Path -LiteralPath $canonicalGitHubCliRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $canonicalGitHubCli -PathType Leaf) -or
+        -not (Test-CanonicalContainment $canonicalProgramFiles $canonicalGitHubCliRoot) -or
+        -not (Test-CanonicalContainment $canonicalGitHubCliRoot $canonicalGitHubCli)
+      ) { throw 'Canonical GitHub CLI executable escapes its trusted installation root.' }
+      $trustedGitHubCli = $canonicalGitHubCli
+    }
     $environment['SystemRoot'] = $systemRoot
     $environment['windir'] = $environment.SystemRoot
     $environment['ProgramFiles'] = $programFiles
@@ -203,11 +299,23 @@ try {
       (Join-Path $systemRoot 'System32/WindowsPowerShell/v1.0'), (Join-Path $programFiles 'PowerShell/7'),
       (Join-Path $programFiles 'Git/cmd')
     )
-    if ($isRelease) { $windowsTrustedPaths += (Join-Path $programFiles 'GitHub CLI') }
     foreach ($path in $windowsTrustedPaths) { Add-ExistingPath $trustedPaths $path }
   } else {
     foreach ($path in @('/usr/local/bin', '/usr/bin', '/bin', '/usr/local/sbin', '/usr/sbin', '/sbin')) { Add-ExistingPath $trustedPaths $path }
   }
+  if ($isRelease -and -not $IsWindows) {
+    foreach ($directory in $trustedPaths) {
+      $candidate = Join-Path $directory 'gh'
+      if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+        $trustedGitHubCli = Resolve-CanonicalPath $candidate
+        break
+      }
+    }
+    if ($null -eq $trustedGitHubCli -or -not (Test-Path -LiteralPath $trustedGitHubCli -PathType Leaf)) {
+      throw 'Trusted GitHub CLI executable is unavailable.'
+    }
+  }
+  if ($isRelease) { $environment['RG_VERIFICATION_GITHUB_CLI'] = $trustedGitHubCli }
   $pathKey = if ($IsWindows) { 'Path' } else { 'PATH' }
   $pathSeparator = [IO.Path]::PathSeparator
   $environment[$pathKey] = [string]::Join($pathSeparator, $trustedPaths)
