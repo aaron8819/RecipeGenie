@@ -82,6 +82,8 @@ function completeReleaseReport(overrides = {}) {
       "production-manifest",
       "deployed-sha",
       "supabase-project-ref",
+      "repository-context",
+      "supported-runtime",
     ].map((name) => ({ name, status: "PASS", authority: "AUTHORITATIVE", detail: "complete" })),
     warnings: [],
     nextAction: "No release action is required.",
@@ -293,6 +295,46 @@ describe("trusted npm execution", () => {
     expect(env.Path).toContain(`${runtime.systemRoot}\\System32`)
     expect(env.Path).toContain(`${runtime.programFiles}\\PowerShell\\7`)
     expect(Object.keys(env).filter((key) => key.toLowerCase() === "path")).toEqual(["Path"])
+  })
+
+  it.each([
+    ["default Windows roots", windowsRuntime()],
+    ["non-C Windows roots with spaces", windowsRuntime("D:\\Windows", "D:\\Program Files")],
+  ])("supplies trusted release prerequisites for %s", (_label, runtime) => {
+    const env = createTrustedChildEnvironment({
+      environment: {
+        ...process.env,
+        DATABASE_URL: "sentinel-database",
+        GH_TOKEN: "sentinel-github-allowed",
+        npm_config_user_agent: "npm/0.0.0 node/v0.0.0",
+        VERCEL_TOKEN: "sentinel-vercel",
+      },
+      mode: "release",
+      platform: "win32",
+      windowsRuntime: runtime,
+      pathExists: () => true,
+    })
+    expect(env.Path).toContain(`${runtime.programFiles}\\GitHub CLI`)
+    expect(env.GH_TOKEN).toBe("sentinel-github-allowed")
+    expect(env.DATABASE_URL).toBeUndefined()
+    expect(env.VERCEL_TOKEN).toBeUndefined()
+    expect(env.npm_config_user_agent).toBe("npm/10.9.8 node/v22.23.1")
+  })
+
+  it("preserves POSIX release roots while replacing npm lifecycle identity", () => {
+    const env = createTrustedChildEnvironment({
+      environment: {
+        ...process.env,
+        npm_config_user_agent: "npm/0.0.0 node/v0.0.0",
+      },
+      mode: "release",
+      platform: "linux",
+      pathExists: () => true,
+    })
+    expect(env.PATH).toContain("/usr/bin")
+    expect(env.PATH).not.toContain("GitHub CLI")
+    expect(env.SHELL).toBe("/bin/sh")
+    expect(env.npm_config_user_agent).toBe("npm/10.9.8 node/v22.23.1")
   })
 
   it("uses the exact trusted non-C PowerShell executable for migration tooling", () => {

@@ -24,7 +24,15 @@ const REQUIRED_RELEASE_CHECKS = [
   "deployed-sha",
   "supabase-project-ref",
 ]
+const RELEASE_PREREQUISITE_CHECKS = [
+  "repository-context",
+  "supported-runtime",
+]
 const RELEASE_CHECK_POLICY = new Map([
+  ...RELEASE_PREREQUISITE_CHECKS.map((name) => [name, {
+    required: true,
+    allowedAuthority: "AUTHORITATIVE",
+  }]),
   ...REQUIRED_RELEASE_CHECKS.map((name) => [name, {
     required: true,
     allowedAuthority: "AUTHORITATIVE",
@@ -218,6 +226,7 @@ export function createTrustedChildEnvironment({
       platformJoin(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
       platformJoin(programFiles, "PowerShell", "7"),
       platformJoin(programFiles, "Git", "cmd"),
+      ...(mode === "release" ? [platformJoin(programFiles, "GitHub CLI")] : []),
     ]
     : ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"]
   const trustedPaths = [runtimeDirectory, localBinDirectory, ...trustedSystemPaths]
@@ -258,6 +267,13 @@ export function createTrustedChildEnvironment({
   sanitized.npm_config_scripts_prepend_node_path = "true"
   sanitized.npm_config_userconfig = platform === "win32" ? "NUL" : "/dev/null"
   sanitized.npm_config_globalconfig = resolve(dirname(npmExecutable), "..", ".npmrc")
+  if (mode === "release") {
+    const npmVersion = JSON.parse(
+      readFileSync(resolve(dirname(npmExecutable), "..", "package.json"), "utf8"),
+    ).version
+    const nodeVersion = readFileSync(resolve(webDirectory, ".nvmrc"), "utf8").trim()
+    sanitized.npm_config_user_agent = `npm/${npmVersion} node/v${nodeVersion}`
+  }
   if (platform === "win32") {
     sanitized.ComSpec = shell
     sanitized.PATHEXT = ".COM;.EXE;.BAT;.CMD"

@@ -8,6 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $verifierArguments = @($VerificationArguments)
 $jsonRequested = $verifierArguments -contains '--json'
+$isRelease = $verifierArguments.Count -gt 0 -and $verifierArguments[0] -eq 'release'
 $usage = 'rg-verify.ps1 [-NodeDistribution ABSOLUTE_PATH] focused|pr|release [verification options]'
 
 function Write-JsonFailure([string]$Message) {
@@ -183,7 +184,7 @@ try {
     $environment['RG_VERIFICATION_WINDOWS_PROGRAM_FILES'] = $programFiles
     $environment['RG_VERIFICATION_POWERSHELL'] = $trustedPowerShell
   }
-  if ($verifierArguments.Count -gt 0 -and $verifierArguments[0] -eq 'release') {
+  if ($isRelease) {
     foreach ($key in @('GH_TOKEN', 'GITHUB_TOKEN', 'RG_BRANCH', 'RG_EXPECTED_GIT_SHA', 'RG_EXPECTED_SUPABASE_PROJECT_REF', 'RG_PRODUCTION_URL', 'RG_REPOSITORY', 'RECIPE_GENIE_PRODUCTION_PROJECT_REF')) {
       $value = Get-EnvironmentValue $key
       if ($null -ne $value) { $environment[$key] = $value }
@@ -197,11 +198,13 @@ try {
   if ($IsWindows) {
     $systemRoot = $environment.SystemRoot
     $programFiles = $environment.ProgramFiles
-    foreach ($path in @(
+    $windowsTrustedPaths = @(
       (Join-Path $systemRoot 'System32'), $systemRoot, (Join-Path $systemRoot 'System32/Wbem'),
       (Join-Path $systemRoot 'System32/WindowsPowerShell/v1.0'), (Join-Path $programFiles 'PowerShell/7'),
       (Join-Path $programFiles 'Git/cmd')
-    )) { Add-ExistingPath $trustedPaths $path }
+    )
+    if ($isRelease) { $windowsTrustedPaths += (Join-Path $programFiles 'GitHub CLI') }
+    foreach ($path in $windowsTrustedPaths) { Add-ExistingPath $trustedPaths $path }
   } else {
     foreach ($path in @('/usr/local/bin', '/usr/bin', '/bin', '/usr/local/sbin', '/usr/sbin', '/sbin')) { Add-ExistingPath $trustedPaths $path }
   }
@@ -219,6 +222,7 @@ try {
   $environment['npm_config_scripts_prepend_node_path'] = 'true'
   $environment['npm_config_userconfig'] = if ($IsWindows) { 'NUL' } else { '/dev/null' }
   $environment['npm_config_globalconfig'] = Join-Path (Split-Path -Parent (Split-Path -Parent $runtime.NpmCli)) '.npmrc'
+  if ($isRelease) { $environment['npm_config_user_agent'] = "npm/$expectedNpm node/v$expectedNode" }
   if ($IsWindows) {
     $environment['ComSpec'] = $shell
     $environment['PATHEXT'] = '.COM;.EXE;.BAT;.CMD'
