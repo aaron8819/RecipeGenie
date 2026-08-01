@@ -98,6 +98,26 @@ const PLATFORM_ENVIRONMENT_KEYS = [
   "USERPROFILE",
   "windir",
 ]
+const WINDOWS_ENVIRONMENT_KEYS = new Set([
+  "APPDATA",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "LOCALAPPDATA",
+  "NUMBER_OF_PROCESSORS",
+  "OS",
+  "PROCESSOR_ARCHITECTURE",
+  "PROCESSOR_IDENTIFIER",
+  "PROCESSOR_LEVEL",
+  "PROCESSOR_REVISION",
+  "ProgramData",
+  "ProgramFiles",
+  "ProgramFiles(x86)",
+  "ProgramW6432",
+  "SystemDrive",
+  "SystemRoot",
+  "USERPROFILE",
+  "windir",
+])
 const RELEASE_ENVIRONMENT_KEYS = [
   "GH_TOKEN",
   "GITHUB_TOKEN",
@@ -149,7 +169,9 @@ export function createTrustedChildEnvironment({
   const allowedKeys = mode === "release"
     ? [...PLATFORM_ENVIRONMENT_KEYS, ...RELEASE_ENVIRONMENT_KEYS]
     : PLATFORM_ENVIRONMENT_KEYS
-  for (const key of allowedKeys) {
+  for (const key of allowedKeys.filter((key) => (
+    platform === "win32" || !WINDOWS_ENVIRONMENT_KEYS.has(key)
+  ))) {
     const value = environmentValue(environment, key)
     if (value !== undefined) sanitized[key] = value
   }

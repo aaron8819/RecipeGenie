@@ -148,12 +148,17 @@ try {
   if (Test-RuntimeShim $localBin) { throw 'Project-local runtime shim is not allowed.' }
   $environment = [ordered]@{}
   $platformKeys = @(
-    'APPDATA', 'CI', 'COLORTERM', 'FORCE_COLOR', 'GITHUB_ACTIONS', 'HOME', 'HOMEDRIVE', 'HOMEPATH',
-    'LANG', 'LC_ALL', 'LC_CTYPE', 'LOCALAPPDATA', 'NEXT_TELEMETRY_DISABLED', 'NO_COLOR', 'NUMBER_OF_PROCESSORS',
-    'OS', 'PROCESSOR_ARCHITECTURE', 'PROCESSOR_IDENTIFIER', 'PROCESSOR_LEVEL', 'PROCESSOR_REVISION', 'ProgramData',
-    'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'SystemDrive', 'SystemRoot', 'TEMP', 'TERM', 'TMP', 'TMPDIR',
-    'TZ', 'USERPROFILE', 'windir'
+    'CI', 'COLORTERM', 'FORCE_COLOR', 'GITHUB_ACTIONS', 'HOME', 'LANG', 'LC_ALL', 'LC_CTYPE',
+    'NEXT_TELEMETRY_DISABLED', 'NO_COLOR', 'TEMP', 'TERM', 'TMP', 'TMPDIR', 'TZ'
   )
+  if ($IsWindows) {
+    $platformKeys += @(
+      'APPDATA', 'HOMEDRIVE', 'HOMEPATH', 'LOCALAPPDATA', 'NUMBER_OF_PROCESSORS', 'OS',
+      'PROCESSOR_ARCHITECTURE', 'PROCESSOR_IDENTIFIER', 'PROCESSOR_LEVEL', 'PROCESSOR_REVISION',
+      'ProgramData', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'SystemDrive', 'SystemRoot',
+      'USERPROFILE', 'windir'
+    )
+  }
   foreach ($key in $platformKeys) {
     $value = Get-EnvironmentValue $key
     if ($null -ne $value) { $environment[$key] = $value }

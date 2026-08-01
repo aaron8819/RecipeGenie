@@ -221,8 +221,13 @@ describe("trusted npm execution", () => {
         "UNRELATED_SECRET",
       ]) expect(env[name]).toBeUndefined()
       expect(env.TEMP).toBe(process.env.TEMP)
-      expect(env.SystemRoot).toBe(process.env.SystemRoot)
-      expect(env.ProgramFiles).toBe("C:\\Program Files")
+      if (process.platform === "win32") {
+        expect(env.SystemRoot).toBe("C:\\Windows")
+        expect(env.ProgramFiles).toBe("C:\\Program Files")
+      } else {
+        expect(env.SystemRoot).toBeUndefined()
+        expect(env.ProgramFiles).toBeUndefined()
+      }
 
       const nested = spawnSync("node", ["--eval", "process.stdout.write(process.versions.node)"], {
         encoding: "utf8",
