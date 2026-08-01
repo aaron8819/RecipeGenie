@@ -9,9 +9,11 @@ import {
   parseVerificationArgs,
   planFocusedVerification,
   resolveTrustedNpmCli,
+  resolveTrustedWindowsRuntime,
   runFocusedVerification,
   runPrVerification,
   runReleaseVerification,
+  renderVerificationJson,
   renderVerificationText,
 } from "./verification.mjs"
 
@@ -21,6 +23,19 @@ const NODE_DISTRIBUTION = process.platform === "win32"
   : resolve(dirname(process.execPath), "..")
 const UNSUPPORTED_NODE = process.platform === "win32"
   ? "C:\\Program Files\\nodejs\\node.exe"
+  : null
+const TEST_WINDOWS_RUNTIME = process.platform === "win32"
+  ? {
+    systemRoot: process.env.SystemRoot,
+    programFiles: process.env.ProgramFiles,
+    powerShellExecutable: join(
+      process.env.ProgramFiles,
+      "PowerShell",
+      "7",
+      "pwsh.exe",
+    ),
+    shell: join(process.env.SystemRoot, "System32", "cmd.exe"),
+  }
   : null
 const RELEASE_IDENTITIES = {
   "github-repository": "github-repository:aaron8819/recipegenie",
@@ -103,6 +118,7 @@ describe("focused verification planning", () => {
 
   it("does not claim focused confidence after escalation", () => {
     const report = runFocusedVerification({
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
       files: ["web/src/app/page.tsx"],
       commandRunner: passingRunner,
     })
@@ -112,6 +128,7 @@ describe("focused verification planning", () => {
 
   it("reports an empty explicit scope as skipped", () => {
     const report = runFocusedVerification({
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
       files: [],
       base: "main",
       commandRunner(command, args) {
@@ -126,6 +143,18 @@ describe("focused verification planning", () => {
 })
 
 describe("trusted npm execution", () => {
+  function windowsRuntime(
+    systemRoot = "C:\\Windows",
+    programFiles = "C:\\Program Files",
+  ) {
+    return {
+      systemRoot,
+      programFiles,
+      powerShellExecutable: `${programFiles}\\PowerShell\\7\\pwsh.exe`,
+      shell: `${systemRoot}\\System32\\cmd.exe`,
+    }
+  }
+
   it("ignores hostile and malformed ambient npm executable variables", () => {
     const originalExecPath = process.env.npm_execpath
     const originalNodeExecPath = process.env.npm_node_execpath
@@ -164,6 +193,7 @@ describe("trusted npm execution", () => {
     )
     try {
       const env = createTrustedChildEnvironment({
+        windowsRuntime: TEST_WINDOWS_RUNTIME,
         environment: {
           ...process.env,
           PATH: `${hostileNodeDirectory}${delimiter}${benign}`,
@@ -222,8 +252,8 @@ describe("trusted npm execution", () => {
       ]) expect(env[name]).toBeUndefined()
       expect(env.TEMP).toBe(process.env.TEMP)
       if (process.platform === "win32") {
-        expect(env.SystemRoot).toBe("C:\\Windows")
-        expect(env.ProgramFiles).toBe("C:\\Program Files")
+        expect(env.SystemRoot).toBe(TEST_WINDOWS_RUNTIME.systemRoot)
+        expect(env.ProgramFiles).toBe(TEST_WINDOWS_RUNTIME.programFiles)
       } else {
         expect(env.SystemRoot).toBeUndefined()
         expect(env.ProgramFiles).toBeUndefined()
@@ -241,9 +271,93 @@ describe("trusted npm execution", () => {
     }
   })
 
+  it.each([
+    ["default Windows roots", windowsRuntime()],
+    ["non-C Windows roots with spaces", windowsRuntime("D:\\Windows", "D:\\Program Files")],
+  ])("preserves %s supplied by the trusted launcher", (_label, runtime) => {
+    const env = createTrustedChildEnvironment({
+      environment: {
+        ...process.env,
+        SystemRoot: "C:\\hostile-windows",
+        ProgramFiles: "C:\\hostile-program-files",
+        PATH: "C:\\hostile-path",
+        Path: "C:\\another-hostile-path",
+      },
+      platform: "win32",
+      windowsRuntime: runtime,
+      pathExists: () => true,
+    })
+    expect(env.SystemRoot).toBe(runtime.systemRoot)
+    expect(env.ProgramFiles).toBe(runtime.programFiles)
+    expect(env.ComSpec).toBe(runtime.shell)
+    expect(env.Path).toContain(`${runtime.systemRoot}\\System32`)
+    expect(env.Path).toContain(`${runtime.programFiles}\\PowerShell\\7`)
+    expect(Object.keys(env).filter((key) => key.toLowerCase() === "path")).toEqual(["Path"])
+  })
+
+  it("uses the exact trusted non-C PowerShell executable for migration tooling", () => {
+    const runtime = windowsRuntime("D:\\Windows", "D:\\Program Files")
+    const calls = []
+    const report = runPrVerification({
+      windowsRuntime: runtime,
+      childEnvironment: createTrustedChildEnvironment({
+        platform: "win32",
+        windowsRuntime: runtime,
+        pathExists: () => true,
+      }),
+      commandRunner(command, args, cwd, env) {
+        calls.push({ command, args, cwd, env })
+        return passingRunner()
+      },
+    })
+    expect(report.status).toBe("PASS")
+    expect(calls[3].command).toBe("D:\\Program Files\\PowerShell\\7\\pwsh.exe")
+  })
+
+  it.each([
+    ["missing trusted PowerShell", {
+      RG_VERIFICATION_WINDOWS_SYSTEM_ROOT: "D:\\Windows",
+      RG_VERIFICATION_WINDOWS_PROGRAM_FILES: "D:\\Program Files",
+    }],
+    ["relative trusted root", {
+      RG_VERIFICATION_WINDOWS_SYSTEM_ROOT: "Windows",
+      RG_VERIFICATION_WINDOWS_PROGRAM_FILES: "D:\\Program Files",
+      RG_VERIFICATION_POWERSHELL: "D:\\Program Files\\PowerShell\\7\\pwsh.exe",
+    }],
+    ["untrusted PowerShell name", {
+      RG_VERIFICATION_WINDOWS_SYSTEM_ROOT: "D:\\Windows",
+      RG_VERIFICATION_WINDOWS_PROGRAM_FILES: "D:\\Program Files",
+      RG_VERIFICATION_POWERSHELL: "D:\\Program Files\\PowerShell\\7\\powershell.exe",
+    }],
+  ])("fails closed for %s", (_label, environment) => {
+    expect(() => resolveTrustedWindowsRuntime({
+      environment,
+      platform: "win32",
+      pathExists: () => true,
+    })).toThrow("Trusted Windows runtime information is unavailable or invalid.")
+  })
+
+  it("fails closed when a trusted Windows path does not exist", () => {
+    const runtime = windowsRuntime("D:\\Windows", "D:\\Program Files")
+    expect(() => resolveTrustedWindowsRuntime({
+      environment: {
+        RG_VERIFICATION_WINDOWS_SYSTEM_ROOT: runtime.systemRoot,
+        RG_VERIFICATION_WINDOWS_PROGRAM_FILES: runtime.programFiles,
+        RG_VERIFICATION_POWERSHELL: runtime.powerShellExecutable,
+      },
+      platform: "win32",
+      pathExists: (value) => value !== runtime.powerShellExecutable,
+    })).toThrow("Trusted Windows runtime information is unavailable or invalid.")
+  })
+
+  it("leaves POSIX runtime resolution unchanged", () => {
+    expect(resolveTrustedWindowsRuntime({ platform: "linux", environment: {} })).toBeNull()
+  })
+
   it("invokes every PR check with its intended argument array", () => {
     const calls = []
     const report = runPrVerification({
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
       commandRunner(command, args, cwd, env) {
         calls.push({ command, args, cwd, env })
         return passingRunner()
@@ -254,6 +368,9 @@ describe("trusted npm execution", () => {
     expect(calls[1].args.slice(-2)).toEqual(["run", "verify"])
     expect(calls[2].args.slice(-2)).toEqual(["run", "build"])
     expect(calls[3].command).toMatch(/[\\/](?:pwsh|powershell)(?:\.exe)?$/iu)
+    if (process.platform === "win32") {
+      expect(calls[3].command).toBe(TEST_WINDOWS_RUNTIME.powerShellExecutable)
+    }
     expect(calls[3].args).toContain("-File")
     expect(calls.every((call) => Array.isArray(call.args))).toBe(true)
     expect(calls.every((call) => typeof call.env === "object")).toBe(true)
@@ -269,9 +386,13 @@ describe("trusted npm execution", () => {
       AWS_SECRET_ACCESS_KEY: "sentinel-aws",
       UNRELATED_SECRET: "sentinel-unrelated",
     }
-    const childEnvironment = createTrustedChildEnvironment({ environment: { ...process.env, ...sentinels } })
+    const childEnvironment = createTrustedChildEnvironment({
+      environment: { ...process.env, ...sentinels },
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
+    })
     const calls = []
     runPrVerification({
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
       childEnvironment,
       commandRunner(command, args, cwd, env) {
         calls.push({ command, args, cwd, env })
@@ -389,6 +510,27 @@ describe("release verification composition", () => {
     expect(report.checks[0].status).toBe("PASS")
   })
 
+  it("accepts deployment evidence only as optional corroborative PASS", () => {
+    const value = completeReleaseReport({
+      checks: [
+        ...completeReleaseReport().checks,
+        { name: "deployment-record", status: "PASS", authority: "CORROBORATIVE", detail: "matched" },
+      ],
+    })
+    const report = runReleaseVerification({
+      commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+    })
+    expect(report.status).toBe("PASS")
+    expect(report.releaseAuthorityEvaluation.at(-1)).toMatchObject({
+      declaredEvidenceType: "deployment-record",
+      allowedAuthority: "CORROBORATIVE",
+      suppliedAuthority: "CORROBORATIVE",
+      requirementStatus: "OPTIONAL",
+      effect: "NO_EFFECT",
+      rejectionReason: null,
+    })
+  })
+
   it("keeps explicit optional corroborative warnings visible without blocking PASS", () => {
     const value = completeReleaseReport({
       warnings: ["Optional deployment evidence is unavailable."],
@@ -413,6 +555,7 @@ describe("release verification composition", () => {
     ["required authoritative warning", { ...completeReleaseReport().checks[0], status: "WARN" }, "FAIL"],
     ["required authoritative skip", { ...completeReleaseReport().checks[0], status: "SKIP" }, "FAIL"],
     ["required authoritative unavailable", { ...completeReleaseReport().checks[0], status: "UNAVAILABLE" }, "FAIL"],
+    ["required authoritative failure", { ...completeReleaseReport().checks[0], status: "FAIL" }, "FAIL"],
     ["fabricated optional label on required check", { ...completeReleaseReport().checks[0], authority: "CORROBORATIVE", status: "WARN" }, "FAIL"],
   ])("enforces %s", (_label, replacement, expected) => {
     const value = completeReleaseReport()
@@ -423,6 +566,98 @@ describe("release verification composition", () => {
       commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
     })
     expect(report.status).toBe(expected)
+  })
+
+  it.each(["PASS", "WARN", "SKIP", "UNAVAILABLE", "FAIL"])(
+    "rejects AUTHORITATIVE deployment evidence with %s status",
+    (status) => {
+      const value = completeReleaseReport({
+        checks: [
+          ...completeReleaseReport().checks,
+          { name: "deployment-record", status, authority: "AUTHORITATIVE", detail: "relabelled" },
+        ],
+      })
+      const report = runReleaseVerification({
+        commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+      })
+      expect(report.status).toBe("FAIL")
+      expect(report.releaseAuthorityEvaluation.at(-1)).toMatchObject({
+        declaredEvidenceType: "deployment-record",
+        allowedAuthority: "CORROBORATIVE",
+        suppliedAuthority: "AUTHORITATIVE",
+        requirementStatus: "OPTIONAL",
+        effect: "REJECTED",
+        rejectionReason: expect.stringContaining("not allowed"),
+      })
+    },
+  )
+
+  it("rejects a fabricated required label on optional deployment evidence", () => {
+    const value = completeReleaseReport({
+      checks: [
+        ...completeReleaseReport().checks,
+        {
+          name: "deployment-record",
+          status: "PASS",
+          authority: "CORROBORATIVE",
+          required: true,
+          detail: "fabricated requirement",
+        },
+      ],
+    })
+    const report = runReleaseVerification({
+      commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+    })
+    expect(report.status).toBe("FAIL")
+    expect(report.releaseAuthorityEvaluation.at(-1)).toMatchObject({
+      requirementStatus: "OPTIONAL",
+      suppliedRequirement: "REQUIRED",
+      effect: "REJECTED",
+      rejectionReason: expect.stringContaining("conflicts"),
+    })
+  })
+
+  it("rejects unknown and duplicate evidence types", () => {
+    const unknown = completeReleaseReport({
+      checks: [
+        ...completeReleaseReport().checks,
+        { name: "fabricated-proof", status: "PASS", authority: "AUTHORITATIVE", detail: "unknown" },
+      ],
+    })
+    const duplicate = completeReleaseReport()
+    duplicate.checks.push({ ...duplicate.checks[0] })
+    for (const value of [unknown, duplicate]) {
+      const report = runReleaseVerification({
+        commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+      })
+      expect(report.status).toBe("FAIL")
+      expect(report.releaseAuthorityEvaluation.some((item) => item.effect === "REJECTED")).toBe(true)
+    }
+  })
+
+  it("shows policy-derived evidence semantics and rejection in human and JSON output", () => {
+    const value = completeReleaseReport({
+      checks: [
+        ...completeReleaseReport().checks,
+        { name: "deployment-record", status: "PASS", authority: "AUTHORITATIVE", detail: "relabelled" },
+      ],
+    })
+    const report = runReleaseVerification({
+      commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+    })
+    const human = renderVerificationText(report)
+    const json = JSON.parse(renderVerificationJson(report))
+    expect(human).toContain(
+      "requirement=OPTIONAL; allowed-authority=CORROBORATIVE; supplied-authority=AUTHORITATIVE; effect=REJECTED",
+    )
+    expect(human).toContain("rejected:")
+    expect(json.releaseAuthorityEvaluation.at(-1)).toMatchObject({
+      declaredEvidenceType: "deployment-record",
+      allowedAuthority: "CORROBORATIVE",
+      suppliedAuthority: "AUTHORITATIVE",
+      requirementStatus: "OPTIONAL",
+      effect: "REJECTED",
+    })
   })
 
   it.each([

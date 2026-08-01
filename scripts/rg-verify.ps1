@@ -164,9 +164,24 @@ try {
     if ($null -ne $value) { $environment[$key] = $value }
   }
   if ($IsWindows) {
-    $environment['SystemRoot'] = [IO.Path]::GetDirectoryName([Environment]::SystemDirectory)
+    $systemRoot = [IO.Path]::GetDirectoryName([Environment]::SystemDirectory)
+    $programFiles = [Environment]::GetFolderPath('ProgramFiles')
+    $trustedPowerShell = [Environment]::ProcessPath
+    if (
+      -not [IO.Path]::IsPathFullyQualified($systemRoot) -or
+      -not [IO.Path]::IsPathFullyQualified($programFiles) -or
+      -not [IO.Path]::IsPathFullyQualified($trustedPowerShell) -or
+      -not (Test-Path -LiteralPath $systemRoot -PathType Container) -or
+      -not (Test-Path -LiteralPath $programFiles -PathType Container) -or
+      -not (Test-Path -LiteralPath $trustedPowerShell -PathType Leaf) -or
+      [IO.Path]::GetFileName($trustedPowerShell) -ine 'pwsh.exe'
+    ) { throw 'Trusted Windows runtime locations are unavailable.' }
+    $environment['SystemRoot'] = $systemRoot
     $environment['windir'] = $environment.SystemRoot
-    $environment['ProgramFiles'] = [Environment]::GetFolderPath('ProgramFiles')
+    $environment['ProgramFiles'] = $programFiles
+    $environment['RG_VERIFICATION_WINDOWS_SYSTEM_ROOT'] = $systemRoot
+    $environment['RG_VERIFICATION_WINDOWS_PROGRAM_FILES'] = $programFiles
+    $environment['RG_VERIFICATION_POWERSHELL'] = $trustedPowerShell
   }
   if ($verifierArguments.Count -gt 0 -and $verifierArguments[0] -eq 'release') {
     foreach ($key in @('GH_TOKEN', 'GITHUB_TOKEN', 'RG_BRANCH', 'RG_EXPECTED_GIT_SHA', 'RG_EXPECTED_SUPABASE_PROJECT_REF', 'RG_PRODUCTION_URL', 'RG_REPOSITORY', 'RECIPE_GENIE_PRODUCTION_PROJECT_REF')) {
@@ -181,7 +196,7 @@ try {
   Add-ExistingPath $trustedPaths $localBin
   if ($IsWindows) {
     $systemRoot = $environment.SystemRoot
-    $programFiles = [Environment]::GetFolderPath('ProgramFiles')
+    $programFiles = $environment.ProgramFiles
     foreach ($path in @(
       (Join-Path $systemRoot 'System32'), $systemRoot, (Join-Path $systemRoot 'System32/Wbem'),
       (Join-Path $systemRoot 'System32/WindowsPowerShell/v1.0'), (Join-Path $programFiles 'PowerShell/7'),
@@ -193,7 +208,7 @@ try {
   $pathKey = if ($IsWindows) { 'Path' } else { 'PATH' }
   $pathSeparator = [IO.Path]::PathSeparator
   $environment[$pathKey] = [string]::Join($pathSeparator, $trustedPaths)
-  $shell = if ($IsWindows) { Join-Path ($environment.SystemRoot ?? 'C:\Windows') 'System32/cmd.exe' } else { '/bin/sh' }
+  $shell = if ($IsWindows) { Join-Path $environment.SystemRoot 'System32/cmd.exe' } else { '/bin/sh' }
   if (-not (Test-Path -LiteralPath $shell -PathType Leaf)) { throw 'Trusted platform shell is unavailable.' }
   $environment['npm_execpath'] = $runtime.NpmCli
   $environment['npm_node_execpath'] = $runtime.Node

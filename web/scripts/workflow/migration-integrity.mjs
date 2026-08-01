@@ -297,7 +297,16 @@ const GITHUB_FILE_STATUSES = new Set([
 
 function normalizeChangedFile(value) {
   if (typeof value === "string") {
-    return { filename: normalizePath(value), previousFilename: null, status: "modified", patch: null }
+    return {
+      filename: normalizePath(value),
+      previousFilename: null,
+      status: "modified",
+      patch: null,
+      additions: null,
+      deletions: null,
+      changes: null,
+      githubTotalsRequired: false,
+    }
   }
   const filename = typeof value?.filename === "string"
     ? normalizePath(value.filename)
@@ -310,6 +319,10 @@ function normalizeChangedFile(value) {
       : null,
     status: value?.status ?? null,
     patch: typeof value?.patch === "string" ? value.patch : null,
+    additions: value?.additions ?? null,
+    deletions: value?.deletions ?? null,
+    changes: value?.changes ?? null,
+    githubTotalsRequired: true,
   }
 }
 
@@ -321,8 +334,9 @@ function migrationSensitivePath(path) {
   )
 }
 
-function completeUnifiedPatch(patch) {
-  if (typeof patch !== "string" || !patch) return false
+function analyzeUnifiedPatch(patch) {
+  const result = { complete: false, additions: 0, deletions: 0 }
+  if (typeof patch !== "string" || !patch) return result
   const lines = patch.split(/\r?\n/u)
   let hunkFound = false
   let expectedOld = 0
@@ -333,7 +347,7 @@ function completeUnifiedPatch(patch) {
   for (const line of lines) {
     const header = line.match(/^@@ -(?:\d+)(?:,(\d+))? \+(?:\d+)(?:,(\d+))? @@/u)
     if (header) {
-      if (hunkFound && !hunkComplete()) return false
+      if (hunkFound && !hunkComplete()) return result
       hunkFound = true
       expectedOld = header[1] === undefined ? 1 : Number(header[1])
       expectedNew = header[2] === undefined ? 1 : Number(header[2])
@@ -343,17 +357,55 @@ function completeUnifiedPatch(patch) {
     }
     if (!hunkFound || line.startsWith("\\ No newline at end of file")) continue
     if (line === "" && hunkComplete()) continue
-    if (line.startsWith("+")) actualNew += 1
-    else if (line.startsWith("-")) actualOld += 1
-    else if (line.startsWith(" ")) {
+    if (line.startsWith("+")) {
+      actualNew += 1
+      result.additions += 1
+    } else if (line.startsWith("-")) {
+      actualOld += 1
+      result.deletions += 1
+    } else if (line.startsWith(" ")) {
       actualOld += 1
       actualNew += 1
     } else {
-      return false
+      return result
     }
-    if (actualOld > expectedOld || actualNew > expectedNew) return false
+    if (actualOld > expectedOld || actualNew > expectedNew) return result
   }
-  return hunkFound && hunkComplete()
+  result.complete = hunkFound && hunkComplete()
+  return result
+}
+
+function validateGithubTotals(record, patchAnalysis) {
+  if (!record.githubTotalsRequired) {
+    return { valid: true, matchesPatch: true, reasons: [] }
+  }
+  const totals = [record.additions, record.deletions, record.changes]
+  if (totals.some((value) => !Number.isSafeInteger(value) || value < 0)) {
+    return {
+      valid: false,
+      matchesPatch: false,
+      reasons: ["GitHub additions, deletions, and changes totals must be present as nonnegative integers."],
+    }
+  }
+  if (record.changes !== record.additions + record.deletions) {
+    return {
+      valid: false,
+      matchesPatch: false,
+      reasons: ["GitHub changes must equal additions plus deletions."],
+    }
+  }
+  const reasons = []
+  if (patchAnalysis.additions !== record.additions) {
+    reasons.push(`Patch additions ${patchAnalysis.additions} do not match GitHub additions ${record.additions}.`)
+  }
+  if (patchAnalysis.deletions !== record.deletions) {
+    reasons.push(`Patch deletions ${patchAnalysis.deletions} do not match GitHub deletions ${record.deletions}.`)
+  }
+  const parsedChanges = patchAnalysis.additions + patchAnalysis.deletions
+  if (parsedChanges !== record.changes) {
+    reasons.push(`Patch changes ${parsedChanges} do not match GitHub changes ${record.changes}.`)
+  }
+  return { valid: true, matchesPatch: reasons.length === 0, reasons }
 }
 
 export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
@@ -389,18 +441,40 @@ export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
   const fileRecords = records.map(({ patch, ...item }) => {
     const completeContent = Object.hasOwn(contentsByPath, item.filename)
       && typeof contentsByPath[item.filename] === "string"
-    const patchComplete = completeUnifiedPatch(patch)
+    const patchAnalysis = analyzeUnifiedPatch(patch)
+    const totals = validateGithubTotals(item, patchAnalysis)
+    const evidenceIncompleteReasons = []
+    if (patch === null && (item.githubTotalsRequired || !completeContent)) {
+      evidenceIncompleteReasons.push("Patch evidence is missing.")
+    } else if (!patchAnalysis.complete && (item.githubTotalsRequired || !completeContent)) {
+      evidenceIncompleteReasons.push("Patch evidence is structurally incomplete.")
+    }
+    evidenceIncompleteReasons.push(...totals.reasons)
+    const evidenceComplete = item.githubTotalsRequired
+      ? patchAnalysis.complete && totals.valid && totals.matchesPatch
+      : completeContent || patchAnalysis.complete
     return {
       ...item,
       patchAvailable: patch !== null,
-      patchComplete,
-      evidenceComplete: completeContent || patchComplete,
+      patchComplete: patchAnalysis.complete,
+      parsedAdditions: patchAnalysis.additions,
+      parsedDeletions: patchAnalysis.deletions,
+      githubTotalsValid: totals.valid,
+      patchTotalsMatch: totals.matchesPatch,
+      evidenceComplete,
+      evidenceIncompleteReasons,
     }
   })
   const incompleteEvidencePaths = [...new Set(fileRecords
     .filter((item) => !item.evidenceComplete)
     .flatMap((item) => [item.filename, item.previousFilename].filter(Boolean)))]
     .sort()
+  const incompleteEvidenceReasons = fileRecords
+    .filter((item) => !item.evidenceComplete)
+    .map((item) => ({
+      filename: item.filename,
+      reasons: item.evidenceIncompleteReasons,
+    }))
   const contentDetectedPaths = [...referenceFiles]
   const conservativelyImpactful = malformedFileRecords.length > 0
     || incompleteEvidencePaths.length > 0
@@ -410,6 +484,7 @@ export function classifyMigrationImpact(changedFiles, contentsByPath = {}) {
     sensitivePaths,
     contentDetectedPaths,
     incompleteEvidencePaths,
+    incompleteEvidenceReasons,
     conservativelyImpactful,
     malformedFileRecords,
     checksumRegistryChanged: sensitivePaths.includes("supabase/migration-checksums.json"),

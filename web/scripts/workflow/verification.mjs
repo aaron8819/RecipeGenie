@@ -24,7 +24,16 @@ const REQUIRED_RELEASE_CHECKS = [
   "deployed-sha",
   "supabase-project-ref",
 ]
-const OPTIONAL_RELEASE_CHECKS = new Set(["deployment-record"])
+const RELEASE_CHECK_POLICY = new Map([
+  ...REQUIRED_RELEASE_CHECKS.map((name) => [name, {
+    required: true,
+    allowedAuthority: "AUTHORITATIVE",
+  }]),
+  ["deployment-record", {
+    required: false,
+    allowedAuthority: "CORROBORATIVE",
+  }],
+])
 const VERIFICATION_USAGE = "verification.mjs focused (--base REF | --file PATH...) [--json] | pr [--json] | release [--json] [release options]"
 const RUNTIME_SHIM_NAMES = process.platform === "win32"
   ? [
@@ -133,12 +142,55 @@ function containsRuntimeShim(directory) {
   return RUNTIME_SHIM_NAMES.some((name) => existsSync(join(directory, name)))
 }
 
+function validAbsoluteWindowsPath(value) {
+  return typeof value === "string"
+    && /^[A-Za-z]:\\[^\0\r\n]+$/u.test(value)
+}
+
+export function resolveTrustedWindowsRuntime({
+  environment = process.env,
+  platform = process.platform,
+  pathExists = existsSync,
+} = {}) {
+  if (platform !== "win32") return null
+  const systemRoot = environmentValue(
+    environment,
+    "RG_VERIFICATION_WINDOWS_SYSTEM_ROOT",
+  )
+  const programFiles = environmentValue(
+    environment,
+    "RG_VERIFICATION_WINDOWS_PROGRAM_FILES",
+  )
+  const powerShellExecutable = environmentValue(
+    environment,
+    "RG_VERIFICATION_POWERSHELL",
+  )
+  const shell = validAbsoluteWindowsPath(systemRoot)
+    ? join(systemRoot, "System32", "cmd.exe")
+    : null
+  if (
+    !validAbsoluteWindowsPath(systemRoot)
+    || !validAbsoluteWindowsPath(programFiles)
+    || !validAbsoluteWindowsPath(powerShellExecutable)
+    || !/\\pwsh\.exe$/iu.test(powerShellExecutable)
+    || !pathExists(systemRoot)
+    || !pathExists(programFiles)
+    || !pathExists(shell)
+    || !pathExists(powerShellExecutable)
+  ) {
+    throw new Error("Trusted Windows runtime information is unavailable or invalid.")
+  }
+  return { systemRoot, programFiles, powerShellExecutable, shell }
+}
+
 export function createTrustedChildEnvironment({
   environment = process.env,
   nodeExecutable = process.execPath,
   npmExecutable = resolveTrustedNpmCli(nodeExecutable),
   platform = process.platform,
   mode = "ordinary",
+  pathExists = existsSync,
+  windowsRuntime = null,
 } = {}) {
   const runtimeDirectory = dirname(nodeExecutable)
   const localBinDirectory = resolve(webDirectory, "node_modules", ".bin")
@@ -148,8 +200,15 @@ export function createTrustedChildEnvironment({
   const comparison = (value) => platform === "win32"
     ? resolve(value).toLowerCase()
     : resolve(value)
-  const systemRoot = "C:\\Windows"
-  const programFiles = "C:\\Program Files"
+  const trustedWindowsRuntime = platform === "win32"
+    ? windowsRuntime ?? resolveTrustedWindowsRuntime({
+      environment,
+      platform,
+      pathExists,
+    })
+    : null
+  const systemRoot = trustedWindowsRuntime?.systemRoot
+  const programFiles = trustedWindowsRuntime?.programFiles
   const trustedSystemPaths = platform === "win32"
     ? [
       join(systemRoot, "System32"),
@@ -161,7 +220,7 @@ export function createTrustedChildEnvironment({
     ]
     : ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"]
   const trustedPaths = [runtimeDirectory, localBinDirectory, ...trustedSystemPaths]
-    .filter(existsSync)
+    .filter(pathExists)
     .filter((value, index, values) => (
       values.findIndex((candidate) => comparison(candidate) === comparison(value)) === index
     ))
@@ -183,7 +242,7 @@ export function createTrustedChildEnvironment({
   const shell = platform === "win32"
     ? join(systemRoot, "System32", "cmd.exe")
     : "/bin/sh"
-  if (!existsSync(shell)) {
+  if (!pathExists(shell)) {
     throw new Error("The trusted platform script shell is unavailable.")
   }
   sanitized[platform === "win32" ? "Path" : "PATH"] = trustedPaths.join(
@@ -228,14 +287,21 @@ function runtimeProbe() {
   )
 }
 
-function resolveTrustedPowerShell() {
-  const candidates = process.platform === "win32"
-    ? [
-      resolve("C:\\Program Files", "PowerShell", "7", "pwsh.exe"),
-      resolve("C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
-    ]
-    : ["/usr/bin/pwsh", "/usr/local/bin/pwsh", "/opt/microsoft/powershell/7/pwsh"]
-  const executable = candidates.find(existsSync)
+function resolveTrustedPowerShell({
+  platform = process.platform,
+  windowsRuntime = null,
+} = {}) {
+  if (platform === "win32") {
+    if (!windowsRuntime?.powerShellExecutable) {
+      throw new Error("A trusted PowerShell executable is unavailable for migration-tooling tests.")
+    }
+    return windowsRuntime.powerShellExecutable
+  }
+  const executable = [
+    "/usr/bin/pwsh",
+    "/usr/local/bin/pwsh",
+    "/opt/microsoft/powershell/7/pwsh",
+  ].find(existsSync)
   if (!executable) {
     throw new Error("A trusted PowerShell executable is unavailable for migration-tooling tests.")
   }
@@ -250,7 +316,10 @@ const MIGRATION_CHECK = Object.freeze({
   coverage: "Validated tracked migration files, checksum coverage, checksums, active endpoint, and documented chain.",
 })
 
-function prChecks() {
+function prChecks({ windowsRuntime = null } = {}) {
+  const powerShellExecutable = process.platform === "win32" && !windowsRuntime
+    ? "<trusted-powershell>"
+    : resolveTrustedPowerShell({ windowsRuntime })
   return [
     npmCheck(
       "repository-verification",
@@ -264,7 +333,7 @@ function prChecks() {
     ),
     {
       name: "migration-tooling-tests",
-      command: resolveTrustedPowerShell(),
+      command: powerShellExecutable,
       args: [
         "-NoProfile",
         "-File",
@@ -397,7 +466,7 @@ function focusedCategory(path) {
   return null
 }
 
-export function planFocusedVerification(changedFiles) {
+export function planFocusedVerification(changedFiles, { windowsRuntime = null } = {}) {
   const files = [...new Set(changedFiles.map(normalizePath))].sort()
   if (files.length === 0) {
     return {
@@ -416,7 +485,7 @@ export function planFocusedVerification(changedFiles) {
       files,
       escalated: true,
       categories: [...new Set(categories.filter(Boolean))].sort(),
-      checks: prChecks(),
+      checks: prChecks({ windowsRuntime }),
       detail: `Scope includes paths without a safe focused mapping: ${unknownFiles.join(", ")}.`,
     }
   }
@@ -515,9 +584,14 @@ function finishReport(report) {
 
 export function runPrVerification(options = {}) {
   const commandRunner = options.commandRunner ?? defaultCommandRunner
-  const childEnvironment = options.childEnvironment ?? createTrustedChildEnvironment()
+  const windowsRuntime = process.platform === "win32"
+    ? options.windowsRuntime ?? resolveTrustedWindowsRuntime()
+    : null
+  const childEnvironment = options.childEnvironment ?? createTrustedChildEnvironment({
+    windowsRuntime,
+  })
   const runtimeAuthority = runRuntimeProbe(commandRunner, childEnvironment)
-  const definitions = prChecks()
+  const definitions = prChecks({ windowsRuntime })
   const checks = [runtimeAuthority]
   if (runtimeAuthority.status === "PASS") {
     checks.push(...definitions.map((definition) => runCheck(
@@ -549,8 +623,15 @@ export function runFocusedVerification({
   files,
   base,
   commandRunner = defaultCommandRunner,
-  childEnvironment = createTrustedChildEnvironment(),
+  childEnvironment = null,
+  windowsRuntime = null,
 } = {}) {
+  const trustedWindowsRuntime = process.platform === "win32"
+    ? windowsRuntime ?? resolveTrustedWindowsRuntime()
+    : null
+  const trustedChildEnvironment = childEnvironment ?? createTrustedChildEnvironment({
+    windowsRuntime: trustedWindowsRuntime,
+  })
   let scope
   if (files?.length) {
     scope = { files, unknown: false, detail: "Explicit changed-file scope supplied." }
@@ -564,11 +645,13 @@ export function runFocusedVerification({
       files: [],
       escalated: true,
       categories: [],
-      checks: prChecks(),
+      checks: prChecks({ windowsRuntime: trustedWindowsRuntime }),
       detail: `${scope.detail} Escalating to PR verification.`,
     }
   } else {
-    plan = planFocusedVerification(scope.files)
+    plan = planFocusedVerification(scope.files, {
+      windowsRuntime: trustedWindowsRuntime,
+    })
   }
 
   const scopeStatus = plan.files.length === 0 && !plan.escalated
@@ -580,14 +663,14 @@ export function runFocusedVerification({
     plan.detail,
   )]
   if (plan.checks.length > 0) {
-    const runtimeAuthority = runRuntimeProbe(commandRunner, childEnvironment)
+    const runtimeAuthority = runRuntimeProbe(commandRunner, trustedChildEnvironment)
     checks.push(runtimeAuthority)
     if (runtimeAuthority.status === "PASS") {
       checks.push(...plan.checks.map((definition) => runCheck(
         definition,
         commandRunner,
         webDirectory,
-        childEnvironment,
+        trustedChildEnvironment,
       )))
     } else {
       checks.push(...plan.checks.map((definition) => check(
@@ -619,14 +702,18 @@ export function runFocusedVerification({
 export function runReleaseVerification({
   args = [],
   commandRunner = defaultCommandRunner,
+  childEnvironment = null,
 } = {}) {
   const releaseScript = resolve(scriptDirectory, "release-status.mjs")
-  const childEnvironment = createTrustedChildEnvironment({ mode: "release" })
+  const trustedChildEnvironment = childEnvironment
+    ?? (commandRunner === defaultCommandRunner
+      ? createTrustedChildEnvironment({ mode: "release" })
+      : {})
   const result = commandRunner(
     process.execPath,
     [releaseScript, "--json", ...args],
     webDirectory,
-    childEnvironment,
+    trustedChildEnvironment,
   )
   let releaseReport = null
   let validation = null
@@ -718,7 +805,6 @@ export function validateReleaseReport(report) {
     return { valid: false, detail: "Release PASS has incomplete or contradictory binding evidence." }
   }
   const recognizedStatuses = new Set(["PASS", "WARN", "SKIP", "UNAVAILABLE", "FAIL"])
-  const recognizedAuthorities = new Set(["AUTHORITATIVE", "CORROBORATIVE"])
   const validChecks = report.checks.every((item) => (
     item
     && typeof item === "object"
@@ -726,15 +812,85 @@ export function validateReleaseReport(report) {
     && typeof item.name === "string"
     && item.name.trim()
     && recognizedStatuses.has(item.status)
-    && recognizedAuthorities.has(item.authority)
+    && typeof item.authority === "string"
     && typeof item.detail === "string"
+    && (!Object.hasOwn(item, "required") || typeof item.required === "boolean")
   ))
   if (!validChecks) {
     return { valid: false, detail: "Release PASS contains malformed evidence." }
   }
   const checkNames = report.checks.map((item) => item.name)
-  if (new Set(checkNames).size !== checkNames.length) {
-    return { valid: false, detail: "Release PASS contains duplicate check identities." }
+  const duplicateNames = new Set(checkNames.filter(
+    (name, index) => checkNames.indexOf(name) !== index,
+  ))
+  const evaluatedChecks = report.checks.map((item) => {
+    const policy = RELEASE_CHECK_POLICY.get(item.name)
+    const rejectionReasons = []
+    if (!policy) {
+      rejectionReasons.push("Unknown evidence type.")
+    } else {
+      if (item.authority !== policy.allowedAuthority) {
+        rejectionReasons.push(
+          `Supplied authority ${item.authority} is not allowed; expected ${policy.allowedAuthority}.`,
+        )
+      }
+      if (Object.hasOwn(item, "required") && item.required !== policy.required) {
+        rejectionReasons.push(
+          `Supplied requirement label conflicts with the ${policy.required ? "required" : "optional"} evidence policy.`,
+        )
+      }
+      if (policy.required && item.status !== "PASS") {
+        rejectionReasons.push("Required authoritative evidence must have PASS status.")
+      }
+      if (!policy.required && item.status === "FAIL") {
+        rejectionReasons.push("Explicit corroborative failure blocks the release verdict.")
+      }
+    }
+    if (duplicateNames.has(item.name)) {
+      rejectionReasons.push("Duplicate evidence type.")
+    }
+    return {
+      name: item.name,
+      declaredEvidenceType: item.name,
+      status: item.status,
+      allowedAuthority: policy?.allowedAuthority ?? null,
+      suppliedAuthority: item.authority,
+      authority: item.authority,
+      required: policy?.required ?? null,
+      requirementStatus: policy
+        ? policy.required ? "REQUIRED" : "OPTIONAL"
+        : "UNKNOWN",
+      suppliedRequirement: Object.hasOwn(item, "required")
+        ? item.required ? "REQUIRED" : "OPTIONAL"
+        : null,
+      warning: item.status === "WARN",
+      skipReason: ["SKIP", "UNAVAILABLE"].includes(item.status) ? item.detail : null,
+      effect: rejectionReasons.length > 0
+        ? "REJECTED"
+        : policy.required
+          ? "SATISFIES_REQUIRED"
+          : "NO_EFFECT",
+      rejectionReason: rejectionReasons.length > 0
+        ? rejectionReasons.join(" ")
+        : null,
+    }
+  })
+  const rejectedEvidence = evaluatedChecks.find((item) => item.rejectionReason)
+  if (rejectedEvidence) {
+    return {
+      valid: false,
+      detail: `Release PASS rejected ${rejectedEvidence.name}: ${rejectedEvidence.rejectionReason}`,
+      evaluatedChecks,
+    }
+  }
+  if (!REQUIRED_RELEASE_CHECKS.every((name) => (
+    report.checks.filter((item) => item.name === name).length === 1
+  ))) {
+    return {
+      valid: false,
+      detail: "Release PASS is missing required authoritative checks.",
+      evaluatedChecks,
+    }
   }
   const suppliedReportIdentities = report.checks
     .filter((item) => Object.hasOwn(item, "identity"))
@@ -742,50 +898,22 @@ export function validateReleaseReport(report) {
   if (suppliedReportIdentities.some((identity) => (
     typeof identity !== "string" || !identity.trim()
   ))) {
-    return { valid: false, detail: "Release PASS contains a malformed authority identity." }
+    return {
+      valid: false,
+      detail: "Release PASS contains a malformed authority identity.",
+      evaluatedChecks,
+    }
   }
   if (new Set(suppliedReportIdentities).size !== suppliedReportIdentities.length) {
-    return { valid: false, detail: "Release PASS reuses an authority identity." }
-  }
-  if (!REQUIRED_RELEASE_CHECKS.every((name) => report.checks.filter((item) => item.name === name).length === 1)) {
-    return { valid: false, detail: "Release PASS is missing required authoritative checks." }
+    return {
+      valid: false,
+      detail: "Release PASS reuses an authority identity.",
+      evaluatedChecks,
+    }
   }
   const requiredChecks = REQUIRED_RELEASE_CHECKS.map(
     (name) => report.checks.find((item) => item.name === name),
   )
-  if (requiredChecks.some((item) => (
-    item.status !== "PASS" || item.authority !== "AUTHORITATIVE"
-  ))) {
-    return { valid: false, detail: "Release PASS is missing recognized authoritative PASS evidence." }
-  }
-  const evaluatedChecks = report.checks.map((item) => {
-    const required = REQUIRED_RELEASE_CHECKS.includes(item.name)
-      || item.authority === "AUTHORITATIVE"
-    return {
-      name: item.name,
-      status: item.status,
-      authority: item.authority,
-      required,
-      warning: item.status === "WARN",
-      skipReason: ["SKIP", "UNAVAILABLE"].includes(item.status) ? item.detail : null,
-      effect: required
-        ? item.status === "PASS" ? "SATISFIES_REQUIRED" : "BLOCKS_PASS"
-        : item.status === "FAIL" ? "BLOCKS_PASS" : "NO_EFFECT",
-    }
-  })
-  if (evaluatedChecks.some((item) => item.required && (
-    item.authority !== "AUTHORITATIVE" || item.status !== "PASS"
-  ))) {
-    return { valid: false, detail: "Release PASS contains non-passing or mislabeled required authoritative evidence." }
-  }
-  if (evaluatedChecks.some((item) => !item.required && !OPTIONAL_RELEASE_CHECKS.has(item.name))) {
-    return { valid: false, detail: "Release PASS contains an unknown optional check identity." }
-  }
-  if (evaluatedChecks.some((item) => !item.required && (
-    item.authority !== "CORROBORATIVE" || item.status === "FAIL"
-  ))) {
-    return { valid: false, detail: "Optional release evidence is malformed, mislabeled, or explicitly failed." }
-  }
   const authorityIdentities = [
     `github-repository:${binding.repository.toLowerCase()}`,
     `github-branch:${binding.repository.toLowerCase()}:${binding.branch}:${binding.expectedSha}`,
@@ -846,7 +974,7 @@ export function renderVerificationText(report) {
   }
   if (report.requestedTier === "RELEASE") {
     lines.push(...report.releaseAuthorityEvaluation.map((item) => (
-      `- release ${item.name}: ${item.status} [${item.required ? "required" : "optional"}; ${item.authority}; effect=${item.effect}]${item.skipReason ? ` - ${item.skipReason}` : ""}`
+      `- release ${item.declaredEvidenceType}: ${item.status} [requirement=${item.requirementStatus}; allowed-authority=${item.allowedAuthority ?? "NONE"}; supplied-authority=${item.suppliedAuthority}; effect=${item.effect}]${item.rejectionReason ? ` - rejected: ${item.rejectionReason}` : item.skipReason ? ` - ${item.skipReason}` : ""}`
     )))
     lines.push(...(report.releaseReport?.warnings ?? []).map((warning) => `WARNING: ${warning}`))
   }

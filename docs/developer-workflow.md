@@ -49,6 +49,12 @@ absolute distribution directory with `-NodeDistribution`. The launcher
 resolves the repository from its own file location, so it supports isolated
 worktrees.
 
+On Windows, the launcher passes the system root, Program Files root, and exact
+PowerShell 7 executable that it resolved and validated. The verifier revalidates
+and uses those values directly, including on non-C installations; ambient
+variables cannot replace them and direct invocation fails when they are absent
+or invalid.
+
 The launcher runs before npm or npm's selected script shell. It validates exact
 Node `22.23.1` and bundled npm `10.9.8`, clears the child environment, rebuilds
 trusted executable and system paths, replaces lifecycle Node/npm/shell
@@ -149,7 +155,11 @@ corroborative. Optional `CORROBORATIVE` deployment evidence remains explicit in
 human and JSON output and may be `WARN`, `SKIP`, or `UNAVAILABLE` without
 blocking overall `PASS`; an explicit corroborative `FAIL` blocks because it
 contradicts the otherwise authoritative release conclusion. Optional evidence
-is never presented as release proof.
+is never presented as release proof. Evidence requirements and allowed
+authority are derived from the evidence name before supplied labels are
+evaluated, so `deployment-record` is always optional and `CORROBORATIVE`;
+relabeling it `AUTHORITATIVE` is rejected with the supplied and allowed labels,
+requirement status, verdict effect, and rejection reason.
 
 `npm run verify` remains the comprehensive local code-quality gate used by CI.
 `npm run check:migration-references` is its repository-backed migration
@@ -168,14 +178,16 @@ rename paths plus GitHub file status are validated. A known authority path is
 potentially impactful even when its patch is absent or truncated; malformed
 path, status, or rename metadata also fails closed. A favorable unrelated
 classification additionally requires valid current and previous paths,
-recognized status metadata, and a structurally complete unified patch or
-explicit complete file content. Missing, malformed, or truncated patch evidence
-is conservatively potentially impactful even for an otherwise unknown
-documentation or workflow path. Reports distinguish known authority-path
-impact, content-detected migration references, and conservative impact caused
-by incomplete evidence. Unrelated documentation and unrelated workflow modules
-remain outside the authority set only when that complete evidence proves them
-unrelated.
+recognized status metadata, and complete file evidence. GitHub patch evidence
+must be structurally complete, include valid nonnegative integer additions,
+deletions, and changes totals where changes equals additions plus deletions, and
+match the added and deleted lines parsed from the patch. Missing, malformed,
+contradictory, mismatched, or truncated patch evidence is conservatively
+potentially impactful even for an otherwise unknown documentation or workflow
+path. Reports distinguish known authority-path impact, content-detected
+migration references, and conservative impact caused by incomplete evidence.
+Unrelated documentation and unrelated workflow modules remain outside the
+authority set only when that complete evidence proves them unrelated.
 
 ## PR evidence report
 

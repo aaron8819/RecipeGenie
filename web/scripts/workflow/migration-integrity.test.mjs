@@ -198,7 +198,15 @@ describe("migration PR impact", () => {
     ],
     [
       "ordinary unrelated rename",
-      [{ filename: "docs/new.md", previous_filename: "docs/old.md", status: "renamed", patch: "@@ -1 +1 @@\n-old\n+ordinary prose" }],
+      [{
+        filename: "docs/new.md",
+        previous_filename: "docs/old.md",
+        status: "renamed",
+        patch: "@@ -1 +1 @@\n-old\n+ordinary prose",
+        additions: 1,
+        deletions: 1,
+        changes: 2,
+      }],
       false,
     ],
   ])("classifies %s using source and destination paths", (_label, files, expected) => {
@@ -232,12 +240,116 @@ describe("migration PR impact", () => {
   })
 
   it.each([
-    [{ filename: "docs/design-notes.md", status: "modified", patch: "@@ -1 +1 @@\n-old\n+ordinary prose" }],
-    [{ filename: "web/scripts/workflow/state.mjs", status: "modified", patch: "@@ -1 +1 @@\n-old\n+ordinary workflow logic" }],
+    [{ filename: "docs/design-notes.md", status: "modified", patch: "@@ -1 +1 @@\n-old\n+ordinary prose", additions: 1, deletions: 1, changes: 2 }],
+    [{ filename: "web/scripts/workflow/state.mjs", status: "modified", patch: "@@ -1 +1 @@\n-old\n+ordinary workflow logic", additions: 1, deletions: 1, changes: 2 }],
   ])("keeps unrelated files outside migration authority", (file) => {
     const report = classifyMigrationImpact([file])
     expect(report.potentiallyImpactful).toBe(false)
     expect(report.fileRecords[0]).toMatchObject({ evidenceComplete: true, patchComplete: true })
+  })
+
+  it("rejects a patch truncated cleanly between complete hunks", () => {
+    const report = classifyMigrationImpact([{
+      filename: "docs/design-notes.md",
+      status: "modified",
+      patch: "@@ -1 +1 @@\n-old one\n+new one",
+      additions: 2,
+      deletions: 2,
+      changes: 4,
+    }])
+    expect(report).toMatchObject({
+      conservativelyImpactful: true,
+      potentiallyImpactful: true,
+    })
+    expect(report.fileRecords[0]).toMatchObject({
+      patchComplete: true,
+      parsedAdditions: 1,
+      parsedDeletions: 1,
+      patchTotalsMatch: false,
+      evidenceComplete: false,
+    })
+    expect(report.fileRecords[0].evidenceIncompleteReasons.join(" ")).toContain(
+      "Patch changes 2 do not match GitHub changes 4.",
+    )
+  })
+
+  it("accepts exact GitHub additions, deletions, and changes totals", () => {
+    const report = classifyMigrationImpact([{
+      filename: "docs/design-notes.md",
+      status: "modified",
+      patch: "@@ -1 +1 @@\n-old\n+ordinary prose",
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+    }])
+    expect(report.potentiallyImpactful).toBe(false)
+    expect(report.fileRecords[0]).toMatchObject({
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+      parsedAdditions: 1,
+      parsedDeletions: 1,
+      githubTotalsValid: true,
+      patchTotalsMatch: true,
+      evidenceComplete: true,
+    })
+  })
+
+  it.each([
+    ["additions mismatch", { additions: 2, deletions: 1, changes: 3 }, "additions"],
+    ["deletions mismatch", { additions: 1, deletions: 2, changes: 3 }, "deletions"],
+    ["changes mismatch", { additions: 1, deletions: 1, changes: 3 }, "changes must equal"],
+    ["missing totals", {}, "must be present"],
+    ["negative totals", { additions: -1, deletions: 1, changes: 0 }, "nonnegative integers"],
+    ["fractional totals", { additions: 1.5, deletions: 1, changes: 2.5 }, "nonnegative integers"],
+    ["malformed totals", { additions: "1", deletions: 1, changes: 2 }, "nonnegative integers"],
+    ["contradictory totals", { additions: 1, deletions: 1, changes: 4 }, "changes must equal"],
+  ])("fails closed for %s", (_label, totals, reason) => {
+    const report = classifyMigrationImpact([{
+      filename: "docs/design-notes.md",
+      status: "modified",
+      patch: "@@ -1 +1 @@\n-old\n+ordinary prose",
+      ...totals,
+    }])
+    expect(report).toMatchObject({
+      conservativelyImpactful: true,
+      potentiallyImpactful: true,
+    })
+    expect(report.fileRecords[0].evidenceComplete).toBe(false)
+    expect(report.fileRecords[0].evidenceIncompleteReasons.join(" ")).toContain(reason)
+  })
+
+  it.each([
+    ["missing patch", null, 1, 1, 2],
+    ["mid-hunk truncation", "@@ -1,2 +1,2 @@\n-old\n+new", 2, 2, 4],
+  ])("preserves fail-closed behavior for %s", (_label, patch, additions, deletions, changes) => {
+    const report = classifyMigrationImpact([{
+      filename: "docs/design-notes.md",
+      status: "modified",
+      patch,
+      additions,
+      deletions,
+      changes,
+    }])
+    expect(report.fileRecords[0]).toMatchObject({
+      patchComplete: false,
+      evidenceComplete: false,
+    })
+    expect(report.potentiallyImpactful).toBe(true)
+  })
+
+  it("keeps a known migration-authority path impactful with complete evidence", () => {
+    const report = classifyMigrationImpact([{
+      filename: "web/scripts/workflow/migration-integrity.mjs",
+      status: "modified",
+      patch: "@@ -1 +1 @@\n-old\n+new",
+      additions: 1,
+      deletions: 1,
+      changes: 2,
+    }])
+    expect(report.fileRecords[0].evidenceComplete).toBe(true)
+    expect(report.sensitivePaths).toEqual(["web/scripts/workflow/migration-integrity.mjs"])
+    expect(report.potentiallyImpactful).toBe(true)
   })
 
   it.each([
@@ -252,7 +364,14 @@ describe("migration PR impact", () => {
 
   it("distinguishes authority, content, and incomplete-evidence impact reasons", () => {
     const report = classifyMigrationImpact([
-      { filename: "README.md", status: "modified", patch: "@@ -1 +1 @@\n-old\n+supabase/migrations/014_example.sql" },
+      {
+        filename: "README.md",
+        status: "modified",
+        patch: "@@ -1 +1 @@\n-old\n+supabase/migrations/014_example.sql",
+        additions: 1,
+        deletions: 1,
+        changes: 2,
+      },
       { filename: "docs/unknown.md", status: "modified" },
     ])
     expect(report.sensitivePaths).toEqual(["README.md"])

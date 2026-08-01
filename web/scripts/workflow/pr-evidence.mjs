@@ -1287,6 +1287,9 @@ export async function collectPrEvidence(options = {}) {
           : null,
         status: item.status ?? null,
         patch: typeof item.patch === "string" ? item.patch : null,
+        additions: item.additions,
+        deletions: item.deletions,
+        changes: item.changes,
       }))
       assertUnique(records, (item) => item.filename, "pull request files")
       report.changedFiles = records.map((item) => item.filename).sort()
@@ -1457,6 +1460,9 @@ export function renderPrEvidenceText(report) {
       : "PR: UNAVAILABLE",
     `Changed files: ${report.changedFiles.length}`,
     `Migration impact: files=${report.migrationImpact.migrationFiles.length} potentially-impactful=${report.migrationImpact.potentiallyImpactful ? "YES" : "NO"} authority-paths=${report.migrationImpact.sensitivePaths.length} content-detected=${report.migrationImpact.contentDetectedPaths.length} incomplete-evidence=${report.migrationImpact.incompleteEvidencePaths.length} conservative=${report.migrationImpact.conservativelyImpactful ? "YES" : "NO"} documentation-only=${report.migrationImpact.documentationOnly ? "YES" : "NO"} checksum-registry=${report.migrationImpact.checksumRegistryChanged ? "CHANGED" : "UNCHANGED"}`,
+    ...report.migrationImpact.incompleteEvidenceReasons.map((item) => (
+      `- incomplete migration evidence ${item.filename}: ${item.reasons.join(" ")}`
+    )),
     `Reviews: ${report.reviews.length}; requests=${report.reviewRequests.users.length + report.reviewRequests.teams.length}`,
     `Comments: top-level=${report.comments.topLevel.length}; inline=${report.comments.inline.length}`,
     `Review threads: total=${report.reviewThreads?.total ?? "UNAVAILABLE"}; unresolved=${report.reviewThreads?.unresolved ?? "UNAVAILABLE"}`,
