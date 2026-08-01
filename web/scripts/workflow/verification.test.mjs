@@ -372,9 +372,11 @@ describe("trusted npm execution", () => {
         npm_config_user_agent: "npm/0.0.0 node/v0.0.0",
       },
       mode: "release",
+      nodeExecutable: "/opt/hostedtoolcache/node/22.23.1/x64/bin/node",
+      npmExecutable: resolveTrustedNpmCli(),
       platform: "linux",
       pathExists: () => true,
-      pathType: (value) => value.endsWith("/gh") ? "file" : "directory",
+      pathType: (value) => value === "/usr/local/bin/gh" ? "file" : "directory",
       canonicalize: (value) => value,
     })
     expect(env.PATH).toContain("/usr/bin")
