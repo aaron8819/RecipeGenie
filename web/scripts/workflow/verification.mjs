@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
-import { delimiter, dirname, join, resolve } from "node:path"
+import { delimiter, dirname, join, resolve, win32 } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { assertSafeOutput, assertSecretSafe } from "./state.mjs"
 
@@ -166,7 +166,7 @@ export function resolveTrustedWindowsRuntime({
     "RG_VERIFICATION_POWERSHELL",
   )
   const shell = validAbsoluteWindowsPath(systemRoot)
-    ? join(systemRoot, "System32", "cmd.exe")
+    ? win32.join(systemRoot, "System32", "cmd.exe")
     : null
   if (
     !validAbsoluteWindowsPath(systemRoot)
@@ -198,8 +198,9 @@ export function createTrustedChildEnvironment({
     throw new Error("The project-local executable directory contains an unexpected Node/npm runtime shim.")
   }
   const comparison = (value) => platform === "win32"
-    ? resolve(value).toLowerCase()
+    ? win32.resolve(value).toLowerCase()
     : resolve(value)
+  const platformJoin = platform === "win32" ? win32.join : join
   const trustedWindowsRuntime = platform === "win32"
     ? windowsRuntime ?? resolveTrustedWindowsRuntime({
       environment,
@@ -211,12 +212,12 @@ export function createTrustedChildEnvironment({
   const programFiles = trustedWindowsRuntime?.programFiles
   const trustedSystemPaths = platform === "win32"
     ? [
-      join(systemRoot, "System32"),
+      platformJoin(systemRoot, "System32"),
       systemRoot,
-      join(systemRoot, "System32", "Wbem"),
-      join(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
-      join(programFiles, "PowerShell", "7"),
-      join(programFiles, "Git", "cmd"),
+      platformJoin(systemRoot, "System32", "Wbem"),
+      platformJoin(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
+      platformJoin(programFiles, "PowerShell", "7"),
+      platformJoin(programFiles, "Git", "cmd"),
     ]
     : ["/usr/local/bin", "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin", "/sbin"]
   const trustedPaths = [runtimeDirectory, localBinDirectory, ...trustedSystemPaths]
@@ -240,7 +241,7 @@ export function createTrustedChildEnvironment({
     sanitized.ProgramFiles = programFiles
   }
   const shell = platform === "win32"
-    ? join(systemRoot, "System32", "cmd.exe")
+    ? platformJoin(systemRoot, "System32", "cmd.exe")
     : "/bin/sh"
   if (!pathExists(shell)) {
     throw new Error("The trusted platform script shell is unavailable.")
@@ -316,10 +317,13 @@ const MIGRATION_CHECK = Object.freeze({
   coverage: "Validated tracked migration files, checksum coverage, checksums, active endpoint, and documented chain.",
 })
 
-function prChecks({ windowsRuntime = null } = {}) {
-  const powerShellExecutable = process.platform === "win32" && !windowsRuntime
+function prChecks({
+  platform = process.platform,
+  windowsRuntime = null,
+} = {}) {
+  const powerShellExecutable = platform === "win32" && !windowsRuntime
     ? "<trusted-powershell>"
-    : resolveTrustedPowerShell({ windowsRuntime })
+    : resolveTrustedPowerShell({ platform, windowsRuntime })
   return [
     npmCheck(
       "repository-verification",
@@ -584,14 +588,16 @@ function finishReport(report) {
 
 export function runPrVerification(options = {}) {
   const commandRunner = options.commandRunner ?? defaultCommandRunner
-  const windowsRuntime = process.platform === "win32"
-    ? options.windowsRuntime ?? resolveTrustedWindowsRuntime()
+  const platform = options.platform ?? process.platform
+  const windowsRuntime = platform === "win32"
+    ? options.windowsRuntime ?? resolveTrustedWindowsRuntime({ platform })
     : null
   const childEnvironment = options.childEnvironment ?? createTrustedChildEnvironment({
+    platform,
     windowsRuntime,
   })
   const runtimeAuthority = runRuntimeProbe(commandRunner, childEnvironment)
-  const definitions = prChecks({ windowsRuntime })
+  const definitions = prChecks({ platform, windowsRuntime })
   const checks = [runtimeAuthority]
   if (runtimeAuthority.status === "PASS") {
     checks.push(...definitions.map((definition) => runCheck(

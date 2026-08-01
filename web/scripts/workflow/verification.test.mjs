@@ -299,6 +299,7 @@ describe("trusted npm execution", () => {
     const runtime = windowsRuntime("D:\\Windows", "D:\\Program Files")
     const calls = []
     const report = runPrVerification({
+      platform: "win32",
       windowsRuntime: runtime,
       childEnvironment: createTrustedChildEnvironment({
         platform: "win32",
