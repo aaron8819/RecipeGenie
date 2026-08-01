@@ -70,7 +70,9 @@ export function resolveTrustedGitHubCliCommand({
   canonicalize = realpathSync.native,
 } = {}) {
   const suppliedPath = environmentValue(environment, GITHUB_CLI_ENVIRONMENT_KEY)
-  if (!suppliedPath) return null
+  if (!suppliedPath) {
+    throw new Error("Trusted GitHub CLI path is missing.")
+  }
   const pathApi = platform === "win32" ? win32 : posix
   if (!pathApi.isAbsolute(suppliedPath) || pathType(suppliedPath) !== "file") {
     throw new Error("Trusted GitHub CLI path is missing or malformed.")
@@ -114,6 +116,16 @@ export function resolveTrustedGitHubCliCommand({
     throw new Error("Trusted GitHub CLI executable escapes its approved root.")
   }
   return canonicalExecutable
+}
+
+function requireAbsoluteGitHubCliPath(value) {
+  const absolute = typeof value === "string"
+    && !/[\0\r\n]/u.test(value)
+    && (posix.isAbsolute(value) || win32.isAbsolute(value))
+  if (!absolute) {
+    throw new Error("Trusted GitHub CLI path is missing or malformed.")
+  }
+  return value
 }
 
 function isSafeBranch(value) {
@@ -282,11 +294,11 @@ function chooseNextAction(report) {
 
 export async function collectReleaseStatus(rawInput, options = {}) {
   const input = validateInputs(rawInput)
+  const githubCli = requireAbsoluteGitHubCliPath(options.githubCli)
   const commandRunner = options.commandRunner || defaultCommandRunner
   const fetchImpl = options.fetchImpl || fetch
   const manifestSignal = options.manifestSignal || AbortSignal.timeout(10_000)
   const cwd = options.cwd || process.cwd()
-  const githubCli = options.githubCli || "gh"
   const context = options.context || collectDoctorReport({ cwd, commandRunner })
   const report = {
     schemaVersion: 1,
@@ -319,7 +331,7 @@ export async function collectReleaseStatus(rawInput, options = {}) {
     return report
   }
 
-  let githubAvailable = githubCli !== "gh" || context.tools?.gh?.available !== false
+  let githubAvailable = true
   let repositoryMetadata
   if (githubAvailable) {
     try {
@@ -336,9 +348,6 @@ export async function collectReleaseStatus(rawInput, options = {}) {
       report.checks.push(check("github-repository", "WARN", "INFERRED", "GitHub repository identity is temporarily inaccessible."))
       addWarning(report, "GitHub source and CI evidence are temporarily inaccessible.")
     }
-  } else {
-    report.checks.push(check("github-repository", "WARN", "INFERRED", "GitHub CLI is unavailable."))
-    addWarning(report, "GitHub source and CI evidence are unavailable because gh is missing.")
   }
 
   const branch = input.branch || repositoryMetadata?.default_branch
@@ -521,13 +530,17 @@ async function main() {
     const input = parseReleaseStatusArgs(process.argv.slice(2))
     const trustedGitHubCli = resolveTrustedGitHubCliCommand()
     const report = await collectReleaseStatus(input, {
-      githubCli: trustedGitHubCli || "gh",
+      githubCli: trustedGitHubCli,
     })
     const output = input.json ? renderReleaseStatusJson(report, configuredSecrets(process.env)) : renderReleaseStatusText(report, configuredSecrets(process.env))
     process.stdout.write(output)
     process.exitCode = report.status === "PASS" ? 0 : report.status === "ACTION_REQUIRED" ? 1 : 2
-  } catch {
-    process.stderr.write("STATUS: BLOCKED\nInvalid or unsafe rg:release:status configuration.\n")
+  } catch (error) {
+    const detail = error instanceof Error
+      && error.message.startsWith("Trusted GitHub CLI")
+      ? "Trusted GitHub CLI contract is missing or invalid."
+      : "Invalid or unsafe rg:release:status configuration."
+    process.stderr.write(`STATUS: BLOCKED\n${detail}\n`)
     process.exitCode = 2
   }
 }
