@@ -1,12 +1,16 @@
 import { spawnSync } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
-import { delimiter, dirname, join, resolve, win32 } from "node:path"
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs"
+import { delimiter, dirname, join, posix, resolve, win32 } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { assertSafeOutput, assertSecretSafe } from "./state.mjs"
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const webDirectory = resolve(scriptDirectory, "..", "..")
 const repositoryRoot = resolve(webDirectory, "..")
+const expectedNodeRuntime = readFileSync(resolve(webDirectory, ".nvmrc"), "utf8").trim()
+const expectedNpmVersion = JSON.parse(
+  readFileSync(resolve(webDirectory, "package.json"), "utf8"),
+).packageManager.replace(/^npm@/u, "")
 const REF_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/@{}^~:-]*$/u
 const PATH_PATTERN = /^(?![A-Za-z]:|\/|\\)(?!.*(?:^|[\\/])\.\.(?:[\\/]|$))[^\0\r\n]+$/u
 const RELEASE_VALUE_OPTIONS = new Set([
@@ -16,24 +20,27 @@ const RELEASE_VALUE_OPTIONS = new Set([
   "--production-url",
   "--expected-project-ref",
 ])
-const REQUIRED_RELEASE_CHECKS = [
-  "github-repository",
-  "branch-head",
-  "exact-sha-ci",
-  "production-manifest",
-  "deployed-sha",
-  "supabase-project-ref",
-]
-const RELEASE_CHECK_POLICY = new Map([
-  ...REQUIRED_RELEASE_CHECKS.map((name) => [name, {
-    required: true,
-    allowedAuthority: "AUTHORITATIVE",
-  }]),
-  ["deployment-record", {
+const RELEASE_CHECK_POLICY = [
+  { name: "repository-context", required: true, allowedAuthority: "AUTHORITATIVE", identity: () => "repository-context:recipe-genie" },
+  { name: "supported-runtime", required: true, allowedAuthority: "AUTHORITATIVE", identity: () => `supported-runtime:node-${expectedNodeRuntime}:npm-${expectedNpmVersion}` },
+  { name: "github-repository", required: true, allowedAuthority: "AUTHORITATIVE", identity: (binding) => `github-repository:${binding.repository.toLowerCase()}` },
+  { name: "branch-head", required: true, allowedAuthority: "AUTHORITATIVE", identity: (binding) => `github-branch:${binding.repository.toLowerCase()}:${binding.branch}:${binding.expectedSha}` },
+  { name: "exact-sha-ci", required: true, allowedAuthority: "AUTHORITATIVE", identity: (binding) => `github-checks:${binding.repository.toLowerCase()}:${binding.expectedSha}` },
+  { name: "production-manifest", required: true, allowedAuthority: "AUTHORITATIVE", identity: (binding) => `production-manifest:${binding.deployedSha}:${binding.deployedProjectRef}:${binding.expectedMigration}` },
+  { name: "deployed-sha", required: true, allowedAuthority: "AUTHORITATIVE", identity: (binding) => `deployed-sha:${binding.deployedSha}` },
+  { name: "supabase-project-ref", required: true, allowedAuthority: "AUTHORITATIVE", identity: (binding) => `supabase-project:${binding.deployedProjectRef}` },
+  {
+    name: "deployment-record",
     required: false,
     allowedAuthority: "CORROBORATIVE",
-  }],
-])
+  },
+]
+const RELEASE_CHECK_POLICY_BY_NAME = new Map(
+  RELEASE_CHECK_POLICY.map((policy) => [policy.name, policy]),
+)
+const REQUIRED_RELEASE_POLICY = RELEASE_CHECK_POLICY.filter(
+  (policy) => policy.required,
+)
 const VERIFICATION_USAGE = "verification.mjs focused (--base REF | --file PATH...) [--json] | pr [--json] | release [--json] [release options]"
 const RUNTIME_SHIM_NAMES = process.platform === "win32"
   ? [
@@ -138,6 +145,8 @@ const RELEASE_ENVIRONMENT_KEYS = [
   "RECIPE_GENIE_PRODUCTION_PROJECT_REF",
 ]
 
+const GITHUB_CLI_ENVIRONMENT_KEY = "RG_VERIFICATION_GITHUB_CLI"
+
 function containsRuntimeShim(directory) {
   return RUNTIME_SHIM_NAMES.some((name) => existsSync(join(directory, name)))
 }
@@ -145,6 +154,91 @@ function containsRuntimeShim(directory) {
 function validAbsoluteWindowsPath(value) {
   return typeof value === "string"
     && /^[A-Za-z]:\\[^\0\r\n]+$/u.test(value)
+}
+
+function defaultPathType(value) {
+  try {
+    const stat = statSync(value)
+    if (stat.isDirectory()) return "directory"
+    if (stat.isFile()) return "file"
+  } catch {
+    // The caller fails closed below.
+  }
+  return null
+}
+
+function canonicalPathEqual(left, right, platform) {
+  return platform === "win32"
+    ? win32.resolve(left).toLowerCase() === win32.resolve(right).toLowerCase()
+    : posix.resolve(left) === posix.resolve(right)
+}
+
+function canonicalPathContained(root, candidate, platform) {
+  const pathApi = platform === "win32" ? win32 : posix
+  const relativePath = pathApi.relative(root, candidate)
+  if (!relativePath || pathApi.isAbsolute(relativePath)) return false
+  return relativePath !== ".." && !relativePath.startsWith(`..${pathApi.sep}`)
+}
+
+export function resolveTrustedGitHubCli({
+  environment = process.env,
+  platform = process.platform,
+  windowsRuntime = null,
+  trustedPaths = [],
+  pathType = defaultPathType,
+  canonicalize = realpathSync.native,
+} = {}) {
+  const suppliedPath = environmentValue(environment, GITHUB_CLI_ENVIRONMENT_KEY)
+  if (platform === "win32") {
+    if (!windowsRuntime?.programFiles) {
+      throw new Error("The trusted GitHub CLI root is unavailable.")
+    }
+    const programFiles = windowsRuntime.programFiles
+    const installationRoot = win32.join(programFiles, "GitHub CLI")
+    const expectedExecutable = win32.join(installationRoot, "gh.exe")
+    if (
+      !validAbsoluteWindowsPath(programFiles)
+      || pathType(programFiles) !== "directory"
+      || pathType(installationRoot) !== "directory"
+      || pathType(expectedExecutable) !== "file"
+    ) {
+      throw new Error("The trusted GitHub CLI installation is unavailable or invalid.")
+    }
+    const canonicalProgramFiles = canonicalize(programFiles)
+    const canonicalRoot = canonicalize(installationRoot)
+    const canonicalExecutable = canonicalize(expectedExecutable)
+    if (
+      pathType(canonicalProgramFiles) !== "directory"
+      || pathType(canonicalRoot) !== "directory"
+      || pathType(canonicalExecutable) !== "file"
+      || !canonicalPathContained(canonicalProgramFiles, canonicalRoot, platform)
+      || !canonicalPathContained(canonicalRoot, canonicalExecutable, platform)
+    ) {
+      throw new Error("The canonical GitHub CLI executable escapes its trusted installation root.")
+    }
+    if (suppliedPath) {
+      if (
+        !validAbsoluteWindowsPath(suppliedPath)
+        || !canonicalPathEqual(canonicalize(suppliedPath), canonicalExecutable, platform)
+      ) {
+        throw new Error("The supplied GitHub CLI executable is not the trusted canonical executable.")
+      }
+    }
+    return canonicalExecutable
+  }
+
+  const candidate = suppliedPath || trustedPaths
+    .map((directory) => posix.join(directory, "gh"))
+    .filter((value) => posix.isAbsolute(value))
+    .find((value) => pathType(value) === "file")
+  if (!candidate || !posix.isAbsolute(candidate) || pathType(candidate) !== "file") {
+    throw new Error("The trusted GitHub CLI executable is unavailable.")
+  }
+  const canonicalExecutable = canonicalize(candidate)
+  if (!posix.isAbsolute(canonicalExecutable) || pathType(canonicalExecutable) !== "file") {
+    throw new Error("The trusted GitHub CLI executable is unavailable.")
+  }
+  return canonicalExecutable
 }
 
 export function resolveTrustedWindowsRuntime({
@@ -190,6 +284,8 @@ export function createTrustedChildEnvironment({
   platform = process.platform,
   mode = "ordinary",
   pathExists = existsSync,
+  pathType = defaultPathType,
+  canonicalize = realpathSync.native,
   windowsRuntime = null,
 } = {}) {
   const runtimeDirectory = dirname(nodeExecutable)
@@ -239,6 +335,9 @@ export function createTrustedChildEnvironment({
     sanitized.SystemRoot = systemRoot
     sanitized.windir = systemRoot
     sanitized.ProgramFiles = programFiles
+    if (mode === "release") {
+      sanitized.RG_VERIFICATION_WINDOWS_PROGRAM_FILES = programFiles
+    }
   }
   const shell = platform === "win32"
     ? platformJoin(systemRoot, "System32", "cmd.exe")
@@ -258,6 +357,21 @@ export function createTrustedChildEnvironment({
   sanitized.npm_config_scripts_prepend_node_path = "true"
   sanitized.npm_config_userconfig = platform === "win32" ? "NUL" : "/dev/null"
   sanitized.npm_config_globalconfig = resolve(dirname(npmExecutable), "..", ".npmrc")
+  if (mode === "release") {
+    const npmVersion = JSON.parse(
+      readFileSync(resolve(dirname(npmExecutable), "..", "package.json"), "utf8"),
+    ).version
+    const nodeVersion = readFileSync(resolve(webDirectory, ".nvmrc"), "utf8").trim()
+    sanitized.npm_config_user_agent = `npm/${npmVersion} node/v${nodeVersion}`
+    sanitized[GITHUB_CLI_ENVIRONMENT_KEY] = resolveTrustedGitHubCli({
+      environment,
+      platform,
+      windowsRuntime: trustedWindowsRuntime,
+      trustedPaths,
+      pathType,
+      canonicalize,
+    })
+  }
   if (platform === "win32") {
     sanitized.ComSpec = shell
     sanitized.PATHEXT = ".COM;.EXE;.BAT;.CMD"
@@ -267,7 +381,7 @@ export function createTrustedChildEnvironment({
   return sanitized
 }
 
-const expectedRuntime = readFileSync(resolve(webDirectory, ".nvmrc"), "utf8").trim()
+const expectedRuntime = expectedNodeRuntime
 
 function npmCheck(name, args, coverage) {
   const npmCli = resolveTrustedNpmCli()
@@ -811,7 +925,7 @@ export function validateReleaseReport(report) {
     return { valid: false, detail: "Release PASS has incomplete or contradictory binding evidence." }
   }
   const recognizedStatuses = new Set(["PASS", "WARN", "SKIP", "UNAVAILABLE", "FAIL"])
-  const validChecks = report.checks.every((item) => (
+  const malformedCheckIndex = report.checks.findIndex((item) => !(
     item
     && typeof item === "object"
     && !Array.isArray(item)
@@ -822,15 +936,21 @@ export function validateReleaseReport(report) {
     && typeof item.detail === "string"
     && (!Object.hasOwn(item, "required") || typeof item.required === "boolean")
   ))
-  if (!validChecks) {
-    return { valid: false, detail: "Release PASS contains malformed evidence." }
+  if (malformedCheckIndex !== -1) {
+    const malformedName = typeof report.checks[malformedCheckIndex]?.name === "string"
+      ? ` for ${report.checks[malformedCheckIndex].name}`
+      : ` at index ${malformedCheckIndex}`
+    return {
+      valid: false,
+      detail: `Release PASS contains malformed evidence${malformedName}.`,
+    }
   }
   const checkNames = report.checks.map((item) => item.name)
   const duplicateNames = new Set(checkNames.filter(
     (name, index) => checkNames.indexOf(name) !== index,
   ))
   const evaluatedChecks = report.checks.map((item) => {
-    const policy = RELEASE_CHECK_POLICY.get(item.name)
+    const policy = RELEASE_CHECK_POLICY_BY_NAME.get(item.name)
     const rejectionReasons = []
     if (!policy) {
       rejectionReasons.push("Unknown evidence type.")
@@ -881,7 +1001,27 @@ export function validateReleaseReport(report) {
         : null,
     }
   })
-  const rejectedEvidence = evaluatedChecks.find((item) => item.rejectionReason)
+  const missingRequiredChecks = REQUIRED_RELEASE_POLICY.filter((policy) => (
+    !report.checks.some((item) => item.name === policy.name)
+  ))
+  evaluatedChecks.push(...missingRequiredChecks.map((policy) => ({
+    name: policy.name,
+    declaredEvidenceType: policy.name,
+    status: "MISSING",
+    allowedAuthority: policy.allowedAuthority,
+    suppliedAuthority: null,
+    authority: null,
+    required: true,
+    requirementStatus: "REQUIRED",
+    suppliedRequirement: null,
+    warning: false,
+    skipReason: null,
+    effect: "REJECTED",
+    rejectionReason: "Required authoritative evidence is missing.",
+  })))
+  const rejectedEvidence = evaluatedChecks
+    .slice(0, report.checks.length)
+    .find((item) => item.rejectionReason)
   if (rejectedEvidence) {
     return {
       valid: false,
@@ -889,12 +1029,10 @@ export function validateReleaseReport(report) {
       evaluatedChecks,
     }
   }
-  if (!REQUIRED_RELEASE_CHECKS.every((name) => (
-    report.checks.filter((item) => item.name === name).length === 1
-  ))) {
+  if (missingRequiredChecks.length > 0) {
     return {
       valid: false,
-      detail: "Release PASS is missing required authoritative checks.",
+      detail: `Release PASS is missing required authoritative checks: ${missingRequiredChecks.map((policy) => policy.name).join(", ")}.`,
       evaluatedChecks,
     }
   }
@@ -917,17 +1055,12 @@ export function validateReleaseReport(report) {
       evaluatedChecks,
     }
   }
-  const requiredChecks = REQUIRED_RELEASE_CHECKS.map(
-    (name) => report.checks.find((item) => item.name === name),
+  const requiredChecks = REQUIRED_RELEASE_POLICY.map(
+    (policy) => report.checks.find((item) => item.name === policy.name),
   )
-  const authorityIdentities = [
-    `github-repository:${binding.repository.toLowerCase()}`,
-    `github-branch:${binding.repository.toLowerCase()}:${binding.branch}:${binding.expectedSha}`,
-    `github-checks:${binding.repository.toLowerCase()}:${binding.expectedSha}`,
-    `production-manifest:${binding.deployedSha}:${binding.deployedProjectRef}:${binding.expectedMigration}`,
-    `deployed-sha:${binding.deployedSha}`,
-    `supabase-project:${binding.deployedProjectRef}`,
-  ]
+  const authorityIdentities = REQUIRED_RELEASE_POLICY.map(
+    (policy) => policy.identity(binding),
+  )
   if (authorityIdentities.some((identity) => !identity.trim())) {
     return { valid: false, detail: "Release PASS contains an authority without a stable identity." }
   }
@@ -954,8 +1087,8 @@ export function validateReleaseReport(report) {
   return {
     valid: true,
     detail: "Release report contract is complete.",
-    authorities: Object.fromEntries(REQUIRED_RELEASE_CHECKS.map(
-      (name, index) => [name, authorityIdentities[index]],
+    authorities: Object.fromEntries(REQUIRED_RELEASE_POLICY.map(
+      (policy, index) => [policy.name, authorityIdentities[index]],
     )),
     evaluatedChecks,
     optionalNonPassing: evaluatedChecks.filter((item) => (

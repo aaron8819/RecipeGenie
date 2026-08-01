@@ -5,11 +5,51 @@ import {
   parseReleaseStatusArgs,
   renderReleaseStatusJson,
   renderReleaseStatusText,
+  resolveTrustedGitHubCliCommand,
 } from "./release-status.mjs"
 
 const SHA = "7ebbad86970bee4389fe870df260ca126132637b"
 const OTHER_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const PROJECT_REF = "eyaoahwzixqetjgfghsh"
+const APPROVED_GITHUB_CLI = "D:\\Program Files\\GitHub CLI\\gh.exe"
+
+function windowsGitHubFileSystem({
+  programFiles = "D:\\Program Files",
+  canonicalProgramFiles = programFiles,
+  canonicalRoot = `${canonicalProgramFiles}\\GitHub CLI`,
+  canonicalExecutable = `${canonicalRoot}\\gh.exe`,
+} = {}) {
+  const root = `${programFiles}\\GitHub CLI`
+  const executable = `${root}\\gh.exe`
+  const canonicalPaths = new Map([
+    [programFiles.toLowerCase(), canonicalProgramFiles],
+    [root.toLowerCase(), canonicalRoot],
+    [executable.toLowerCase(), canonicalExecutable],
+  ])
+  const directories = new Set([
+    programFiles,
+    root,
+    canonicalProgramFiles,
+    canonicalRoot,
+  ].map((value) => value.toLowerCase()))
+  const files = new Set(
+    [executable, canonicalExecutable].map((value) => value.toLowerCase()),
+  )
+  return {
+    environment: {
+      PATH: "D:\\Hostile",
+      RG_VERIFICATION_WINDOWS_PROGRAM_FILES: programFiles,
+      RG_VERIFICATION_GITHUB_CLI: canonicalExecutable,
+    },
+    canonicalize: (value) => canonicalPaths.get(value.toLowerCase()) || value,
+    pathType(value) {
+      const normalized = value.toLowerCase()
+      if (directories.has(normalized)) return "directory"
+      if (files.has(normalized)) return "file"
+      return null
+    },
+  }
+}
 
 function manifest(overrides = {}) {
   return {
@@ -50,6 +90,7 @@ function fixture(overrides = {}) {
   const commands = []
   const commandRunner = (command, args, cwd) => {
     commands.push({ command, args, cwd })
+    overrides.onCommand?.({ command, args, cwd })
     const endpoint = args[1] || ""
     if (overrides.commandFailure?.(endpoint)) return { exitCode: 1, stdout: overrides.externalSecret || "sensitive raw failure", stderr: overrides.externalSecret || "sensitive raw failure" }
     if (overrides.commandOutput?.[endpoint]) return overrides.commandOutput[endpoint]
@@ -72,11 +113,134 @@ function fixture(overrides = {}) {
     return underlyingFetch(...args)
   }
   const manifestSignal = overrides.manifestSignal || { fixture: "timeout-signal" }
-  return collectReleaseStatus(input, { context, commandRunner, fetchImpl, manifestSignal, cwd: overrides.cwd || "C:/fixture" })
+  const githubCli = Object.hasOwn(overrides, "githubCli")
+    ? overrides.githubCli
+    : APPROVED_GITHUB_CLI
+  return collectReleaseStatus(input, {
+    context,
+    commandRunner,
+    fetchImpl,
+    manifestSignal,
+    githubCli,
+    cwd: overrides.cwd || "C:/fixture",
+  })
     .then((report) => ({ report, commands, fetchCalls, manifestSignal }))
 }
 
 describe("release status", () => {
+  it("launches no command when the trusted GitHub CLI contract is missing", async () => {
+    const commands = []
+    await expect(fixture({
+      githubCli: undefined,
+      onCommand: (call) => commands.push(call),
+    })).rejects.toThrow(/GitHub CLI path is missing/iu)
+    expect(commands).toHaveLength(0)
+  })
+
+  it("ignores a hostile PATH containing a fake bare gh command", async () => {
+    const originalPath = process.env.PATH
+    const commands = []
+    process.env.PATH = "D:\\Hostile\\FakeGitHubCli"
+    try {
+      await expect(fixture({
+        githubCli: undefined,
+        onCommand: (call) => commands.push(call),
+      })).rejects.toThrow(/GitHub CLI path is missing/iu)
+    } finally {
+      process.env.PATH = originalPath
+    }
+    expect(commands).toHaveLength(0)
+  })
+
+  it.each([undefined, "gh", "relative/path/to/gh"])(
+    "does not pass GitHub credentials to the runner for a missing or invalid contract (%s)",
+    async (githubCli) => {
+      const runnerCalls = []
+      const originalGhToken = process.env.GH_TOKEN
+      const originalGitHubToken = process.env.GITHUB_TOKEN
+      process.env.GH_TOKEN = "ghp_runner_must_not_receive_this_value"
+      process.env.GITHUB_TOKEN = "github_pat_runner_must_not_receive_this_value"
+      try {
+        await expect(fixture({
+          githubCli,
+          onCommand: (...args) => runnerCalls.push(args),
+        })).rejects.toThrow(/GitHub CLI path is missing or malformed/iu)
+      } finally {
+        if (originalGhToken === undefined) delete process.env.GH_TOKEN
+        else process.env.GH_TOKEN = originalGhToken
+        if (originalGitHubToken === undefined) delete process.env.GITHUB_TOKEN
+        else process.env.GITHUB_TOKEN = originalGitHubToken
+      }
+      expect(runnerCalls).toHaveLength(0)
+    },
+  )
+
+  it.each([
+    ["missing", undefined],
+    ["invalid", "gh"],
+  ])("main fails clearly when the trusted GitHub CLI contract is %s", (_label, githubCli) => {
+    const environment = {
+      ...process.env,
+      GH_TOKEN: "ghp_main_must_not_expose_this_value",
+      GITHUB_TOKEN: "github_pat_main_must_not_expose_this_value",
+    }
+    if (githubCli === undefined) delete environment.RG_VERIFICATION_GITHUB_CLI
+    else environment.RG_VERIFICATION_GITHUB_CLI = githubCli
+    const result = spawnSync(process.execPath, [
+      "scripts/workflow/release-status.mjs",
+      "--repository", "aaron8819/RecipeGenie",
+      "--branch", "main",
+      "--expected-sha", SHA,
+      "--production-url", "https://recipe-genie.example",
+      "--expected-project-ref", PROJECT_REF,
+    ], {
+      cwd: process.cwd(),
+      encoding: "utf8",
+      env: environment,
+      windowsHide: true,
+    })
+    const output = `${result.stdout || ""}${result.stderr || ""}`
+    expect(result.status).toBe(2)
+    expect(output).toContain("Trusted GitHub CLI contract is missing or invalid.")
+    expect(output).not.toContain(environment.GH_TOKEN)
+    expect(output).not.toContain(environment.GITHUB_TOKEN)
+  })
+
+  it("invokes the exact absolute GitHub CLI without a bare-name fallback", async () => {
+    const githubCli = APPROVED_GITHUB_CLI
+    const { report, commands } = await fixture({
+      githubCli,
+      ghAvailable: false,
+    })
+    expect(report.status).toBe("PASS")
+    expect(commands.length).toBeGreaterThan(0)
+    expect(commands.every((call) => call.command === githubCli)).toBe(true)
+    expect(commands.some((call) => call.command === "gh")).toBe(false)
+  })
+
+  it("validates the canonical executable independently of ambient PATH", () => {
+    const fileSystem = windowsGitHubFileSystem()
+    expect(resolveTrustedGitHubCliCommand({
+      platform: "win32",
+      ...fileSystem,
+    })).toBe("D:\\Program Files\\GitHub CLI\\gh.exe")
+  })
+
+  it.each([
+    ["installation root redirected outside", windowsGitHubFileSystem({
+      canonicalRoot: "D:\\Outside\\GitHub CLI",
+      canonicalExecutable: "D:\\Outside\\GitHub CLI\\gh.exe",
+    })],
+    ["executable redirected outside", windowsGitHubFileSystem({
+      canonicalExecutable: "D:\\Outside\\gh.exe",
+    })],
+  ])("rejects %s at the release-status consumption boundary", (_label, fileSystem) => {
+    expect(() => resolveTrustedGitHubCliCommand({
+      platform: "win32",
+      ...fileSystem,
+    })).toThrow(/approved root/iu)
+  })
+
   it("correlates exact-SHA CI with the authoritative production manifest", async () => {
     const { report } = await fixture({ deployments: [{ id: 42 }] })
     expect(report.status).toBe("PASS")
@@ -142,14 +306,6 @@ describe("release status", () => {
 
     const invalid = await fixture({ checkEvidence: { check_runs: [] } })
     expect(invalid.report.checks.find((item) => item.name === "exact-sha-ci")).toMatchObject({ status: "WARN", authority: "AUTHORITATIVE" })
-  })
-
-  it("continues with warnings when gh is missing", async () => {
-    const { report, commands } = await fixture({ ghAvailable: false })
-    expect(report.status).toBe("PASS")
-    expect(commands).toHaveLength(0)
-    expect(report.checks.find((item) => item.name === "exact-sha-ci")?.status).toBe("WARN")
-    expect(report.warnings.join(" ")).toMatch(/gh is missing/i)
   })
 
   it("continues when GitHub Checks are temporarily inaccessible", async () => {

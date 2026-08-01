@@ -9,6 +9,7 @@ import {
   parseVerificationArgs,
   planFocusedVerification,
   resolveTrustedNpmCli,
+  resolveTrustedGitHubCli,
   resolveTrustedWindowsRuntime,
   runFocusedVerification,
   runPrVerification,
@@ -38,6 +39,8 @@ const TEST_WINDOWS_RUNTIME = process.platform === "win32"
   }
   : null
 const RELEASE_IDENTITIES = {
+  "repository-context": "repository-context:recipe-genie",
+  "supported-runtime": "supported-runtime:node-22.23.1:npm-10.9.8",
   "github-repository": "github-repository:aaron8819/recipegenie",
   "branch-head": `github-branch:aaron8819/recipegenie:main:${SHA}`,
   "exact-sha-ci": `github-checks:aaron8819/recipegenie:${SHA}`,
@@ -82,6 +85,8 @@ function completeReleaseReport(overrides = {}) {
       "production-manifest",
       "deployed-sha",
       "supabase-project-ref",
+      "repository-context",
+      "supported-runtime",
     ].map((name) => ({ name, status: "PASS", authority: "AUTHORITATIVE", detail: "complete" })),
     warnings: [],
     nextAction: "No release action is required.",
@@ -152,6 +157,41 @@ describe("trusted npm execution", () => {
       programFiles,
       powerShellExecutable: `${programFiles}\\PowerShell\\7\\pwsh.exe`,
       shell: `${systemRoot}\\System32\\cmd.exe`,
+    }
+  }
+
+  function windowsGitHubFileSystem(runtime, {
+    canonicalProgramFiles = runtime.programFiles,
+    canonicalRoot = `${canonicalProgramFiles}\\GitHub CLI`,
+    canonicalExecutable = `${canonicalRoot}\\gh.exe`,
+    executableExists = true,
+  } = {}) {
+    const installationRoot = `${runtime.programFiles}\\GitHub CLI`
+    const expectedExecutable = `${installationRoot}\\gh.exe`
+    const canonicalPaths = new Map([
+      [runtime.programFiles.toLowerCase(), canonicalProgramFiles],
+      [installationRoot.toLowerCase(), canonicalRoot],
+      [expectedExecutable.toLowerCase(), canonicalExecutable],
+    ])
+    const directoryPaths = new Set([
+      runtime.programFiles,
+      installationRoot,
+      canonicalProgramFiles,
+      canonicalRoot,
+    ].map((value) => value.toLowerCase()))
+    const filePaths = new Set(
+      executableExists
+        ? [expectedExecutable, canonicalExecutable].map((value) => value.toLowerCase())
+        : [],
+    )
+    return {
+      canonicalize: (value) => canonicalPaths.get(value.toLowerCase()) || value,
+      pathType(value) {
+        const normalized = value.toLowerCase()
+        if (directoryPaths.has(normalized)) return "directory"
+        if (filePaths.has(normalized)) return "file"
+        return null
+      },
     }
   }
 
@@ -293,6 +333,152 @@ describe("trusted npm execution", () => {
     expect(env.Path).toContain(`${runtime.systemRoot}\\System32`)
     expect(env.Path).toContain(`${runtime.programFiles}\\PowerShell\\7`)
     expect(Object.keys(env).filter((key) => key.toLowerCase() === "path")).toEqual(["Path"])
+  })
+
+  it.each([
+    ["default Windows roots", windowsRuntime()],
+    ["non-C Windows roots with spaces", windowsRuntime("D:\\Windows", "D:\\Program Files")],
+  ])("supplies trusted release prerequisites for %s", (_label, runtime) => {
+    const fileSystem = windowsGitHubFileSystem(runtime)
+    const env = createTrustedChildEnvironment({
+      environment: {
+        ...process.env,
+        DATABASE_URL: "sentinel-database",
+        GH_TOKEN: "sentinel-github-allowed",
+        npm_config_user_agent: "npm/0.0.0 node/v0.0.0",
+        VERCEL_TOKEN: "sentinel-vercel",
+      },
+      mode: "release",
+      platform: "win32",
+      windowsRuntime: runtime,
+      pathExists: () => true,
+      ...fileSystem,
+    })
+    expect(env.Path).not.toContain(`${runtime.programFiles}\\GitHub CLI`)
+    expect(env.RG_VERIFICATION_GITHUB_CLI).toBe(
+      `${runtime.programFiles}\\GitHub CLI\\gh.exe`,
+    )
+    expect(env.RG_VERIFICATION_WINDOWS_PROGRAM_FILES).toBe(runtime.programFiles)
+    expect(env.GH_TOKEN).toBe("sentinel-github-allowed")
+    expect(env.DATABASE_URL).toBeUndefined()
+    expect(env.VERCEL_TOKEN).toBeUndefined()
+    expect(env.npm_config_user_agent).toBe("npm/10.9.8 node/v22.23.1")
+  })
+
+  it("preserves POSIX release roots while replacing npm lifecycle identity", () => {
+    const env = createTrustedChildEnvironment({
+      environment: {
+        ...process.env,
+        npm_config_user_agent: "npm/0.0.0 node/v0.0.0",
+      },
+      mode: "release",
+      nodeExecutable: "/opt/hostedtoolcache/node/22.23.1/x64/bin/node",
+      npmExecutable: resolveTrustedNpmCli(),
+      platform: "linux",
+      pathExists: () => true,
+      pathType: (value) => value === "/usr/local/bin/gh" ? "file" : "directory",
+      canonicalize: (value) => value,
+    })
+    expect(env.PATH).toContain("/usr/bin")
+    expect(env.PATH).not.toContain("GitHub CLI")
+    expect(env.RG_VERIFICATION_GITHUB_CLI).toBe("/usr/local/bin/gh")
+    expect(env.SHELL).toBe("/bin/sh")
+    expect(env.npm_config_user_agent).toBe("npm/10.9.8 node/v22.23.1")
+  })
+
+  it("accepts Windows casing differences for the exact canonical executable", () => {
+    const runtime = windowsRuntime("D:\\Windows", "D:\\Program Files")
+    const fileSystem = windowsGitHubFileSystem(runtime, {
+      canonicalProgramFiles: "d:\\program files",
+      canonicalRoot: "d:\\program files\\github cli",
+      canonicalExecutable: "d:\\program files\\github cli\\GH.EXE",
+    })
+    expect(resolveTrustedGitHubCli({
+      environment: {
+        RG_VERIFICATION_GITHUB_CLI: "D:\\PROGRAM FILES\\GITHUB CLI\\gh.exe",
+      },
+      platform: "win32",
+      windowsRuntime: runtime,
+      ...fileSystem,
+    })).toBe("d:\\program files\\github cli\\GH.EXE")
+  })
+
+  it.each([
+    ["installation root redirected outside", {
+      canonicalRoot: "D:\\Outside\\GitHub CLI",
+      canonicalExecutable: "D:\\Outside\\GitHub CLI\\gh.exe",
+    }],
+    ["executable redirected outside", {
+      canonicalExecutable: "D:\\Outside\\gh.exe",
+    }],
+  ])("rejects %s through canonical containment", (_label, redirects) => {
+    const runtime = windowsRuntime("D:\\Windows", "D:\\Program Files")
+    expect(() => resolveTrustedGitHubCli({
+      platform: "win32",
+      windowsRuntime: runtime,
+      ...windowsGitHubFileSystem(runtime, redirects),
+    })).toThrow(/escapes its trusted installation root/iu)
+  })
+
+  it("accepts an executable link whose canonical target remains inside the root", () => {
+    const runtime = windowsRuntime("D:\\Windows", "D:\\Program Files")
+    const canonicalExecutable = "D:\\Program Files\\GitHub CLI\\bin\\gh.exe"
+    expect(resolveTrustedGitHubCli({
+      platform: "win32",
+      windowsRuntime: runtime,
+      ...windowsGitHubFileSystem(runtime, { canonicalExecutable }),
+    })).toBe(canonicalExecutable)
+  })
+
+  it("rejects a supplied executable outside the approved root", () => {
+    const runtime = windowsRuntime()
+    expect(() => resolveTrustedGitHubCli({
+      environment: { RG_VERIFICATION_GITHUB_CLI: "C:\\Tools\\gh.exe" },
+      platform: "win32",
+      windowsRuntime: runtime,
+      ...windowsGitHubFileSystem(runtime),
+    })).toThrow(/not the trusted canonical executable/iu)
+  })
+
+  it("rejects a missing gh.exe", () => {
+    const runtime = windowsRuntime()
+    expect(() => resolveTrustedGitHubCli({
+      platform: "win32",
+      windowsRuntime: runtime,
+      ...windowsGitHubFileSystem(runtime, { executableExists: false }),
+    })).toThrow(/installation is unavailable or invalid/iu)
+  })
+
+  it("does not substitute gh.cmd for the required gh.exe", () => {
+    const runtime = windowsRuntime()
+    const fileSystem = windowsGitHubFileSystem(runtime, { executableExists: false })
+    expect(() => resolveTrustedGitHubCli({
+      platform: "win32",
+      windowsRuntime: runtime,
+      canonicalize: fileSystem.canonicalize,
+      pathType(value) {
+        if (value.toLowerCase().endsWith("\\gh.cmd")) return "file"
+        return fileSystem.pathType(value)
+      },
+    })).toThrow(/installation is unavailable or invalid/iu)
+  })
+
+  it("requires GitHub CLI only for release-mode child environments", () => {
+    const runtime = windowsRuntime()
+    expect(() => createTrustedChildEnvironment({
+      mode: "ordinary",
+      platform: "win32",
+      windowsRuntime: runtime,
+      pathExists: () => true,
+      pathType: () => null,
+    })).not.toThrow()
+    expect(() => createTrustedChildEnvironment({
+      mode: "release",
+      platform: "win32",
+      windowsRuntime: runtime,
+      pathExists: () => true,
+      pathType: () => null,
+    })).toThrow(/GitHub CLI installation/iu)
   })
 
   it("uses the exact trusted non-C PowerShell executable for migration tooling", () => {
@@ -509,6 +695,105 @@ describe("release verification composition", () => {
     })
     expect(report.status).toBe("PASS")
     expect(report.checks[0].status).toBe("PASS")
+  })
+
+  it.each([
+    ["repository-context", ["repository-context"]],
+    ["supported-runtime", ["supported-runtime"]],
+    ["both prerequisites", ["repository-context", "supported-runtime"]],
+  ])("rejects a report missing %s", (_label, missing) => {
+    const value = completeReleaseReport()
+    value.checks = value.checks.filter((item) => !missing.includes(item.name))
+    const report = runReleaseVerification({
+      commandRunner: () => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify(value),
+      }),
+    })
+    expect(report.status).toBe("FAIL")
+    expect(report.checks[0].detail).toContain(missing.join(", "))
+    for (const name of missing) {
+      expect(report.releaseAuthorityEvaluation).toContainEqual(
+        expect.objectContaining({ name, status: "MISSING", effect: "REJECTED" }),
+      )
+    }
+  })
+
+  it.each(["repository-context", "supported-runtime"])(
+    "rejects a failed %s prerequisite",
+    (name) => {
+      const value = completeReleaseReport()
+      value.checks = value.checks.map((item) => item.name === name
+        ? { ...item, status: "FAIL", detail: "prerequisite failed" }
+        : item)
+      const report = runReleaseVerification({
+        commandRunner: () => ({
+          exitCode: 0,
+          stderr: "",
+          stdout: JSON.stringify(value),
+        }),
+      })
+      expect(report.status).toBe("FAIL")
+      expect(report.checks[0].detail).toContain(name)
+      expect(report.releaseAuthorityEvaluation.find((item) => item.name === name))
+        .toMatchObject({ status: "FAIL", effect: "REJECTED" })
+    },
+  )
+
+  it("rejects a malformed prerequisite with human and JSON failure output", () => {
+    const value = completeReleaseReport()
+    value.checks = value.checks.map((item) => item.name === "repository-context"
+      ? { ...item, detail: null }
+      : item)
+    const report = runReleaseVerification({
+      commandRunner: () => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify(value),
+      }),
+    })
+    expect(report.status).toBe("FAIL")
+    expect(renderVerificationText(report)).toContain(
+      "malformed evidence for repository-context",
+    )
+    expect(JSON.parse(renderVerificationJson(report)).checks[0].detail).toContain(
+      "malformed evidence for repository-context",
+    )
+  })
+
+  it("reports both prerequisites exactly once as required authorities", () => {
+    const report = runReleaseVerification({
+      commandRunner: () => ({
+        exitCode: 0,
+        stderr: "",
+        stdout: JSON.stringify(completeReleaseReport()),
+      }),
+    })
+    for (const name of ["repository-context", "supported-runtime"]) {
+      expect(report.releaseAuthorityEvaluation.filter((item) => item.name === name))
+        .toHaveLength(1)
+      expect(report.releaseAuthorityEvaluation.find((item) => item.name === name))
+        .toMatchObject({ requirementStatus: "REQUIRED", effect: "SATISFIES_REQUIRED" })
+      expect(report.releaseAuthorityIdentities[name]).toBe(RELEASE_IDENTITIES[name])
+    }
+  })
+
+  it("shows missing prerequisites in human and JSON output", () => {
+    const value = completeReleaseReport()
+    value.checks = value.checks.filter((item) => item.name !== "supported-runtime")
+    const report = runReleaseVerification({
+      commandRunner: () => ({ exitCode: 0, stderr: "", stdout: JSON.stringify(value) }),
+    })
+    expect(renderVerificationText(report)).toContain(
+      "release supported-runtime: MISSING [requirement=REQUIRED",
+    )
+    expect(JSON.parse(renderVerificationJson(report)).releaseAuthorityEvaluation)
+      .toContainEqual(expect.objectContaining({
+        name: "supported-runtime",
+        status: "MISSING",
+        effect: "REJECTED",
+      }))
   })
 
   it("accepts deployment evidence only as optional corroborative PASS", () => {
