@@ -3,6 +3,7 @@ import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeShoppingItems } from "./shopping-list-merging"
 import { createShoppingPurchaseKey } from "./shopping-list-normalization"
 import { ensureShoppingItemsHaveRowIds } from "./shopping-row-identity"
+import { matchesIngredientExclusionReason } from "./ingredient-exclusion-families"
 
 export const SHOPPING_NORMALIZATION_VERSION = 2
 
@@ -226,9 +227,64 @@ function isConfidentLegacyReplacement(
   )
 }
 
+function contributingItemsFor(
+  contributions: RecipeShoppingContribution[],
+  derived: ContributionAwareShoppingItem
+): ShoppingContributionItem[] {
+  const key = contributionKey(derived)
+  const baseKey = key.split("|category:")[0]
+
+  return [...contributions]
+    .sort((left, right) => left.recipeId.localeCompare(right.recipeId))
+    .flatMap((contribution) => contribution.items)
+    .filter((item) => {
+      const candidateKey = contributionKey(item)
+      return candidateKey === key ||
+        (candidateKey === baseKey && item.categoryKey === derived.categoryKey)
+    })
+}
+
+function familyExclusionReason(
+  item: ShoppingContributionItem
+): string | undefined {
+  return matchesIngredientExclusionReason(
+    { item: item.item, amount: item.amount, unit: item.unit },
+    item.excludedBy
+  )
+    ? item.excludedBy
+    : undefined
+}
+
+function computedProjectionDefault(
+  contributions: RecipeShoppingContribution[],
+  derived: ContributionAwareShoppingItem
+): {
+  bucket: ShoppingContributionBucket
+  excludedBy?: string
+  clearExcludedBy?: boolean
+} {
+  const contributingItems = contributingItemsFor(contributions, derived)
+  const firstFamilyReason = contributingItems
+    .map(familyExclusionReason)
+    .find(Boolean)
+  const firstBucket = contributingItems[0]?.bucket || "items"
+
+  if (!firstFamilyReason) return { bucket: firstBucket }
+
+  const hasUnanimousFamilyExclusion = contributingItems.every(
+    (item) =>
+      item.bucket === "excluded" &&
+      familyExclusionReason(item) === firstFamilyReason
+  )
+  return hasUnanimousFamilyExclusion
+    ? { bucket: "excluded", excludedBy: firstFamilyReason }
+    : { bucket: "items", clearExcludedBy: true }
+}
+
 function captureOverrides(
   currentList: ShoppingList,
   previousDerived: ContributionAwareShoppingItem[],
+  previousContributions: RecipeShoppingContribution[],
   existingOverrides: ShoppingContributionOverrides
 ): ShoppingContributionOverrides {
   const overrides = { ...existingOverrides }
@@ -272,15 +328,25 @@ function captureOverrides(
     }
 
     const { item, bucket } = currentMatch
+    const previousDefault = computedProjectionDefault(
+      previousContributions,
+      derived
+    )
+    const existingBucket = overrides[key]?.bucket
     const nextOverride: ShoppingContributionOverride = {
       ...overrides[key],
-      bucket,
       rowId: item.rowId,
       checked: item.checked,
       displayName: item.item,
       categoryKey: item.categoryKey,
       categoryOrder: item.categoryOrder,
       deleted: false,
+    }
+
+    if (existingBucket !== undefined || bucket !== previousDefault.bucket) {
+      nextOverride.bucket = bucket
+    } else {
+      delete nextOverride.bucket
     }
 
     if (!quantitiesEqual(item, derived)) {
@@ -360,7 +426,12 @@ export function projectShoppingContributions({
   const replacingIds = new Set(replacingRecipeIds)
   const overrides = clearAll
     ? {}
-    : captureOverrides(currentList, previousDerived, existingOverrides || {})
+    : captureOverrides(
+        currentList,
+        previousDerived,
+        previousContributions,
+        existingOverrides || {}
+      )
 
   const manualByBucket: Record<ShoppingContributionBucket, ShoppingItem[]> = {
     items: [],
@@ -392,19 +463,18 @@ export function projectShoppingContributions({
   for (const derived of nextDerived) {
     const key = contributionKey(derived)
     const override = findOverride(overrides, key, derived)
-    const projected = applyOverride(derived, override)
+    let projected = applyOverride(derived, override)
     if (!projected) continue
 
-    const defaultBucket = [...nextContributions]
-      .sort((left, right) => left.recipeId.localeCompare(right.recipeId))
-      .flatMap((contribution) => contribution.items)
-      .find((item) => {
-        const candidateKey = contributionKey(item)
-        const baseKey = key.split("|category:")[0]
-        return candidateKey === key ||
-          (candidateKey === baseKey && item.categoryKey === derived.categoryKey)
-      })?.bucket || "items"
-    projectedByBucket[override?.bucket || defaultBucket].push(projected)
+    const computedDefault = computedProjectionDefault(nextContributions, derived)
+    if (computedDefault.excludedBy) {
+      projected = { ...projected, excludedBy: computedDefault.excludedBy }
+    } else if (computedDefault.clearExcludedBy && projected.excludedBy) {
+      projected = { ...projected }
+      delete projected.excludedBy
+    }
+
+    projectedByBucket[override?.bucket || computedDefault.bucket].push(projected)
   }
 
   const items = ensureShoppingItemsHaveRowIds(

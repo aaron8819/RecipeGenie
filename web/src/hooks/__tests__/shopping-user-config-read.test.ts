@@ -34,6 +34,8 @@ describe("shopping user config reads", () => {
       .mockResolvedValueOnce({
         data: {
           excluded_keywords: ["salt"],
+          exclude_salt_variants: true,
+          exclude_black_pepper_variants: false,
           category_overrides: { garlic: "produce" },
         },
         error: null,
@@ -43,15 +45,17 @@ describe("shopping user config reads", () => {
 
     expect(config).toEqual({
       excluded_keywords: ["salt"],
+      exclude_salt_variants: true,
+      exclude_black_pepper_variants: false,
       category_overrides: { garlic: "produce" },
     })
     expect(select).toHaveBeenNthCalledWith(
       1,
-      "excluded_keywords, category_overrides, shopping_item_order"
+      "excluded_keywords, exclude_salt_variants, exclude_black_pepper_variants, category_overrides, shopping_item_order"
     )
     expect(select).toHaveBeenNthCalledWith(
       2,
-      "excluded_keywords, category_overrides"
+      "excluded_keywords, exclude_salt_variants, exclude_black_pepper_variants, category_overrides"
     )
   })
 

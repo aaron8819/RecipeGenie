@@ -1,6 +1,6 @@
 # Pantry Domain Reference
 
-Use this doc when working on pantry items, excluded keywords, pantry-driven recipe matching, or pantry-to-shopping flows.
+Use this doc when working on pantry items, shopping exclusions, pantry-driven recipe matching, or pantry-to-shopping flows.
 
 This is a domain reference. Canonical project-wide boundaries live in [`./ARCHITECTURE_GUARDRAILS.md`](./ARCHITECTURE_GUARDRAILS.md).
 
@@ -8,7 +8,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 | File | Responsibility |
 |------|----------------|
-| `web/src/components/pantry/pantry-list.tsx` | Main pantry UI for pantry items and excluded keywords. |
+| `web/src/components/pantry/pantry-list.tsx` | Main pantry UI for pantry items, built-in family exclusions, and exact exclusions. |
 | `web/src/components/pantry/what-can-i-make.tsx` | Pantry-driven recipe-match view. |
 | `web/src/hooks/use-pantry.ts` | Pantry item and excluded-keyword data access. |
 | `web/src/hooks/use-pantry-match.ts` | Pantry match orchestration against recipe data. |
@@ -33,8 +33,20 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 ### Excluded keywords
 
-- Excluded-keyword matching is exact and case-insensitive.
+- Exact-exclusion matching uses the whole normalized ingredient name, is
+  case-insensitive, and does not perform substring matching.
 - This is intentionally stricter than fuzzy pantry matching.
+
+### Always-excluded families
+
+- The Pantry excluded-items card exposes only the opt-in Salt variants and
+  Black pepper variants settings. Their fixed alias lists are explained beside
+  accessible checkboxes and are persisted independently in `user_config`.
+- Settings affect newly generated recipe contributions only. Clear/reset plus
+  regeneration is the reliable boundary for rebuilding a shopping list under
+  current settings.
+- Exact exclusions remain a separate section and count; changing a family
+  setting does not change `excluded_keywords`.
 
 ### What Can I Make
 
@@ -46,4 +58,4 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - See [`shopping-component.md`](./shopping-component.md) for the downstream shopping behavior that consumes pantry data.
 - See [`./project_overview.md`](./project_overview.md) for the broader architecture map.
 
-Last updated: 2026-03-07
+Last updated: 2026-08-01

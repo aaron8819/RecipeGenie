@@ -30,6 +30,13 @@ import {
   scalePackageV1,
   scaleQuantityV1,
 } from "./recipe-quantity"
+import {
+  INGREDIENT_EXCLUSION_REASONS,
+  isIngredientExclusionEnabled,
+  matchIngredientExclusionFamily,
+  type IngredientExclusionFamily,
+  type IngredientExclusionSettings,
+} from "./ingredient-exclusion-families"
 
 export interface ShoppingListResult {
   items: ShoppingItem[]
@@ -158,7 +165,11 @@ export function generateShoppingList(
   scale: number = 1.0,
   userCategoryOverrides?: Record<string, string> | null,
   shoppingItemOrder?: ShoppingItemOrderPreferences | null,
-  exactScaleV1?: RationalV1
+  exactScaleV1?: RationalV1,
+  ingredientExclusionSettings: IngredientExclusionSettings = {
+    exclude_salt_variants: false,
+    exclude_black_pepper_variants: false,
+  }
 ): ShoppingListResult {
   // Get pantry items as a set for quick lookup
   const pantrySet = new Set(
@@ -186,6 +197,7 @@ export function generateShoppingList(
       exactPackageV1?: ShoppingItem["exactPackageV1"]
       exactAuthoredUnit?: string
       structuredSourceKey?: string
+      exclusionFamily: IngredientExclusionFamily | null
     }
   >()
 
@@ -226,6 +238,7 @@ export function generateShoppingList(
       const compatibilityUnit = exactPackage
         ? `${exactPackage.type} (${exactPackage.size.lexeme} ${exactPackage.size.authoredUnit})`
         : ingredient.unit || ""
+      const exclusionFamily = matchIngredientExclusionFamily(ingredient)
       const purchase = normalizeShoppingPurchase({
         item: ingredient.item,
         amount:
@@ -288,6 +301,10 @@ export function generateShoppingList(
 
       if (ingredientMap.has(key)) {
         const existing = ingredientMap.get(key)!
+        existing.exclusionFamily =
+          existing.exclusionFamily === exclusionFamily
+            ? exclusionFamily
+            : null
         let amountToMerge = amount
         existing.preserveExactFraction =
           existing.preserveExactFraction && preserveExactFraction && existing.unit === unit
@@ -356,6 +373,7 @@ export function generateShoppingList(
           exactAuthoredUnit:
             sourceAwareStructured ? resolved.authoredUnit : undefined,
           structuredSourceKey,
+          exclusionFamily,
         })
       }
     }
@@ -405,6 +423,17 @@ export function generateShoppingList(
         excluded.push({
           ...shoppingItem,
           excludedBy: matchingKeyword,
+        })
+      } else if (
+        ingredient.exclusionFamily &&
+        isIngredientExclusionEnabled(
+          ingredient.exclusionFamily,
+          ingredientExclusionSettings
+        )
+      ) {
+        excluded.push({
+          ...shoppingItem,
+          excludedBy: INGREDIENT_EXCLUSION_REASONS[ingredient.exclusionFamily],
         })
       } else {
         shoppingList.push(shoppingItem)

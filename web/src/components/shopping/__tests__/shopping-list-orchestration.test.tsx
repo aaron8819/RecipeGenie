@@ -122,6 +122,8 @@ function makeConfig(overrides: Partial<UserConfig> = {}): UserConfig {
     custom_categories: [],
     category_order: null,
     shopping_item_order: {},
+    exclude_salt_variants: false,
+    exclude_black_pepper_variants: false,
     excluded_keywords: [],
     history_exclusion_days: 10,
     week_start_day: 1,

@@ -345,6 +345,8 @@ export type Database = {
           custom_categories: Json | null
           default_selection: Json | null
           enabled_planner_categories: string[] | null
+          exclude_black_pepper_variants: boolean
+          exclude_salt_variants: boolean
           excluded_days: number[] | null
           excluded_keywords: string[] | null
           history_exclusion_days: number | null
@@ -362,6 +364,8 @@ export type Database = {
           custom_categories?: Json | null
           default_selection?: Json | null
           enabled_planner_categories?: string[] | null
+          exclude_black_pepper_variants?: boolean
+          exclude_salt_variants?: boolean
           excluded_days?: number[] | null
           excluded_keywords?: string[] | null
           history_exclusion_days?: number | null
@@ -379,6 +383,8 @@ export type Database = {
           custom_categories?: Json | null
           default_selection?: Json | null
           enabled_planner_categories?: string[] | null
+          exclude_black_pepper_variants?: boolean
+          exclude_salt_variants?: boolean
           excluded_days?: number[] | null
           excluded_keywords?: string[] | null
           history_exclusion_days?: number | null

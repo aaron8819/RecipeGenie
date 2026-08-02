@@ -11,6 +11,7 @@ const addKeywordsMutate = vi.fn()
 const removeKeywordMutate = vi.fn()
 const removeKeywordMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
+const updateIngredientExclusionMutate = vi.fn()
 const pantryItemsState = {
   data: [] as Array<{ id: string; item: string; user_id?: string; created_at?: string }>,
   isLoading: false,
@@ -20,6 +21,17 @@ const excludedKeywordsState = {
   data: [] as string[],
   isLoading: false,
   isFetching: false,
+}
+const userConfigState = {
+  data: {
+    exclude_salt_variants: false,
+    exclude_black_pepper_variants: true,
+  },
+  isLoading: false,
+  isError: false,
+}
+const ingredientExclusionMutationState = {
+  isPending: false,
 }
 
 vi.mock("@/hooks/use-pantry", () => ({
@@ -59,6 +71,14 @@ vi.mock("@/hooks/use-undo-toast", () => ({
   }),
 }))
 
+vi.mock("@/hooks/shared/user-config", () => ({
+  useUserConfig: () => userConfigState,
+  useUpdateIngredientExclusionSetting: () => ({
+    mutate: updateIngredientExclusionMutate,
+    isPending: ingredientExclusionMutationState.isPending,
+  }),
+}))
+
 describe("PantryList", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -68,6 +88,11 @@ describe("PantryList", () => {
     excludedKeywordsState.data = []
     excludedKeywordsState.isLoading = false
     excludedKeywordsState.isFetching = false
+    userConfigState.data.exclude_salt_variants = false
+    userConfigState.data.exclude_black_pepper_variants = true
+    userConfigState.isLoading = false
+    userConfigState.isError = false
+    ingredientExclusionMutationState.isPending = false
     removeKeywordMutateAsync.mockResolvedValue(undefined)
   })
 
@@ -116,6 +141,64 @@ describe("PantryList", () => {
     expect(screen.getByText(/use exact keywords for ingredients that should stay out of shopping/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /add pantry items/i })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /add excluded keywords/i })).toBeInTheDocument()
+  })
+
+  it("renders accessible family settings above separate exact exclusions", () => {
+    render(<PantryList />)
+
+    const salt = screen.getByRole("checkbox", { name: "Salt variants" })
+    const pepper = screen.getByRole("checkbox", { name: "Black pepper variants" })
+    expect(salt).not.toBeChecked()
+    expect(pepper).toBeChecked()
+    expect(salt).toHaveAccessibleDescription(
+      "Salt variants include salt, kosher salt, sea salt, and table salt."
+    )
+    expect(pepper).toHaveAccessibleDescription(
+      "Black pepper variants include black pepper, ground black pepper, freshly ground black pepper, and cracked black pepper."
+    )
+    expect(screen.getByRole("heading", { name: "Always exclude" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Exact exclusions" })).toBeInTheDocument()
+    expect(screen.getByText(/clear\/reset the shopping list, then regenerate/i)).toBeInTheDocument()
+    expect(screen.getByText(/does not perform substring matching/i)).toBeInTheDocument()
+  })
+
+  it("saves one family setting and shows a failure toast", () => {
+    render(<PantryList />)
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Salt variants" }))
+
+    expect(updateIngredientExclusionMutate).toHaveBeenCalledWith(
+      { setting: "exclude_salt_variants", enabled: true },
+      expect.objectContaining({ onError: expect.any(Function) })
+    )
+    const options = updateIngredientExclusionMutate.mock.calls[0][1]
+    act(() => options.onError())
+    expect(undoToastShow).toHaveBeenCalledWith({
+      message: "Could not save the shopping exclusion setting. Try again.",
+      duration: 4000,
+    })
+  })
+
+  it("disables family settings while their serialized write is pending", () => {
+    ingredientExclusionMutationState.isPending = true
+
+    render(<PantryList />)
+
+    expect(screen.getByRole("checkbox", { name: "Salt variants" })).toBeDisabled()
+    expect(screen.getByRole("checkbox", { name: "Black pepper variants" })).toBeDisabled()
+  })
+
+  it("shows family-setting loading and error states", () => {
+    userConfigState.isLoading = true
+    const { rerender } = render(<PantryList />)
+    expect(screen.getByText("Loading exclusion settings...")).toBeInTheDocument()
+
+    userConfigState.isLoading = false
+    userConfigState.isError = true
+    rerender(<PantryList />)
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not load exclusion settings. Try refreshing the page."
+    )
   })
 
   it("uses specific loading copy for pantry items and excluded keywords", () => {

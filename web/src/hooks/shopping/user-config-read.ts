@@ -4,6 +4,8 @@ import { getSupabase } from "@/lib/supabase/client"
 
 export type ShoppingUserConfig = {
   excluded_keywords?: string[]
+  exclude_salt_variants?: boolean
+  exclude_black_pepper_variants?: boolean
   category_overrides?: Record<string, string>
   shopping_item_order?: unknown
 }
@@ -49,8 +51,8 @@ async function fetchConfigWithOptionalShoppingItemOrder(
 
 export function fetchShoppingGenerationConfig(): Promise<ShoppingUserConfig> {
   return fetchConfigWithOptionalShoppingItemOrder(
-    "excluded_keywords, category_overrides, shopping_item_order",
-    "excluded_keywords, category_overrides"
+    "excluded_keywords, exclude_salt_variants, exclude_black_pepper_variants, category_overrides, shopping_item_order",
+    "excluded_keywords, exclude_salt_variants, exclude_black_pepper_variants, category_overrides"
   )
 }
 
