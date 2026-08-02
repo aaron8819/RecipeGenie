@@ -344,6 +344,8 @@ function userConfigFixture(overrides: Partial<UserConfig> = {}): UserConfig {
     enabled_planner_categories: null,
     history_exclusion_days: 14,
     excluded_days: [],
+    exclude_salt_variants: false,
+    exclude_black_pepper_variants: false,
     excluded_keywords: [],
     onboarding_completed_at: null,
     preferred_days: [],

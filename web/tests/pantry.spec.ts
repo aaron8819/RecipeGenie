@@ -98,6 +98,40 @@ test.describe('Pantry Management', () => {
     await expect(page.getByRole('button', { name: /^undo$/i })).toBeVisible()
   })
 
+  test('persists Salt and Black pepper family exclusions independently @core', async ({ page, navigateToTab }) => {
+    const salt = page.getByRole('checkbox', { name: 'Salt variants' })
+    const blackPepper = page.getByRole('checkbox', { name: 'Black pepper variants' })
+    await expect(salt).toBeVisible()
+    await expect(blackPepper).toBeVisible()
+
+    const originalSalt = await salt.isChecked()
+    const originalBlackPepper = await blackPepper.isChecked()
+    const saveSalt = page.waitForResponse((response) =>
+      response.request().method() === 'PATCH' &&
+      response.url().includes('/rest/v1/user_config')
+    )
+    await salt.setChecked(!originalSalt)
+    expect((await saveSalt).ok()).toBe(true)
+    await expect(salt).toBeChecked({ checked: !originalSalt })
+    await expect(blackPepper).toBeChecked({ checked: originalBlackPepper })
+
+    await page.reload()
+    await navigateToTab('pantry')
+    await expect(
+      page.getByRole('checkbox', { name: 'Salt variants' })
+    ).toBeChecked({ checked: !originalSalt })
+    await expect(
+      page.getByRole('checkbox', { name: 'Black pepper variants' })
+    ).toBeChecked({ checked: originalBlackPepper })
+
+    const restoreSalt = page.waitForResponse((response) =>
+      response.request().method() === 'PATCH' &&
+      response.url().includes('/rest/v1/user_config')
+    )
+    await page.getByRole('checkbox', { name: 'Salt variants' }).setChecked(originalSalt)
+    expect((await restoreSalt).ok()).toBe(true)
+  })
+
   test('uses mobile-sized remove touch targets @extended', async ({ page }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await page.reload()

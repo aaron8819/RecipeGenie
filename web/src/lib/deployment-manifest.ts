@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "014_add_recipe_yield_metadata"
+export const EXPECTED_LATEST_MIGRATION = "015_add_shopping_exclusion_settings"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

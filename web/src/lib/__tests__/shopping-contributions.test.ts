@@ -78,6 +78,145 @@ describe("authoritative recipe shopping contributions", () => {
     expect(SHOPPING_NORMALIZATION_VERSION).toBe(2)
   })
 
+  it("excludes a cross-contribution aggregate only for one unanimous built-in family", () => {
+    const recipeA = contribution("a", 1)
+    const recipeB = contribution("b", 2)
+    for (const recipe of [recipeA, recipeB]) {
+      recipe.items[0].item = "salt"
+      recipe.items[0].bucket = "excluded"
+      recipe.items[0].excludedBy = "Salt variants"
+    }
+
+    const result = project(list(), [], [recipeA, recipeB])
+
+    expect(result.shoppingList.items).toEqual([])
+    expect(result.shoppingList.excluded[0]).toMatchObject({
+      amount: 3,
+      excludedBy: "Salt variants",
+    })
+  })
+
+  it("keeps mixed family, bucket, and exact-reason aggregates visible", () => {
+    const family = contribution("a", 1)
+    family.items[0].item = "salt"
+    family.items[0].bucket = "excluded"
+    family.items[0].excludedBy = "Salt variants"
+    const visible = contribution("b", 2)
+    visible.items[0].item = "salt"
+    const otherFamily = contribution("c", 3)
+    otherFamily.items[0].item = "salt"
+    otherFamily.items[0].bucket = "excluded"
+    otherFamily.items[0].excludedBy = "Black pepper variants"
+    const exact = contribution("d", 4)
+    exact.items[0].item = "salt"
+    exact.items[0].bucket = "excluded"
+    exact.items[0].excludedBy = "salt"
+
+    for (const contributors of [
+      [family, visible],
+      [family, otherFamily],
+      [family, exact],
+    ]) {
+      const result = project(list(), [], contributors)
+      expect(result.shoppingList.excluded).toEqual([])
+      expect(result.shoppingList.items).toHaveLength(1)
+      expect(result.shoppingList.items[0].excludedBy).toBeUndefined()
+    }
+  })
+
+  it("preserves a lifecycle bucket override over family unanimity", () => {
+    const previous = contribution("a", 1)
+    previous.items[0].item = "salt"
+    previous.items[0].bucket = "excluded"
+    previous.items[0].excludedBy = "Salt variants"
+    const initial = project(list(), [], [previous])
+    const restored = list({
+      ...initial.shoppingList,
+      items: [initial.shoppingList.excluded[0]],
+      excluded: [],
+    })
+    const replacement = contribution("a", 2)
+    replacement.items[0].item = "salt"
+    replacement.items[0].bucket = "excluded"
+    replacement.items[0].excludedBy = "Salt variants"
+
+    const result = project(restored, [previous], [replacement])
+
+    expect(result.shoppingList.items).toHaveLength(1)
+    expect(result.shoppingList.excluded).toEqual([])
+    expect(result.overrides.salt.bucket).toBe("items")
+  })
+
+  it("does not preserve a derived family bucket over new mixed evidence", () => {
+    const family = contribution("a", 1)
+    family.items[0].item = "salt"
+    family.items[0].bucket = "excluded"
+    family.items[0].excludedBy = "Salt variants"
+    const initial = project(list(), [], [family])
+    const unmatched = contribution("b", 2)
+    unmatched.items[0].item = "salt"
+    unmatched.items[0].sources = [{
+      recipeId: "b",
+      recipeName: unmatched.recipeName,
+      originalItem: "salt",
+      preparationModifiers: ["finely chopped"],
+    }]
+
+    const result = project(
+      { ...list(), ...initial.shoppingList },
+      [family],
+      [family, unmatched]
+    )
+
+    expect(initial.shoppingList.excluded).toHaveLength(1)
+    expect(result.shoppingList.excluded).toEqual([])
+    expect(result.shoppingList.items[0]).toMatchObject({
+      item: "salt",
+      amount: 3,
+    })
+    expect(result.shoppingList.items[0].sources).toHaveLength(2)
+    expect(result.overrides.salt.bucket).toBeUndefined()
+  })
+
+  it.each([
+    ["Salt variants", "salt"],
+    ["Black pepper variants", "black pepper"],
+  ])(
+    "keeps an exact %s exclusion out of family consensus",
+    (reason, familyItem) => {
+      const exact = contribution("a", 1)
+      exact.items[0].item = reason
+      exact.items[0].bucket = "excluded"
+      exact.items[0].excludedBy = reason
+      const sameKeyVisible = contribution("b", 2)
+      sameKeyVisible.items[0].item = reason
+      const family = contribution("c", 3)
+      family.items[0].item = familyItem
+      family.items[0].bucket = "excluded"
+      family.items[0].excludedBy = reason
+      const familyVisible = contribution("d", 4)
+      familyVisible.items[0].item = familyItem
+
+      const result = project(list(), [], [
+        exact,
+        sameKeyVisible,
+        family,
+        familyVisible,
+      ])
+
+      expect(result.shoppingList.excluded).toEqual([
+        expect.objectContaining({
+          item: reason.toLowerCase(),
+          amount: 3,
+        }),
+      ])
+      expect(result.shoppingList.items).toEqual([
+        expect.objectContaining({ item: familyItem, amount: 7 }),
+      ])
+      expect(result.shoppingList.items[0].excludedBy).toBeUndefined()
+    }
+  )
+
   it("projects one frozen recipe contribution", () => {
     const result = project(list(), [], [contribution("a", 1)])
 
@@ -616,7 +755,7 @@ describe("authoritative recipe shopping contributions", () => {
 
     expect(result.shoppingList.items).toHaveLength(1)
     expect(result.shoppingList.already_have).toEqual([])
-    expect(result.overrides.milk.bucket).toBe("items")
+    expect(result.overrides.milk.bucket).toBeUndefined()
   })
 
   it("keeps an explicit deletion suppressed while undo can restore the prior row", () => {

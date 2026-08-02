@@ -47,7 +47,19 @@ Shopping generation takes selected recipes plus pantry/config data and produces 
 - `already_have`
 - `excluded`
 
-The aggregation pipeline normalizes ingredient names and units, merges compatible amounts, subtracts pantry items, applies exact-match excluded keywords, and then categorizes the remainder.
+The aggregation pipeline recognizes the two opt-in ingredient exclusion
+families from the complete structured ingredient immediately before purchase
+normalization, then preserves the existing normalization, compatible-amount
+merging, and categorization behavior. Final classification precedence is
+pantry, exact excluded keyword, enabled unanimous built-in family, then visible
+item. Every occurrence in an aggregate must independently match the same family.
+
+Frozen contribution projection keeps its existing bucket behavior unless a
+contributor carries `Salt variants` or `Black pepper variants`. In that case,
+the aggregate defaults to excluded only when every contributor is excluded for
+that same reason; mixed or unprovable aggregates default to visible. Persisted
+lifecycle overrides still win. No family provenance is added to sources and
+normalization version 2 is unchanged.
 
 Purchase identity uses an explicit structured canonicalization result: base name,
 identity modifiers, preparation modifiers, optionality, display name, and merge
@@ -88,4 +100,4 @@ npm run test -- --run
 npx playwright test shopping-list.spec.ts --project=chromium
 ```
 
-Last updated: 2026-03-11
+Last updated: 2026-08-01

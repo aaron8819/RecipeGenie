@@ -23,6 +23,13 @@ const recipeB = {
   updated_at: "2026-07-14T00:00:00.000Z",
 } as unknown as Recipe
 let recipeRows = [recipeB]
+let configRow: Record<string, unknown> = {
+  excluded_keywords: [],
+  exclude_salt_variants: false,
+  exclude_black_pepper_variants: false,
+  category_overrides: {},
+  shopping_item_order: {},
+}
 
 function storedContribution(recipeId: string, amount: number) {
   return {
@@ -121,11 +128,7 @@ const supabaseMock = {
       return {
         select: () => ({
           maybeSingle: async () => ({
-            data: {
-              excluded_keywords: [],
-              category_overrides: {},
-              shopping_item_order: {},
-            },
+            data: configRow,
             error: null,
           }),
         }),
@@ -149,12 +152,19 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => supabaseMock,
 }))
 
-import { POST } from "./route"
+import { DELETE, POST } from "./route"
 
 beforeEach(() => {
   vi.clearAllMocks()
   rpcAttempt = 0
   recipeRows = [recipeB]
+  configRow = {
+    excluded_keywords: [],
+    exclude_salt_variants: false,
+    exclude_black_pepper_variants: false,
+    category_overrides: {},
+    shopping_item_order: {},
+  }
   vi.spyOn(console, "info").mockImplementation(() => undefined)
   rpcMock.mockImplementation(async (functionName, args) => {
     if (functionName === "get_recipe_shopping_contribution_state") {
@@ -266,6 +276,197 @@ describe("recipe contribution command route", () => {
         ([name]) => name === "apply_recipe_shopping_contribution_uuid_command"
       )
     ).toHaveLength(0)
+  })
+
+  it("forwards enabled family settings into a newly generated contribution", async () => {
+    recipeRows = [{
+      ...recipeB,
+      ingredients: [{ item: "Kosher salt", amount: 1, unit: "tsp" }],
+    }]
+    configRow = {
+      ...configRow,
+      exclude_salt_variants: true,
+    }
+    const request = new Request("http://localhost/api/shopping/recipe-contributions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeIds: [RECIPE_B],
+        scale: 1,
+        idempotencyKey: "salt-family-b",
+      }),
+    })
+
+    const response = await POST(request)
+    const writeCalls = rpcMock.mock.calls.filter(
+      ([name]) => name === "apply_recipe_shopping_contribution_uuid_command"
+    )
+    const snapshotItems = writeCalls.at(-1)?.[1].p_contributions[0].snapshot.items
+
+    expect(response.status).toBe(200)
+    expect(snapshotItems).toEqual([
+      expect.objectContaining({
+        item: "kosher salt",
+        bucket: "excluded",
+        excludedBy: "Salt variants",
+      }),
+    ])
+  })
+
+  it("defaults missing family settings to false", async () => {
+    recipeRows = [{
+      ...recipeB,
+      ingredients: [{ item: "Black pepper", amount: 1, unit: "tsp" }],
+    }]
+    configRow = {
+      excluded_keywords: [],
+      category_overrides: {},
+      shopping_item_order: {},
+    }
+    const request = new Request("http://localhost/api/shopping/recipe-contributions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeIds: [RECIPE_B],
+        scale: 1,
+        idempotencyKey: "legacy-config-b",
+      }),
+    })
+
+    const response = await POST(request)
+    const writeCalls = rpcMock.mock.calls.filter(
+      ([name]) => name === "apply_recipe_shopping_contribution_uuid_command"
+    )
+    const snapshotItems = writeCalls.at(-1)?.[1].p_contributions[0].snapshot.items
+
+    expect(response.status).toBe(200)
+    expect(snapshotItems).toEqual([
+      expect.objectContaining({ item: "black pepper", bucket: "items" }),
+    ])
+  })
+
+  it("regenerates with enabled family settings only after an authoritative clear", async () => {
+    recipeRows = [{
+      ...recipeB,
+      ingredients: [{ item: "Kosher salt", amount: 1, unit: "tsp" }],
+    }]
+    let persistedState = {
+      list: { ...currentList([], 0, 0), items: [] },
+      contributions: [] as ReturnType<typeof storedContribution>[],
+    }
+    rpcMock.mockImplementation(async (functionName, args) => {
+      if (functionName === "get_recipe_shopping_contribution_state") {
+        return {
+          data: {
+            shopping_list: persistedState.list,
+            contributions: persistedState.contributions,
+          },
+          error: null,
+        }
+      }
+
+      const replacements = args.p_contributions as ReturnType<
+        typeof storedContribution
+      >[]
+      const replacementIds = new Set(
+        replacements.map((row) => row.recipe_uuid)
+      )
+      const removedIds = new Set(args.p_remove_recipe_uuids as string[])
+      persistedState = {
+        list: {
+          ...persistedState.list,
+          ...args.p_projection,
+          contribution_revision:
+            (persistedState.list.contribution_revision || 0) + 1,
+          contribution_overrides: args.p_contribution_overrides,
+        },
+        contributions: [
+          ...persistedState.contributions.filter(
+            (row) =>
+              !replacementIds.has(row.recipe_uuid) &&
+              !removedIds.has(row.recipe_uuid)
+          ),
+          ...replacements,
+        ],
+      }
+      return {
+        data: {
+          outcome: "applied",
+          shopping_list: persistedState.list,
+        },
+        error: null,
+      }
+    })
+
+    const firstResponse = await POST(new Request(
+      "http://localhost/api/shopping/recipe-contributions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipeIds: [RECIPE_B],
+          scale: 1,
+          idempotencyKey: "salt-before-clear",
+        }),
+      }
+    ))
+    const firstResult = await firstResponse.json()
+
+    expect(firstResponse.status, JSON.stringify(firstResult)).toBe(200)
+    expect(firstResult.shopping_list.items).toEqual([
+      expect.objectContaining({ item: "kosher salt" }),
+    ])
+    expect(firstResult.shopping_list.excluded).toEqual([])
+
+    configRow = { ...configRow, exclude_salt_variants: true }
+    expect(persistedState.contributions[0].snapshot.items[0]).toMatchObject({
+      item: "kosher salt",
+      bucket: "items",
+    })
+    expect(persistedState.list.items).toEqual([
+      expect.objectContaining({ item: "kosher salt" }),
+    ])
+    expect(persistedState.list.excluded).toEqual([])
+
+    const clearResponse = await DELETE(new Request(
+      "http://localhost/api/shopping/recipe-contributions",
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipeIds: [],
+          clearAll: true,
+          idempotencyKey: "clear-salt-list",
+        }),
+      }
+    ))
+    expect(clearResponse.status).toBe(200)
+    expect(persistedState.contributions).toEqual([])
+    expect(persistedState.list.items).toEqual([])
+    expect(persistedState.list.excluded).toEqual([])
+
+    const regeneratedResponse = await POST(new Request(
+      "http://localhost/api/shopping/recipe-contributions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipeIds: [RECIPE_B],
+          scale: 1,
+          idempotencyKey: "salt-after-clear",
+        }),
+      }
+    ))
+    const regeneratedResult = await regeneratedResponse.json()
+
+    expect(regeneratedResponse.status).toBe(200)
+    expect(regeneratedResult.shopping_list.items).toEqual([])
+    expect(regeneratedResult.shopping_list.excluded).toEqual([
+      expect.objectContaining({
+        item: "kosher salt",
+        excludedBy: "Salt variants",
+      }),
+    ])
   })
 
   it("rejects persisted exact scale that contradicts the numeric row scale", async () => {

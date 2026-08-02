@@ -19,6 +19,21 @@ describe("user-config", () => {
     expect(config.week_start_day).toBe(0)
   })
 
+  it("defaults missing or nullable family settings without changing exact exclusions", () => {
+    const legacy = {
+      ...DEFAULT_USER_CONFIG,
+      excluded_keywords: ["salt"],
+      exclude_salt_variants: undefined,
+      exclude_black_pepper_variants: null,
+    }
+
+    const config = resolveUserConfig(legacy as never, null)
+
+    expect(config.exclude_salt_variants).toBe(false)
+    expect(config.exclude_black_pepper_variants).toBe(false)
+    expect(config.excluded_keywords).toEqual(["salt"])
+  })
+
   it("uses canonical beef defaults and no legacy steak defaults", () => {
     expect(DEFAULT_RECIPE_CATEGORIES).toContain("beef")
     expect(DEFAULT_RECIPE_CATEGORIES).not.toContain("steak")

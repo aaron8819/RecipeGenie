@@ -209,6 +209,8 @@ function buildContribution(
   pantryItems: PantryItem[],
   config: {
     excluded_keywords?: string[] | null
+    exclude_salt_variants?: boolean | null
+    exclude_black_pepper_variants?: boolean | null
     category_overrides?: Record<string, string> | null
     shopping_item_order?: unknown
   },
@@ -222,7 +224,12 @@ function buildContribution(
     scale,
     config.category_overrides || null,
     normalizeShoppingItemOrderPreferences(config.shopping_item_order),
-    scaleV1
+    scaleV1,
+    {
+      exclude_salt_variants: config.exclude_salt_variants ?? false,
+      exclude_black_pepper_variants:
+        config.exclude_black_pepper_variants ?? false,
+    }
   )
   const withBucket = (
     bucket: ShoppingContributionItem["bucket"],
@@ -293,7 +300,7 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
         supabase.from("pantry_items").select("*"),
         supabase
           .from("user_config")
-          .select("excluded_keywords, category_overrides, shopping_item_order")
+          .select("excluded_keywords, exclude_salt_variants, exclude_black_pepper_variants, category_overrides, shopping_item_order")
           .maybeSingle(),
       ])
 
@@ -325,6 +332,8 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
     const pantryItems = (pantryResult.data || []) as PantryItem[]
     const config = (configResult.data || {}) as {
       excluded_keywords?: string[] | null
+      exclude_salt_variants?: boolean | null
+      exclude_black_pepper_variants?: boolean | null
       category_overrides?: Record<string, string> | null
       shopping_item_order?: unknown
     }

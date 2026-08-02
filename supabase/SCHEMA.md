@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-07-23*
+*Last updated: 2026-08-01*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -60,9 +60,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/012_enforce_uuid_active_recipe_writes.sql`
 - `supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql`
 - `supabase/migrations/014_add_recipe_yield_metadata.sql`
+- `supabase/migrations/015_add_shopping_exclusion_settings.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 14 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 15 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -81,6 +82,8 @@ Archived files are not replacement migrations and are not part of that chain.
   snapshot acceptance with private, non-executable structured quantity,
   package, rational, unit, and yield validators while preserving the numeric
   servings projection.
+- Migration 015 adds opt-in Salt-variant and Black-pepper-variant shopping
+  exclusions. Both settings are non-null and default to `false`.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -194,7 +197,9 @@ Stores user-specific configuration and preferences.
 | `user_id` | UUID | PRIMARY KEY, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the config |
 | `categories` | TEXT[] | DEFAULT ARRAY['chicken', 'beef', 'turkey', 'lamb', 'vegetarian'] | Available recipe categories |
 | `default_selection` | JSONB | DEFAULT '{"chicken": 2, "beef": 1, "turkey": 1, "lamb": 1, "vegetarian": 1}' | Default number of recipes per category for meal planning |
-| `excluded_keywords` | TEXT[] | DEFAULT '{}' | Keywords to exclude from recipe suggestions |
+| `excluded_keywords` | TEXT[] | DEFAULT '{}' | Whole normalized ingredient names to exclude from shopping generation |
+| `exclude_salt_variants` | BOOLEAN | NOT NULL, DEFAULT FALSE | Whether approved standalone Salt aliases are excluded from newly generated shopping contributions |
+| `exclude_black_pepper_variants` | BOOLEAN | NOT NULL, DEFAULT FALSE | Whether approved standalone Black pepper aliases are excluded from newly generated shopping contributions |
 | `history_exclusion_days` | INTEGER | DEFAULT 7 | Number of days to exclude recently made recipes |
 | `week_start_day` | INTEGER | DEFAULT 1 | Day of week that starts the meal plan (1 = Monday) |
 | `onboarding_completed_at` | TIMESTAMPTZ | DEFAULT NULL | Timestamp when the user completed onboarding |
@@ -703,11 +708,12 @@ The repository now uses a baseline-first bootstrap strategy:
 12. **012_enforce_uuid_active_recipe_writes.sql** - Required UUID authority for active recipe writes, derived compatibility mirrors, and added UUID-coordinated recipe deletion.
 13. **013_allow_uuid_shopping_contribution_replacement.sql** - Preserved UUID authority for content-only replacement of an existing contribution identity pair.
 14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and deep, atomic shared-snapshot validation for all copied recipe fields, including bounded instruction groups and images, exact quantities, ranges, packages, units, and yield metadata. Private validators are execution-revoked and the authenticated acceptance RPC rejects the whole snapshot before any recipient recipe or share-state mutation.
+15. **015_add_shopping_exclusion_settings.sql** - Added the non-null, default-false Salt-variant and Black-pepper-variant shopping exclusion settings to `user_config`.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through 014. The archived pre-baseline sequence is not replayed.
+  migration through 015. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -826,7 +832,7 @@ This section is the operational runbook for schema changes in this repository. I
 5. Preflight the linked remote before pushing.
    From `web/`, run `npm run db:preflight`. For a separately reviewed
    single-migration rollout, pass the exact pending tail explicitly, for
-   example `npm run db:preflight -- --expected-pending 014`.
+   example `npm run db:preflight -- --expected-pending 015`.
 6. Push to the intentionally linked remote project.
    Run `npx supabase --workdir .. db push`.
 7. Regenerate types from the linked remote after a successful push.
@@ -870,7 +876,7 @@ Common drift signals:
 
 Concrete examples of when to stop and investigate:
 
-- The repository's tracked `001`-`014` chain and remote ledger do not align
+- The repository's tracked `001`-`015` chain and remote ledger do not align
   row-for-row after accounting for the documented baseline squash.
 - A teammate added a migration locally and you have not pulled it yet.
 - You are linked to the wrong Supabase project or environment.
@@ -956,7 +962,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 014, and the
+instructions. The current authoritative chain ends at migration 015, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

@@ -17,6 +17,12 @@ import { usePantryExcludedKeywords } from "@/hooks/use-pantry-excluded-keywords"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { cn } from "@/lib/utils"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  useUpdateIngredientExclusionSetting,
+  useUserConfig,
+  type IngredientExclusionSetting,
+} from "@/hooks/shared/user-config"
 
 type InlineFeedback = {
   message: string
@@ -85,6 +91,25 @@ export function PantryList() {
   const removePantryItem = useRemovePantryItem()
   const restorePantryItem = useRestorePantryItem()
   const undoToast = useUndoToast()
+  const userConfig = useUserConfig()
+  const updateIngredientExclusion = useUpdateIngredientExclusionSetting()
+
+  const handleIngredientExclusionChange = useCallback((
+    setting: IngredientExclusionSetting,
+    enabled: boolean
+  ) => {
+    updateIngredientExclusion.mutate(
+      { setting, enabled },
+      {
+        onError: () => {
+          undoToast.show({
+            message: "Could not save the shopping exclusion setting. Try again.",
+            duration: 4000,
+          })
+        },
+      }
+    )
+  }, [undoToast, updateIngredientExclusion])
 
   const handleRemovePantryItem = useCallback((item: PantryItem) => {
     if (removingPantryIds.has(item.id)) return
@@ -373,21 +398,89 @@ export function PantryList() {
         </CardContent>
       </Card>
 
-      {/* Excluded Keywords */}
+      {/* Excluded Items */}
       <Card className={cn(activeSection !== "excluded" && "hidden md:block")}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Ban className="h-5 w-5" />
-            Excluded Keywords
+            Excluded Items
             <span className="rounded-full bg-terracotta-100 px-2 py-0.5 text-xs font-medium text-terracotta-700">
               {keywordCount}
             </span>
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Keywords that exclude matching ingredients. Only exact matches are excluded (e.g., &quot;pepper&quot; matches &quot;pepper&quot; but not &quot;poblano pepper&quot;).
+            Keep common staples and exact ingredient names out of newly generated shopping lists.
           </p>
         </CardHeader>
         <CardContent>
+          <section aria-labelledby="always-exclude-heading" className="space-y-3">
+            <div>
+              <h3 id="always-exclude-heading" className="text-sm font-semibold">
+                Always exclude
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Clear/reset the shopping list, then regenerate it to reliably rebuild with current settings.
+              </p>
+            </div>
+            {userConfig.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading exclusion settings...</p>
+            ) : userConfig.isError ? (
+              <p className="text-sm text-destructive" role="alert">
+                Could not load exclusion settings. Try refreshing the page.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="exclude-salt-variants"
+                    checked={userConfig.data?.exclude_salt_variants ?? false}
+                    onCheckedChange={(checked) =>
+                      handleIngredientExclusionChange("exclude_salt_variants", checked)
+                    }
+                    aria-describedby="exclude-salt-variants-description"
+                    disabled={updateIngredientExclusion.isPending}
+                  />
+                  <div className="space-y-1">
+                    <label htmlFor="exclude-salt-variants" className="text-sm font-medium">
+                      Salt variants
+                    </label>
+                    <p id="exclude-salt-variants-description" className="text-xs text-muted-foreground">
+                      Salt variants include salt, kosher salt, sea salt, and table salt.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="exclude-black-pepper-variants"
+                    checked={userConfig.data?.exclude_black_pepper_variants ?? false}
+                    onCheckedChange={(checked) =>
+                      handleIngredientExclusionChange("exclude_black_pepper_variants", checked)
+                    }
+                    aria-describedby="exclude-black-pepper-variants-description"
+                    disabled={updateIngredientExclusion.isPending}
+                  />
+                  <div className="space-y-1">
+                    <label htmlFor="exclude-black-pepper-variants" className="text-sm font-medium">
+                      Black pepper variants
+                    </label>
+                    <p id="exclude-black-pepper-variants-description" className="text-xs text-muted-foreground">
+                      Black pepper variants include black pepper, ground black pepper, freshly ground black pepper, and cracked black pepper.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <div className="my-5 border-t border-border-muted" />
+
+          <section aria-labelledby="exact-exclusions-heading">
+            <h3 id="exact-exclusions-heading" className="mb-1 text-sm font-semibold">
+              Exact exclusions
+            </h3>
+            <p className="mb-4 text-xs text-muted-foreground">
+              Matches a whole normalized ingredient name and does not perform substring matching.
+            </p>
           <form onSubmit={handleAddKeyword} className="flex gap-2 mb-4">
             <Input
               ref={keywordInputRef}
@@ -491,6 +584,7 @@ export function PantryList() {
               ) : null}
             </div>
           )}
+          </section>
         </CardContent>
       </Card>
     </div>

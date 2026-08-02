@@ -51,7 +51,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 - Canonical bootstrap is baseline-first and applies every tracked file in
   `supabase/migrations/`, currently `001_baseline.sql` through
-  `014_add_recipe_yield_metadata.sql`.
+  `015_add_shopping_exclusion_settings.sql`.
 - Pre-baseline incremental migrations are retained under
   `supabase/migrations/archive/2026-03-09-pre-028-squash/` for historical
   context only.
@@ -153,7 +153,7 @@ fails on every local-only migration. During an explicitly reviewed
 single-migration rollout, name the sole expected pending tail migration:
 
 ```bash
-npm run db:preflight -- --expected-pending 014
+npm run db:preflight -- --expected-pending 015
 ```
 
 The opt-in is accepted only when `--expected-pending` is present in that

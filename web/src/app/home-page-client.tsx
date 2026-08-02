@@ -112,7 +112,7 @@ export function HomePageClient({
           queryFn: async () => {
             const { data, error } = await supabase
               .from("user_config")
-              .select("auto_assign_days,categories,category_order,category_overrides,custom_categories,default_selection,enabled_planner_categories,excluded_days,excluded_keywords,history_exclusion_days,onboarding_completed_at,preferred_days,user_id,week_start_day")
+              .select("auto_assign_days,categories,category_order,category_overrides,custom_categories,default_selection,enabled_planner_categories,exclude_black_pepper_variants,exclude_salt_variants,excluded_days,excluded_keywords,history_exclusion_days,onboarding_completed_at,preferred_days,user_id,week_start_day")
               .single()
             if (error && error.code !== "PGRST116") throw error
             return data

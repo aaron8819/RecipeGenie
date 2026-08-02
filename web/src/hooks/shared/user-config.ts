@@ -11,6 +11,10 @@ import { configurationKeys, principalId } from "@/lib/query-keys"
 const DEFAULT_CATEGORY_ORDER = ["chicken", "beef", "lamb", "turkey", "vegetarian"]
 export const USER_CONFIG_WRITE_SCOPE_ID = "user-config-write"
 
+export type IngredientExclusionSetting =
+  | "exclude_salt_variants"
+  | "exclude_black_pepper_variants"
+
 function sortDefaultCategories(categories: string[]): string[] {
   return [...categories].sort((a, b) => {
     const indexA = DEFAULT_CATEGORY_ORDER.indexOf(a)
@@ -169,6 +173,94 @@ export function useUpdateExcludedKeywords() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: configurationKeys.detail(ownerUserId) })
+    },
+  })
+}
+
+export function useUpdateIngredientExclusionSetting() {
+  const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const ownerUserId = principalId(user?.id)
+
+  return useMutation({
+    scope: { id: `${USER_CONFIG_WRITE_SCOPE_ID}:${ownerUserId}` },
+    mutationFn: async ({
+      setting,
+      enabled,
+    }: {
+      setting: IngredientExclusionSetting
+      enabled: boolean
+    }) => {
+      const supabase = getSupabase()
+      const updates = setting === "exclude_salt_variants"
+        ? { exclude_salt_variants: enabled }
+        : { exclude_black_pepper_variants: enabled }
+      const { data, error } = await supabase
+        .from("user_config")
+        .update(updates)
+        .eq("user_id", user!.id)
+        .select()
+        .single()
+
+      if (!error) {
+        return resolveUserConfig(data as UserConfig | null, null)
+      }
+
+      if (error.code === "PGRST116") {
+        const { data: upsertData, error: upsertError } = await supabase
+          .from("user_config")
+          .upsert(
+            { ...DEFAULT_USER_CONFIG, user_id: user!.id, ...updates },
+            { onConflict: "user_id" }
+          )
+          .select()
+          .single()
+
+        if (upsertError) throw upsertError
+        return resolveUserConfig(upsertData as UserConfig | null, null)
+      }
+
+      throw error
+    },
+    onMutate: async ({ setting, enabled }) => {
+      await queryClient.cancelQueries({
+        queryKey: configurationKeys.detail(ownerUserId),
+      })
+      const previousConfig = queryClient.getQueryData<UserConfig>(
+        configurationKeys.detail(ownerUserId)
+      )
+      const optimisticConfig = previousConfig
+        ? { ...previousConfig }
+        : { ...DEFAULT_USER_CONFIG, user_id: user!.id }
+
+      queryClient.setQueryData<UserConfig>(
+        configurationKeys.detail(ownerUserId),
+        { ...optimisticConfig, [setting]: enabled }
+      )
+
+      return { previousConfig }
+    },
+    onError: (_error, _updates, context) => {
+      if (context?.previousConfig) {
+        queryClient.setQueryData(
+          configurationKeys.detail(ownerUserId),
+          context.previousConfig
+        )
+        return
+      }
+
+      queryClient.removeQueries({
+        queryKey: configurationKeys.detail(ownerUserId),
+        exact: true,
+      })
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(configurationKeys.detail(ownerUserId), data)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: configurationKeys.detail(ownerUserId),
+      })
     },
   })
 }

@@ -866,6 +866,108 @@ describe('generateShoppingList', () => {
       expect(result.items[0].item).toBe("frank's hot sauce")
     })
   })
+
+  describe('built-in ingredient family exclusions', () => {
+    const enabled = {
+      exclude_salt_variants: true,
+      exclude_black_pepper_variants: true,
+    }
+
+    function generateWithSettings(
+      ingredients: Recipe['ingredients'],
+      settings = enabled,
+      pantryItems: PantryItem[] = [],
+      excludedKeywords: string[] = []
+    ) {
+      return generateShoppingList(
+        [createMockRecipe({ ingredients })],
+        pantryItems,
+        excludedKeywords,
+        1,
+        null,
+        null,
+        undefined,
+        settings
+      )
+    }
+
+    it('leaves existing output unchanged when both settings are off', () => {
+      const result = generateWithSettings(
+        [
+          { item: 'Salt', amount: 1, unit: 'tsp' },
+          { item: 'Freshly ground black pepper', amount: 1, unit: 'tsp' },
+        ],
+        { exclude_salt_variants: false, exclude_black_pepper_variants: false }
+      )
+
+      expect(result.items.map((item) => item.item)).toEqual([
+        'freshly ground black pepper',
+        'salt',
+      ])
+      expect(result.excluded).toEqual([])
+    })
+
+    it('applies Salt and Black pepper settings independently', () => {
+      const ingredients = [
+        { item: 'Sea salt', amount: 1, unit: 'tsp' },
+        { item: 'Cracked black pepper', amount: 1, unit: 'tsp' },
+      ]
+      const salt = generateWithSettings(ingredients, {
+        exclude_salt_variants: true,
+        exclude_black_pepper_variants: false,
+      })
+      const pepper = generateWithSettings(ingredients, {
+        exclude_salt_variants: false,
+        exclude_black_pepper_variants: true,
+      })
+
+      expect(salt.excluded[0]).toMatchObject({
+        item: 'sea salt',
+        excludedBy: 'Salt variants',
+      })
+      expect(salt.items.map((item) => item.item)).toContain('cracked black pepper')
+      expect(pepper.excluded[0]).toMatchObject({
+        item: 'cracked black pepper',
+        excludedBy: 'Black pepper variants',
+      })
+      expect(pepper.items.map((item) => item.item)).toContain('sea salt')
+    })
+
+    it('keeps pantry and exact exclusions ahead of a built-in family', () => {
+      const pantry = generateWithSettings(
+        [{ item: 'Salt', amount: 1, unit: 'tsp' }],
+        enabled,
+        [createMockPantryItem('salt')],
+        ['salt']
+      )
+      const exact = generateWithSettings(
+        [{ item: 'Salt', amount: 1, unit: 'tsp' }],
+        enabled,
+        [],
+        ['salt']
+      )
+
+      expect(pantry.alreadyHave).toHaveLength(1)
+      expect(pantry.excluded).toEqual([])
+      expect(exact.excluded[0].excludedBy).toBe('salt')
+    })
+
+    it('requires every merged occurrence to match the same family', () => {
+      const result = generateWithSettings([
+        { item: 'Salt', amount: 1, unit: 'tsp' },
+        {
+          item: 'Salt',
+          amount: 1,
+          unit: 'tsp',
+          alternatives: ['low-sodium salt'],
+        },
+      ])
+
+      expect(result.excluded).toEqual([])
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]).toMatchObject({ amount: 2, unit: 'tsp' })
+    })
+  })
 })
 
 describe('sortShoppingList', () => {
