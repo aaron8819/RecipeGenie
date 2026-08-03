@@ -19,6 +19,28 @@ describe("inspection request-failure classification", () => {
     expect(isExpectedInspectionNavigationAbort(expectedFailure)).toBe(true)
   })
 
+  it("ignores cancelled App Router payloads for primary route transitions", () => {
+    expect(
+      isExpectedInspectionNavigationAbort({
+        ...expectedFailure,
+        isNavigationRequest: false,
+        resourceType: "fetch",
+        url: "http://127.0.0.1:3107/planner?_rsc=route-payload",
+      })
+    ).toBe(true)
+  })
+
+  it("does not ignore a primary-route fetch without an App Router payload", () => {
+    expect(
+      isExpectedInspectionNavigationAbort({
+        ...expectedFailure,
+        isNavigationRequest: false,
+        resourceType: "fetch",
+        url: "http://127.0.0.1:3107/planner",
+      })
+    ).toBe(false)
+  })
+
   it.each(["fetch", "xhr"])(
     "does not ignore an aborted %s request",
     (resourceType) => {

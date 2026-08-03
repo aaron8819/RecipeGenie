@@ -2,7 +2,7 @@
 
 > **When to read:** You're making a major architectural decision, proposing a refactor, or need context on why something was built a certain way.
 
-*Last updated: 2026-07-23*
+*Last updated: 2026-08-03*
 
 This document captures key architectural and design decisions for Recipe Genie, including rationale and tradeoffs.
 
@@ -784,3 +784,30 @@ rollout; current documentation must not describe those objects as removed.
   behavior, and operational runbook.
 - `docs/recipe-identity-migration.md` is historical design, audit, and rollout
   context rather than current operational authority.
+
+---
+
+## ADR-024: Route-Owned Primary Navigation
+
+**Status:** Accepted (2026-08-03)
+
+**Context:** The primary features were kept mounted as client-selected panes on
+`/`. That made the URL, browser history, scroll ownership, and screen lifecycle
+depend on duplicated client persistence and custom reconciliation logic.
+
+**Decision:** Recipes, Planner, Pantry, and Shopping own `/recipes`, `/planner`,
+`/pantry`, and `/shopping` under one authenticated App Router layout. `/`
+redirects to `/recipes`. Recipe browse state and planner week are canonical URL
+query parameters. Recipe details use `/recipes/[id]` with an optional bounded
+`from` hint; known sources return through history and direct links replace to
+`/recipes`.
+
+**Consequences:**
+
+- Only the active feature screen mounts and owns its queries.
+- Back, Forward, refresh, direct links, and copied URLs preserve supported view
+  state without local storage, session storage, cookies, or origin tokens.
+- The document owns scrolling; route transitions replace the old kept-mounted
+  pane and pane-scroll helpers.
+- Shared auth, onboarding, header, and bottom navigation stay centralized in
+  the authenticated layout.

@@ -638,7 +638,7 @@ describe("MealPlanner interactions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Go to Recipes" }))
 
-    expect(window.localStorage.getItem("recipe-genie-active-tab")).toBe("recipes")
+    expect(routerPush).toHaveBeenCalledWith("/recipes")
   })
 
   it("disables repeat taps on the mobile card action and returns to a neutral state when nothing new is added", async () => {
@@ -685,50 +685,15 @@ describe("MealPlanner interactions", () => {
     fireEvent.click(recipeCard!)
 
     expect(routerPush).toHaveBeenCalledOnce()
-    expect(routerPush.mock.calls[0][0]).toMatch(
-      /^\/recipes\/recipe-1\?from=planner&origin=/
+    expect(routerPush).toHaveBeenCalledWith(
+      "/recipes/recipe-1?from=planner"
     )
   })
 
-  it("restores the selected planner week after a route remount", () => {
-    window.sessionStorage.setItem(
-      "recipe-genie:planner-view-state:v1",
-      JSON.stringify({
-        currentWeekDate: "2026-08-10",
-        mobileWeekTab: "nextWeek",
-      })
-    )
-
-    render(<MealPlanner />)
+  it("initializes the selected planner week from route state", () => {
+    render(<MealPlanner routeWeek="2026-08-10" />)
 
     expect(requestedWeekDate).toBe("2026-08-10")
   })
 
-  it.each([
-    "2026-02-29",
-    "2026-04-31",
-    "2026-00-15",
-    "2026-13-15",
-    "2026-99-99",
-    "2026-01-00",
-    "2026-01-32",
-    "2026/01/15",
-  ])(
-    "rejects persisted date %s before the Planner data query",
-    (invalidDate) => {
-      window.sessionStorage.setItem(
-        "recipe-genie:planner-view-state:v1",
-        JSON.stringify({
-          currentWeekDate: invalidDate,
-          mobileWeekTab: "nextWeek",
-        })
-      )
-
-      render(<MealPlanner />)
-
-      const safeDefault = getWeekStartDate(new Date(), 1)
-      expect(requestedWeekDate).toBe(safeDefault)
-      expect(requestedWeekDates).not.toContain(invalidDate)
-    }
-  )
 })

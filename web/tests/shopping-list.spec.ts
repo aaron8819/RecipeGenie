@@ -29,11 +29,11 @@ test.describe('Shopping List', () => {
   let releaseLock: (() => void) | null = null
   let cleanupState: (() => Promise<void>) | null = null
 
-  test.beforeEach(async ({ setupAuth, navigateToTab }) => {
+  test.beforeEach(async ({ setupAuth, navigateToRoute }) => {
     releaseLock = await acquireShoppingSpecLock()
     cleanupState = null
     await setupAuth()
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
   })
 
   test.afterEach(async () => {

@@ -17,7 +17,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 - **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering, custom categories, and category ordering to match your store layout
 - **Pantry Tracking**: Mark items you have on hand; "What Can I Make?" shows recipes you can cook now
 - **Multi-User Support**: Each user has their own private data via Supabase Auth
-- **Responsive UI**: Desktop header with tab navigation; mobile bottom nav; Stitch design (Outfit, Playfair, sage/terracotta palette)
+- **Responsive UI**: Desktop header and mobile bottom navigation use shareable routes; Stitch design (Outfit, Playfair, sage/terracotta palette)
 - **Cloud Deployment**: Host on Vercel for access from anywhere
 
 ## Tech Stack
@@ -200,7 +200,7 @@ The app includes an auth callback route at `/auth/callback` that handles email c
 
 ### Adding Recipes
 
-1. Click "My Recipes" tab
+1. Open **Recipes** (`/recipes`)
 2. Click "Add Recipe" button
 3. Choose entry method:
    - **Manual Entry**: Fill in recipe details manually (name, category, servings, ingredients, instructions)
@@ -220,7 +220,7 @@ The app includes an auth callback route at `/auth/callback` that handles email c
 
 ### Managing Recipe Categories
 
-1. Click "My Recipes" tab
+1. Open **Recipes** (`/recipes`)
 2. Click the category settings button (⚙️) in the header
 3. In the category settings modal:
    - **Add categories**: Type a name and click "Add"
@@ -232,7 +232,7 @@ The app includes an auth callback route at `/auth/callback` that handles email c
 
 ### Generating a Meal Plan
 
-1. Click "Meal Planner" tab
+1. Open **Planner** (`/planner`)
 2. Set the number of recipes you want for each category
 3. Click "Generate Meal Plan"
 4. Review your randomly selected recipes
@@ -253,7 +253,7 @@ The app includes an auth callback route at `/auth/callback` that handles email c
 
 ### Managing Your Pantry
 
-1. Click "Pantry" tab
+1. Open **Pantry** (`/pantry`)
 2. Add items you currently have on hand
 3. Configure excluded keywords (staples like "oil", "salt")
 4. These items will be automatically excluded from your shopping list
@@ -289,7 +289,8 @@ web/
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── layout.tsx          # Root layout with providers
-│   │   └── page.tsx            # Main page with tabs
+│   │   ├── page.tsx            # Redirects authenticated entry to /recipes
+│   │   └── (authenticated)/    # Shared shell and route-owned screens
 │   ├── components/
 │   │   ├── ui/                 # Radix UI components
 │   │   ├── layout/             # Header, bottom nav, onboarding

@@ -36,7 +36,7 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 
 | Layer | Location | Responsibility |
 |------|----------|----------------|
-| App shell | `web/src/app/` | Next.js entry points, providers, main tab shell, API routes. |
+| App shell | `web/src/app/` | Next.js entry points, providers, shared authenticated layout, route-owned screens, and API routes. |
 | UI components | `web/src/components/` | Domain UI for planner, recipes, pantry, shopping, plus shared UI primitives. |
 | Domain hooks | `web/src/hooks/` | TanStack Query reads/mutations and domain-specific orchestration around Supabase. |
 | Pure logic | `web/src/lib/` | Deterministic business logic, parsers, selectors, normalization, matching, and utility helpers. |
@@ -63,6 +63,7 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Recipe image upload/delete flows go through `web/src/hooks/use-recipe-image-storage.ts`.
 - `getRecipeImageUrl()` in `web/src/lib/supabase/storage.ts` is a pure URL helper and can be used from components/selectors.
 - Recipe list orchestration includes current search/filter UX, responsive toolbar behavior, and Recipes modal coordination.
+- Recipe browse state is URL-owned on `/recipes`; recipe details remain nested at `/recipes/[id]` under the shared authenticated shell.
 - Recipe detail is query-backed and now owns common follow-up actions such as add-to-plan, add-to-shopping, and mark-made entry points.
 - Persisted recipe data now includes first-class times and notes, plus additive grouped-instruction persistence, while retaining legacy flat `instructions` for backward compatibility.
 
@@ -72,10 +73,9 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Presentation-only shopping sections live in `web/src/components/shopping/shopping-list-components.tsx`.
 - Shopping mutations and cache flows live in `web/src/hooks/shopping/`.
 - Shopping aggregation/normalization/category logic lives in `web/src/lib/shopping-list.ts`, `web/src/lib/shopping-list-normalization.ts`, `web/src/lib/shopping-list-merging.ts`, and `web/src/lib/shopping-categories.ts`.
-- Pane-relative in-tab scrolling helpers live in `web/src/lib/pane-scroll.ts`.
 - Stable shopping row identity helpers live in `web/src/lib/shopping-row-identity.ts`.
 - Shopping row-targeted server mutations now align on persisted `ShoppingItem.rowId` across UI state, cache mutations, and RPC boundaries.
-- Shopping section jumps must scroll the active kept-mounted tab pane directly rather than relying on `scrollIntoView()`.
+- Shopping is a normal document-scrolling route. Section jumps target their elements with `scrollIntoView()` and CSS scroll margins.
 
 ### Pantry
 
@@ -83,6 +83,13 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Pantry data access lives in `web/src/hooks/use-pantry.ts`.
 - Pantry-to-recipe matching lives in `web/src/hooks/use-pantry-match.ts` and `web/src/lib/pantry-matcher.ts`.
 - Pantry also feeds the shopping flow through `web/src/hooks/shopping/use-shopping-pantry.ts`.
+
+## Navigation And Route State
+
+- `/` redirects to `/recipes`; `/recipes`, `/planner`, `/pantry`, and `/shopping` are the primary authenticated routes.
+- The shared authenticated layout owns auth gating, onboarding, the desktop header, and mobile bottom navigation. Each route owns exactly one mounted screen.
+- Recipe search, filters, sort, and view mode are canonical query parameters. Planner week selection is the canonical `week=YYYY-MM-DD` query parameter.
+- Cross-feature recipe links use `/recipes/[id]?from=recipes|planner|shopping`. Known sources return through browser history; direct or shared detail URLs replace to `/recipes`.
 
 ## Data And Backend
 

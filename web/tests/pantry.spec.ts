@@ -23,9 +23,9 @@ function undoAlert(page: import('@playwright/test').Page) {
 }
 
 test.describe('Pantry Management', () => {
-  test.beforeEach(async ({ setupAuth, navigateToTab }) => {
+  test.beforeEach(async ({ setupAuth, navigateToRoute }) => {
     await setupAuth()
-    await navigateToTab('pantry')
+    await navigateToRoute('pantry')
   })
 
   test('shows Pantry header, counts, helper text, and current empty-state copy when visible @extended', async ({ page }) => {
@@ -98,7 +98,7 @@ test.describe('Pantry Management', () => {
     await expect(page.getByRole('button', { name: /^undo$/i })).toBeVisible()
   })
 
-  test('persists Salt and Black pepper family exclusions independently @core', async ({ page, navigateToTab }) => {
+  test('persists Salt and Black pepper family exclusions independently @core', async ({ page, navigateToRoute }) => {
     const salt = page.getByRole('checkbox', { name: 'Salt variants' })
     const blackPepper = page.getByRole('checkbox', { name: 'Black pepper variants' })
     await expect(salt).toBeVisible()
@@ -116,7 +116,7 @@ test.describe('Pantry Management', () => {
     await expect(blackPepper).toBeChecked({ checked: originalBlackPepper })
 
     await page.reload()
-    await navigateToTab('pantry')
+    await navigateToRoute('pantry')
     await expect(
       page.getByRole('checkbox', { name: 'Salt variants' })
     ).toBeChecked({ checked: !originalSalt })
@@ -140,7 +140,7 @@ test.describe('Pantry Management', () => {
     const viewport = page.viewportSize()
     const isMobile = viewport && viewport.width < 768
     if (isMobile) {
-      await page.locator('nav.fixed.bottom-0').getByRole('button', { name: /pantry/i }).click()
+      await page.locator('nav.fixed.bottom-0').getByRole('link', { name: /pantry/i }).click()
     }
 
     const seed = uniqueSeed()

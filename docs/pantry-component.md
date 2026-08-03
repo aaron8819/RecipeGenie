@@ -26,6 +26,9 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 ## Important Behaviors
 
+Pantry owns the `/pantry` route and mounts only while that route is active under
+the shared authenticated shell.
+
 ### Pantry items
 
 - Pantry items are normalized case-insensitively.
@@ -58,4 +61,4 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - See [`shopping-component.md`](./shopping-component.md) for the downstream shopping behavior that consumes pantry data.
 - See [`./project_overview.md`](./project_overview.md) for the broader architecture map.
 
-Last updated: 2026-08-01
+Last updated: 2026-08-03

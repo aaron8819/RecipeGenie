@@ -74,7 +74,6 @@ import { getTagClassName, getTagColor } from "@/lib/tag-colors"
 import { getCategoryHexColor } from "@/lib/planner-colors"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import {
-  isCanonicalLocalDate,
   parseLocalDate,
   toLocalNoonISOString,
   dayIndexToDayOfWeek,
@@ -82,8 +81,8 @@ import {
 } from "@/lib/planner-utils"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
-import { navigateToHomeTab } from "@/lib/home-navigation"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
+import { buildPlannerHref } from "@/lib/planner-route-state"
 import { cn, getErrorMessage } from "@/lib/utils"
 import {
   formatLocalISODate,
@@ -140,41 +139,6 @@ import type { Recipe, RecipeHistory, PlanTemplate } from "@/types/database"
 const SHOPPING_ITEM_LABEL = {
   singular: "shopping item",
   plural: "shopping items",
-}
-
-const PLANNER_VIEW_STATE_STORAGE_KEY = "recipe-genie:planner-view-state:v1"
-
-interface PlannerViewState {
-  currentWeekDate: string
-  mobileWeekTab: MobileWeekTab
-}
-
-function getStoredPlannerViewState(): PlannerViewState | null {
-  if (typeof window === "undefined") return null
-
-  try {
-    const stored = window.sessionStorage.getItem(
-      PLANNER_VIEW_STATE_STORAGE_KEY
-    )
-    if (!stored) return null
-
-    const parsed = JSON.parse(stored) as Partial<PlannerViewState>
-    const validTab =
-      parsed.mobileWeekTab === "today" ||
-      parsed.mobileWeekTab === "thisWeek" ||
-      parsed.mobileWeekTab === "nextWeek"
-    const validDate =
-      isCanonicalLocalDate(parsed.currentWeekDate)
-
-    return validTab && validDate
-      ? {
-          currentWeekDate: parsed.currentWeekDate!,
-          mobileWeekTab: parsed.mobileWeekTab!,
-        }
-      : null
-  } catch {
-    return null
-  }
 }
 
 /**
@@ -1131,12 +1095,10 @@ function MobileRecipeCard({
   )
 }
 
-export function MealPlanner() {
+export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const router = useRouter()
-  const [initialViewState] = useState(getStoredPlannerViewState)
-  // Default to current week (client local date); syncs to user's week_start_day when config loads
   const [currentWeekDate, setCurrentWeekDate] = useState<string>(() =>
-    initialViewState?.currentWeekDate ?? getWeekStartDate(new Date(), 1)
+    routeWeek ?? getWeekStartDate(new Date(), 1)
   )
   const [selection, setSelection] = useState<Record<string, number>>({})
   const [markingRecipeId, setMarkingRecipeId] = useState<string | null>(null)
@@ -1155,7 +1117,7 @@ export function MealPlanner() {
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false)
   const [isLoadTemplateOpen, setIsLoadTemplateOpen] = useState(false)
   const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>(
-    initialViewState?.mobileWeekTab ?? "thisWeek"
+    "thisWeek"
   )
   const mobileDaysContainerRef = useRef<HTMLDivElement>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
@@ -1178,17 +1140,6 @@ export function MealPlanner() {
     mq.addEventListener("change", handler)
     return () => mq.removeEventListener("change", handler)
   }, [])
-
-  useEffect(() => {
-    try {
-      window.sessionStorage.setItem(
-        PLANNER_VIEW_STATE_STORAGE_KEY,
-        JSON.stringify({ currentWeekDate, mobileWeekTab })
-      )
-    } catch {
-      // Planner state remains functional when browser storage is unavailable.
-    }
-  }, [currentWeekDate, mobileWeekTab])
 
   // Hook to save day assignments to database
   const saveDayAssignments = useSaveDayAssignments()
@@ -1287,18 +1238,22 @@ export function MealPlanner() {
   // Build a map of recipe_id -> stats (last made + times made)
   const statsMap = useMemo(() => getRecipeStatsMap(historyStats), [historyStats])
 
-  // Sync to current week when config first loads (user's week_start_day)
-  const hasSyncedInitialWeekRef = useRef(!!initialViewState)
-  const markUserNavigated = useCallback(() => {
-    hasSyncedInitialWeekRef.current = true
-  }, [])
   useEffect(() => {
-    if (hasSyncedInitialWeekRef.current) return
-    if (!config?.week_start_day) return
-    const weekStart = getWeekStartDate(new Date(), config.week_start_day)
-    setCurrentWeekDate(weekStart)
-    hasSyncedInitialWeekRef.current = true
-  }, [config?.week_start_day])
+    const defaultWeek = getWeekStartDate(
+      new Date(),
+      config?.week_start_day || 1
+    )
+    setCurrentWeekDate(routeWeek ?? defaultWeek)
+  }, [config?.week_start_day, routeWeek])
+
+  const navigateToWeek = useCallback((weekDate: string) => {
+    const defaultWeek = getWeekStartDate(
+      new Date(),
+      config?.week_start_day || 1
+    )
+    setCurrentWeekDate(weekDate)
+    router.push(buildPlannerHref(weekDate, defaultWeek))
+  }, [config?.week_start_day, router])
 
   // Initialize selection from config
   useEffect(() => {
@@ -1308,27 +1263,26 @@ export function MealPlanner() {
   }, [config?.default_selection])
 
   const handlePrevWeek = () => {
-    markUserNavigated()
     const next = navigateWeek(currentWeekDate, "prev")
-    setCurrentWeekDate(next)
+    navigateToWeek(next)
     const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
     if (next === thisWeekStart) setMobileWeekTab("thisWeek")
     else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
   }
 
   const handleNextWeek = () => {
-    markUserNavigated()
     const next = navigateWeek(currentWeekDate, "next")
-    setCurrentWeekDate(next)
+    navigateToWeek(next)
     const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
     if (next === thisWeekStart) setMobileWeekTab("thisWeek")
     else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
   }
 
   const handleMobileWeekTab = (tab: MobileWeekTab) => {
-    markUserNavigated()
     setMobileWeekTab(tab)
-    setCurrentWeekDate(resolveWeekDateForMobileTab(tab, config?.week_start_day || 1))
+    navigateToWeek(
+      resolveWeekDateForMobileTab(tab, config?.week_start_day || 1)
+    )
   }
 
   const handleGeneratePlan = () => {
@@ -1743,9 +1697,8 @@ export function MealPlanner() {
                       selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                       onSelect={(date) => {
                         if (date) {
-                          markUserNavigated()
                           const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
-                          setCurrentWeekDate(weekStart)
+                          navigateToWeek(weekStart)
                           setIsDatePickerOpenMobile(false)
                           const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
                           if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
@@ -1821,9 +1774,8 @@ export function MealPlanner() {
                     selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                     onSelect={(date) => {
                       if (date) {
-                        markUserNavigated()
                         const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
-                        setCurrentWeekDate(weekStart)
+                        navigateToWeek(weekStart)
                         setIsDatePickerOpenDesktop(false)
                       }
                     }}
@@ -2050,7 +2002,7 @@ export function MealPlanner() {
               description="You need recipes before you can plan meals. Add a few in Recipes, then come back to build this week."
               action={{
                 label: "Go to Recipes",
-                onClick: () => navigateToHomeTab("recipes"),
+                onClick: () => router.push("/recipes"),
               }}
             />
           ) : (

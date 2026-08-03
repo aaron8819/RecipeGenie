@@ -8,49 +8,54 @@ globalThis.React = React
 vi.mock("@/components/recipes/recipe-detail-page", () => ({
   RecipeDetailPage: ({
     recipeId,
-    originToken,
+    returnSource,
   }: {
     recipeId: string
-    originToken?: string
+    returnSource?: string | null
   }) => (
     <div
       data-testid="recipe-route"
       data-recipe-id={recipeId}
-      data-origin={originToken}
+      data-source={returnSource ?? undefined}
     />
   ),
 }))
 
 describe("/recipes/[id]", () => {
-  it("renders direct recipe URLs without requiring origin state", async () => {
+  it("renders direct recipe URLs with the Recipes fallback", async () => {
     const page = await RecipePage({
       params: Promise.resolve({ id: "recipe-1" }),
       searchParams: Promise.resolve({}),
     })
 
     render(page)
-
     expect(screen.getByTestId("recipe-route")).toHaveAttribute(
       "data-recipe-id",
       "recipe-1"
     )
-    expect(screen.getByTestId("recipe-route")).not.toHaveAttribute("data-origin")
+    expect(screen.getByTestId("recipe-route")).not.toHaveAttribute(
+      "data-source"
+    )
   })
 
-  it("passes only the opaque origin token to the shared detail page", async () => {
-    const page = await RecipePage({
+  it("passes only a whitelisted source to the detail page", async () => {
+    const plannerPage = await RecipePage({
       params: Promise.resolve({ id: "recipe-1" }),
-      searchParams: Promise.resolve({
-        from: "planner",
-        origin: "origin-token",
-      }),
+      searchParams: Promise.resolve({ from: "planner" }),
+    })
+    const invalidPage = await RecipePage({
+      params: Promise.resolve({ id: "recipe-2" }),
+      searchParams: Promise.resolve({ from: "pantry" }),
     })
 
-    render(page)
-
+    const { rerender } = render(plannerPage)
     expect(screen.getByTestId("recipe-route")).toHaveAttribute(
-      "data-origin",
-      "origin-token"
+      "data-source",
+      "planner"
+    )
+    rerender(invalidPage)
+    expect(screen.getByTestId("recipe-route")).not.toHaveAttribute(
+      "data-source"
     )
   })
 })

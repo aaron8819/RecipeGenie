@@ -1,21 +1,20 @@
 "use client"
 
 import { UtensilsCrossed, CalendarDays, ShoppingCart, Package } from "lucide-react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
-const tabs = [
-  { id: "planner", label: "Planner", icon: CalendarDays },
-  { id: "recipes", label: "Recipes", icon: UtensilsCrossed },
-  { id: "shopping", label: "Shopping", icon: ShoppingCart },
-  { id: "pantry", label: "Pantry", icon: Package },
+const navItems = [
+  { href: "/planner", label: "Planner", icon: CalendarDays },
+  { href: "/recipes", label: "Recipes", icon: UtensilsCrossed },
+  { href: "/shopping", label: "Shopping", icon: ShoppingCart },
+  { href: "/pantry", label: "Pantry", icon: Package },
 ] as const
 
-interface BottomNavProps {
-  activeTab: string
-  onTabChange: (tab: string) => void
-}
+export function BottomNav() {
+  const pathname = usePathname()
 
-export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card/95 backdrop-blur-md safe-area-bottom md:hidden"
@@ -23,14 +22,15 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
       style={{ minHeight: "var(--bottom-nav-safe-height)" }}
     >
       <div className="flex h-16 items-center justify-around">
-        {tabs.map((tab) => {
-          const Icon = tab.icon
-          const isActive = activeTab === tab.id
+        {navItems.map((item) => {
+          const Icon = item.icon
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`)
 
           return (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
+            <Link
+              key={item.href}
+              href={item.href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-150",
@@ -53,9 +53,9 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                   isActive ? "text-primary" : "text-muted-foreground"
                 )}
               >
-                {tab.label}
+                {item.label}
               </span>
-            </button>
+            </Link>
           )
         })}
       </div>

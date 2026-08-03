@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
+import React, { useState, useMemo, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Inbox, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -28,79 +28,14 @@ import { downloadRecipesAsJson } from "@/lib/recipe-export"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
 import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
+import {
+  buildRecipeRouteHref,
+  type RecipeRouteState,
+  type RecipeSortOption,
+} from "@/lib/recipe-route-state"
 import type { Recipe } from "@/types/database"
 
-type SortOption = "timesMade" | "lastMade" | "name" | "newest"
-
-const RECIPE_VIEW_STATE_KEY = "recipe-genie:recipes-view-state:v1"
-
-interface RecipeViewState {
-  category: string | null
-  favoritesOnly: boolean
-  scrollTop: number
-  search: string
-  selectedTags: string[]
-  sortBy: SortOption
-  viewMode: "grid" | "list"
-}
-
-function getDefaultRecipeViewState(): RecipeViewState {
-  return {
-    category: null,
-    favoritesOnly: false,
-    scrollTop: 0,
-    search: "",
-    selectedTags: [],
-    sortBy: "lastMade",
-    viewMode: "grid",
-  }
-}
-
-function readRecipeViewState(): RecipeViewState {
-  const fallback = getDefaultRecipeViewState()
-  if (typeof window === "undefined") return fallback
-
-  try {
-    const stored = JSON.parse(
-      window.sessionStorage.getItem(RECIPE_VIEW_STATE_KEY) || "null"
-    ) as Partial<RecipeViewState> | null
-    if (!stored) return fallback
-
-    return {
-      category: typeof stored.category === "string" ? stored.category : null,
-      favoritesOnly: stored.favoritesOnly === true,
-      scrollTop:
-        typeof stored.scrollTop === "number" && stored.scrollTop >= 0
-          ? stored.scrollTop
-          : 0,
-      search: typeof stored.search === "string" ? stored.search : "",
-      selectedTags: Array.isArray(stored.selectedTags)
-        ? stored.selectedTags.filter(
-            (tag): tag is string => typeof tag === "string"
-          )
-        : [],
-      sortBy:
-        stored.sortBy &&
-        ["timesMade", "lastMade", "name", "newest"].includes(stored.sortBy)
-          ? stored.sortBy
-          : "lastMade",
-      viewMode:
-        stored.viewMode === "grid" || stored.viewMode === "list"
-          ? stored.viewMode
-          : fallback.viewMode,
-    }
-  } catch {
-    return fallback
-  }
-}
-
-function persistRecipeViewState(state: RecipeViewState) {
-  try {
-    window.sessionStorage.setItem(RECIPE_VIEW_STATE_KEY, JSON.stringify(state))
-  } catch {
-    // Recipe browsing remains functional when browser storage is unavailable.
-  }
-}
+type SortOption = RecipeSortOption
 
 const SHOPPING_ITEM_LABEL = {
   singular: "shopping item",
@@ -374,40 +309,15 @@ function MobileRecipesHeader({
   )
 }
 
-export function RecipeList() {
+export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const isDesktop = useIsDesktop()
   const router = useRouter()
-  const [initialViewState] = useState(readRecipeViewState)
-  const restoredScrollRef = useRef(false)
-  const scrollTopRef = useRef(initialViewState.scrollTop)
-
-  const [search, setSearch] = useState(initialViewState.search)
-  const [category, setCategory] = useState<string | null>(
-    initialViewState.category
-  )
-  const [selectedTags, setSelectedTags] = useState<string[]>(
-    initialViewState.selectedTags
-  )
-  const [favoritesOnly, setFavoritesOnly] = useState(
-    initialViewState.favoritesOnly
-  )
-  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
-    if (typeof window === "undefined") return "grid"
-
-    try {
-      const saved = localStorage.getItem("recipeViewMode")
-      if (saved === "grid" || saved === "list") {
-        return saved
-      }
-    } catch {
-      return initialViewState.viewMode
-    }
-
-    return initialViewState.viewMode === "list" || window.innerWidth < 768
-      ? "list"
-      : "grid"
-  })
-  const [sortBy, setSortBy] = useState<SortOption>(initialViewState.sortBy)
+  const [search, setSearch] = useState(routeState.query)
+  const category = routeState.category
+  const selectedTags = routeState.tags
+  const favoritesOnly = routeState.favoritesOnly
+  const sortBy = routeState.sortBy
+  const viewMode = routeState.viewMode ?? (isDesktop ? "grid" : "list")
   const [addToPlanRecipeId, setAddToPlanRecipeId] = useState<string | null>(null)
   const [addingToShoppingListId, setAddingToShoppingListId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -417,29 +327,47 @@ export function RecipeList() {
   const [shareRecipeId, setShareRecipeId] = useState<string | null>(null)
   const [skeletonDelayed, setSkeletonDelayed] = useState(false)
 
-  // Persist view mode preference to localStorage
   useEffect(() => {
-    if (typeof window === "undefined") return
-    try {
-      localStorage.setItem("recipeViewMode", viewMode)
-    } catch {
-      // The session-scoped view state still works when local storage is disabled.
-    }
-  }, [viewMode])
+    setSearch(routeState.query)
+  }, [routeState.query])
+
+  const replaceRouteState = useCallback((patch: Partial<RecipeRouteState>) => {
+    router.replace(
+      buildRecipeRouteHref({ ...routeState, query: search, ...patch }),
+      { scroll: false }
+    )
+  }, [routeState, router, search])
 
   useEffect(() => {
-    persistRecipeViewState({
-      category,
-      favoritesOnly,
-      scrollTop: scrollTopRef.current,
-      search,
-      selectedTags,
-      sortBy,
-      viewMode,
-    })
-  }, [category, favoritesOnly, search, selectedTags, sortBy, viewMode])
+    if (search.trim() === routeState.query) return
+    const timeout = window.setTimeout(() => {
+      replaceRouteState({ query: search })
+    }, 250)
+    return () => window.clearTimeout(timeout)
+  }, [replaceRouteState, routeState.query, search])
 
-  const normalizedSearch = search.trim()
+  const setCategory = useCallback(
+    (value: string | null) => replaceRouteState({ category: value }),
+    [replaceRouteState]
+  )
+  const setSelectedTags = useCallback(
+    (value: string[]) => replaceRouteState({ tags: value }),
+    [replaceRouteState]
+  )
+  const setFavoritesOnly = useCallback(
+    (value: boolean) => replaceRouteState({ favoritesOnly: value }),
+    [replaceRouteState]
+  )
+  const setSortBy = useCallback(
+    (value: SortOption) => replaceRouteState({ sortBy: value }),
+    [replaceRouteState]
+  )
+  const setViewMode = useCallback(
+    (value: "grid" | "list") => replaceRouteState({ viewMode: value }),
+    [replaceRouteState]
+  )
+
+  const normalizedSearch = routeState.query
 
   const { data: recipes, isLoading, isFetching } = useRecipes({
     category,
@@ -479,21 +407,6 @@ export function RecipeList() {
     return undefined
   }, [isLoadingWithNoData])
   const showSkeleton = isLoadingWithNoData && skeletonDelayed
-
-  useEffect(() => {
-    if (restoredScrollRef.current || isLoadingWithNoData) return
-
-    const panel = document.querySelector<HTMLElement>(
-      '[data-home-tab-panel="recipes"]'
-    )
-    if (!panel) return
-
-    const frame = requestAnimationFrame(() => {
-      panel.scrollTop = scrollTopRef.current
-      restoredScrollRef.current = true
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [displayRecipes.length, isLoadingWithNoData])
 
   const deleteRecipeAndNotify = useCallback(async (recipe: Recipe) => {
     try {
@@ -548,29 +461,8 @@ export function RecipeList() {
   }, [])
 
   const handleOpenRecipe = useCallback((recipe: Recipe) => {
-    const panel = document.querySelector<HTMLElement>(
-      '[data-home-tab-panel="recipes"]'
-    )
-    scrollTopRef.current = panel?.scrollTop ?? 0
-    persistRecipeViewState({
-      category,
-      favoritesOnly,
-      scrollTop: scrollTopRef.current,
-      search,
-      selectedTags,
-      sortBy,
-      viewMode,
-    })
     openRecipeDetail(router, recipe.id, "recipes")
-  }, [
-    category,
-    favoritesOnly,
-    router,
-    search,
-    selectedTags,
-    sortBy,
-    viewMode,
-  ])
+  }, [router])
 
   const handleToggleFavorite = useCallback((r: Recipe) => {
     toggleFavorite.mutate({ id: r.id, favorite: !!r.favorite })
@@ -580,13 +472,16 @@ export function RecipeList() {
     if (!selectedTags.includes(tag)) {
       setSelectedTags([...selectedTags, tag])
     }
-  }, [selectedTags])
+  }, [selectedTags, setSelectedTags])
 
   const clearAllFilters = () => {
-    setCategory(null)
-    setSelectedTags([])
-    setFavoritesOnly(false)
     setSearch("")
+    replaceRouteState({
+      category: null,
+      favoritesOnly: false,
+      query: "",
+      tags: [],
+    })
   }
 
   const isFiltered = !!normalizedSearch || !!category || favoritesOnly || selectedTags.length > 0

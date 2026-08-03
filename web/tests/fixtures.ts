@@ -88,14 +88,14 @@ export interface RecipeGenieFixtures {
   setupAuth: () => Promise<void>
   /** Sign out of the current session */
   signOut: () => Promise<void>
-  /** Navigate to a specific tab */
-  navigateToTab: (tab: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>
+  /** Navigate to a primary application route */
+  navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>
   /** Add a recipe via the UI */
   addRecipe: (recipe: typeof SAMPLE_RECIPE) => Promise<void>
   /** Wait for the app to be fully loaded */
   waitForAppLoad: () => Promise<void>
-  /** Get the active tab name */
-  getActiveTab: () => Promise<string | null>
+  /** Get the active primary route name */
+  getActiveRoute: () => Promise<string | null>
   /** Check if on mobile viewport */
   isMobileViewport: () => Promise<boolean>
 }
@@ -163,43 +163,44 @@ export const test = base.extend<RecipeGenieFixtures>({
     await use(signOut)
   },
 
-  navigateToTab: async ({ page }, use) => {
-    const navigateToTab = async (tab: 'planner' | 'recipes' | 'shopping' | 'pantry') => {
+  navigateToRoute: async ({ page }, use) => {
+    const navigateToRoute = async (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => {
       const viewport = page.viewportSize()
       const isMobile = viewport && viewport.width < 768
 
-      const tabNames: Record<string, string> = {
+      const routeNames: Record<string, string> = {
         planner: 'Planner',
         recipes: 'Recipes',
         shopping: 'Shopping',
         pantry: 'Pantry',
       }
-      const tabName = tabNames[tab] || tab
+      const routeName = routeNames[route] || route
 
       if (isMobile) {
-        let navButton = page.locator('nav.fixed.bottom-0').getByRole('button', { name: new RegExp(tabName, 'i') })
+        let navLink = page.locator('nav.fixed.bottom-0').getByRole('link', { name: new RegExp(routeName, 'i') })
 
-        if (!(await navButton.isVisible().catch(() => false))) {
-          navButton = page.locator('nav').last().getByRole('button', { name: new RegExp(tabName, 'i') })
+        if (!(await navLink.isVisible().catch(() => false))) {
+          navLink = page.locator('nav').last().getByRole('link', { name: new RegExp(routeName, 'i') })
         }
 
         // The Next.js development portal can overlap the bottom-left Planner target.
-        // Dispatch through the button itself so responsive navigation tests exercise
-        // the app handler instead of the development-only overlay geometry.
-        await navButton.evaluate((button: HTMLButtonElement) => button.click())
+        // Dispatch through the link itself so responsive navigation tests exercise
+        // route navigation instead of the development-only overlay geometry.
+        await navLink.evaluate((link: HTMLAnchorElement) => link.click())
       } else {
-        const navButton = page
+        const navLink = page
           .getByRole('navigation')
-          .getByRole('button', { name: new RegExp(`^${tabName}$`, 'i') })
+          .getByRole('link', { name: new RegExp(`^${routeName}$`, 'i') })
           .first()
-        await expect(navButton).toBeVisible()
-        await navButton.click()
+        await expect(navLink).toBeVisible()
+        await navLink.click()
       }
 
-      await page.waitForTimeout(300)
+      await expect(page).toHaveURL(new RegExp(`/${route}(?:\\?|$)`))
+      await expect(page.locator(`[data-app-screen="${route}"]`)).toHaveCount(1)
     }
 
-    await use(navigateToTab)
+    await use(navigateToRoute)
   },
 
   addRecipe: async ({ page }, use) => {
@@ -335,23 +336,23 @@ export const test = base.extend<RecipeGenieFixtures>({
     await use(waitForAppLoad)
   },
 
-  getActiveTab: async ({ page }, use) => {
-    const getActiveTab = async () => {
+  getActiveRoute: async ({ page }, use) => {
+    const getActiveRoute = async () => {
       const viewport = page.viewportSize()
       const isMobile = viewport && viewport.width < 768
 
       if (isMobile) {
-        const activeButton = page.locator('nav.fixed.bottom-0 button.text-primary')
-        const text = await activeButton.textContent()
+        const activeLink = page.locator('nav.fixed.bottom-0 a[aria-current="page"]')
+        const text = await activeLink.textContent()
         return text?.toLowerCase() || null
       }
 
-      const activeButton = page.locator('header.md\\:fixed button.text-primary.border-b-2')
-      const text = await activeButton.textContent()
+      const activeLink = page.locator('header a[aria-current="page"]')
+      const text = await activeLink.textContent()
       return text?.toLowerCase() || null
     }
 
-    await use(getActiveTab)
+    await use(getActiveRoute)
   },
 
   isMobileViewport: async ({ page }, use) => {

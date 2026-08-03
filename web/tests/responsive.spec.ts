@@ -24,16 +24,16 @@ test.describe('Responsive contracts @extended', () => {
     expect(bottomNavBox).not.toBeNull()
     expect(bottomNavBox!.y + bottomNavBox!.height).toBeLessThanOrEqual(VIEWPORTS.mobile.height)
 
-    const shoppingButton = bottomNav.getByRole('button', { name: /shopping/i })
+    const shoppingButton = bottomNav.getByRole('link', { name: /shopping/i })
     await expect(shoppingButton).toBeVisible()
     await shoppingButton.click()
     await expect(page.getByRole('heading', { name: 'Shopping List' }).first()).toBeVisible()
   })
 
-  test('keeps the recipes mobile primary actions in viewport on small screens', async ({ page, setupAuth, navigateToTab }) => {
+  test('keeps the recipes mobile primary actions in viewport on small screens', async ({ page, setupAuth, navigateToRoute }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await dismissNextDevTools(page)
 
     const searchInput = page.getByRole('textbox', { name: /search recipes by name or category/i })
@@ -77,10 +77,10 @@ test.describe('Responsive contracts @extended', () => {
     }
   })
 
-  test('keeps shopping list primary controls reachable above the mobile shell chrome', async ({ page, setupAuth, navigateToTab }) => {
+  test('keeps shopping list primary controls reachable above the mobile shell chrome', async ({ page, setupAuth, navigateToRoute }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await dismissNextDevTools(page)
 
     const heading = page.getByRole('heading', { name: 'Shopping List' }).first()
@@ -104,10 +104,10 @@ test.describe('Responsive contracts @extended', () => {
     expect(buttonBox!.y + buttonBox!.height).toBeLessThan(bottomNavBox!.y)
   })
 
-  test('keeps planner actions visible and touch targets usable at 320px', async ({ page, setupAuth, navigateToTab }) => {
+  test('keeps planner actions visible and touch targets usable at 320px', async ({ page, setupAuth, navigateToRoute }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
-    await navigateToTab('planner')
+    await navigateToRoute('planner')
     await dismissNextDevTools(page)
 
     const controls = [
@@ -141,10 +141,10 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('menuitem', { name: 'Load template', exact: true })).toBeVisible()
   })
 
-  test('keeps shared header and pantry section controls mobile-sized', async ({ page, setupAuth, navigateToTab }) => {
+  test('keeps shared header and pantry section controls mobile-sized', async ({ page, setupAuth, navigateToRoute }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
-    await navigateToTab('pantry')
+    await navigateToRoute('pantry')
     await dismissNextDevTools(page)
 
     const pantrySections = page.getByRole('navigation', { name: 'Pantry sections' })
@@ -167,10 +167,10 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('heading', { name: /Pantry Items/i })).toBeHidden()
   })
 
-  test('uses a compact mobile shopping summary without horizontal overflow', async ({ page, setupAuth, navigateToTab }) => {
+  test('uses a compact mobile shopping summary without horizontal overflow', async ({ page, setupAuth, navigateToRoute }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await dismissNextDevTools(page)
 
     const summary = page.getByTestId('shopping-progress-mobile')

@@ -9,6 +9,13 @@ export interface RequestFailureSnapshot {
 export const EXPECTED_INSPECTION_RECIPE_PATH =
   "/recipes/10000000-0000-4000-8000-000000000006"
 
+const PRIMARY_ROUTE_PATHS = new Set([
+  "/recipes",
+  "/planner",
+  "/shopping",
+  "/pantry",
+])
+
 export function formatRequestFailure(
   failure: RequestFailureSnapshot
 ): string {
@@ -25,11 +32,23 @@ export function formatRequestFailure(
 export function isExpectedInspectionNavigationAbort(
   failure: RequestFailureSnapshot
 ): boolean {
-  return (
-    failure.failureText === "net::ERR_ABORTED" &&
+  if (failure.failureText !== "net::ERR_ABORTED" || failure.method !== "GET") {
+    return false
+  }
+
+  const url = new URL(failure.url)
+  const isDetailDocumentNavigation =
     failure.isNavigationRequest &&
-    failure.method === "GET" &&
     failure.resourceType === "document" &&
-    new URL(failure.url).pathname === EXPECTED_INSPECTION_RECIPE_PATH
+    url.pathname === EXPECTED_INSPECTION_RECIPE_PATH
+
+  const isPrimaryRouteRscNavigation =
+    !failure.isNavigationRequest &&
+    failure.resourceType === "fetch" &&
+    url.searchParams.has("_rsc") &&
+    PRIMARY_ROUTE_PATHS.has(url.pathname)
+
+  return (
+    isDetailDocumentNavigation || isPrimaryRouteRscNavigation
   )
 }

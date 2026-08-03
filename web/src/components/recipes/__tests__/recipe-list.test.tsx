@@ -2,7 +2,17 @@ import React from "react"
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeList } from "../recipe-list"
+import type { RecipeRouteState } from "@/lib/recipe-route-state"
 import type { Recipe } from "@/types/database"
+
+const DEFAULT_ROUTE_STATE: RecipeRouteState = {
+  category: null,
+  favoritesOnly: false,
+  query: "",
+  sortBy: "lastMade",
+  tags: [],
+  viewMode: null,
+}
 
 let lastRecipeOptions:
   | {
@@ -255,18 +265,18 @@ describe("RecipeList", () => {
   })
 
   it("aligns the search copy with the actual search scope", () => {
-    render(<RecipeList />)
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     expect(screen.getByPlaceholderText("Search by recipe name or category...")).toBeInTheDocument()
     expect(screen.getByText("Search matches recipe names and categories.")).toBeInTheDocument()
   })
 
-  it("shows active search filters clearly and trims the query before sending it to data fetching", () => {
-    render(<RecipeList />)
-
-    fireEvent.change(screen.getByLabelText("Search recipes by name or category"), {
-      target: { value: "  chicken  " },
-    })
+  it("shows active route search clearly and sends it to data fetching", () => {
+    render(
+      <RecipeList
+        routeState={{ ...DEFAULT_ROUTE_STATE, query: "chicken" }}
+      />
+    )
 
     expect(lastRecipeOptions?.search).toBe("chicken")
     expect(screen.getByText('Search: "chicken"')).toBeInTheDocument()
@@ -275,11 +285,11 @@ describe("RecipeList", () => {
   })
 
   it("uses filtered empty-state copy that explains what search actually matches", () => {
-    render(<RecipeList />)
-
-    fireEvent.change(screen.getByLabelText("Search recipes by name or category"), {
-      target: { value: "pasta" },
-    })
+    render(
+      <RecipeList
+        routeState={{ ...DEFAULT_ROUTE_STATE, query: "pasta" }}
+      />
+    )
 
     expect(screen.getByText("No recipes match the current search and filters")).toBeInTheDocument()
     expect(
@@ -293,7 +303,7 @@ describe("RecipeList", () => {
   it("keeps mobile filters compact while surfacing shared and settings utilities", () => {
     isDesktopViewport = false
 
-    render(<RecipeList />)
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     expect(screen.queryByLabelText("Recipe browse filters")).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Filters" }))
@@ -312,7 +322,7 @@ describe("RecipeList", () => {
       merged: 2,
     })
 
-    render(<RecipeList />)
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
 
@@ -329,7 +339,7 @@ describe("RecipeList", () => {
       merged: 0,
     })
 
-    render(<RecipeList />)
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
 
@@ -343,7 +353,7 @@ describe("RecipeList", () => {
   it("waits for recipe deletion to succeed before confirming it", async () => {
     deleteRecipeMutateAsync.mockResolvedValueOnce("recipe-1")
 
-    render(<RecipeList />)
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Delete Chicken Soup" }))
 
@@ -357,13 +367,13 @@ describe("RecipeList", () => {
   })
 
   it("opens recipe results on the canonical full-page route", () => {
-    render(<RecipeList />)
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "View Chicken Soup" }))
 
     expect(routerPush).toHaveBeenCalledOnce()
-    expect(routerPush.mock.calls[0][0]).toMatch(
-      /^\/recipes\/recipe-1\?from=recipes&origin=/
+    expect(routerPush).toHaveBeenCalledWith(
+      "/recipes/recipe-1?from=recipes"
     )
   })
 })

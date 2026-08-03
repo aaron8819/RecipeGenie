@@ -1,6 +1,6 @@
 "use client"
 
-import { type MouseEvent, useEffect, useMemo, useState } from "react"
+import { type MouseEvent, useMemo, useState } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
@@ -21,9 +21,6 @@ import {
   Users,
   UtensilsCrossed,
 } from "lucide-react"
-import { AuthForm } from "@/components/auth/auth-form"
-import { BottomNav } from "@/components/layout/bottom-nav"
-import { Header } from "@/components/layout/header"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,7 +52,6 @@ import {
   getRecipeNotes,
 } from "@/lib/recipe-structure"
 import {
-  getRecipeDetailReturnSource,
   returnFromRecipeDetail,
   type RecipeDetailSource,
 } from "@/lib/recipe-detail-navigation"
@@ -72,11 +68,7 @@ import { getRecipeStatsMap } from "@/lib/recipe-history-stats"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import { getTagClassName } from "@/lib/tag-colors"
-import { useAuthContext } from "@/lib/auth-context"
-import { persistHomeTab } from "@/lib/home-navigation"
 import { cn, getErrorMessage } from "@/lib/utils"
-import type { HomeTab } from "@/app/home-tab-state"
-import { isValidHomeTab } from "@/app/home-tab-state"
 import type { Recipe } from "@/types/database"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
 import { RecipeDialog } from "./recipe-dialog"
@@ -89,7 +81,7 @@ const SHOPPING_ITEM_LABEL = {
 
 interface RecipeDetailPageProps {
   recipeId: string
-  originToken?: string
+  returnSource?: RecipeDetailSource | null
 }
 
 interface RecipeDetailContentProps {
@@ -726,11 +718,9 @@ export function RecipeDetailContent({
 
 export function RecipeDetailPage({
   recipeId,
-  originToken,
+  returnSource = null,
 }: RecipeDetailPageProps) {
   const router = useRouter()
-  const { user, loading: authLoading, signOut, isAuthenticated } =
-    useAuthContext()
   const recipeQuery = useRecipe(recipeId)
   const { data: categories } = useCategories()
   const { data: historyStats } = useRecipeHistoryStats()
@@ -744,8 +734,6 @@ export function RecipeDetailPage({
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [isAddToPlanOpen, setIsAddToPlanOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [returnSource, setReturnSource] =
-    useState<RecipeDetailSource | null>(null)
   const returnLabel =
     RECIPE_RETURN_LABELS[returnSource ?? "recipes"]
   const statsMap = useMemo(
@@ -754,24 +742,8 @@ export function RecipeDetailPage({
   )
   const stats = statsMap.get(recipeId)
 
-  useEffect(() => {
-    setReturnSource(
-      getRecipeDetailReturnSource(recipeId, originToken ?? null)
-    )
-  }, [originToken, recipeId])
-
   const handleReturn = () => {
-    returnFromRecipeDetail(
-      router,
-      recipeId,
-      originToken ?? null
-    )
-  }
-
-  const handleTabChange = (tab: string) => {
-    if (!isValidHomeTab(tab)) return
-    persistHomeTab(tab)
-    router.push("/")
+    returnFromRecipeDetail(router, returnSource)
   }
 
   const handleFavorite = async () => {
@@ -856,37 +828,12 @@ export function RecipeDetailPage({
     }
   }
 
-  if (authLoading) {
-    return (
-      <main className="flex min-h-0 flex-1 items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </main>
-    )
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-background p-4">
-        <AuthForm />
-      </main>
-    )
-  }
-
   const errorCode = (recipeQuery.error as { code?: string } | null)?.code
   const isMissing = recipeQuery.isSuccess && !recipeQuery.data
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col bg-background md:pt-[var(--header-height)]">
-      <div className="recipe-detail-print-hidden">
-        <Header
-          userEmail={user?.email}
-          onSignOut={signOut}
-          activeTab={returnSource ?? "recipes"}
-          onTabChange={handleTabChange}
-        />
-      </div>
-
-      <div className="recipe-detail-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-thin">
+    <>
+      <div className="recipe-detail-scroll min-w-0 overflow-x-hidden scroll-smooth">
         {recipeQuery.isLoading ? <RecipeDetailLoading /> : null}
         {recipeQuery.isError ? (
           <RecipeDetailState
@@ -932,13 +879,6 @@ export function RecipeDetailPage({
             isAddingToShopping={addToShopping.isPending}
           />
         ) : null}
-      </div>
-
-      <div className="recipe-detail-print-hidden">
-        <BottomNav
-          activeTab={returnSource ?? "recipes"}
-          onTabChange={handleTabChange}
-        />
       </div>
 
       <RecipeDialog
@@ -988,6 +928,6 @@ export function RecipeDetailPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </main>
+    </>
   )
 }

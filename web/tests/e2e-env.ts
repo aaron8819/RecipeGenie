@@ -53,7 +53,7 @@ export function assertStorageStateContainsNoCredentials(statePath: string, confi
 }
 
 export async function isRecipeGenieAppShellVisible(page: Page): Promise<boolean> {
-  return page.getByRole('button', { name: 'Go to Planner', exact: true }).isVisible().catch(() => false)
+  return page.getByRole('link', { name: 'Go to Planner', exact: true }).isVisible().catch(() => false)
 }
 
 export async function isRecipeGenieAuthVisible(page: Page): Promise<boolean> {
@@ -74,7 +74,7 @@ export async function waitForRecipeGenieSurface(page: Page, timeout = 45000): Pr
 }
 
 export async function assertRecipeGenieAppShell(page: Page, timeout = 45000) {
-  const appShellMarker = page.getByRole('button', { name: 'Go to Planner', exact: true })
+  const appShellMarker = page.getByRole('link', { name: 'Go to Planner', exact: true })
   const started = Date.now()
 
   while (Date.now() - started < timeout) {

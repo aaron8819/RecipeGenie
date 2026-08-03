@@ -46,8 +46,8 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={cn(outfit.variable, playfair.variable)}>
-      <body className={cn(outfit.className, "min-h-0 flex flex-col overflow-hidden")}>
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+      <body className={cn(outfit.className, "min-h-screen overflow-x-hidden")}>
+        <div className="min-h-screen min-w-0">
           <Providers>{children}</Providers>
         </div>
       </body>
