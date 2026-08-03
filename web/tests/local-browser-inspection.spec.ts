@@ -184,6 +184,10 @@ test.describe('local authenticated browser inspection', () => {
     await navigateToInspectionRoute(page, 'shopping')
     await page.goBack()
     await expect(page).toHaveURL(/\/recipes/)
+    await expect.poll(async () => {
+      const metrics = await contentScrollMetrics(page)
+      return Math.abs((metrics?.scrollTop ?? 0) - requestedScrollTop)
+    }).toBeLessThanOrEqual(8)
     const restoredScroll = await contentScrollMetrics(page)
     await testInfo.attach('route-scroll-restoration', {
       body: Buffer.from(JSON.stringify({ requestedScrollTop, restoredScroll }, null, 2)),

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo, useEffect, useCallback } from "react"
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Plus, Search, Heart, Filter, Grid3x3, List, Settings, Loader2, Download, Inbox, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -313,6 +313,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const isDesktop = useIsDesktop()
   const router = useRouter()
   const [search, setSearch] = useState(routeState.query)
+  const lastSubmittedQueryRef = useRef(routeState.query)
   const category = routeState.category
   const selectedTags = routeState.tags
   const favoritesOnly = routeState.favoritesOnly
@@ -328,6 +329,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const [skeletonDelayed, setSkeletonDelayed] = useState(false)
 
   useEffect(() => {
+    if (routeState.query === lastSubmittedQueryRef.current) return
     setSearch(routeState.query)
   }, [routeState.query])
 
@@ -341,6 +343,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   useEffect(() => {
     if (search.trim() === routeState.query) return
     const timeout = window.setTimeout(() => {
+      lastSubmittedQueryRef.current = search.trim()
       replaceRouteState({ query: search })
     }, 250)
     return () => window.clearTimeout(timeout)

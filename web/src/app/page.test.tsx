@@ -24,4 +24,17 @@ describe("root route", () => {
       "/recipes?error=access_denied&error_code=link_expired&error_description=Try+again"
     )
   })
+
+  it("preserves a bounded root auth code for client exchange", () => {
+    expect(
+      buildRootDestination({
+        code: "confirmation-code",
+        next: "https://example.com",
+      })
+    ).toBe("/recipes?code=confirmation-code")
+
+    expect(buildRootDestination({ code: "x".repeat(2049) })).toBe(
+      "/recipes"
+    )
+  })
 })

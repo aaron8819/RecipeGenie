@@ -40,7 +40,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 | File | Responsibility |
 |------|----------------|
-| `web/src/app/recipes/[id]/page.tsx` | Canonical recipe-detail route. |
+| `web/src/app/(authenticated)/recipes/[id]/page.tsx` | Canonical recipe-detail route. |
 | `web/src/components/recipes/recipe-list.tsx` | Main recipe browsing, filtering, and sorting orchestration. |
 | `web/src/components/recipes/recipe-dialog.tsx` | Main create/edit orchestration for manual entry and imports. |
 | `web/src/components/recipes/recipe-dialog-components.tsx` | Presentation-only recipe dialog sections extracted from the main dialog. |

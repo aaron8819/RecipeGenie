@@ -29,11 +29,12 @@ const addToShoppingListMutateAsync = vi.fn()
 const deleteRecipeMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
 const routerPush = vi.fn()
+const routerReplace = vi.fn()
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: routerPush,
-    replace: vi.fn(),
+    replace: routerReplace,
     back: vi.fn(),
   }),
 }))
@@ -259,6 +260,7 @@ describe("RecipeList", () => {
     deleteRecipeMutateAsync.mockReset()
     undoToastShow.mockReset()
     routerPush.mockReset()
+    routerReplace.mockReset()
     window.localStorage.clear()
     window.sessionStorage.clear()
     vi.spyOn(window, "confirm").mockReturnValue(true)
@@ -282,6 +284,29 @@ describe("RecipeList", () => {
     expect(screen.getByText('Search: "chicken"')).toBeInTheDocument()
     expect(screen.getByText("1 recipe shown")).toBeInTheDocument()
     expect(screen.getByText("Search checks names and categories. Category, tag, and favorites filters narrow further.")).toBeInTheDocument()
+  })
+
+  it("does not overwrite newer typing when an older route query arrives", async () => {
+    const view = render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    const search = screen.getByLabelText(
+      "Search recipes by name or category"
+    )
+
+    fireEvent.change(search, { target: { value: "chicken" } })
+    await waitFor(() => {
+      expect(routerReplace).toHaveBeenCalledWith("/recipes?q=chicken", {
+        scroll: false,
+      })
+    })
+
+    fireEvent.change(search, { target: { value: "chicken soup" } })
+    view.rerender(
+      <RecipeList
+        routeState={{ ...DEFAULT_ROUTE_STATE, query: "chicken" }}
+      />
+    )
+
+    expect(search).toHaveValue("chicken soup")
   })
 
   it("uses filtered empty-state copy that explains what search actually matches", () => {

@@ -6,6 +6,7 @@ import { AuthenticatedShell } from "../authenticated-shell"
 globalThis.React = React
 
 const signOut = vi.fn()
+const exchangeCodeForSession = vi.fn()
 let authState = {
   user: null as { email?: string } | null,
   loading: false,
@@ -45,7 +46,7 @@ vi.mock("@/components/auth/auth-form", () => ({
 vi.mock("@/lib/supabase/client", () => ({
   getSupabase: () => ({
     auth: {
-      exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+      exchangeCodeForSession,
     },
   }),
 }))
@@ -58,6 +59,7 @@ describe("AuthenticatedShell", () => {
       loading: false,
       isAuthenticated: false,
     }
+    exchangeCodeForSession.mockResolvedValue({ error: null })
     window.history.replaceState({}, "", "/recipes")
   })
 
@@ -92,6 +94,23 @@ describe("AuthenticatedShell", () => {
     })
     expect(window.location.pathname).toBe("/recipes")
     expect(window.location.search).toBe("")
+  })
+
+  it("exchanges and removes a confirmation code forwarded from the root route", async () => {
+    window.history.replaceState({}, "", "/recipes?code=confirmation-code")
+
+    render(
+      <AuthenticatedShell>
+        <div>Private route</div>
+      </AuthenticatedShell>
+    )
+
+    await waitFor(() => {
+      expect(exchangeCodeForSession).toHaveBeenCalledWith("confirmation-code")
+    })
+    await waitFor(() => {
+      expect(window.location.search).toBe("")
+    })
   })
 
   it("renders the shared shell, route, onboarding, and sign-out behavior", () => {
