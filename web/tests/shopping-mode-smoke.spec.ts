@@ -44,9 +44,9 @@ async function shoppingHasVisibleState(page: import('@playwright/test').Page) {
 
 async function clearShoppingListIfNeeded(
   page: import('@playwright/test').Page,
-  navigateToTab: (tab: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>
+  navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>
 ) {
-  await navigateToTab('shopping')
+  await navigateToRoute('shopping')
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (!(await shoppingHasVisibleState(page))) return
@@ -75,10 +75,10 @@ async function clearShoppingListIfNeeded(
 
 async function ensureRecipeAddedToShopping(
   page: import('@playwright/test').Page,
-  navigateToTab: (tab: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>,
+  navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>,
   smokeRecipe: SmokeRecipe
 ) {
-  await navigateToTab('recipes')
+  await navigateToRoute('recipes')
 
   const searchInput = page.getByPlaceholder(/search by recipe name or category/i)
   if (await searchInput.isVisible().catch(() => false)) {
@@ -117,7 +117,7 @@ async function ensureRecipeAddedToShopping(
     await recipeCard.getByRole('button', { name: /^shop$/i }).click()
   }
 
-  await navigateToTab('shopping')
+  await navigateToRoute('shopping')
   await expect
     .poll(async () => page.locator('[data-checkbox="true"]').count(), {
       timeout: 10000,
@@ -163,10 +163,10 @@ async function createSmokeRecipe(
 
 async function seedPantryAndExcludedState(
   page: import('@playwright/test').Page,
-  navigateToTab: (tab: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>,
+  navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>,
   smokeRecipe: SmokeRecipe
 ) {
-  await navigateToTab('pantry')
+  await navigateToRoute('pantry')
 
   const pantryInput = page.getByPlaceholder(/add pantry item/i)
   await pantryInput.waitFor({ state: 'visible', timeout: 10000 })
@@ -214,14 +214,14 @@ test.describe('Shopping Mode Smoke @core', () => {
   test('keeps shopping mode dense by default and reveals manage controls only on demand @smoke', async ({
     page,
     setupAuth,
-    navigateToTab,
+    navigateToRoute,
   }) => {
     const smokeRecipe = buildSmokeRecipe(`${Date.now()}`)
 
     await setupAuth()
-    await seedPantryAndExcludedState(page, navigateToTab, smokeRecipe)
-    await clearShoppingListIfNeeded(page, navigateToTab)
-    await ensureRecipeAddedToShopping(page, navigateToTab, smokeRecipe)
+    await seedPantryAndExcludedState(page, navigateToRoute, smokeRecipe)
+    await clearShoppingListIfNeeded(page, navigateToRoute)
+    await ensureRecipeAddedToShopping(page, navigateToRoute, smokeRecipe)
 
     const addItemInput = page.getByPlaceholder(/Add (tomatoes|milk)/).filter({ visible: true })
     const manualItem = `smoke apples ${Date.now()}`
@@ -259,21 +259,21 @@ test.describe('Shopping Mode Smoke Mobile @extended', () => {
   test('keeps mobile quick actions and richer restore context available @smoke', async ({
     page,
     setupAuth,
-    navigateToTab,
+    navigateToRoute,
   }) => {
     const smokeRecipe = buildSmokeRecipe(`${Date.now()}`)
 
     await setupAuth()
-    await seedPantryAndExcludedState(page, navigateToTab, smokeRecipe)
-    await clearShoppingListIfNeeded(page, navigateToTab)
-    await ensureRecipeAddedToShopping(page, navigateToTab, smokeRecipe)
+    await seedPantryAndExcludedState(page, navigateToRoute, smokeRecipe)
+    await clearShoppingListIfNeeded(page, navigateToRoute)
+    await ensureRecipeAddedToShopping(page, navigateToRoute, smokeRecipe)
 
     await expect(page.getByText(/recipes in list/i)).toBeVisible()
     const showRecipesButton = page.getByRole('button', { name: /show recipes in list/i })
     await expect(showRecipesButton).toBeVisible()
     await showRecipesButton.click()
-    const activeShoppingPanel = page.locator('[data-home-tab-panel="shopping"][aria-hidden="false"]')
-    await expect(activeShoppingPanel.getByText(new RegExp(smokeRecipe.name, 'i')).first()).toBeVisible()
+    const shoppingScreen = page.locator('[data-app-screen="shopping"]')
+    await expect(shoppingScreen.getByText(new RegExp(smokeRecipe.name, 'i')).first()).toBeVisible()
     await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
 
     const expandPantry = page.getByRole('button', { name: /in pantry .*expand pantry items/i })
@@ -292,7 +292,7 @@ test.describe('Shopping Mode Smoke Mobile @extended', () => {
     await expect(page.getByRole('button', { name: new RegExp(`restore ${smokeRecipe.excludedItem}`, 'i') })).toBeVisible()
     await expect(page.getByText(new RegExp(`Excluded: ${smokeRecipe.excludedItem}`, 'i')).first()).toBeVisible()
 
-    const chickenRow = activeShoppingPanel
+    const chickenRow = shoppingScreen
       .locator('[data-testid^="shopping-row-"]')
       .filter({ hasText: smokeRecipe.ingredients[0].item })
       .first()

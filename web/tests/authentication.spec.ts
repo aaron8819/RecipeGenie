@@ -41,7 +41,7 @@ test.describe('Authentication', () => {
         await page.setViewportSize(viewport)
         await setupAuth()
         await assertRecipeGenieAppShell(page)
-        await expect(page.getByRole('button', { name: 'Go to Planner', exact: true })).toBeVisible()
+        await expect(page.getByRole('link', { name: 'Go to Planner', exact: true })).toBeVisible()
       }
     })
 

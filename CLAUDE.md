@@ -44,7 +44,7 @@ global auth-state file.
 **Data flow:** User Action → React Event Handler → TanStack Mutation (custom hook) → Supabase Client → PostgreSQL (RLS) → Response → Query Invalidation → UI Update
 
 **Key layers:**
-- `web/src/app/page.tsx` — Single-page app with tab navigation (Planner, Recipes, Pantry, Shopping)
+- `web/src/app/(authenticated)/` — Shared authenticated shell and route-owned screens for Recipes, Planner, Pantry, and Shopping; `/` redirects to `/recipes`
 - `web/src/hooks/` — All data access via TanStack Query hooks (`useQuery` for reads, `useMutation` for writes). Shopping hooks in `hooks/shopping/` (barrel via `use-shopping.ts`). Key hooks: `use-recipes.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`
 - `web/src/lib/` — Pure business logic, no React dependencies. Core algorithms: `meal-planner.ts`, `shopping-list.ts`, `shopping-list-merging.ts`, `shopping-list-normalization.ts`, `recipe-parser.ts`, `recipe-url-parser.ts` (URL import/JSON-LD), `recipe-export.ts` (JSON/text export), `pantry-matcher.ts` (ingredient matching), `recipe-sharing.ts` (share lifecycle), `rate-limit.ts` (Upstash Redis), `url-safety.ts` (SSRF guard), `planner-utils.ts`, `planner-colors.ts`, `user-config.ts`
 - `web/src/app/api/` — Server-side API routes: `recipe-import/route.ts` (URL fetch + JSON-LD parse, rate-limited), `recipe-shares/` (create, inbox, sent, accept, decline routes)
@@ -96,7 +96,7 @@ Patterns established during the 2026-02-27 performance audit. Treat these as har
 - **Tag mutations**: Use `supabase.rpc()` for `rename_tag`, `delete_tag`, `merge_tags`. Never loop per-recipe — N+1 updates are banned for bulk tag operations.
 - **Read-then-write banned**: Use `.upsert()` with explicit `onConflict` instead of fetch → conditional insert/update. Keys: `'user_id'` for `shopping_list`, `'user_id,week_date'` for `weekly_plans` (unique index, not constraint — must be explicit).
 - **Heavy library dynamic import**: `@dnd-kit` and other large libraries must be dynamically imported (`next/dynamic`) and kept out of the initial bundle. The extracted file is `recipe-sortable-ingredients.tsx`.
-- **Tab lazy-mounting**: Non-default tabs (`MealPlanner`, `PantryList`, `ShoppingListView`) are mounted on first visit only, tracked via a `visited` Set. Do not revert to always-mounting all tabs — each tab mounts its own queries.
+- **Route lifecycle**: Recipes, Planner, Pantry, and Shopping are separate App Router pages under one authenticated shell. Only the active route mounts its screen and queries; do not reintroduce a kept-mounted tab shell.
 - **Breakpoint detection**: `hooks/use-is-desktop.ts` is the canonical SSR-safe `matchMedia` hook. Do not add new `window.matchMedia` listeners directly in components.
 
 ---

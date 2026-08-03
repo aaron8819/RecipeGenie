@@ -34,7 +34,7 @@ test.describe('Accessibility @extended', () => {
     await page.setViewportSize(VIEWPORTS.desktop)
     await setupAuth()
 
-    await expect(page.getByRole('button', { name: /go to planner/i })).toBeVisible()
+    await expect(page.getByRole('link', { name: /go to planner/i })).toBeVisible()
     await expect(page.getByRole('textbox', { name: /search recipes by name or category/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /^add recipe$/i }).first()).toBeVisible()
 
@@ -47,10 +47,10 @@ test.describe('Accessibility @extended', () => {
     ).toEqual([])
   })
 
-  test('opens and dismisses the add-recipe dialog through keyboard-accessible dialog semantics', async ({ page, setupAuth, navigateToTab }) => {
+  test('opens and dismisses the add-recipe dialog through keyboard-accessible dialog semantics', async ({ page, setupAuth, navigateToRoute }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
 
     await page.getByTestId('recipes-add-fab').click()
 

@@ -138,12 +138,7 @@ function makeConfig(overrides: Partial<UserConfig> = {}): UserConfig {
 
 function renderShoppingList() {
   return render(
-    <div
-      data-home-tab-panel="shopping"
-      data-testid="shopping-test-pane"
-      aria-hidden="false"
-      style={{ overflowY: "auto", maxHeight: "600px" }}
-    >
+    <div data-testid="shopping-route">
       <UndoToastProvider>
         <ShoppingListView />
       </UndoToastProvider>
@@ -689,7 +684,7 @@ describe("ShoppingListView orchestration", () => {
     expectCategoryExpanded("pantry", false)
   })
 
-  it("preserves manual intent across tab visibility, rerenders, category reordering, and unrelated changes", () => {
+  it("preserves manual intent across rerenders, category reordering, and unrelated changes", () => {
     currentShoppingList = makeList({
       items: [
         makeItem("apples", { rowId: "row-apples", categoryKey: "produce" }),
@@ -707,12 +702,7 @@ describe("ShoppingListView orchestration", () => {
       updateShoppingList((list) => ({ ...list, items: [list.items[1], list.items[0]] }))
     })
     view.rerender(
-      <div data-home-tab-panel="shopping" data-testid="shopping-test-pane" aria-hidden="true">
-        <UndoToastProvider><ShoppingListView /></UndoToastProvider>
-      </div>
-    )
-    view.rerender(
-      <div data-home-tab-panel="shopping" data-testid="shopping-test-pane" aria-hidden="false">
+      <div data-testid="shopping-route">
         <UndoToastProvider><ShoppingListView /></UndoToastProvider>
       </div>
     )
@@ -960,7 +950,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByRole("button", { name: "Show 2 done" })).toBeInTheDocument()
   })
 
-  it("uses progress jump chips to reopen a collapsed active category and scroll the active pane", () => {
+  it("uses progress jump chips to reopen and scroll to an active category", () => {
     setMobileViewport()
     vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
       callback(0)
@@ -976,55 +966,11 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    const pane = screen.getByTestId("shopping-test-pane")
-    const scrollTo = vi.fn(({ top }: ScrollToOptions) => {
-      Object.defineProperty(pane, "scrollTop", {
-        configurable: true,
-        writable: true,
-        value: top ?? 0,
-      })
-    })
-
-    Object.defineProperty(pane, "clientHeight", {
-      configurable: true,
-      value: 600,
-    })
-    Object.defineProperty(pane, "scrollHeight", {
-      configurable: true,
-      value: 1600,
-    })
-    Object.defineProperty(pane, "scrollTop", {
-      configurable: true,
-      writable: true,
-      value: 80,
-    })
-    Object.defineProperty(pane, "scrollTo", {
-      configurable: true,
-      value: scrollTo,
-    })
-    vi.spyOn(pane, "getBoundingClientRect").mockReturnValue({
-      x: 0,
-      y: 20,
-      width: 390,
-      height: 600,
-      top: 20,
-      right: 390,
-      bottom: 620,
-      left: 0,
-      toJSON: () => ({}),
-    })
-
     const pantrySection = screen.getByTestId("shopping-category-pantry")
-    vi.spyOn(pantrySection, "getBoundingClientRect").mockReturnValue({
-      x: 0,
-      y: 620,
-      width: 390,
-      height: 180,
-      top: 620,
-      right: 390,
-      bottom: 800,
-      left: 0,
-      toJSON: () => ({}),
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(pantrySection, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
     })
 
     fireEvent.click(screen.getAllByRole("button", { name: "Collapse category" })[1])
@@ -1034,7 +980,10 @@ describe("ShoppingListView orchestration", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /Pantry/i }))
 
     expect(screen.getByText("rice")).toBeInTheDocument()
-    expect(scrollTo).toHaveBeenCalledWith({ top: 584, behavior: "auto" })
+    expect(scrollIntoView).toHaveBeenCalledWith({
+      behavior: "auto",
+      block: "start",
+    })
   })
 
   it("applies bulk check-off optimistically and keeps the checked state stable after settlement", async () => {
@@ -1337,7 +1286,7 @@ describe("ShoppingListView orchestration", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Browse Recipes" }))
 
-    expect(window.localStorage.getItem("recipe-genie-active-tab")).toBe("recipes")
+    expect(routerPush).toHaveBeenCalledWith("/recipes")
   })
 
   it("shows inline add feedback when some manual items are duplicates", async () => {

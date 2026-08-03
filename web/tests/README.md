@@ -174,7 +174,7 @@ npm run test:e2e:codegen
 | File | Coverage |
 |------|----------|
 | `authentication.spec.ts` | Sign up, sign in, sign out, session persistence |
-| `navigation.spec.ts` | Desktop header, mobile bottom nav, tab switching, active indicators |
+| `navigation.spec.ts` | Desktop header, mobile bottom nav, route transitions, history, direct access, active indicators |
 | `recipes.spec.ts` | Recipe CRUD, add/edit modals, import from text, category management |
 | `meal-planner.spec.ts` | Plan generation, settings modal, day assignments, mark as made |
 | `shopping-list.spec.ts` | List generation, check off items, auto-collapse, add to pantry |
@@ -195,10 +195,10 @@ The `fixtures.ts` file provides reusable helpers:
 
 - `setupAuth()` - Navigate to the app with isolated per-test authentication state
 - `signOut()` - Sign out of current session
-- `navigateToTab(tab)` - Navigate to planner/recipes/shopping/pantry
+- `navigateToRoute(route)` - Navigate to planner/recipes/shopping/pantry
 - `addRecipe(recipe)` - Add a recipe via UI
 - `waitForAppLoad()` - Wait for app to be fully loaded
-- `getActiveTab()` - Get name of active tab
+- `getActiveRoute()` - Get the route marked active in shared navigation
 - `isMobileViewport()` - Check if on mobile viewport
 
 ### Authenticated Testing

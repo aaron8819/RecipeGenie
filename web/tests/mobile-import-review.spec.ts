@@ -107,7 +107,7 @@ async function discardDialog(page: import('@playwright/test').Page) {
 test('mobile import review is compact, sectioned, and state-safe', async ({
   page,
   setupAuth,
-  navigateToTab,
+  navigateToRoute,
 }, testInfo) => {
   expect(E2E_CONFIG.target).toBe('local')
   const diagnostics: string[] = []
@@ -126,7 +126,7 @@ test('mobile import review is compact, sectioned, and state-safe', async ({
 
   await page.setViewportSize({ width: 1200, height: 800 })
   await setupAuth()
-  await navigateToTab('recipes')
+  await navigateToRoute('recipes')
 
   const measurements: Array<Record<string, unknown>> = []
   for (const mobileCase of mobileCases) {

@@ -40,7 +40,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 | File | Responsibility |
 |------|----------------|
-| `web/src/app/recipes/[id]/page.tsx` | Canonical recipe-detail route. |
+| `web/src/app/(authenticated)/recipes/[id]/page.tsx` | Canonical recipe-detail route. |
 | `web/src/components/recipes/recipe-list.tsx` | Main recipe browsing, filtering, and sorting orchestration. |
 | `web/src/components/recipes/recipe-dialog.tsx` | Main create/edit orchestration for manual entry and imports. |
 | `web/src/components/recipes/recipe-dialog-components.tsx` | Presentation-only recipe dialog sections extracted from the main dialog. |
@@ -82,22 +82,14 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - Recipe detail always uses `/recipes/[id]`; do not add source-specific detail
   components or intercepting modal routes.
-- Source navigation records only a safe home-tab enum and an opaque
-  same-session origin token. Matching origins return through browser history.
-  That validated session return context survives a refresh, so a refreshed
-  detail page can still return to Recipes, Planner, or Shopping through browser
-  history with an accurate source-aware label. A genuinely direct or shared
-  URL without matching session context ignores route text as return authority
-  and safely falls back to Recipes.
-- If browser local storage cannot record that direct/shared fallback, a
-  session cookie keeps the server-selected Recipes tab authoritative until
-  local tab persistence catches up. Ordinary home visits still restore valid
-  Planner and Shopping tab preferences.
-- Recipes restores its supported filters, sorting, view mode, and scroll
-  position from validated versioned session storage. Planner restores its
-  selected week and mobile week tab through the same kind of validated
-  session-scoped state; restored Planner dates must be real canonical
-  `YYYY-MM-DD` Gregorian calendar dates.
+- Cross-feature links may include only the bounded `from=recipes|planner|shopping`
+  source hint. Known sources return through browser history with an accurate
+  label; direct, shared, missing, or invalid sources replace to `/recipes`.
+- Search, category, tags, favorites, sort, and view mode are canonical query
+  parameters on `/recipes`. Parser helpers validate values and fall back safely;
+  interactions update the URL so Back, Forward, refresh, and copied links work.
+- Recipe navigation does not depend on local storage, session storage, cookies,
+  opaque origin tokens, or a remembered active screen.
 - Mobile Ingredients, Instructions, and Notes controls are anchor navigation.
   All sections remain in normal document flow.
 
@@ -216,4 +208,4 @@ part of the fast general `npm run verify` command.
 The local inspection suite covers mobile import state transitions at 360x800,
 390x844, 430x932, and 390x420, plus the preserved desktop flow at 1200x800.
 
-Last updated: 2026-07-29
+Last updated: 2026-08-03

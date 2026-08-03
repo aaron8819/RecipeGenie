@@ -2,7 +2,6 @@ import React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeDetailPage } from "../recipe-detail-page"
-import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import type { Recipe } from "@/types/database"
 
 globalThis.React = React
@@ -16,10 +15,6 @@ const favoriteMutateAsync = vi.fn()
 const addShoppingMutateAsync = vi.fn()
 const refetch = vi.fn()
 const showToast = vi.fn()
-const originToken = "11111111-1111-4111-8111-111111111111"
-
-let isAuthenticated = true
-let authLoading = false
 let recipeResult: {
   data: Recipe | null | undefined
   error: unknown
@@ -47,15 +42,6 @@ vi.mock("next/image", () => ({
     // eslint-disable-next-line @next/next/no-img-element
     <img alt={alt || ""} {...props} />
   ),
-}))
-
-vi.mock("@/lib/auth-context", () => ({
-  useAuthContext: () => ({
-    user: { id: "user-1", email: "cook@example.com" },
-    loading: authLoading,
-    signOut: vi.fn(),
-    isAuthenticated,
-  }),
 }))
 
 vi.mock("@/hooks/use-recipes", () => ({
@@ -86,18 +72,6 @@ vi.mock("@/hooks/use-shopping", () => ({
 
 vi.mock("@/hooks/use-undo-toast", () => ({
   useUndoToast: () => ({ show: showToast }),
-}))
-
-vi.mock("@/components/layout/header", () => ({
-  Header: () => <header>App header</header>,
-}))
-
-vi.mock("@/components/layout/bottom-nav", () => ({
-  BottomNav: () => <nav>App navigation</nav>,
-}))
-
-vi.mock("@/components/auth/auth-form", () => ({
-  AuthForm: () => <div>Sign in form</div>,
 }))
 
 vi.mock("../recipe-dialog", () => ({
@@ -138,11 +112,6 @@ function makeRecipe(): Recipe {
 describe("RecipeDetailPage states", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    sessionStorage.clear()
-    localStorage.clear()
-    vi.spyOn(crypto, "randomUUID").mockReturnValue(originToken)
-    isAuthenticated = true
-    authLoading = false
     recipeResult = {
       data: undefined,
       error: null,
@@ -269,14 +238,10 @@ describe("RecipeDetailPage states", () => {
         isLoading: false,
         isSuccess: true,
       }
-      openRecipeDetail(router, "recipe-1", source)
-      router.back.mockClear()
-      router.push.mockClear()
-
       render(
         <RecipeDetailPage
           recipeId="recipe-1"
-          originToken={originToken}
+          returnSource={source}
         />
       )
 
@@ -289,7 +254,7 @@ describe("RecipeDetailPage states", () => {
     }
   )
 
-  it("preserves validated return context across a detail-page refresh", async () => {
+  it("preserves route return context across a detail-page refresh", async () => {
     recipeResult = {
       data: makeRecipe(),
       error: null,
@@ -297,11 +262,10 @@ describe("RecipeDetailPage states", () => {
       isLoading: false,
       isSuccess: true,
     }
-    openRecipeDetail(router, "recipe-1", "planner")
     const firstRender = render(
       <RecipeDetailPage
         recipeId="recipe-1"
-        originToken={originToken}
+        returnSource="planner"
       />
     )
 
@@ -313,7 +277,7 @@ describe("RecipeDetailPage states", () => {
     render(
       <RecipeDetailPage
         recipeId="recipe-1"
-        originToken={originToken}
+        returnSource="planner"
       />
     )
 
@@ -322,7 +286,7 @@ describe("RecipeDetailPage states", () => {
     ).toBeInTheDocument()
   })
 
-  it("uses the Recipes fallback for direct URLs without valid origin context", () => {
+  it("uses the Recipes fallback for direct URLs without route context", () => {
     recipeResult = {
       data: makeRecipe(),
       error: null,
@@ -337,15 +301,6 @@ describe("RecipeDetailPage states", () => {
     )
 
     expect(router.back).not.toHaveBeenCalled()
-    expect(router.replace).toHaveBeenCalledWith("/")
-    expect(localStorage.getItem("recipe-genie-active-tab")).toBe("recipes")
-  })
-
-  it("shows authentication instead of leaking recipe state", () => {
-    isAuthenticated = false
-
-    render(<RecipeDetailPage recipeId="recipe-1" />)
-
-    expect(screen.getByText("Sign in form")).toBeInTheDocument()
+    expect(router.replace).toHaveBeenCalledWith("/recipes")
   })
 })

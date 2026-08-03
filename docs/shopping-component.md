@@ -28,7 +28,6 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/lib/shopping-ingredient-canonicalization.ts` | Pure, narrow purchase-identity canonicalization and controlled display pluralization. |
 | `web/src/lib/shopping-list-merging.ts` | Merge-compatible-unit logic. |
 | `web/src/lib/shopping-categories.ts` | Category lookup and excluded-keyword matching. |
-| `web/src/lib/pane-scroll.ts` | Pane-relative scrolling helper for kept-mounted home-tab panes. |
 
 ## Boundaries
 
@@ -73,14 +72,13 @@ projection so stored snapshots and existing row IDs remain unchanged.
 
 Per-item pending state matters. Do not disable all shopping actions behind a single mutation-level `isPending` flag when only one item is changing.
 
-### In-pane jump navigation
+### Document jump navigation
 
-Shopping runs inside the kept-mounted home tab shell, where the active tab pane is the real `overflow-y-auto` scroller and `body` is locked to the viewport.
+Shopping owns `/shopping` and scrolls with the document under the shared authenticated shell.
 
-- Do not use `scrollIntoView()` for Shopping section jumps or other home-tab in-pane navigation.
-- Use `scrollNodeIntoPane()` from `web/src/lib/pane-scroll.ts` so the active pane is scrolled explicitly.
-- Mobile jump navigation should avoid smooth scrolling when sticky in-pane UI is present.
-- If the Shopping sticky mobile header changes height, re-check the jump offset constants in `shopping-list.tsx`.
+- Section jumps call `scrollIntoView()` on the target section.
+- Target sections use CSS scroll margins to clear sticky navigation.
+- Mobile jump navigation should avoid smooth scrolling when sticky UI is present.
 
 ### Pantry bridge
 
@@ -100,4 +98,4 @@ npm run test -- --run
 npx playwright test shopping-list.spec.ts --project=chromium
 ```
 
-Last updated: 2026-08-01
+Last updated: 2026-08-03

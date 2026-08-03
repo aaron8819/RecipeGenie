@@ -22,60 +22,37 @@ const viewports = [
 
 async function contentScrollMetrics(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
-    const scrollContainer = Array.from(document.querySelectorAll<HTMLElement>('*'))
-      .find((element) => {
-        const { overflowY } = window.getComputedStyle(element)
-        return (
-          ['auto', 'scroll'].includes(overflowY) &&
-          element.scrollHeight > element.clientHeight + 1
-        )
-      })
-
-    if (!scrollContainer) return null
+    const scrollContainer = document.scrollingElement ?? document.documentElement
     return {
-      viewportHeight: scrollContainer.clientHeight,
+      viewportHeight: window.innerHeight,
       contentHeight: scrollContainer.scrollHeight,
-      scrollTop: scrollContainer.scrollTop,
+      scrollTop: window.scrollY,
       scrollScreens: Number(
-        (scrollContainer.scrollHeight / scrollContainer.clientHeight).toFixed(2)
+        (scrollContainer.scrollHeight / window.innerHeight).toFixed(2)
       ),
     }
   })
 }
 
-async function navigateToInspectionTab(
+async function navigateToInspectionRoute(
   page: import('@playwright/test').Page,
-  tab: 'recipes' | 'shopping' | 'planner' | 'pantry'
+  route: 'recipes' | 'shopping' | 'planner' | 'pantry'
 ) {
-  const control = tab === 'planner'
-    ? page.getByRole('button', { name: 'Go to Planner', exact: true })
+  const control = route === 'planner'
+    ? page.getByRole('link', { name: 'Go to Planner', exact: true })
     : page
       .getByRole('navigation', { name: 'Bottom navigation' })
-      .getByRole('button', {
-        name: new RegExp(`^${tab}$`, 'i'),
+      .getByRole('link', {
+        name: new RegExp(`^${route}$`, 'i'),
       })
 
   await expect(control).toBeVisible()
   await control.click()
 
-  const activePanel = page.locator(
-    `[data-home-tab-panel="${tab}"][aria-hidden="false"]`
-  )
-  await expect(activePanel).toBeVisible()
-  return activePanel
-}
-
-function waitForPlannerHistoryPrefetch(
-  page: import('@playwright/test').Page
-) {
-  return page.waitForResponse((response) => {
-    const url = new URL(response.url())
-    return (
-      response.request().method() === 'GET' &&
-      url.origin === 'http://127.0.0.1:54321' &&
-      url.pathname === '/rest/v1/recipe_history'
-    )
-  })
+  const activeScreen = page.locator(`[data-app-screen="${route}"]`)
+  await expect(activeScreen).toBeVisible()
+  await expect(page.locator('[data-app-screen]')).toHaveCount(1)
+  return activeScreen
 }
 
 test.describe('local authenticated browser inspection', () => {
@@ -115,17 +92,13 @@ test.describe('local authenticated browser inspection', () => {
     })
 
     await page.setViewportSize({ width: 1200, height: 800 })
-    const initialPlannerHistoryPrefetch = waitForPlannerHistoryPrefetch(page)
     await setupAuth()
-    await initialPlannerHistoryPrefetch
 
     for (const viewport of viewports) {
       await page.setViewportSize(viewport)
-      const plannerHistoryPrefetch = waitForPlannerHistoryPrefetch(page)
       await page.reload({ waitUntil: 'domcontentloaded' })
-      await plannerHistoryPrefetch
       await expect(page.locator('main')).toBeVisible()
-      await expect(page.getByRole('button', { name: /^planner$/i }).first())
+      await expect(page.getByRole('link', { name: /^planner$/i }).first())
         .toBeVisible({ timeout: 45000 })
       await page.waitForLoadState('networkidle')
 
@@ -159,12 +132,12 @@ test.describe('local authenticated browser inspection', () => {
     }
 
     await page.setViewportSize({ width: 390, height: 844 })
-    for (const tab of ['recipes', 'shopping', 'planner', 'pantry'] as const) {
-      const activePanel = await navigateToInspectionTab(page, tab)
+    for (const route of ['recipes', 'shopping', 'planner', 'pantry'] as const) {
+      const activeScreen = await navigateToInspectionRoute(page, route)
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth))
         .toBeLessThanOrEqual(1)
-      if (tab === 'recipes') {
-        const lasagnaCard = activePanel
+      if (route === 'recipes') {
+        const lasagnaCard = activeScreen
           .getByRole('button')
           .filter({
             has: page.getByRole('heading', {
@@ -174,14 +147,14 @@ test.describe('local authenticated browser inspection', () => {
           })
         await expect(lasagnaCard).toHaveCount(1)
         await expect(lasagnaCard).toBeVisible()
-      } else if (tab === 'shopping') {
-        const lemonsRow = activePanel
+      } else if (route === 'shopping') {
+        const lemonsRow = activeScreen
           .getByTestId('shopping-item-row')
           .filter({ has: page.getByText('lemons', { exact: true }) })
         await expect(lemonsRow).toHaveCount(1)
         await expect(lemonsRow).toBeVisible()
-      } else if (tab === 'planner') {
-        const mondaySection = activePanel.locator(
+      } else if (route === 'planner') {
+        const mondaySection = activeScreen.locator(
           'section[data-day-index="0"][data-day-date]'
         )
         await expect(
@@ -191,49 +164,40 @@ test.describe('local authenticated browser inspection', () => {
           mondaySection.getByText('Weeknight Lemon Chicken', { exact: true })
         ).toBeVisible()
       } else {
-        const garlicItem = activePanel
+        const garlicItem = activeScreen
           .locator('[data-pantry-item]')
           .filter({ has: page.getByText('garlic', { exact: true }) })
         await expect(garlicItem).toHaveCount(1)
         await expect(garlicItem).toBeVisible()
       }
       await page.screenshot({
-        path: testInfo.outputPath(`mobile-390-${tab}.png`),
+        path: testInfo.outputPath(`mobile-390-${route}.png`),
         fullPage: true,
       })
     }
 
-    await navigateToInspectionTab(page, 'recipes')
+    await navigateToInspectionRoute(page, 'recipes')
     const requestedScrollTop = await page.evaluate(() => {
-      const scrollContainer = Array.from(document.querySelectorAll<HTMLElement>('*'))
-        .find((element) => {
-          const { overflowY } = window.getComputedStyle(element)
-          return (
-            ['auto', 'scroll'].includes(overflowY) &&
-            element.scrollHeight > element.clientHeight + 1
-          )
-        })
-      if (!scrollContainer) return 0
-      scrollContainer.scrollTop = Math.min(500, scrollContainer.scrollHeight - scrollContainer.clientHeight)
-      return scrollContainer.scrollTop
+      window.scrollTo(0, Math.min(500, document.documentElement.scrollHeight - window.innerHeight))
+      return window.scrollY
     })
-    await navigateToInspectionTab(page, 'shopping')
-    await navigateToInspectionTab(page, 'recipes')
+    await navigateToInspectionRoute(page, 'shopping')
+    await page.goBack()
+    await expect(page).toHaveURL(/\/recipes/)
+    await expect.poll(async () => {
+      const metrics = await contentScrollMetrics(page)
+      return Math.abs((metrics?.scrollTop ?? 0) - requestedScrollTop)
+    }).toBeLessThanOrEqual(8)
     const restoredScroll = await contentScrollMetrics(page)
-    await testInfo.attach('tab-scroll-restoration', {
+    await testInfo.attach('route-scroll-restoration', {
       body: Buffer.from(JSON.stringify({ requestedScrollTop, restoredScroll }, null, 2)),
       contentType: 'application/json',
     })
 
-    const lasagnaCard = page
-      .getByRole('button')
-      .filter({
-        has: page.getByRole('heading', {
-          name: 'Long Sunday Lasagna',
-          exact: true,
-        }),
-      })
-    await lasagnaCard.click()
+    await page.getByRole('heading', {
+      name: 'Long Sunday Lasagna',
+      exact: true,
+    }).click()
     await expect(page).toHaveURL(
       /\/recipes\/10000000-0000-4000-8000-000000000006(?:\?|$)/
     )
@@ -308,7 +272,7 @@ test.describe('local authenticated browser inspection', () => {
     expect(diagnostics.filter((entry) => entry.kind === 'response' && Number(entry.detail.split(' ')[0]) >= 500)).toEqual([])
   })
 
-  test('keeps the direct recipe fallback on Recipes when local storage writes fail', async ({
+  test('returns direct recipe detail URLs to Recipes', async ({
     page,
     setupAuth,
   }) => {
@@ -316,49 +280,17 @@ test.describe('local authenticated browser inspection', () => {
     await page.setViewportSize({ width: 1200, height: 800 })
     await setupAuth()
 
-    await page.evaluate(() => {
-      window.localStorage.setItem('recipe-genie-active-tab', 'planner')
-      document.cookie =
-        'recipe-genie-active-tab=planner; Path=/; Max-Age=31536000; SameSite=Lax'
-    })
     await page.goto(
       `${E2E_CONFIG.baseURL}/recipes/10000000-0000-4000-8000-000000000006`
     )
     await expect(page.getByTestId('recipe-detail-page')).toBeVisible()
-    await page.evaluate(() => {
-      const originalSetItem = Storage.prototype.setItem
-      Storage.prototype.setItem = function (key: string, value: string) {
-        if (
-          this === window.localStorage &&
-          key === 'recipe-genie-active-tab'
-        ) {
-          throw new Error('simulated local storage write failure')
-        }
-        return originalSetItem.call(this, key, value)
-      }
-    })
 
     await page.getByRole('button', { name: /back to recipes/i }).click()
 
-    await expect(page).toHaveURL(`${E2E_CONFIG.baseURL}/`)
-    await expect(
-      page.locator(
-        '[data-home-tab-panel="recipes"][aria-hidden="false"]'
-      )
-    ).toBeVisible()
-    const persistedState = await page.evaluate(() => ({
-      activeTab: window.localStorage.getItem('recipe-genie-active-tab'),
-      cookie: document.cookie
-        .split('; ')
-        .find((entry) => entry.startsWith('recipe-genie-active-tab='))
-        ?.split('=')[1],
-    }))
-
-    expect(persistedState).toEqual({
-      activeTab: 'planner',
-      cookie: 'recipes',
-    })
+    await expect(page).toHaveURL(`${E2E_CONFIG.baseURL}/recipes`)
+    await expect(page.locator('[data-app-screen="recipes"]')).toBeVisible()
 
     await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page).toHaveURL(`${E2E_CONFIG.baseURL}/recipes`)
   })
 })

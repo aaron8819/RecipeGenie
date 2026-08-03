@@ -14,15 +14,15 @@ function rowById(page: Page, rowId: string) {
 async function openShoppingFromBottomNav(page: Page) {
   await page
     .getByRole('navigation', { name: /bottom navigation/i })
-    .getByRole('button', { name: /^shopping$/i })
-    .evaluate((button: HTMLButtonElement) => button.click())
+    .getByRole('link', { name: /^shopping$/i })
+    .evaluate((link: HTMLAnchorElement) => link.click())
 }
 
-async function activateBottomNavTab(page: Page, tabName: RegExp) {
+async function activateBottomNavRoute(page: Page, routeName: RegExp) {
   await page
     .getByRole('navigation', { name: /bottom navigation/i })
-    .getByRole('button', { name: tabName })
-    .evaluate((button: HTMLButtonElement) => button.click())
+    .getByRole('link', { name: routeName })
+    .evaluate((link: HTMLAnchorElement) => link.click())
 }
 
 async function dismissNextDevTools(page: Page) {
@@ -42,7 +42,7 @@ async function ensureShoppingView(page: Page) {
       return
     }
 
-    await activateBottomNavTab(page, /^shopping$/i)
+    await activateBottomNavRoute(page, /^shopping$/i)
 
     await page.waitForTimeout(250)
   }
@@ -60,45 +60,19 @@ async function readShellLockState(page: Page) {
   }))
 }
 
-async function readActivePaneState(page: Page) {
+async function readDocumentScrollState(page: Page) {
   return page.evaluate(() => {
-    const activePane = Array.from(document.querySelectorAll('main .container > div[aria-hidden="false"]'))
-      .find((element) => getComputedStyle(element).overflowY === 'auto') as HTMLDivElement | undefined
-
-    if (!activePane) {
-      return null
-    }
-
-    const before = activePane.scrollTop
-    activePane.scrollTop = before + 120
+    const scrollElement = document.scrollingElement ?? document.documentElement
+    const before = window.scrollY
+    window.scrollTo(0, Math.min(before + 120, scrollElement.scrollHeight - window.innerHeight))
 
     return {
       before,
-      after: activePane.scrollTop,
-      clientHeight: activePane.clientHeight,
-      scrollHeight: activePane.scrollHeight,
-      overflowY: getComputedStyle(activePane).overflowY,
+      after: window.scrollY,
+      clientHeight: window.innerHeight,
+      scrollHeight: scrollElement.scrollHeight,
     }
   })
-}
-
-async function persistHomeTab(page: Page, tab: 'planner' | 'recipes' | 'shopping' | 'pantry') {
-  await page.context().addCookies([
-    {
-      name: 'recipe-genie-active-tab',
-      value: tab,
-      url: page.url(),
-    },
-  ])
-
-  await page.addInitScript((nextTab) => {
-    window.localStorage.setItem('recipe-genie-active-tab', nextTab)
-  }, tab)
-
-  await page.evaluate((nextTab) => {
-    window.localStorage.setItem('recipe-genie-active-tab', nextTab)
-    document.cookie = `recipe-genie-active-tab=${encodeURIComponent(nextTab)}; Path=/; Max-Age=31536000; SameSite=Lax`
-  }, tab)
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -128,7 +102,7 @@ test.describe('Shopping List Mobile @extended', () => {
     }
   })
 
-  test('reaches Shopping from bottom nav reliably and shows seeded rows', async ({ page, navigateToTab }) => {
+  test('reaches Shopping from bottom nav reliably and shows seeded rows', async ({ page, navigateToRoute }) => {
     const seed = `${Date.now()}-nav`
     const rowId = `row-mobile-nav-${seed}`
 
@@ -144,7 +118,7 @@ test.describe('Shopping List Mobile @extended', () => {
     })
     await page.reload()
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await openShoppingFromBottomNav(page)
 
     await expect(page.getByRole('heading', { name: /shopping list/i })).toBeVisible()
@@ -373,7 +347,7 @@ test.describe('Shopping List Mobile @extended', () => {
     await expect(categoryHeader('bakery')).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('keeps the active Shopping pane scrollable after repeated section jumps and tab switches', async ({ page }) => {
+  test('keeps document scrolling usable after section jumps and route switches', async ({ page }) => {
     const seed = `${Date.now()}-jump-stability`
     const produceRowId = `row-mobile-produce-${seed}`
     const proteinRowId = `row-mobile-protein-${seed}`
@@ -410,9 +384,9 @@ test.describe('Shopping List Mobile @extended', () => {
     await expect(page.getByRole('button', { name: /^jump to protein$/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /^jump to pantry$/i })).toBeVisible()
 
-    const paneBefore = await readActivePaneState(page)
-    expect(paneBefore).not.toBeNull()
-    expect(paneBefore?.after).toBeGreaterThan(paneBefore?.before ?? 0)
+    const documentBefore = await readDocumentScrollState(page)
+    expect(documentBefore).not.toBeNull()
+    expect(documentBefore?.after).toBeGreaterThan(documentBefore?.before ?? 0)
 
     await page.getByRole('button', { name: /^jump to protein$/i }).click()
     await expect(rowById(page, proteinRowId)).toBeVisible()
@@ -420,19 +394,19 @@ test.describe('Shopping List Mobile @extended', () => {
     await page.getByRole('button', { name: /^jump to pantry$/i }).click()
     await expect(rowById(page, pantryRowId)).toBeVisible()
 
-    const paneAfterJumps = await readActivePaneState(page)
-    expect(paneAfterJumps).not.toBeNull()
-    expect(paneAfterJumps?.after).toBeGreaterThan(paneAfterJumps?.before ?? 0)
+    const documentAfterJumps = await readDocumentScrollState(page)
+    expect(documentAfterJumps).not.toBeNull()
+    expect(documentAfterJumps?.after).toBeGreaterThan(documentAfterJumps?.before ?? 0)
 
-    await activateBottomNavTab(page, /^recipes$/i)
+    await activateBottomNavRoute(page, /^recipes$/i)
     await page.waitForTimeout(250)
 
-    await activateBottomNavTab(page, /^shopping$/i)
+    await activateBottomNavRoute(page, /^shopping$/i)
     await expect(rowById(page, pantryRowId)).toBeVisible()
 
-    const paneAfterReturn = await readActivePaneState(page)
-    expect(paneAfterReturn).not.toBeNull()
-    expect(paneAfterReturn?.after).toBeGreaterThan(paneAfterReturn?.before ?? 0)
+    const documentAfterReturn = await readDocumentScrollState(page)
+    expect(documentAfterReturn).not.toBeNull()
+    expect(documentAfterReturn?.after).toBeGreaterThan(documentAfterReturn?.before ?? 0)
   })
 
   test('releases Shopping action-menu locks before switching to Planner on mobile @extended', async ({ page }) => {
@@ -452,8 +426,7 @@ test.describe('Shopping List Mobile @extended', () => {
         }),
       ],
     })
-    await persistHomeTab(page, 'shopping')
-    await page.goto('/')
+    await page.goto('/shopping')
     await ensureShoppingView(page)
 
     const row = rowById(page, rowId)
@@ -474,7 +447,7 @@ test.describe('Shopping List Mobile @extended', () => {
       })
 
     await dismissNextDevTools(page)
-    await activateBottomNavTab(page, /^planner$/i)
+    await activateBottomNavRoute(page, /^planner$/i)
     await expect(page.getByRole('button', { name: /today/i })).toBeVisible()
 
     await expect
@@ -485,15 +458,14 @@ test.describe('Shopping List Mobile @extended', () => {
         visibleMenuCount: 0,
       })
 
-    const paneState = await readActivePaneState(page)
-    expect(paneState).not.toBeNull()
-    expect(paneState?.overflowY).toBe('auto')
-    expect(paneState?.scrollHeight).toBeGreaterThanOrEqual(paneState?.clientHeight ?? 0)
+    const documentState = await readDocumentScrollState(page)
+    expect(documentState).not.toBeNull()
+    expect(documentState?.scrollHeight).toBeGreaterThanOrEqual(documentState?.clientHeight ?? 0)
 
-    if (paneState && paneState.scrollHeight > paneState.clientHeight) {
-      expect(paneState.after).toBeGreaterThan(paneState.before)
+    if (documentState && documentState.scrollHeight > documentState.clientHeight) {
+      expect(documentState.after).toBeGreaterThan(documentState.before)
     } else {
-      await expect(page.getByRole('button', { name: /^shopping$/i })).toBeVisible()
+      await expect(page.getByRole('link', { name: /^shopping$/i })).toBeVisible()
     }
   })
 })

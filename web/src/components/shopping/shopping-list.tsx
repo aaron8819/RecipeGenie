@@ -57,11 +57,9 @@ import { cn, toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
-import { navigateToHomeTab } from "@/lib/home-navigation"
 import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
 import { createShoppingRowId } from "@/lib/shopping-row-identity"
-import { scrollNodeIntoPane } from "@/lib/pane-scroll"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import { useRecipes } from "@/hooks/use-recipes"
 import {
@@ -111,11 +109,6 @@ type ManualEditDraft = {
   amount: string
   unit: string
 }
-
-const SHOPPING_CATEGORY_JUMP_OFFSET = {
-  desktop: 0,
-  mobile: 96,
-} as const
 
 function isManualOnlyItem(item: ShoppingItem) {
   const sources = item.sources || []
@@ -1227,9 +1220,9 @@ export function ShoppingListView() {
       const categorySection = categorySectionRefs.current[categoryKey]
       if (!categorySection) return
 
-      scrollNodeIntoPane(categorySection, {
-        offset: isDesktop ? SHOPPING_CATEGORY_JUMP_OFFSET.desktop : SHOPPING_CATEGORY_JUMP_OFFSET.mobile,
+      categorySection.scrollIntoView({
         behavior: isDesktop ? "smooth" : "auto",
+        block: "start",
       })
     })
   }, [isDesktop, setCategoryExpanded])
@@ -1365,6 +1358,7 @@ export function ShoppingListView() {
               categorySectionRefs.current[categoryData.key] = node
             }}
             data-testid={`shopping-category-${categoryData.key}`}
+            className="scroll-mt-24 md:scroll-mt-0"
           >
             <ShoppingCategorySection
               categoryData={categoryData}
@@ -1556,7 +1550,7 @@ export function ShoppingListView() {
             }}
             secondaryAction={{
               label: "Browse Recipes",
-              onClick: () => navigateToHomeTab("recipes"),
+              onClick: () => router.push("/recipes"),
             }}
           />
         </div>

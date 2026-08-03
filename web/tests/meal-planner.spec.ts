@@ -70,7 +70,7 @@ function plannerWeekLabel(page: Page): Locator {
 }
 
 async function openPlannerTab(page: Page) {
-  await page.locator('header').getByRole('button', { name: /^planner$/i }).click()
+  await page.locator('header').getByRole('link', { name: /^planner$/i }).click()
 }
 
 async function handleGeneratePlan(page: Page) {
@@ -151,12 +151,12 @@ test.describe('Meal Planner', () => {
     await openPlannerTab(page)
   })
 
-  test('generates a plan for the visible week and keeps that week populated after reload @core', async ({ page, navigateToTab }) => {
+  test('generates a plan for the visible week and keeps that week populated after reload @core', async ({ page, navigateToRoute }) => {
     const seed = `${Date.now()}-generate`
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await createRecipe(page, buildRecipe(seed))
-    await navigateToTab('planner')
+    await navigateToRoute('planner')
 
     const weekLabel = await plannerWeekLabel(page).textContent()
     await handleGeneratePlan(page)
@@ -169,13 +169,13 @@ test.describe('Meal Planner', () => {
     await expect(page.getByRole('button', { name: /move to another day/i }).first()).toBeVisible()
   })
 
-  test('adds a created recipe to plan, moves it to another day, and preserves the assignment after reload @core', async ({ page, navigateToTab }) => {
+  test('adds a created recipe to plan, moves it to another day, and preserves the assignment after reload @core', async ({ page, navigateToRoute }) => {
     const seed = `${Date.now()}-move`
     const recipe = buildRecipe(seed)
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await createRecipe(page, recipe)
-    await navigateToTab('planner')
+    await navigateToRoute('planner')
     await jumpWeeks(page, 12)
 
     await addRecipeToCurrentWeek(page, recipe.name)
@@ -199,34 +199,34 @@ test.describe('Meal Planner', () => {
     await expectAssignedDayDisabled(page, recipe.name, assignedDayLabel)
   })
 
-  test('sends planned meal ingredients to Shopping and keeps the recipe linked back to Shopping on return @core', async ({ page, navigateToTab }) => {
+  test('sends planned meal ingredients to Shopping and keeps the recipe linked back to Shopping on return @core', async ({ page, navigateToRoute }) => {
     const seed = `${Date.now()}-shopping`
     const recipe = buildRecipe(seed)
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await createRecipe(page, recipe)
-    await navigateToTab('planner')
+    await navigateToRoute('planner')
 
     await addRecipeToCurrentWeek(page, recipe.name)
 
     await page.getByRole('button', { name: /add planned meal ingredients to shopping/i }).click()
 
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expect(page.getByText(new RegExp(recipe.ingredients[0].item, 'i')).first()).toBeVisible()
     await expect(page.getByText(new RegExp(`from ${escapeRegex(recipe.name)}`, 'i')).first()).toBeVisible()
 
-    await navigateToTab('planner')
+    await navigateToRoute('planner')
     await expect(plannerRecipeCard(page, recipe.name).getByText(/in shopping/i)).toBeVisible()
   })
 
-  test('loads a saved template into the currently visible week @extended', async ({ page, navigateToTab }) => {
+  test('loads a saved template into the currently visible week @extended', async ({ page, navigateToRoute }) => {
     const seed = `${Date.now()}-template`
     const recipe = buildRecipe(seed)
     const templateName = `E2E Template ${seed}`
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await createRecipe(page, recipe)
-    await navigateToTab('planner')
+    await navigateToRoute('planner')
     await jumpWeeks(page, 16)
 
     await addRecipeToCurrentWeek(page, recipe.name)

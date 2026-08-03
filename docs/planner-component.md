@@ -23,6 +23,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/hooks/use-plan-templates.ts` | Plan template queries and mutations. |
 | `web/src/lib/meal-planner.ts` | Plan generation and related planner business logic. |
 | `web/src/lib/planner-utils.ts` | Date helpers and day-index utilities. |
+| `web/src/lib/planner-route-state.ts` | Validates and builds the canonical `/planner?week=YYYY-MM-DD` route state. |
 
 ## Boundaries
 
@@ -44,9 +45,12 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - Use `toLocalNoonISOString()` for `date_made` values derived from a calendar day.
 - Keep planner date handling local-calendar-safe to avoid UTC boundary drift.
-- Persisted Planner view dates are accepted only when they round-trip as real
+- Planner view dates come from the `week` query parameter and are accepted only
+  when they round-trip as real
   Gregorian calendar dates in canonical `YYYY-MM-DD` form. Invalid state falls
   back to the current planning week before any plan query runs.
+- Week controls push a new URL so browser Back, Forward, refresh, and copied
+  links preserve the selected week; session storage is not used.
 
 ### Weekly-plan persistence
 
@@ -77,4 +81,4 @@ npm run check:cycles
 npm run check:no-new-ts-expect-error
 ```
 
-Last updated: 2026-03-07
+Last updated: 2026-08-03

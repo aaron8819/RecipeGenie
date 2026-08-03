@@ -336,7 +336,7 @@ test.describe('local recipe import browser verification', () => {
   test('creates a persisted recipe from canonical Markdown', async ({
     page,
     setupAuth,
-    navigateToTab,
+    navigateToRoute,
   }, testInfo) => {
     expect(E2E_CONFIG.target).toBe('local')
     expect(new URL(E2E_CONFIG.baseURL).hostname).toBe('127.0.0.1')
@@ -349,7 +349,7 @@ test.describe('local recipe import browser verification', () => {
     try {
       await removePriorImportedTitle(client)
       await setupAuth()
-      await navigateToTab('recipes')
+      await navigateToRoute('recipes')
 
       await page.getByRole('button', { name: /add recipe/i }).first().click()
       const dialog = page.getByRole('dialog').first()
@@ -386,7 +386,7 @@ test.describe('local recipe import browser verification', () => {
       await expect(detail).toBeHidden()
 
       await page.reload()
-      await navigateToTab('recipes')
+      await navigateToRoute('recipes')
       detail = await openImportedRecipe(page)
       await assertImportedDetail(detail)
       console.log('[recipe-import] create reopen assertions: PASS')
@@ -407,7 +407,7 @@ test.describe('local recipe import browser verification', () => {
   test('replaces recipe content while preserving identity and metadata', async ({
     page,
     setupAuth,
-    navigateToTab,
+    navigateToRoute,
   }, testInfo) => {
     expect(E2E_CONFIG.target).toBe('local')
     const diagnostics = createDiagnostics(page)
@@ -440,7 +440,7 @@ test.describe('local recipe import browser verification', () => {
       if (fixtureError) throw fixtureError
 
       await setupAuth()
-      await navigateToTab('recipes')
+      await navigateToRoute('recipes')
       const search = page.getByLabel(/search recipes by name or category/i)
       await search.fill(fixture.name)
       await page.locator(`[data-recipe-name="${fixture.name}"]`).first().click()
@@ -487,7 +487,7 @@ test.describe('local recipe import browser verification', () => {
       await expect(editDialog).toBeHidden()
 
       await page.reload()
-      await navigateToTab('recipes')
+      await navigateToRoute('recipes')
       const replacedDetail = await openImportedRecipe(page)
       await assertImportedDetail(replacedDetail)
       await expect(
@@ -532,7 +532,7 @@ test.describe('local recipe import browser verification', () => {
   test('previews and imports a representative legacy plain-text recipe', async ({
     page,
     setupAuth,
-    navigateToTab,
+    navigateToRoute,
   }, testInfo) => {
     expect(E2E_CONFIG.target).toBe('local')
     const diagnostics = createDiagnostics(page)
@@ -542,7 +542,7 @@ test.describe('local recipe import browser verification', () => {
     try {
       await removePriorLegacyFixture(client)
       await setupAuth()
-      await navigateToTab('recipes')
+      await navigateToRoute('recipes')
 
       await page.getByRole('button', { name: /add recipe/i }).first().click()
       const dialog = page.getByRole('dialog').first()

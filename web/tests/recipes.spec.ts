@@ -248,7 +248,7 @@ test.describe.configure({ mode: 'serial' })
 test.describe('Recipes', () => {
   let recipeRun: RecipeRunState | undefined
 
-  test.beforeEach(async ({ page, setupAuth, navigateToTab }) => {
+  test.beforeEach(async ({ page, setupAuth, navigateToRoute }) => {
     const run: RecipeRunState = {
       runId: randomUUID(),
       recipeUuids: new Set(),
@@ -258,7 +258,7 @@ test.describe('Recipes', () => {
     recipeRun = run
     page.on('request', (request) => captureRecipeIdentity(request, run))
     await setupAuth()
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
   })
 
   test.afterEach(async () => {
@@ -316,7 +316,7 @@ test.describe('Recipes', () => {
     await expect(page.getByText(updatedName, { exact: true })).toBeVisible()
   })
 
-  test('shows recipe detail actions and adds its ingredients to shopping @extended', async ({ page, navigateToTab }) => {
+  test('shows recipe detail actions and adds its ingredients to shopping @extended', async ({ page, navigateToRoute }) => {
     const seed = `${recipeRun!.runId}-actions`
     const recipe = buildRecipe(seed)
 
@@ -348,11 +348,11 @@ test.describe('Recipes', () => {
 
     await returnFromRecipeDetail(page)
     await page.reload()
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await searchRecipes(page, recipe.name)
     await expect(page.getByText(recipe.name, { exact: true })).toBeVisible()
 
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await page.getByRole('button', { name: /jump to protein/i }).click()
     await expect(page.getByText(recipe.ingredients[0].item, { exact: true })).toBeVisible()
     await page.getByRole('button', { name: /jump to fresh produce/i }).click()
@@ -389,7 +389,7 @@ test.describe('Recipes', () => {
     ).toBeVisible()
   })
 
-  test('preserves an imported ingredient quantity range through recipe and shopping views @extended', async ({ page, navigateToTab }) => {
+  test('preserves an imported ingredient quantity range through recipe and shopping views @extended', async ({ page, navigateToRoute }) => {
     const seed = `${recipeRun!.runId}-range`
     const recipeName = `Range Recipe ${seed}`
     const ingredient = `lemon zest ${seed}`
@@ -435,13 +435,13 @@ Ingredients:
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
 
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expect(page.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: `From ${recipeName}` })).toBeVisible()
     await expect(page.getByText('½ 0.5-1 tsp', { exact: true })).toHaveCount(0)
   })
 
-  test('replaces edited recipe contributions without stale or duplicate shopping rows @extended', async ({ page, navigateToTab }) => {
+  test('replaces edited recipe contributions without stale or duplicate shopping rows @extended', async ({ page, navigateToRoute }) => {
     const seed = `${recipeRun!.runId}-replace`
     const originalIngredient = `e2e orzo ${seed}`
     const editedIngredient = `e2e farro ${seed}`
@@ -462,11 +462,11 @@ Ingredients:
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
 
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(1)
     await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(1)
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await searchRecipes(page, recipe.name)
     await page.getByText(recipe.name, { exact: true }).click()
     await page.getByRole('button', { name: /edit recipe/i }).click()
@@ -489,7 +489,7 @@ Ingredients:
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
 
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(1)
     await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(0)
     await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(0)
@@ -499,15 +499,15 @@ Ingredients:
     await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(0)
     await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(0)
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await searchRecipes(page, recipe.name)
     await page.getByText(recipe.name, { exact: true }).click()
     await deleteOpenRecipe(page)
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(0)
   })
 
-  test('deletes an active recipe contribution through one visible confirmation @smoke', async ({ page, navigateToTab }) => {
+  test('deletes an active recipe contribution through one visible confirmation @smoke', async ({ page, navigateToRoute }) => {
     const seed = `${Date.now()}-delete`
     const recipe = {
       ...buildRecipe(seed),
@@ -585,11 +585,11 @@ Ingredients:
     await searchRecipes(page, recipe.name)
     await expect(page.getByText(/no recipes match the current search and filters/i)).toBeVisible()
 
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expect(page.getByText(recipe.ingredients[0].item, { exact: true })).toHaveCount(0)
   })
 
-  test('preserves supported pantry and exclusion lifecycle actions across replacement @smoke', async ({ page, navigateToTab }) => {
+  test('preserves supported pantry and exclusion lifecycle actions across replacement @smoke', async ({ page, navigateToRoute }) => {
     test.setTimeout(120000)
     const seed = `${Date.now()}-lifecycle`
     const pantryRecipe = {
@@ -604,7 +604,7 @@ Ingredients:
     await createRecipe(page, pantryRecipe)
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
 
     const pantryRow = page.getByText(pantryRecipe.ingredients[0].item, { exact: true })
       .locator('xpath=ancestor::*[.//button[@aria-label="Add to pantry"]][1]')
@@ -617,12 +617,12 @@ Ingredients:
       name: new RegExp(`^Restore ${escapeRegex(pantryRecipe.ingredients[0].item)}`, 'i'),
     })).toBeVisible()
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await searchRecipes(page, pantryRecipe.name)
     await page.getByText(pantryRecipe.name, { exact: true }).click()
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     const pantryRestore = page.getByRole('button', {
       name: new RegExp(`^Restore ${escapeRegex(pantryRecipe.ingredients[0].item)}`, 'i'),
     })
@@ -630,7 +630,7 @@ Ingredients:
     await pantryRestore.click()
     await expect(page.getByText(pantryRecipe.ingredients[0].item, { exact: true })).toBeVisible()
 
-    await navigateToTab('pantry')
+    await navigateToRoute('pantry')
     const removePantryButton = page.getByRole('button', {
       name: new RegExp(`remove ${escapeRegex(pantryRecipe.ingredients[0].item)}`, 'i'),
     })
@@ -642,22 +642,22 @@ Ingredients:
     await page.keyboard.press('Enter')
     await expect(page.getByText(exclusionRecipe.ingredients[0].item, { exact: true })).toBeVisible()
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await createRecipe(page, exclusionRecipe)
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     const excludedRestore = page.getByRole('button', {
       name: new RegExp(`^Restore ${escapeRegex(exclusionRecipe.ingredients[0].item)}`, 'i'),
     })
     await expect(excludedRestore).toBeVisible()
 
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
     await searchRecipes(page, exclusionRecipe.name)
     await page.getByText(exclusionRecipe.name, { exact: true }).click()
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expect(excludedRestore).toBeVisible()
     await excludedRestore.click()
     await expect(
@@ -666,11 +666,11 @@ Ingredients:
       })
     ).toBeVisible()
 
-    await navigateToTab('pantry')
+    await navigateToRoute('pantry')
     await page.getByRole('button', {
       name: new RegExp(`remove excluded keyword ${escapeRegex(exclusionRecipe.ingredients[0].item)}`, 'i'),
     }).click()
-    await navigateToTab('recipes')
+    await navigateToRoute('recipes')
 
     for (const recipe of [pantryRecipe, exclusionRecipe]) {
       await searchRecipes(page, recipe.name)

@@ -30,12 +30,12 @@ async function dismissNextDevTools(page: import('@playwright/test').Page) {
   }
 }
 
-async function activateBottomNavTab(
+async function activateBottomNavRoute(
   page: import('@playwright/test').Page,
-  tabName: RegExp
+  routeName: RegExp
 ) {
-  const button = page.getByRole('navigation', { name: /bottom navigation/i }).getByRole('button', { name: tabName })
-  await button.dispatchEvent('click')
+  const link = page.getByRole('navigation', { name: /bottom navigation/i }).getByRole('link', { name: routeName })
+  await link.dispatchEvent('click')
 }
 
 test.describe('Smoke Baseline', () => {
@@ -61,16 +61,17 @@ test.describe('Smoke Baseline', () => {
     })
   })
 
-  test('restores the authenticated home shell at the app root @extended @smoke', async ({ page, setupAuth }) => {
+  test('redirects the authenticated app root to Recipes @extended @smoke', async ({ page, setupAuth }) => {
     await setupAuth()
     await page.goto('/')
 
     await assertRecipeGenieAppShell(page)
     await expect(page.getByRole('button', { name: /help/i })).toBeVisible()
     await expectRecipesView(page)
+    await expect(page).toHaveURL(/\/recipes$/)
   })
 
-  test('switches tabs through the mobile bottom navigation @extended @smoke', async ({ page, setupAuth }) => {
+  test('switches routes through the mobile bottom navigation @extended @smoke', async ({ page, setupAuth }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
 
@@ -78,25 +79,24 @@ test.describe('Smoke Baseline', () => {
     await expect(bottomNav).toBeVisible()
     await dismissNextDevTools(page)
 
-    await activateBottomNavTab(page, /planner/i)
+    await activateBottomNavRoute(page, /planner/i)
     await expectPlannerView(page)
 
-    await activateBottomNavTab(page, /shopping/i)
+    await activateBottomNavRoute(page, /shopping/i)
     await expectShoppingView(page)
 
-    await activateBottomNavTab(page, /pantry/i)
+    await activateBottomNavRoute(page, /pantry/i)
     await expectPantryView(page)
   })
 
-  test('persists the active tab contract across reloads @extended @smoke', async ({ page, setupAuth, navigateToTab }) => {
+  test('keeps the active route across reloads @extended @smoke', async ({ page, setupAuth, navigateToRoute }) => {
     await setupAuth()
-    await navigateToTab('shopping')
+    await navigateToRoute('shopping')
     await expectShoppingView(page)
 
     await page.reload()
     await expectShoppingView(page)
-    await expect
-      .poll(async () => page.evaluate(() => localStorage.getItem('recipe-genie-active-tab')))
-      .toBe('shopping')
+    await expect(page).toHaveURL(/\/shopping$/)
+    await expect(page.locator('[data-app-screen="shopping"]')).toHaveCount(1)
   })
 })

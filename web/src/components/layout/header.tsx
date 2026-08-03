@@ -1,6 +1,8 @@
 "use client"
 
 import { LogOut, UtensilsCrossed, HelpCircle } from "lucide-react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { OnboardingDialog } from "./onboarding-dialog"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { cn } from "@/lib/utils"
@@ -11,11 +13,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const NAV_TABS = [
-  { id: "planner", label: "Planner" },
-  { id: "recipes", label: "Recipes" },
-  { id: "shopping", label: "Shopping" },
-  { id: "pantry", label: "Pantry" },
+const NAV_ITEMS = [
+  { href: "/planner", label: "Planner" },
+  { href: "/recipes", label: "Recipes" },
+  { href: "/shopping", label: "Shopping" },
+  { href: "/pantry", label: "Pantry" },
 ] as const
 
 function getInitials(email: string | undefined): string {
@@ -28,17 +30,14 @@ function getInitials(email: string | undefined): string {
 interface HeaderProps {
   userEmail?: string
   onSignOut: () => void
-  activeTab?: string
-  onTabChange?: (tab: string) => void
 }
 
 export function Header({
   userEmail,
   onSignOut,
-  activeTab,
-  onTabChange,
 }: HeaderProps) {
   const isDesktop = useIsDesktop()
+  const pathname = usePathname()
 
   return (
     <>
@@ -51,9 +50,8 @@ export function Header({
         <div className="w-full flex items-center justify-between">
           {/* Left: logo, app name, help — flush to left padding; logo/text navigate to planner */}
           <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => onTabChange?.("planner")}
+            <Link
+              href="/planner"
               className="flex items-center gap-2 flex-shrink-0 rounded-lg -m-1 p-1 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               aria-label="Go to Planner"
             >
@@ -63,7 +61,7 @@ export function Header({
               <h1 className="font-display text-xl sm:text-2xl text-primary flex-shrink-0">
                 Recipe Genie
               </h1>
-            </button>
+            </Link>
             <OnboardingDialog
               trigger={
                 <button
@@ -77,16 +75,17 @@ export function Header({
             />
           </div>
 
-          {/* Center: nav tabs — Stitch: gap-8, centered via justify-between */}
-          {onTabChange && isDesktop && (
+          {/* Center: primary routes — Stitch: gap-8, centered via justify-between */}
+          {isDesktop && (
             <nav className="flex items-center justify-center gap-8 text-sm font-medium flex-shrink-0">
-              {NAV_TABS.map((tab) => {
-                const isActive = activeTab === tab.id
+              {NAV_ITEMS.map((item) => {
+                const isActive =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`)
                 return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => onTabChange(tab.id)}
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    aria-current={isActive ? "page" : undefined}
                     className={cn(
                       "pb-1 transition-colors flex-shrink-0",
                       isActive
@@ -94,8 +93,8 @@ export function Header({
                         : "text-slate-500 hover:text-primary"
                     )}
                   >
-                    {tab.label}
-                  </button>
+                    {item.label}
+                  </Link>
                 )
               })}
             </nav>
