@@ -97,6 +97,27 @@ export type Ingredient = {
   originalText?: string
 }
 
+export type CanonicalIngredient = Omit<Ingredient, "groupLabel">
+
+export type IngredientSection = {
+  label: string | null
+  ingredients: CanonicalIngredient[]
+}
+
+export type InstructionSection = {
+  label: string | null
+  steps: string[]
+}
+
+export type RecipeStructure = {
+  ingredientSections: IngredientSection[]
+  instructionSections: InstructionSection[]
+}
+
+export type RecipeContent = RecipeStructure & {
+  notes: string[]
+}
+
 export type RecipeInstructionGroup = {
   label?: string
   steps: string[]

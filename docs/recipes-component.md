@@ -176,6 +176,32 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Older recipes that only have flat `instructions` must continue to render correctly.
 - Legacy `Notes:` label lines inside flat instructions are still supported at hydration/render time and should not be reintroduced into persisted notes-aware recipes.
 
+Slice A of the canonical recipe-structure design is checked in as a foundation
+only. `database.ts` defines `CanonicalIngredient`, `IngredientSection`,
+`InstructionSection`, `RecipeStructure`, and `RecipeContent` alongside the
+unchanged legacy runtime types. `recipe-structure.ts` owns the strict canonical
+validator, the deterministic legacy converter, and the two ordered boundary
+derivations `flattenRecipeIngredients()` and `flattenRecipeInstructions()`.
+Conversion results distinguish ordinary success, equivalent dual data,
+fail-closed conflicts, and malformed input without putting recipe content in
+classification evidence.
+
+The aggregate-only structural preflight lives at
+`supabase/verification/canonical_recipe_structure_preflight.sql`. Its default
+path requires the exact Recipe Genie production project reference and migration
+ledger through `015`, sets both the session default and transaction read-only,
+and always rolls back. For dependency-free local validation against any
+PostgreSQL 16 instance, pass
+`-v canonical_recipe_structure_fixture_mode=1`; also pass
+`-v canonical_recipe_structure_fixture_failure=1` to prove the conflict path
+exits nonzero. Production reruns still require repository authorization and
+must never use fixture mode.
+
+No recipe read, write, import, sharing, export, Shopping, or form-state path
+uses the canonical foundation in Slice A. The atomic schema/runtime cutover and
+the later physical removal of legacy fields remain separate Slice B and Slice C
+work described in `canonical-recipe-structure-design.md`.
+
 ### Dialog discard protection
 
 - Unsaved-change discard confirmation applies to both create mode and edit mode.
