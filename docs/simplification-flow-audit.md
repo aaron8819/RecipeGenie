@@ -900,8 +900,10 @@ Ownership and boundaries:
 - Detail renders sections directly.
 - Serving scaling maps section ingredients without changing section structure.
 - Shopping calls one pure `flattenIngredients(content)` at its boundary.
-- Plain-text/Schema.org export flattens only when the external format requires
-  it; Schema.org `HowToSection` can preserve groups where supported.
+- The active export is Schema.org JSON-LD; it flattens ingredients because
+  `recipeIngredient` is flat and can preserve instruction sections with
+  `HowToSection`. There is no active plain-text, Markdown, or clipboard recipe
+  export. Any future flat export must derive its output at that boundary.
 - Share snapshots copy and validate `RecipeContent` once.
 - Paste-to-replace replaces canonical sections and notes according to the
   existing preservation rules.
@@ -1115,8 +1117,8 @@ Focused tests:
 - Detail and print preserve section and item order.
 - Scaling leaves structure unchanged and Shopping receives the same flattened
   ingredient order/quantities.
-- Flat Schema.org/plain-text export is a pure derivation; grouped export uses
-  `HowToSection` where supported.
+- Schema.org export derives flat `recipeIngredient` values and uses
+  `HowToSection` where supported. No plain-text export is currently active.
 - Share/accept round-trip uses one content representation.
 
 Manual flow: create flat and grouped recipes, import each source type, edit and
