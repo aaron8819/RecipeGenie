@@ -1381,8 +1381,7 @@ function main() {
       }
     }
 
-    runSupabase(["db", "reset", "--local", "--no-seed"])
-    restoredLatest = true
+    runSupabase(["db", "reset", "--local", "--version", "014", "--no-seed"])
     container = databaseContainer()
     for (const [name, snapshot, accepted] of cases) {
       const encoded = JSON.stringify(snapshot)
@@ -1404,6 +1403,9 @@ function main() {
         )
       }
     }
+
+    runSupabase(["db", "reset", "--local", "--no-seed"])
+    restoredLatest = true
   } finally {
     if (!restoredLatest) {
       runSupabase(["db", "reset", "--local", "--no-seed"])
