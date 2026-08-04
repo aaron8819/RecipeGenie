@@ -13,11 +13,12 @@ delete from public.recipes where user_id in (
 );
 
 insert into public.recipes(
-  id, recipe_uuid, user_id, name, category, servings, ingredients, instructions
+  id, recipe_uuid, user_id, name, category, servings,
+  ingredient_sections, instruction_sections
 ) values
-  ('stage2c-a-1', '61111111-1111-4111-8111-111111111111', '61000000-0000-4000-8000-000000000001', 'Stage 2C A1', 'test', 4, '[]', '{}'),
-  ('stage2c-a-2', '61222222-2222-4222-8222-222222222222', '61000000-0000-4000-8000-000000000001', 'Stage 2C A2', 'test', 4, '[]', '{}'),
-  ('stage2c-b-1', '62333333-3333-4333-8333-333333333333', '62000000-0000-4000-8000-000000000002', 'Stage 2C B1', 'test', 4, '[]', '{}');
+  ('stage2c-a-1', '61111111-1111-4111-8111-111111111111', '61000000-0000-4000-8000-000000000001', 'Stage 2C A1', 'test', 4, '[]', '[]'),
+  ('stage2c-a-2', '61222222-2222-4222-8222-222222222222', '61000000-0000-4000-8000-000000000001', 'Stage 2C A2', 'test', 4, '[]', '[]'),
+  ('stage2c-b-1', '62333333-3333-4333-8333-333333333333', '62000000-0000-4000-8000-000000000002', 'Stage 2C B1', 'test', 4, '[]', '[]');
 
 -- Historical migration-owner evidence remains nullable and unresolved.
 insert into public.recipe_history(user_id, recipe_id, date_made)
@@ -56,8 +57,10 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '61000000-0000-4000-8000-000000000001', true);
 
 select extensions.lives_ok($$
-  insert into public.recipes(recipe_uuid, user_id, name, category, servings, ingredients, instructions)
-  values ('61444444-4444-4444-8444-444444444444', auth.uid(), 'UUID only', 'test', 4, '[]', '{}')
+  insert into public.recipes(
+    recipe_uuid, user_id, name, category, servings,
+    ingredient_sections, instruction_sections
+  ) values ('61444444-4444-4444-8444-444444444444', auth.uid(), 'UUID only', 'test', 4, '[]', '[]')
 $$, 'UUID-only recipe creation succeeds');
 select extensions.is(
   (select id from public.recipes where recipe_uuid = '61444444-4444-4444-8444-444444444444'),
@@ -364,8 +367,10 @@ $$, '23503', 'recipe UUID is unresolved or belongs to another user',
   'duplicate deletion returns the non-disclosing not-found result'
 );
 
-insert into public.recipes(recipe_uuid, user_id, name, category, servings, ingredients, instructions)
-values ('61666666-6666-4666-8666-666666666666', auth.uid(), 'Rollback recipe', 'test', 4, '[]', '{}');
+insert into public.recipes(
+  recipe_uuid, user_id, name, category, servings,
+  ingredient_sections, instruction_sections
+) values ('61666666-6666-4666-8666-666666666666', auth.uid(), 'Rollback recipe', 'test', 4, '[]', '[]');
 update public.weekly_plans
 set recipe_uuids = recipe_uuids || '61666666-6666-4666-8666-666666666666'::uuid,
     day_assignment_recipe_uuids = day_assignment_recipe_uuids

@@ -13,14 +13,15 @@ delete from public.recipes where user_id in (
 );
 
 insert into public.recipes(
-  id, recipe_uuid, user_id, name, category, servings, ingredients, instructions
+  id, recipe_uuid, user_id, name, category, servings,
+  ingredient_sections, instruction_sections
 ) values
   ('71111111-1111-4111-8111-111111111111', '71111111-1111-4111-8111-111111111111',
-    '71000000-0000-4000-8000-000000000001', 'Same Name', 'test', 4, '[]', '{}'),
+    '71000000-0000-4000-8000-000000000001', 'Same Name', 'test', 4, '[]', '[]'),
   ('71222222-2222-4222-8222-222222222222', '71222222-2222-4222-8222-222222222222',
-    '71000000-0000-4000-8000-000000000001', 'Same Name', 'test', 4, '[]', '{}'),
+    '71000000-0000-4000-8000-000000000001', 'Same Name', 'test', 4, '[]', '[]'),
   ('72333333-3333-4333-8333-333333333333', '72333333-3333-4333-8333-333333333333',
-    '72000000-0000-4000-8000-000000000002', 'Same Name', 'test', 4, '[]', '{}');
+    '72000000-0000-4000-8000-000000000002', 'Same Name', 'test', 4, '[]', '[]');
 
 select extensions.is(
   (select count(*)::integer from public.recipes where name = 'Same Name'), 3,

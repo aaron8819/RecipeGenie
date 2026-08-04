@@ -51,14 +51,15 @@ insert into auth.users(id, email) values
   ('82000000-0000-4000-8000-000000000002', 'made-state-b@example.test');
 
 insert into public.recipes(
-  id, recipe_uuid, user_id, name, category, servings, ingredients, instructions
+  id, recipe_uuid, user_id, name, category, servings,
+  ingredient_sections, instruction_sections
 ) values
   ('made-a-target', '81111111-1111-4111-8111-111111111111',
-    '81000000-0000-4000-8000-000000000001', 'Target', 'test', 1, '[]', '{}'),
+    '81000000-0000-4000-8000-000000000001', 'Target', 'test', 1, '[]', '[]'),
   ('made-a-unrelated', '81222222-2222-4222-8222-222222222222',
-    '81000000-0000-4000-8000-000000000001', 'Unrelated', 'test', 1, '[]', '{}'),
+    '81000000-0000-4000-8000-000000000001', 'Unrelated', 'test', 1, '[]', '[]'),
   ('made-b-target', '82333333-3333-4333-8333-333333333333',
-    '82000000-0000-4000-8000-000000000002', 'Other owner', 'test', 1, '[]', '{}');
+    '82000000-0000-4000-8000-000000000002', 'Other owner', 'test', 1, '[]', '[]');
 
 insert into public.weekly_plans(
   user_id, week_date, recipe_uuids, day_assignment_recipe_uuids, made_recipe_uuids

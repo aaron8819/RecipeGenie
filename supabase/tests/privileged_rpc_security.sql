@@ -39,8 +39,8 @@ insert into public.recipes (
   category,
   servings,
   tags,
-  ingredients,
-  instructions
+  ingredient_sections,
+  instruction_sections
 )
 values
   (
@@ -51,7 +51,7 @@ values
     2,
     array['common', 'rename-a', 'merge-a', 'delete-a'],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-owned',
@@ -61,7 +61,7 @@ values
     2,
     array['common', 'rename-b', 'merge-b', 'delete-b'],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-malformed-source',
@@ -71,7 +71,7 @@ values
     2,
     array['malformed-share-source'],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-contradictory-quantity',
@@ -81,7 +81,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-contradictory-package',
@@ -91,7 +91,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-oversized-rational',
@@ -101,7 +101,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-malformed-package',
@@ -111,7 +111,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-contradictory-yield',
@@ -121,7 +121,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-malformed-instructions',
@@ -131,7 +131,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-direct-acceptance-source',
@@ -141,7 +141,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-decline-source',
@@ -151,7 +151,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   ),
   (
     'b-legacy-empty-source',
@@ -161,7 +161,7 @@ values
     2,
     array[]::text[],
     '[]'::jsonb,
-    '{}'::text[]
+    '[]'::jsonb
   );
 
 insert into public.recipe_history (user_id, recipe_id, date_made)
