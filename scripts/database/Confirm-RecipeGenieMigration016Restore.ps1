@@ -64,7 +64,7 @@ if ($ExpectedProjectReference -cne $definition.ExpectedProjectReference) { throw
     -MaximumAgeMinutes $MaximumAgeMinutes `
     -ExpectedMigrationPath $migrationPath `
     -ExpectedGitCommitSha ([string]$manifest.gitCommitSha)
-if ($LASTEXITCODE -ne 0) { throw 'Backup verification failed before disposable restore confirmation.' }
+if (-not $?) { throw 'Backup verification failed before disposable restore confirmation.' }
 
 $gitExecutablePath = Resolve-GitExecutable
 $rootResult = Invoke-GitCapture $gitExecutablePath @('-C', $PSScriptRoot, 'rev-parse', '--show-toplevel')
