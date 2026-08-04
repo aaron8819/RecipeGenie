@@ -191,6 +191,31 @@ function Get-RecipeGenieMigrationBackupDefinition {
                 RequireRestoreVerification = $true
             }
         }
+        'supabase/migrations/016_canonical_recipe_structure_cutover.sql' {
+            [ordered]@{
+                MigrationPath = $normalizedPath
+                PendingMigrationVersion = '016'
+                ExpectedAppliedMigrationVersions = @('001','002','003','004','005','006','007','008','009','010','011','012','013','014','015')
+                ExpectedProjectReference = 'eyaoahwzixqetjgfghsh'
+                RequireRestoreVerification = $true
+                AllowExternalEvidenceCommit = $true
+                ExpectedEvidenceCommitSha = '172958fe5a413f4c8ced08b431b3ead82dc92bf7'
+                PreflightPath = 'supabase/verification/canonical_recipe_structure_preflight.sql'
+                RestoreAssertionPath = 'scripts/database/restore/016_canonical_recipe_structure_cutover.sql'
+                RestorePreparationPath = 'scripts/database/restore/016_prepare_clean_restore.sql'
+                RestoreFinalizationPath = 'scripts/database/restore/016_finalize_clean_restore.sql'
+                RequiredArchiveTables = @(
+                    'public.recipes',
+                    'public.recipe_shares',
+                    'supabase_migrations.schema_migrations'
+                )
+                RequiredArchiveFunctions = @(
+                    'private.recipe_share_snapshot_is_valid',
+                    'public.accept_recipe_share',
+                    'public.handle_new_user'
+                )
+            }
+        }
         default { throw 'Migration is not supported by the Recipe Genie production backup gate.' }
     }
     [pscustomobject]$definition
@@ -341,6 +366,48 @@ function Get-GitBlobSha256 {
         $null = $stderrTask.GetAwaiter().GetResult()
         if ($process.ExitCode -ne 0) { throw 'Migration evidence could not be read from the recorded Git commit.' }
         return [Convert]::ToHexString($hashBytes).ToLowerInvariant()
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function Export-GitBlobToFile {
+    param(
+        [Parameter(Mandatory)] [string]$RepositoryRoot,
+        [Parameter(Mandatory)] [string]$CommitSha,
+        [Parameter(Mandatory)] [string]$RepositoryRelativePath,
+        [Parameter(Mandatory)] [string]$GitExecutablePath,
+        [Parameter(Mandatory)] [string]$DestinationPath
+    )
+
+    if ($CommitSha -notmatch '^[0-9a-f]{40}$') { throw 'Git commit SHA is invalid.' }
+    if ([IO.Path]::IsPathRooted($RepositoryRelativePath) -or $RepositoryRelativePath -match '(^|[\\/])\.\.([\\/]|$)') {
+        throw 'Evidence path must be repository-relative and cannot escape the repository.'
+    }
+    $spec = "$CommitSha`:$($RepositoryRelativePath.Replace('\\','/'))"
+    $blobResult = Invoke-GitCapture $GitExecutablePath @('-C', $RepositoryRoot, 'rev-parse', $spec)
+    if ($blobResult.ExitCode -ne 0 -or -not $blobResult.Output) { throw 'Evidence is not present at the recorded Git commit.' }
+    $blobId = $blobResult.Output.Trim()
+    if ($blobId -notmatch '^[0-9a-f]{40,64}$') { throw 'Git blob identity is invalid.' }
+
+    $destinationDirectory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($DestinationPath))
+    [IO.Directory]::CreateDirectory($destinationDirectory) | Out-Null
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = [Diagnostics.ProcessStartInfo]::new()
+    $process.StartInfo.FileName = $GitExecutablePath
+    $process.StartInfo.UseShellExecute = $false
+    $process.StartInfo.CreateNoWindow = $true
+    $process.StartInfo.RedirectStandardOutput = $true
+    $process.StartInfo.RedirectStandardError = $true
+    foreach ($argument in @('-C', $RepositoryRoot, 'cat-file', 'blob', $blobId)) { $process.StartInfo.ArgumentList.Add($argument) }
+    try {
+        if (-not $process.Start()) { throw 'Git blob process did not start.' }
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $stream = [IO.File]::Open($DestinationPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+        try { $process.StandardOutput.BaseStream.CopyTo($stream) } finally { $stream.Dispose() }
+        $process.WaitForExit()
+        $null = $stderrTask.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) { throw 'Evidence could not be read from the recorded Git commit.' }
     } finally {
         $process.Dispose()
     }
@@ -602,15 +669,44 @@ function Get-PostgreSqlMajorVersion {
 }
 
 function Test-ArchiveTableOfContents {
-    param([Parameter(Mandatory)] [string]$Contents)
+    param(
+        [Parameter(Mandatory)] [string]$Contents,
+        [object]$Definition
+    )
     $ledger = $Contents -match '(?im)\b(?:TABLE|TABLE DATA)\s+supabase_migrations\s+schema_migrations\b'
     $core = $Contents -match '(?im)\bTABLE\s+public\s+recipes\b'
     $function = $Contents -match '(?im)\bFUNCTION\s+(?:public|private)\s+'
+    $requiredTablesFound = $true
+    $requiredFunctionsFound = $true
+    if ($Definition -and $Definition.PSObject.Properties['RequiredArchiveTables']) {
+        foreach ($table in @($Definition.RequiredArchiveTables)) {
+            $parts = ([string]$table).Split('.', 2)
+            if ($parts.Count -ne 2) { throw 'Required archive table definition is invalid.' }
+            $schema = [regex]::Escape($parts[0])
+            $name = [regex]::Escape($parts[1])
+            if ($Contents -notmatch "(?im)\b(?:TABLE|TABLE DATA)\s+$schema\s+$name\b") {
+                $requiredTablesFound = $false
+            }
+        }
+    }
+    if ($Definition -and $Definition.PSObject.Properties['RequiredArchiveFunctions']) {
+        foreach ($requiredFunction in @($Definition.RequiredArchiveFunctions)) {
+            $parts = ([string]$requiredFunction).Split('.', 2)
+            if ($parts.Count -ne 2) { throw 'Required archive function definition is invalid.' }
+            $schema = [regex]::Escape($parts[0])
+            $name = [regex]::Escape($parts[1])
+            if ($Contents -notmatch "(?im)\bFUNCTION\s+$schema\s+$name(?:\(|\s)") {
+                $requiredFunctionsFound = $false
+            }
+        }
+    }
     [pscustomobject]@{
         MigrationLedgerFound = $ledger
         CoreApplicationTableFound = $core
         ApplicationFunctionFound = $function
-        ExpectedApplicationMarkersFound = ($core -and $function)
+        RequiredTablesFound = $requiredTablesFound
+        RequiredFunctionsFound = $requiredFunctionsFound
+        ExpectedApplicationMarkersFound = ($core -and $function -and $requiredTablesFound -and $requiredFunctionsFound)
     }
 }
 

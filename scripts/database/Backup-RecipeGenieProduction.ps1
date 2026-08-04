@@ -5,7 +5,8 @@ param(
     [switch]$PreflightOnly,
     [string]$PostgreSqlBinDirectory,
     [ValidateRange(1, 60)] [int]$ManagementApiTimeoutSeconds = 10,
-    [string]$MigrationPath = 'supabase/migrations/014_add_recipe_yield_metadata.sql'
+    [string]$MigrationPath = 'supabase/migrations/014_add_recipe_yield_metadata.sql',
+    [string]$EvidenceCommitSha
 )
 
 Set-StrictMode -Version Latest
@@ -22,6 +23,7 @@ if ([string]::IsNullOrWhiteSpace($databaseUrl)) { throw "Required environment va
 if ([string]::IsNullOrWhiteSpace($projectReference)) { throw "Required environment variable $projectReferenceVariable is missing." }
 if ([string]::IsNullOrWhiteSpace($accessToken)) { throw "Required environment variable $accessTokenVariable is missing." }
 $definition = Get-RecipeGenieMigrationBackupDefinition -MigrationPath $MigrationPath
+$allowExternalEvidence = $definition.PSObject.Properties['AllowExternalEvidenceCommit'] -and $definition.AllowExternalEvidenceCommit -eq $true
 if ($projectReference -cne $definition.ExpectedProjectReference) {
     throw "Required environment variable $projectReferenceVariable must identify the approved Recipe Genie production project."
 }
@@ -34,6 +36,12 @@ $repositoryRoot = $rootResult.Output.Trim()
 if (-not (Test-RecipeGenieRepositoryRoot -RepositoryRoot $repositoryRoot)) {
     throw 'Current repository is not the expected Recipe Genie repository.'
 }
+$initialStatusResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'status', '--porcelain')
+if ($initialStatusResult.ExitCode -ne 0) { throw 'Git worktree state could not be captured.' }
+$initialWorktreeClean = [string]::IsNullOrWhiteSpace($initialStatusResult.Output)
+if ($allowExternalEvidence -and -not $initialWorktreeClean) {
+    throw 'Migration 016 backup and preflight require a clean recovery-tooling worktree before remote access.'
+}
 $registeredWorktrees = Get-RegisteredGitWorktreePaths -RepositoryRoot $repositoryRoot -GitExecutablePath $gitExecutablePath
 Assert-ExternalDestination -DestinationRoot $DestinationRoot -RegisteredWorktreePaths $registeredWorktrees
 $linkedProjectReference = Get-LinkedProjectReference -RepositoryRoot $repositoryRoot
@@ -44,20 +52,76 @@ $connection = ConvertFrom-RecipeGenieDatabaseUrl -DatabaseUrl $databaseUrl -Expe
 $controlPlane = Invoke-SupabaseProjectMetadata -AccessToken $accessToken -ExpectedProjectReference $projectReference -Connection $connection -TimeoutSeconds $ManagementApiTimeoutSeconds
 
 $commitResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'rev-parse', 'HEAD')
-$gitCommitSha = if ($commitResult.Output) { $commitResult.Output.Trim() } else { '' }
-if ($commitResult.ExitCode -ne 0 -or $gitCommitSha -notmatch '^[0-9a-f]{40}$') { throw "Git commit SHA could not be captured." }
-$migrationRelativePath = $definition.MigrationPath
-$migrationFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $migrationRelativePath)
-if (-not (Test-PathWithin -Candidate $migrationFullPath -Parent $repositoryRoot) -or -not (Test-Path -LiteralPath $migrationFullPath -PathType Leaf)) {
-    throw 'Migration file is missing or outside the repository.'
+$toolingCommitSha = if ($commitResult.Output) { $commitResult.Output.Trim() } else { '' }
+if ($commitResult.ExitCode -ne 0 -or $toolingCommitSha -notmatch '^[0-9a-f]{40}$') { throw "Git commit SHA could not be captured." }
+if ($allowExternalEvidence) {
+    if ($EvidenceCommitSha -cne [string]$definition.ExpectedEvidenceCommitSha) {
+        throw 'Migration 016 evidence commit must be the exact approved reviewed head.'
+    }
+    $gitCommitSha = $EvidenceCommitSha
+} elseif ($EvidenceCommitSha) {
+    throw 'A separate evidence commit is not permitted for this migration.'
+} else {
+    $gitCommitSha = $toolingCommitSha
 }
+$evidenceUsesToolingWorktree = $gitCommitSha -ceq $toolingCommitSha
+$migrationRelativePath = $definition.MigrationPath
 $migrationCommitHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $migrationRelativePath -GitExecutablePath $gitExecutablePath
-if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $migrationRelativePath -GitExecutablePath $gitExecutablePath)) { throw 'Migration file differs from the recorded Git commit.' }
-$preflightRelativePath = 'scripts/database/preflight/' + [IO.Path]::GetFileName($migrationRelativePath)
-$preflightFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $preflightRelativePath)
-if (-not (Test-Path -LiteralPath $preflightFullPath -PathType Leaf)) { throw 'Commit-bound migration preflight is missing.' }
+if ($evidenceUsesToolingWorktree) {
+    $migrationFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $migrationRelativePath)
+    if (-not (Test-PathWithin -Candidate $migrationFullPath -Parent $repositoryRoot) -or -not (Test-Path -LiteralPath $migrationFullPath -PathType Leaf)) {
+        throw 'Migration file is missing or outside the repository.'
+    }
+    if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $migrationRelativePath -GitExecutablePath $gitExecutablePath)) { throw 'Migration file differs from the recorded Git commit.' }
+}
+$preflightRelativePath = if ($definition.PSObject.Properties['PreflightPath']) {
+    [string]$definition.PreflightPath
+} else {
+    'scripts/database/preflight/' + [IO.Path]::GetFileName($migrationRelativePath)
+}
 $preflightCommitHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath -GitExecutablePath $gitExecutablePath
-if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath -GitExecutablePath $gitExecutablePath)) { throw 'Migration preflight differs from the recorded Git commit.' }
+if ($evidenceUsesToolingWorktree) {
+    $preflightFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $preflightRelativePath)
+    if (-not (Test-Path -LiteralPath $preflightFullPath -PathType Leaf)) { throw 'Commit-bound migration preflight is missing.' }
+    if (-not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath -GitExecutablePath $gitExecutablePath)) { throw 'Migration preflight differs from the recorded Git commit.' }
+} else {
+    $preflightFullPath = $null
+}
+$restoreAssertion = $null
+$restoreProcedure = $null
+if ($definition.PSObject.Properties['RestoreAssertionPath']) {
+    $restoreAssertionPath = [string]$definition.RestoreAssertionPath
+    $restoreAssertionHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $restoreAssertionPath -GitExecutablePath $gitExecutablePath
+    $restoreAssertionFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $restoreAssertionPath)
+    if (-not (Test-Path -LiteralPath $restoreAssertionFullPath -PathType Leaf) -or
+        -not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $restoreAssertionPath -GitExecutablePath $gitExecutablePath)) {
+        throw 'Restore assertion does not match the recovery-tooling commit.'
+    }
+    $restoreAssertion = [ordered]@{
+        path = $restoreAssertionPath
+        commitSha = $toolingCommitSha
+        sha256 = $restoreAssertionHash
+        worktreeMatchesCommit = $true
+    }
+    $restoreProcedure = [ordered]@{}
+    foreach ($stage in @(
+        [pscustomobject]@{ Name = 'preparation'; Path = [string]$definition.RestorePreparationPath },
+        [pscustomobject]@{ Name = 'finalization'; Path = [string]$definition.RestoreFinalizationPath }
+    )) {
+        $stageHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $stage.Path -GitExecutablePath $gitExecutablePath
+        $stageFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $stage.Path)
+        if (-not (Test-Path -LiteralPath $stageFullPath -PathType Leaf) -or
+            -not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $stage.Path -GitExecutablePath $gitExecutablePath)) {
+            throw "Restore $($stage.Name) does not match the recovery-tooling commit."
+        }
+        $restoreProcedure[$stage.Name] = [ordered]@{
+            path = $stage.Path
+            commitSha = $toolingCommitSha
+            sha256 = $stageHash
+            worktreeMatchesCommit = $true
+        }
+    }
+}
 
 $destination = Get-NormalizedFullPath $DestinationRoot
 [IO.Directory]::CreateDirectory($destination) | Out-Null
@@ -79,6 +143,7 @@ $manifest = [ordered]@{
     environment = 'production'
     projectReference = $projectReference
     createdAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+    toolingCommitSha = $toolingCommitSha
     gitCommitSha = $gitCommitSha
     gitWorktreeClean = $false
     runtime = [ordered]@{
@@ -106,7 +171,8 @@ $manifest = [ordered]@{
         path = $migrationRelativePath
         commitSha = $gitCommitSha
         sha256 = $migrationCommitHash
-        worktreeMatchesCommit = $true
+        source = if ($evidenceUsesToolingWorktree) { 'tooling-worktree' } else { 'exact-git-commit' }
+        worktreeMatchesCommit = $evidenceUsesToolingWorktree
     }
     preflight = [ordered]@{
         path = $preflightRelativePath
@@ -114,8 +180,11 @@ $manifest = [ordered]@{
         sha256 = $preflightCommitHash
         readOnly = $true
         countOnly = $true
-        worktreeMatchesCommit = $true
+        source = if ($evidenceUsesToolingWorktree) { 'tooling-worktree' } else { 'exact-git-commit' }
+        worktreeMatchesCommit = $evidenceUsesToolingWorktree
     }
+    restoreAssertion = $restoreAssertion
+    restoreProcedure = $restoreProcedure
     backupScope = [ordered]@{
         type = 'logical-database-custom-archive'
         includedSchemas = @('public', 'private', 'supabase_migrations')
@@ -123,7 +192,10 @@ $manifest = [ordered]@{
         includesSupabaseManagedAuthConfiguration = $false
         includesGlobalRoles = $false
         includesSecrets = $false
+        requiredTables = if ($definition.PSObject.Properties['RequiredArchiveTables']) { @($definition.RequiredArchiveTables) } else { @() }
+        requiredFunctions = if ($definition.PSObject.Properties['RequiredArchiveFunctions']) { @($definition.RequiredArchiveFunctions) } else { @() }
     }
+    recoveryCounts = $null
     postgresServerVersion = $null
     connectionType = $connection.EndpointType
     toolVersions = [ordered]@{ git = $gitVersion }
@@ -131,10 +203,13 @@ $manifest = [ordered]@{
     archiveContents = [ordered]@{
         migrationLedgerFound = $false
         expectedApplicationMarkersFound = $false
+        requiredTablesFound = $false
+        requiredFunctionsFound = $false
     }
     commandResults = [ordered]@{
         serverVersionQueryExitCode = $null
         identityQueryExitCode = $null
+        recoveryScopeQueryExitCode = $null
         pgDumpExitCode = $null
         pgRestoreListExitCode = $null
     }
@@ -231,9 +306,16 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $manifest.identityVerification.verified = $true
 
     if ($PreflightOnly) {
+        if (-not $preflightFullPath) {
+            $preflightFullPath = Join-Path $backupDirectory 'migration-preflight.sql'
+            Export-GitBlobToFile -RepositoryRoot $repositoryRoot -CommitSha $gitCommitSha -RepositoryRelativePath $preflightRelativePath -GitExecutablePath $gitExecutablePath -DestinationPath $preflightFullPath
+        }
         $preflightOut = Join-Path $logsDirectory 'preflight.stdout.log'
         $preflightErr = Join-Path $logsDirectory 'preflight.stderr.log'
         $preflightArguments = @('-X','--no-psqlrc','--set=ON_ERROR_STOP=1','--file',$preflightFullPath)
+        if ($definition.PendingMigrationVersion -eq '016') {
+            $preflightArguments = @('-X','--no-psqlrc','--set=ON_ERROR_STOP=1',"--set=expected_project_ref=$projectReference",'--file',$preflightFullPath)
+        }
         $preflightResult = Invoke-RecipeGenieNativeProcess -ExecutablePath $tools.psql -ArgumentList $preflightArguments -StdOutPath $preflightOut -StdErrPath $preflightErr -LiteralSecrets $literalSecrets
         Assert-NativeExitCode $preflightResult "Migration $($definition.PendingMigrationVersion) read-only preflight"
         if (-not (Test-PathWithin -Candidate $backupDirectory -Parent $destination)) { throw 'Preflight scratch directory escaped the supplied destination.' }
@@ -247,6 +329,26 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $statusResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'status', '--porcelain')
     if ($statusResult.ExitCode -ne 0) { throw "Git worktree state could not be captured." }
     $manifest.gitWorktreeClean = [string]::IsNullOrWhiteSpace($statusResult.Output)
+    if ($allowExternalEvidence -and -not $manifest.gitWorktreeClean) {
+        throw 'Migration 016 backup requires a clean recovery-tooling worktree through archive creation.'
+    }
+
+    if ($definition.PendingMigrationVersion -eq '016') {
+        $scopeOut = Join-Path $logsDirectory 'recovery-scope.stdout.log'
+        $scopeErr = Join-Path $logsDirectory 'recovery-scope.stderr.log'
+        $scopeSql = 'begin transaction read only; select count(*)::text || ''|'' || (select count(*)::text from public.recipe_shares) from public.recipes; rollback;'
+        $scopeArguments = @('-X','--no-psqlrc','-At','--set=ON_ERROR_STOP=1','--command',$scopeSql)
+        $scopeResult = Invoke-RecipeGenieNativeProcess -ExecutablePath $tools.psql -ArgumentList $scopeArguments -StdOutPath $scopeOut -StdErrPath $scopeErr -LiteralSecrets $literalSecrets
+        $manifest.commandResults.recoveryScopeQueryExitCode = $scopeResult.ExitCode
+        Assert-NativeExitCode $scopeResult 'Migration 016 recovery-scope query'
+        $scopeLine = [IO.File]::ReadAllLines($scopeOut) | Where-Object { $_ -match '^\d+\|\d+$' } | Select-Object -First 1
+        if (-not $scopeLine) { throw 'Migration 016 recovery counts are missing or malformed.' }
+        $scopeParts = $scopeLine.Split('|', 2)
+        $manifest.recoveryCounts = [ordered]@{
+            recipes = [int64]$scopeParts[0]
+            recipeShares = [int64]$scopeParts[1]
+        }
+    }
 
     $dumpOut = Join-Path $logsDirectory 'pg_dump.stdout.log'
     $dumpErr = Join-Path $logsDirectory 'pg_dump.stderr.log'
@@ -275,11 +377,13 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $tocResult = Invoke-RecipeGenieNativeProcess -ExecutablePath $tools.pg_restore -ArgumentList $tocArguments -StdOutPath $tocOut -StdErrPath $tocErr -LiteralSecrets $literalSecrets
     $manifest.commandResults.pgRestoreListExitCode = $tocResult.ExitCode
     Assert-NativeExitCode $tocResult 'pg_restore --list'
-    $contents = Test-ArchiveTableOfContents ([IO.File]::ReadAllText($tocOut))
+    $contents = Test-ArchiveTableOfContents ([IO.File]::ReadAllText($tocOut)) $definition
     if (-not $contents.MigrationLedgerFound) { throw "Archive does not contain the authoritative migration ledger." }
     if (-not $contents.ExpectedApplicationMarkersFound) { throw "Archive does not contain expected Recipe Genie tables and functions." }
     $manifest.archiveContents.migrationLedgerFound = $true
     $manifest.archiveContents.expectedApplicationMarkersFound = $true
+    $manifest.archiveContents.requiredTablesFound = $contents.RequiredTablesFound
+    $manifest.archiveContents.requiredFunctionsFound = $contents.RequiredFunctionsFound
     $manifest.archiveValidated = $true
     $hash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     $manifest.artifacts = @([ordered]@{
@@ -293,6 +397,7 @@ select current_database(), current_user, current_setting('server_version_num'), 
     $summaryLines = @(
         'Recipe Genie production logical database backup',
         "Created (UTC): $($manifest.createdAtUtc)",
+        "Recovery tooling commit: $toolingCommitSha",
         "Project reference: $projectReference",
         "Connection type: $($connection.EndpointType)",
         'Control-plane project identity: verified',
