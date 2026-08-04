@@ -150,7 +150,7 @@ select extensions.lives_ok($$
     auth.uid(), 'stage2b-a@example.test',
     '72000000-0000-4000-8000-000000000002', 'stage2b-b@example.test',
     '71111111-1111-4111-8111-111111111111',
-    '{"name":"Same Name","category":"test","servings":4,"tags":[],"ingredients":[],"instructions":[]}'::jsonb,
+    '{"name":"Same Name","category":"test","servings":4,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb,
     'pending'
   )
 $$, 'UUID-first share creation succeeds');

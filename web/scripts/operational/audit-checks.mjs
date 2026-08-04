@@ -27,16 +27,32 @@ export const AUDIT_CHECKS = [
   check(
     "invalid-recipe-and-ingredient-shape",
     "ERROR",
-    "The recipe editor and shopping generator require nonblank recipe fields, positive servings, an ingredient array, and touched ingredient rows with valid item/amount/unit combinations.",
+    "The recipe editor and shopping generator require nonblank recipe fields, positive servings, canonical ingredient sections, and touched ingredient rows with valid item/amount/unit combinations.",
     "Open each recipe in the editor, correct the flagged fields, and save through the normal application path.",
     `with invalid as (
       select distinct r.recipe_uuid::text as identifier
       from public.recipes r
       left join lateral jsonb_array_elements(
-        case when jsonb_typeof(r.ingredients) = 'array' then r.ingredients else '[]'::jsonb end
+        case when jsonb_typeof(r.ingredient_sections) = 'array'
+          then r.ingredient_sections else '[]'::jsonb end
+      ) section on true
+      left join lateral jsonb_array_elements(
+        case when jsonb_typeof(section.value->'ingredients') = 'array'
+          then section.value->'ingredients' else '[]'::jsonb end
       ) ingredient on true
       where trim(r.name) = '' or trim(r.category) = '' or r.servings <= 0
-        or jsonb_typeof(r.ingredients) <> 'array'
+        or jsonb_typeof(r.ingredient_sections) <> 'array'
+        or (section.value is not null and (
+          jsonb_typeof(section.value) <> 'object'
+          or not (section.value ?& array['label', 'ingredients'])
+          or exists (
+            select 1 from jsonb_object_keys(section.value) as key
+            where key <> all(array['label', 'ingredients'])
+          )
+          or jsonb_typeof(section.value->'label') not in ('string', 'null')
+          or jsonb_typeof(section.value->'ingredients') <> 'array'
+          or jsonb_array_length(section.value->'ingredients') = 0
+        ))
         or (ingredient.value is not null and (
           jsonb_typeof(ingredient.value) <> 'object'
           or (coalesce(trim(ingredient.value->>'item'), '') = '' and (
@@ -59,14 +75,19 @@ export const AUDIT_CHECKS = [
     "Review the duplicate rows in the recipe editor and use its exact-duplicate cleanup when appropriate.",
     `with identities as (
       select r.recipe_uuid,
-        lower(regexp_replace(trim(coalesce(i.value->>'groupLabel', '')), '\\s+', ' ', 'g')) as group_key,
+        lower(regexp_replace(trim(coalesce(section.value->>'label', '')), '\\s+', ' ', 'g')) as group_key,
         lower(regexp_replace(trim(i.value->>'item'), '\\s+', ' ', 'g')) as item_key,
         coalesce(i.value->>'amount', '') as amount_key,
         lower(trim(coalesce(i.value->>'unit', ''))) as unit_key,
         lower(regexp_replace(trim(coalesce(i.value->>'modifier', '')), '\\s+', ' ', 'g')) as modifier_key
       from public.recipes r
       cross join lateral jsonb_array_elements(
-        case when jsonb_typeof(r.ingredients) = 'array' then r.ingredients else '[]'::jsonb end
+        case when jsonb_typeof(r.ingredient_sections) = 'array'
+          then r.ingredient_sections else '[]'::jsonb end
+      ) section
+      cross join lateral jsonb_array_elements(
+        case when jsonb_typeof(section.value->'ingredients') = 'array'
+          then section.value->'ingredients' else '[]'::jsonb end
       ) i
       where jsonb_typeof(i.value) = 'object' and coalesce(trim(i.value->>'item'), '') <> ''
     ), invalid as (

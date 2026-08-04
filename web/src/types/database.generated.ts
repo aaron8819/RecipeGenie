@@ -152,8 +152,10 @@ export type Database = {
           favorite: boolean | null
           id: string
           image_url: string | null
+          ingredient_sections: Json
           ingredients: Json
           instruction_groups: Json | null
+          instruction_sections: Json
           instructions: string[]
           name: string
           notes: Json
@@ -173,8 +175,10 @@ export type Database = {
           favorite?: boolean | null
           id: string
           image_url?: string | null
+          ingredient_sections?: Json
           ingredients?: Json
           instruction_groups?: Json | null
+          instruction_sections?: Json
           instructions?: string[]
           name: string
           notes?: Json
@@ -194,8 +198,10 @@ export type Database = {
           favorite?: boolean | null
           id?: string
           image_url?: string | null
+          ingredient_sections?: Json
           ingredients?: Json
           instruction_groups?: Json | null
+          instruction_sections?: Json
           instructions?: string[]
           name?: string
           notes?: Json
@@ -476,8 +482,10 @@ export type Database = {
           favorite: boolean | null
           id: string
           image_url: string | null
+          ingredient_sections: Json
           ingredients: Json
           instruction_groups: Json | null
+          instruction_sections: Json
           instructions: string[]
           name: string
           notes: Json

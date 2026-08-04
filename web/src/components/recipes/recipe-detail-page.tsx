@@ -46,10 +46,9 @@ import {
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import {
+  flattenRecipeIngredients,
   formatRecipeTime,
-  getRecipeIngredientGroups,
-  getRecipeInstructionGroups,
-  getRecipeNotes,
+  normalizeRecipeNotes,
 } from "@/lib/recipe-structure"
 import {
   returnFromRecipeDetail,
@@ -198,7 +197,7 @@ export function RecipeDetailContent({
   const selectYield = (nextYield: number) => {
     try {
       assertRecipeScalingFeasible(
-        recipe.ingredients || [],
+        flattenRecipeIngredients(recipe.ingredientSections),
         scalingBasis,
         nextYield
       )
@@ -229,13 +228,13 @@ export function RecipeDetailContent({
     )
   }
   const recipeImageUrl = getRecipeImageUrl(recipe.image_url)
-  const ingredientGroups = getRecipeIngredientGroups(recipe.ingredients)
+  const ingredientGroups = recipe.ingredientSections
   const ingredientCount = ingredientGroups.reduce(
     (count, group) => count + group.ingredients.length,
     0
   )
-  const instructionGroups = getRecipeInstructionGroups(recipe)
-  const notes = getRecipeNotes(recipe)
+  const instructionGroups = recipe.instructionSections
+  const notes = normalizeRecipeNotes(recipe.notes)
   const timeChips = [
     { label: "Prep", value: formatRecipeTime(recipe.prep_time_minutes) },
     { label: "Cook", value: formatRecipeTime(recipe.cook_time_minutes) },

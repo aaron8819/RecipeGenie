@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeList } from "../recipe-list"
 import type { RecipeRouteState } from "@/lib/recipe-route-state"
 import type { Recipe } from "@/types/database"
+import {
+  canonicalizeRecipeFixture,
+  type RecipeFixtureInput,
+} from "@/test/recipe-fixtures"
 
 const DEFAULT_ROUTE_STATE: RecipeRouteState = {
   category: null,
@@ -232,8 +236,8 @@ vi.mock("@/lib/recipe-export", () => ({
   downloadRecipesAsJson: vi.fn(),
 }))
 
-function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Chicken Soup",
@@ -247,7 +251,7 @@ function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
     created_at: "2026-03-01T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
     ...overrides,
-  }
+  })
 }
 
 describe("RecipeList", () => {

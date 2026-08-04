@@ -59,13 +59,16 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Recipe CRUD hooks live in `web/src/hooks/use-recipes.ts`.
 - Recipe import uses `web/src/hooks/use-recipe-import.ts` plus `web/src/app/api/recipe-import/route.ts`.
 - Text and URL parsing logic lives in `web/src/lib/recipe-parser.ts` and `web/src/lib/recipe-url-parser.ts`.
-- Recipe structure compatibility and flat/grouped conversion lives in `web/src/lib/recipe-structure.ts`.
+- Canonical recipe-section validation, editor conversion, and boundary flattening live in `web/src/lib/recipe-structure.ts`.
 - Recipe image upload/delete flows go through `web/src/hooks/use-recipe-image-storage.ts`.
 - `getRecipeImageUrl()` in `web/src/lib/supabase/storage.ts` is a pure URL helper and can be used from components/selectors.
 - Recipe list orchestration includes current search/filter UX, responsive toolbar behavior, and Recipes modal coordination.
 - Recipe browse state is URL-owned on `/recipes`; recipe details remain nested at `/recipes/[id]` under the shared authenticated shell.
 - Recipe detail is query-backed and now owns common follow-up actions such as add-to-plan, add-to-shopping, and mark-made entry points.
-- Persisted recipe data now includes first-class times and notes, plus additive grouped-instruction persistence, while retaining legacy flat `instructions` for backward compatibility.
+- Persisted recipe structure is canonical ordered ingredient and instruction
+  sections. Active reads, writes, import, sharing, detail, and Shopping use
+  those sections only; the old physical structure columns are frozen until
+  their separately reviewed removal migration.
 
 ### Shopping
 

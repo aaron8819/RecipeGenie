@@ -164,7 +164,7 @@ values (
   '42000000-0000-0000-0000-000000000002',
   'identity-b@example.test',
   'legacy-a-2',
-  '{"name":"Same Name","category":"test","servings":4,"tags":[],"ingredients":[],"instructions":[]}'::jsonb
+  '{"name":"Same Name","category":"test","servings":4,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb
 );
 
 set local role authenticated;

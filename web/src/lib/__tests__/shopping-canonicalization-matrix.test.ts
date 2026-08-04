@@ -8,14 +8,15 @@ import type {
   Recipe,
   ShoppingItem,
 } from "@/types/database"
+import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 
 function recipe(id: string, ingredients: Ingredient[]): Recipe {
-  return {
+  return canonicalizeRecipeFixture({
     id,
     name: `Recipe ${id}`,
     servings: 4,
     ingredients,
-  } as Recipe
+  })
 }
 
 function fromLines(...lines: string[]): Recipe[] {

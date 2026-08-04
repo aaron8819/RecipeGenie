@@ -261,33 +261,21 @@ function formatIngredientText(ingredient: Ingredient): string {
 }
 
 function getIngredientGroups(preview: ParsedRecipe): Array<{
-  label?: string
+  label: string | null
   ingredients: Ingredient[]
 }> {
-  if (preview.ingredientGroups && preview.ingredientGroups.length > 0) {
-    return preview.ingredientGroups
-  }
-
-  return preview.ingredients.length > 0
-    ? [{ ingredients: preview.ingredients }]
-    : []
+  return preview.ingredientSections
 }
 
 function getInstructionGroups(preview: ParsedRecipe): Array<{
-  label?: string
+  label: string | null
   steps: string[]
 }> {
-  if (preview.instructionGroups && preview.instructionGroups.length > 0) {
-    return preview.instructionGroups
-  }
-
-  return preview.instructions.length > 0
-    ? [{ steps: preview.instructions }]
-    : []
+  return preview.instructionSections
 }
 
 function countInstructionSteps(
-  groups: Array<{ label?: string; steps: string[] }>
+  groups: Array<{ label: string | null; steps: string[] }>
 ): number {
   return groups.reduce((total, group) => total + group.steps.length, 0)
 }
@@ -316,10 +304,19 @@ export function RecipeImportSection({
   const previewRecipe = importStep === "preview" ? parsedPreview : livePreview
   const ingredientGroups = previewRecipe ? getIngredientGroups(previewRecipe) : []
   const instructionGroups = previewRecipe ? getInstructionGroups(previewRecipe) : []
+  const ingredientCount = ingredientGroups.reduce(
+    (total, group) => total + group.ingredients.length,
+    0
+  )
   const instructionStepCount = countInstructionSteps(instructionGroups)
   const notes = previewRecipe?.notes || []
   const isReplacement = variant === "replace"
-  const liveIngredientCount = livePreview?.ingredients.length ?? 0
+  const liveIngredientCount = livePreview
+    ? livePreview.ingredientSections.reduce(
+        (total, section) => total + section.ingredients.length,
+        0
+      )
+    : 0
   const liveInstructionCount = livePreview ? instructionStepCount : 0
   const liveWarnings = livePreview?.warnings ?? []
   const hasBlockingLivePreviewWarnings = !!livePreview && (
@@ -534,7 +531,7 @@ export function RecipeImportSection({
 
           <div>
             <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">
-              Ingredients ({parsedPreview?.ingredients?.length || 0})
+              Ingredients ({ingredientCount})
             </div>
             {ingredientGroups.length > 0 ? (
               <div className="space-y-3 text-sm">
@@ -771,10 +768,10 @@ Instructions:
                 </div>
                 <div>
                   <div className="text-lg font-bold">
-                    {livePreview.ingredients.length}
+                    {liveIngredientCount}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    ingredient{livePreview.ingredients.length !== 1 ? "s" : ""}
+                    ingredient{liveIngredientCount !== 1 ? "s" : ""}
                   </div>
                 </div>
               </div>
@@ -824,7 +821,7 @@ Instructions:
               </div>
             ) : null}
 
-            {livePreview.ingredients.length > 0 ? (
+            {liveIngredientCount > 0 ? (
               <div>
                 <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Ingredients Preview
@@ -851,7 +848,7 @@ Instructions:
               </div>
             ) : null}
 
-            {livePreview.instructions.length > 0 ? (
+            {liveInstructionCount > 0 ? (
               <div>
                 <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Instructions Preview

@@ -46,8 +46,8 @@ const structuredSnapshot = {
   category: 'dinner',
   servings: 4,
   tags: [],
-  ingredients: [],
-  instructions: [],
+  ingredient_sections: [],
+  instruction_sections: [],
 };
 
 async function acceptShare() {
@@ -81,29 +81,23 @@ describe('recipe share acceptance route', () => {
     });
   });
 
-  it('passes the supported legacy empty snapshot unchanged to the RPC', async () => {
+  it('rejects a legacy empty snapshot before the RPC', async () => {
     snapshot = {};
 
     const response = await acceptShare();
 
-    expect(response.status).toBe(200);
-    expect(rpcMock).toHaveBeenCalledOnce();
-    expect(rpcMock).toHaveBeenCalledWith('accept_recipe_share', {
-      p_share_id: 'share-a',
-    });
+    expect(response.status).toBe(400);
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
-  it('allows an idempotent retry for an accepted legacy empty snapshot', async () => {
+  it('rejects an accepted legacy empty snapshot before the RPC', async () => {
     snapshot = {};
     shareStatus = 'accepted';
 
     const response = await acceptShare();
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      acceptedRecipeId: 'accepted-recipe-a',
-    });
-    expect(rpcMock).toHaveBeenCalledOnce();
+    expect(response.status).toBe(400);
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
   it('allows an idempotent retry for an accepted structured snapshot', async () => {

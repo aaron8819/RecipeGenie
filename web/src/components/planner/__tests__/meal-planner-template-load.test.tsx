@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MealPlanner } from "../meal-planner"
 import { getWeekStartDate } from "../meal-planner.utils"
 import type { PlanTemplate, Recipe, UserConfig, WeeklyPlan } from "@/types/database"
+import { canonicalizeRecipeFixture, type RecipeFixtureInput } from "@/test/recipe-fixtures"
 
 globalThis.React = React
 
@@ -303,8 +304,8 @@ vi.mock("../meal-planner-components", () => ({
   ),
 }))
 
-function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Recipe",
@@ -318,7 +319,7 @@ function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
     created_at: null,
     updated_at: null,
     ...overrides,
-  }
+  })
 }
 
 function weeklyPlanFixture(overrides: Partial<WeeklyPlan> = {}): WeeklyPlan {

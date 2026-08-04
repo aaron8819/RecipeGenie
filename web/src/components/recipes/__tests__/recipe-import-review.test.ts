@@ -12,8 +12,8 @@ function candidate(overrides: Partial<ParsedRecipe> = {}): ParsedRecipe {
   return {
     name: 'Soup',
     servings: 4,
-    ingredients: [{ item: 'carrot', amount: 1, unit: '' }],
-    instructions: ['Cook'],
+    ingredientSections: [{ label: null, ingredients: [{ item: 'carrot', amount: 1, unit: '' }] }],
+    instructionSections: [{ label: null, steps: ['Cook'] }],
     warnings: [],
     ...overrides,
   }
@@ -55,8 +55,8 @@ describe('mobile import review workflow', () => {
 
   it('allows review only for structurally valid candidates', () => {
     expect(canReviewImportedRecipe(candidate())).toBe(true)
-    expect(canReviewImportedRecipe(candidate({ ingredients: [] }))).toBe(false)
-    expect(canReviewImportedRecipe(candidate({ instructions: [] }))).toBe(false)
+    expect(canReviewImportedRecipe(candidate({ ingredientSections: [] }))).toBe(false)
+    expect(canReviewImportedRecipe(candidate({ instructionSections: [] }))).toBe(false)
     expect(canReviewImportedRecipe(null)).toBe(false)
   })
 

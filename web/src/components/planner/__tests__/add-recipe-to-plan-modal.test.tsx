@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { AddRecipeToPlanModal } from "../add-recipe-to-plan-modal"
 import type { Recipe } from "@/types/database"
+import { canonicalizeRecipeFixture, type RecipeFixtureInput } from "@/test/recipe-fixtures"
 
 globalThis.React = React
 
@@ -36,8 +37,8 @@ vi.mock("@/hooks/use-planner", () => ({
   }),
 }))
 
-function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Planner Recipe",
@@ -51,7 +52,7 @@ function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
     created_at: null,
     updated_at: null,
     ...overrides,
-  }
+  })
 }
 
 describe("AddRecipeToPlanModal", () => {

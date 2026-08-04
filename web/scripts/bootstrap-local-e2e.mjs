@@ -181,10 +181,12 @@ async function checked(error, operation) {
 }
 
 async function seedRepresentativeData(client, userId) {
-  const recipeRows = RECIPES.map((recipe) => ({
+  const recipeRows = RECIPES.map(({ ingredients, instructions, ...recipe }) => ({
     ...recipe,
     id: recipe.recipe_uuid,
     user_id: userId,
+    ingredient_sections: [{ label: null, ingredients }],
+    instruction_sections: [{ label: null, steps: instructions }],
     notes: [],
   }))
   const { error: recipeError } = await client.from('recipes').insert(recipeRows)

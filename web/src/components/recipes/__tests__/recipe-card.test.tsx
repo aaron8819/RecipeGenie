@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { Recipe } from "@/types/database"
 import { RecipeCard } from "../recipe-card"
+import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 
 globalThis.React = React
 
@@ -39,7 +40,7 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
 }))
 
 function makeRecipe(): Recipe {
-  return {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Card Recipe",
@@ -52,7 +53,7 @@ function makeRecipe(): Recipe {
     image_url: null,
     created_at: "2026-03-01T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
-  }
+  })
 }
 
 describe("RecipeCard", () => {

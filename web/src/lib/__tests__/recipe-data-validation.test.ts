@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import {
-  isLegacyEmptyRecipeShareSnapshot,
   normalizeIngredients,
   normalizeRecipeShareSnapshot,
   normalizeShoppingItems,
@@ -10,15 +9,6 @@ import {
 import { parseIngredientLine } from "@/lib/recipe-parser"
 
 describe("structured recipe data boundaries", () => {
-  it("recognizes only the supported legacy empty share snapshot", () => {
-    expect(isLegacyEmptyRecipeShareSnapshot({})).toBe(true)
-    expect(isLegacyEmptyRecipeShareSnapshot({ version: 0 })).toBe(false)
-    expect(isLegacyEmptyRecipeShareSnapshot(null)).toBe(false)
-    expect(isLegacyEmptyRecipeShareSnapshot([])).toBe(false)
-    expect(isLegacyEmptyRecipeShareSnapshot("")).toBe(false)
-    expect(isLegacyEmptyRecipeShareSnapshot(false)).toBe(false)
-  })
-
   it("preserves valid authored ingredient metadata through persistence", () => {
     const ingredient = parseIngredientLine("0.50 (14 oz) can tomatoes")
     expect(requireIngredientsForPersistence([ingredient])).toEqual([ingredient])
@@ -127,23 +117,24 @@ describe("structured recipe data boundaries", () => {
       category: "dinner",
       servings: 4,
       tags: ["easy"],
-      ingredients: [parseIngredientLine("1 cup milk")],
-      instructions: ["Stir"],
+      ingredient_sections: [{ label: null, ingredients: [parseIngredientLine("1 cup milk")] }],
+      instruction_sections: [{ label: null, steps: ["Stir"] }],
     }
     expect(normalizeRecipeShareSnapshot(snapshot, "persist")).toMatchObject({
       name: "Soup",
       category: "dinner",
       servings: 4,
       tags: ["easy"],
-      ingredients: [
-        {
+      ingredient_sections: [{
+        label: null,
+        ingredients: [{
           item: "milk",
           amount: 1,
           unit: "cup",
           originalText: "1 cup milk",
-        },
-      ],
-      instructions: ["Stir"],
+        }],
+      }],
+      instruction_sections: [{ label: null, steps: ["Stir"] }],
     })
     expect(
       normalizeRecipeShareSnapshot(
@@ -165,20 +156,18 @@ describe("structured recipe data boundaries", () => {
         yield_metadata: [],
         prep_time_minutes: "soon",
         notes: false,
-        instruction_groups: {},
       })
     ).toMatchObject({
       name: "Soup",
-      ingredients: [{ item: "milk", amount: 1, unit: "cup" }],
+      ingredient_sections: [{ label: null, ingredients: [{ item: "milk", amount: 1, unit: "cup" }] }],
       yield_metadata: null,
       prep_time_minutes: null,
       notes: [],
-      instruction_groups: null,
     })
     expect(recipeShareSnapshotForDisplay({ malformed: true })).toMatchObject({
       name: "Shared recipe",
-      ingredients: [],
-      instructions: [],
+      ingredient_sections: [],
+      instruction_sections: [],
     })
   })
 

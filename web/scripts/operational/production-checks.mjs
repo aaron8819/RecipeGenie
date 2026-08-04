@@ -5,7 +5,8 @@ const EXPECTED_TABLES = [
 ]
 
 const EXPECTED_COLUMNS = [
-  "recipes.recipe_uuid", "recipes.ingredients", "recipes.user_id",
+  "recipes.recipe_uuid", "recipes.ingredient_sections", "recipes.instruction_sections",
+  "recipes.ingredients", "recipes.user_id",
   "weekly_plans.recipe_uuids", "weekly_plans.day_assignment_recipe_uuids", "weekly_plans.made_recipe_uuids",
   "plan_templates.recipe_uuids", "plan_templates.day_assignment_recipe_uuids",
   "recipe_history.recipe_uuid", "recipe_shares.source_recipe_uuid", "recipe_shares.accepted_recipe_uuid",
@@ -206,7 +207,7 @@ export function createDatabaseChecks(expectedMigration) {
     {
       name: "representative-application-reads",
       run: async ({ query }) => {
-        await query("select recipe_uuid, ingredients from public.recipes order by recipe_uuid limit 1")
+        await query("select recipe_uuid, ingredient_sections, instruction_sections from public.recipes order by recipe_uuid limit 1")
         await query("select item from public.pantry_items order by id limit 1")
         await query("select recipe_uuid, snapshot from public.shopping_recipe_contributions order by recipe_uuid limit 1")
         return "recipe, pantry, and shopping contribution reads succeeded"

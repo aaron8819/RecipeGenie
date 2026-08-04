@@ -5,6 +5,10 @@ import { RecipeDialog } from "../recipe-dialog"
 import type { Ingredient, Recipe } from "@/types/database"
 import { parseIngredientLine } from "@/lib/recipe-parser"
 import { parseIngredientAmountLexeme } from "@/lib/recipe-parser"
+import {
+  canonicalizeRecipeFixture,
+  type RecipeFixtureInput,
+} from "@/test/recipe-fixtures"
 
 globalThis.React = React
 
@@ -309,8 +313,8 @@ vi.mock("../recipe-dialog-components", () => ({
   ),
 }))
 
-function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Recipe",
@@ -324,7 +328,7 @@ function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
     created_at: "2026-03-01T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
     ...overrides,
-  }
+  })
 }
 
 function renderCreateDialog(props?: {
@@ -447,8 +451,7 @@ describe("RecipeDialog image orchestration", () => {
         name: "Fancy Soup",
         category: "Dinner",
         servings: 4,
-        instructions: [],
-        instruction_groups: [],
+        instruction_sections: [],
         image_url: "https://cdn.example.com/fancy-soup.jpg",
         recipeUuid: uploadedRecipeUuid,
       })
@@ -475,8 +478,9 @@ describe("RecipeDialog image orchestration", () => {
     await waitFor(() => {
       expect(createRecipeMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
-          ingredients: [
-            expect.objectContaining({
+          ingredient_sections: [{
+            label: null,
+            ingredients: [expect.objectContaining({
               item: "tomatoes",
               amount: "0.5–1",
               unit: "(14 oz) cans",
@@ -492,8 +496,8 @@ describe("RecipeDialog image orchestration", () => {
                 type: "can",
                 authoredType: "cans",
               }),
-            }),
-          ],
+            })],
+          }],
         })
       )
     })
@@ -514,16 +518,17 @@ describe("RecipeDialog image orchestration", () => {
       expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
         expect.objectContaining({
           updates: expect.objectContaining({
-            ingredients: [
-              expect.objectContaining({
+            ingredient_sections: [{
+              label: null,
+              ingredients: [expect.objectContaining({
                 amount: 0.5,
                 quantityV1: expect.objectContaining({
                   authored: "0.50",
                   lexeme: "0.50",
                   value: { numerator: "1", denominator: "2" },
                 }),
-              }),
-            ],
+              })],
+            }],
           }),
         })
       )
@@ -531,13 +536,13 @@ describe("RecipeDialog image orchestration", () => {
 
     const persisted = (
       updateRecipeMutateAsync.mock.calls.at(-1)?.[0] as {
-        updates: Partial<Recipe>
+        updates: { ingredient_sections?: Recipe["ingredientSections"] }
       }
     ).updates
     first.unmount()
     renderEditDialog(recipeFixture({
       id: "authored-amount",
-      ...persisted,
+      ingredientSections: persisted.ingredient_sections,
     }))
 
     const reopenedAmount = screen.getByLabelText("Amount 1")
@@ -550,8 +555,9 @@ describe("RecipeDialog image orchestration", () => {
       expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
         expect.objectContaining({
           updates: expect.objectContaining({
-            ingredients: [
-              expect.objectContaining({
+            ingredient_sections: [{
+              label: null,
+              ingredients: [expect.objectContaining({
                 amount: 0.5,
                 originalText: undefined,
                 quantityV1: expect.objectContaining({
@@ -559,8 +565,8 @@ describe("RecipeDialog image orchestration", () => {
                   lexeme: "1/2",
                   value: { numerator: "1", denominator: "2" },
                 }),
-              }),
-            ],
+              })],
+            }],
           }),
         })
       )
@@ -583,8 +589,9 @@ describe("RecipeDialog image orchestration", () => {
       expect(updateRecipeMutateAsync).toHaveBeenLastCalledWith(
         expect.objectContaining({
           updates: expect.objectContaining({
-            ingredients: [
-              expect.objectContaining({
+            ingredient_sections: [{
+              label: null,
+              ingredients: [expect.objectContaining({
                 item: "tomatoes",
                 amount: 1,
                 unit: "(28 oz) cans",
@@ -604,8 +611,8 @@ describe("RecipeDialog image orchestration", () => {
                   type: "can",
                   authoredType: "cans",
                 }),
-              }),
-            ],
+              })],
+            }],
           }),
         })
       )
@@ -631,8 +638,7 @@ describe("RecipeDialog image orchestration", () => {
           name: "Fancy Soup",
           category: "Dinner",
           servings: 4,
-          instructions: [],
-          instruction_groups: [],
+          instruction_sections: [],
           image_url: null,
         })
       )
@@ -673,8 +679,7 @@ describe("RecipeDialog image orchestration", () => {
           name: "Edit Soup",
           category: "Dinner",
           servings: 4,
-          instructions: ["Cook"],
-          instruction_groups: expect.arrayContaining([
+          instruction_sections: expect.arrayContaining([
             expect.objectContaining({ steps: ["Cook"] }),
           ]),
           image_url: null,
@@ -706,8 +711,7 @@ describe("RecipeDialog image orchestration", () => {
             name: "Edit Soup",
             category: "Dinner",
             servings: 4,
-            instructions: ["Cook"],
-            instruction_groups: expect.arrayContaining([
+            instruction_sections: expect.arrayContaining([
               expect.objectContaining({ steps: ["Cook"] }),
             ]),
             image_url: null,

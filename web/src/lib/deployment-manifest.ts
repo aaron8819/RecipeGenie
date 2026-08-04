@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "015_add_shopping_exclusion_settings"
+export const EXPECTED_LATEST_MIGRATION = "016_canonical_recipe_structure_cutover"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

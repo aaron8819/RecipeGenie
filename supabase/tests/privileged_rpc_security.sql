@@ -192,7 +192,7 @@ values
       "category":"security-test",
       "servings":2,
       "tags":["shared"],
-      "ingredients":[{
+      "ingredient_sections":[{"label":null,"ingredients":[{
         "item":"sugar",
         "amount":0.5,
         "unit":"cup",
@@ -205,12 +205,11 @@ values
           "value":{"numerator":"1","denominator":"2"},
           "lexeme":"0.50"
         }
-      }],
-      "instructions":[],
-      "image_url":"",
-      "instruction_groups":[
+      }]}],
+      "instruction_sections":[
         {"label":"Finish","steps":["Serve immediately."]}
       ],
+      "image_url":"",
       "yield_metadata":{
         "version":1,
         "authoredText":"2 servings",
@@ -227,7 +226,7 @@ values
     '20000000-0000-0000-0000-000000000002',
     'security-b@example.test',
     'a-owned',
-    '{"name":"Shared for B","category":"security-test","servings":2,"tags":["shared"],"ingredients":[],"instructions":[]}'::jsonb
+    '{"name":"Shared for B","category":"security-test","servings":2,"tags":["shared"],"ingredient_sections":[],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000003',
@@ -236,7 +235,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-contradictory-quantity',
-    '{"name":"Malformed for A","category":"security-test","servings":"many","tags":{},"ingredients":[],"instructions":[]}'::jsonb
+    '{"name":"Malformed for A","category":"security-test","servings":"many","tags":{},"ingredient_sections":[],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000004',
@@ -245,7 +244,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-contradictory-package',
-    '{"name":"Contradictory quantity","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"sugar","amount":1,"unit":"cup","authoredUnit":"cup","quantityV1":{"version":1,"kind":"exact","authored":"9","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"9"}}],"instructions":[]}'::jsonb
+    '{"name":"Contradictory quantity","category":"security-test","servings":2,"tags":[],"ingredient_sections":[{"label":null,"ingredients":[{"item":"sugar","amount":1,"unit":"cup","authoredUnit":"cup","quantityV1":{"version":1,"kind":"exact","authored":"9","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"9"}}]}],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000005',
@@ -254,7 +253,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-oversized-rational',
-    '{"name":"Contradictory package","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"tomatoes","amount":1,"unit":"(14 oz) can","authoredUnit":"(14 oz) can","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"packageV1":{"version":1,"count":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"size":{"value":{"numerator":"14","denominator":"1"},"lexeme":"999","unit":"oz","authoredUnit":"oz"},"type":"can","authoredType":"can"}}],"instructions":[]}'::jsonb
+    '{"name":"Contradictory package","category":"security-test","servings":2,"tags":[],"ingredient_sections":[{"label":null,"ingredients":[{"item":"tomatoes","amount":1,"unit":"(14 oz) can","authoredUnit":"(14 oz) can","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"packageV1":{"version":1,"count":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"size":{"value":{"numerator":"14","denominator":"1"},"lexeme":"999","unit":"oz","authoredUnit":"oz"},"type":"can","authoredType":"can"}}]}],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000006',
@@ -263,7 +262,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-malformed-package',
-    '{"name":"Oversized rational","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"sugar","amount":1,"unit":"cup","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1000000000000","denominator":"1"},"lexeme":"1"}}],"instructions":[]}'::jsonb
+    '{"name":"Oversized rational","category":"security-test","servings":2,"tags":[],"ingredient_sections":[{"label":null,"ingredients":[{"item":"sugar","amount":1,"unit":"cup","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1000000000000","denominator":"1"},"lexeme":"1"}}]}],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000007',
@@ -272,7 +271,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-malformed-source',
-    '{"name":"Malformed package","category":"security-test","servings":2,"tags":[],"ingredients":[{"item":"tomatoes","amount":1,"unit":"can","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"packageV1":{"version":1,"count":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"size":{},"type":"can","authoredType":"can"}}],"instructions":[]}'::jsonb
+    '{"name":"Malformed package","category":"security-test","servings":2,"tags":[],"ingredient_sections":[{"label":null,"ingredients":[{"item":"tomatoes","amount":1,"unit":"can","quantityV1":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"packageV1":{"version":1,"count":{"version":1,"kind":"exact","authored":"1","source":"authored","value":{"numerator":"1","denominator":"1"},"lexeme":"1"},"size":{},"type":"can","authoredType":"can"}}]}],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000009',
@@ -281,7 +280,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-malformed-instructions',
-    '{"name":"Malformed instructions","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[],"instruction_groups":[{"steps":"not-an-array"}]}'::jsonb
+    '{"name":"Malformed instructions","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[{"label":null,"steps":"not-an-array"}]}'::jsonb
   );
 
 insert into public.recipe_shares (
@@ -301,7 +300,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-direct-acceptance-source',
-    '{"name":"Direct acceptance target","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb
+    '{"name":"Direct acceptance target","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000011',
@@ -310,7 +309,7 @@ values
     '10000000-0000-0000-0000-000000000001',
     'security-a@example.test',
     'b-decline-source',
-    '{"name":"Decline target","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb
+    '{"name":"Decline target","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb
   ),
   (
     'a1000000-0000-0000-0000-000000000012',
@@ -370,28 +369,28 @@ insert into snapshot_validation_cases(description, snapshot, expected)
 select description, base.snapshot || extension, expected
 from (
   select
-    '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb
+    '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb
       as snapshot
 ) as base
 cross join lateral (values
-  ('accepts legacy null instruction groups', '{"instruction_groups":null}'::jsonb, true),
-  ('accepts legacy empty instruction groups', '{"instruction_groups":[]}'::jsonb, true),
-  ('accepts current instruction groups', '{"instruction_groups":[{"label":"Sauce","steps":["Whisk."]}]}'::jsonb, true),
-  ('rejects boolean instruction groups', '{"instruction_groups":true}'::jsonb, false),
-  ('rejects object instruction groups', '{"instruction_groups":{}}'::jsonb, false),
-  ('rejects scalar instruction groups', '{"instruction_groups":"steps"}'::jsonb, false),
-  ('rejects null group entries', '{"instruction_groups":[null]}'::jsonb, false),
-  ('rejects array group entries', '{"instruction_groups":[[]]}'::jsonb, false),
-  ('rejects scalar group entries', '{"instruction_groups":["group"]}'::jsonb, false),
-  ('rejects unsupported group fields', '{"instruction_groups":[{"name":"Sauce","steps":[]}]}'::jsonb, false),
-  ('rejects missing steps', '{"instruction_groups":[{"label":"Sauce"}]}'::jsonb, false),
-  ('rejects null steps', '{"instruction_groups":[{"steps":null}]}'::jsonb, false),
-  ('rejects object steps', '{"instruction_groups":[{"steps":{}}]}'::jsonb, false),
-  ('rejects string steps', '{"instruction_groups":[{"steps":"Cook."}]}'::jsonb, false),
-  ('rejects boolean steps', '{"instruction_groups":[{"steps":true}]}'::jsonb, false),
-  ('rejects null labels', '{"instruction_groups":[{"label":null,"steps":[]}]}'::jsonb, false),
-  ('rejects empty labels', '{"instruction_groups":[{"label":" ","steps":[]}]}'::jsonb, false),
-  ('rejects object step entries', '{"instruction_groups":[{"steps":[{"text":"Cook."}]}]}'::jsonb, false),
+  ('accepts empty canonical section arrays', '{}'::jsonb, true),
+  ('accepts an unlabeled instruction section', '{"instruction_sections":[{"label":null,"steps":["Whisk."]}]}'::jsonb, true),
+  ('accepts a labeled instruction section', '{"instruction_sections":[{"label":"Sauce","steps":["Whisk."]}]}'::jsonb, true),
+  ('rejects legacy ingredients', '{"ingredients":[]}'::jsonb, false),
+  ('rejects legacy instructions', '{"instructions":[]}'::jsonb, false),
+  ('rejects legacy instruction groups', '{"instruction_groups":[]}'::jsonb, false),
+  ('rejects null section entries', '{"instruction_sections":[null]}'::jsonb, false),
+  ('rejects array section entries', '{"instruction_sections":[[]]}'::jsonb, false),
+  ('rejects scalar section entries', '{"instruction_sections":["section"]}'::jsonb, false),
+  ('rejects unsupported section fields', '{"instruction_sections":[{"name":"Sauce","label":"Sauce","steps":["Whisk."]}]}'::jsonb, false),
+  ('rejects missing steps', '{"instruction_sections":[{"label":"Sauce"}]}'::jsonb, false),
+  ('rejects null steps', '{"instruction_sections":[{"label":null,"steps":null}]}'::jsonb, false),
+  ('rejects object steps', '{"instruction_sections":[{"label":null,"steps":{}}]}'::jsonb, false),
+  ('rejects string steps', '{"instruction_sections":[{"label":null,"steps":"Cook."}]}'::jsonb, false),
+  ('rejects boolean steps', '{"instruction_sections":[{"label":null,"steps":true}]}'::jsonb, false),
+  ('rejects empty sections', '{"instruction_sections":[{"label":null,"steps":[]}]}'::jsonb, false),
+  ('rejects empty labels', '{"instruction_sections":[{"label":" ","steps":["Cook."]}]}'::jsonb, false),
+  ('rejects object step entries', '{"instruction_sections":[{"label":null,"steps":[{"text":"Cook."}]}]}'::jsonb, false),
   ('rejects invalid image URLs', '{"image_url":false}'::jsonb, false)
 ) as cases(description, extension, expected);
 
@@ -399,21 +398,21 @@ insert into snapshot_validation_cases(description, snapshot, expected)
 select
   'rejects oversized group arrays',
   base.snapshot || jsonb_build_object(
-    'instruction_groups',
+    'instruction_sections',
     (
-      select jsonb_agg(jsonb_build_object('steps', '[]'::jsonb))
+      select jsonb_agg(jsonb_build_object('label', null, 'steps', jsonb_build_array('Cook.')))
       from generate_series(1, 501)
     )
   ),
   false
 from (
-  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb as snapshot
 ) as base
 union all
 select
   'rejects oversized step arrays',
   base.snapshot || jsonb_build_object(
-    'instruction_groups',
+    'instruction_sections',
     jsonb_build_array(jsonb_build_object(
       'steps',
       (select jsonb_agg('Cook.'::text) from generate_series(1, 2001))
@@ -421,34 +420,34 @@ select
   ),
   false
 from (
-  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb as snapshot
 ) as base
 union all
 select
   'rejects oversized labels',
   base.snapshot || jsonb_build_object(
-    'instruction_groups',
+    'instruction_sections',
     jsonb_build_array(jsonb_build_object(
       'label', repeat('x', 129),
-      'steps', '[]'::jsonb
+      'steps', jsonb_build_array('Cook.')
     ))
   ),
   false
 from (
-  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb as snapshot
 ) as base
 union all
 select
   'rejects oversized step strings',
   base.snapshot || jsonb_build_object(
-    'instruction_groups',
+    'instruction_sections',
     jsonb_build_array(jsonb_build_object(
       'steps', jsonb_build_array(repeat('x', 10001))
     ))
   ),
   false
 from (
-  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb as snapshot
 ) as base
 union all
 select
@@ -456,7 +455,7 @@ select
   base.snapshot || jsonb_build_object('image_url', repeat('x', 8193)),
   false
 from (
-  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[]}'::jsonb as snapshot
+  select '{"name":"Snapshot case","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb as snapshot
 ) as base;
 
 select extensions.is(
@@ -494,7 +493,7 @@ select extensions.lives_ok(
       'security-a@example.test',
       id,
       recipe_uuid,
-      '{"name":"Contradictory yield","category":"security-test","servings":2,"tags":[],"ingredients":[],"instructions":[],"yield_metadata":{"version":1,"authoredText":"9 servings","kind":"servings","scalingBasis":{"numerator":"2","denominator":"1"},"value":{"numerator":"2","denominator":"1"}}}'::jsonb
+      '{"name":"Contradictory yield","category":"security-test","servings":2,"tags":[],"ingredient_sections":[],"instruction_sections":[],"yield_metadata":{"version":1,"authoredText":"9 servings","kind":"servings","scalingBasis":{"numerator":"2","denominator":"1"},"value":{"numerator":"2","denominator":"1"}}}'::jsonb
     from public.recipes
     where id = 'b-contradictory-yield'
   $$,
@@ -672,11 +671,11 @@ select extensions.ok(
 
 select extensions.ok(
   (
-    select ingredients #>> '{0,quantityV1,authored}' = '0.50'
-      and ingredients #>> '{0,quantityV1,value,numerator}' = '1'
+    select ingredient_sections #>> '{0,ingredients,0,quantityV1,authored}' = '0.50'
+      and ingredient_sections #>> '{0,ingredients,0,quantityV1,value,numerator}' = '1'
       and yield_metadata->>'authoredText' = '2 servings'
-      and instruction_groups #>> '{0,label}' = 'Finish'
-      and instruction_groups #>> '{0,steps,0}' = 'Serve immediately.'
+      and instruction_sections #>> '{0,label}' = 'Finish'
+      and instruction_sections #>> '{0,steps,0}' = 'Serve immediately.'
       and image_url is null
     from public.recipes
     where recipe_uuid = (
@@ -709,54 +708,28 @@ select extensions.is(
   'accepted structured share retries create no duplicate recipe'
 );
 
-select extensions.ok(
-  public.accept_recipe_share(
-    'a1000000-0000-0000-0000-000000000012'
-  ) is not null,
-  'User A can accept a supported legacy empty snapshot'
-);
-
-select extensions.ok(
-  (
-    select
-      share.status = 'accepted'
-      and share.responded_at is not null
-      and share.accepted_recipe_uuid is not null
-      and recipe.name = 'Shared Recipe'
-      and recipe.category = 'uncategorized'
-      and recipe.servings = 4
-      and recipe.tags = '{}'::text[]
-      and recipe.ingredients = '[]'::jsonb
-      and recipe.instructions = '{}'::text[]
-    from public.recipe_shares as share
-    join public.recipes as recipe
-      on recipe.recipe_uuid = share.accepted_recipe_uuid
-    where share.id = 'a1000000-0000-0000-0000-000000000012'
-  ),
-  'legacy empty acceptance atomically applies database defaults and share metadata'
+select extensions.throws_ok(
+  $$ select public.accept_recipe_share('a1000000-0000-0000-0000-000000000012') $$,
+  'P0001', 'Invalid recipe snapshot',
+  'empty legacy snapshots are rejected'
 );
 
 select extensions.is(
-  public.accept_recipe_share('a1000000-0000-0000-0000-000000000012'),
-  (
-    select accepted_recipe_uuid
-    from public.recipe_shares
-    where id = 'a1000000-0000-0000-0000-000000000012'
-  ),
-  'accepted legacy empty share retries return the existing recipe UUID'
+  (select status from public.recipe_shares where id = 'a1000000-0000-0000-0000-000000000012'),
+  'pending',
+  'empty snapshot rejection leaves the share pending'
 );
 
 select extensions.is(
-  (
-    select count(*)
-    from public.recipes
-    where user_id = '10000000-0000-0000-0000-000000000001'
-      and name = 'Shared Recipe'
-      and category = 'uncategorized'
-      and servings = 4
-  ),
-  1::bigint,
-  'accepted legacy empty share retries create no duplicate recipe'
+  (select accepted_recipe_uuid from public.recipe_shares where id = 'a1000000-0000-0000-0000-000000000012'),
+  null::uuid,
+  'empty snapshot rejection creates no accepted identity'
+);
+
+select extensions.is(
+  (select count(*) from public.recipes where user_id = '10000000-0000-0000-0000-000000000001' and name = 'Shared Recipe'),
+  0::bigint,
+  'empty snapshot rejection creates no recipe'
 );
 
 select extensions.is(

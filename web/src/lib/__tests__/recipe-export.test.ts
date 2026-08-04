@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { recipesToSchemaOrg } from '../recipe-export';
 import type { Recipe } from '@/types/database';
+import {
+  canonicalizeRecipeFixture,
+  type RecipeFixtureInput,
+} from '@/test/recipe-fixtures';
 
 function makeRecipe(
-  overrides: Partial<Recipe> = {}
+  overrides: RecipeFixtureInput = {}
 ): Recipe {
-  return {
+  return canonicalizeRecipeFixture({
     id: 'test-1',
     user_id: 'user-1',
     name: 'Test Recipe',
@@ -39,7 +43,7 @@ function makeRecipe(
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-02T00:00:00Z',
     ...overrides,
-  };
+  });
 }
 
 describe('recipesToSchemaOrg', () => {
@@ -178,10 +182,11 @@ describe('recipesToSchemaOrg', () => {
     expect(result.recipeYield).toBe('4–5 servings');
     expect(result.recipeIngredient).toEqual(['2 cups flour']);
     expect(result.recipeGenieData).toEqual({
-      version: 1,
+      version: 2,
       servings: 4,
       yieldMetadata,
-      ingredients: [ingredient],
+      ingredientSections: [{ label: null, ingredients: [ingredient] }],
+      instructionSections: [{ label: null, steps: ['Mix ingredients.', 'Bake at 350F.'] }],
     });
   });
 });

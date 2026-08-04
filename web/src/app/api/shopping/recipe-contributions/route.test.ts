@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { Recipe, ShoppingList } from "@/types/database"
+import type { ShoppingList } from "@/types/database"
+import type { RecipeRow } from "@/lib/recipe-identity"
 
 let rpcAttempt = 0
 const rpcMock = vi.fn()
@@ -14,14 +15,19 @@ const recipeB = {
   name: "Recipe B",
   category: "test",
   servings: 4,
-  ingredients: [{ item: "milk", amount: 2, unit: "cup" }],
-  instructions: [],
+  ingredient_sections: [{ label: null, ingredients: [{ item: "milk", amount: 2, unit: "cup" }] }],
+  instruction_sections: [],
+  notes: [],
+  yield_metadata: null,
+  prep_time_minutes: null,
+  cook_time_minutes: null,
+  total_time_minutes: null,
   tags: [],
   favorite: false,
   image_url: null,
   created_at: "2026-07-14T00:00:00.000Z",
   updated_at: "2026-07-14T00:00:00.000Z",
-} as unknown as Recipe
+} as RecipeRow
 let recipeRows = [recipeB]
 let configRow: Record<string, unknown> = {
   excluded_keywords: [],
@@ -253,7 +259,7 @@ describe("recipe contribution command route", () => {
     recipeRows = [{
       ...recipeB,
       servings: 1,
-      ingredients: [{ item: "flour", amount: 100000000, unit: "cup" }],
+      ingredient_sections: [{ label: null, ingredients: [{ item: "flour", amount: 100000000, unit: "cup" }] }],
     }]
     const request = new Request("http://localhost/api/shopping/recipe-contributions", {
       method: "POST",
@@ -281,7 +287,7 @@ describe("recipe contribution command route", () => {
   it("forwards enabled family settings into a newly generated contribution", async () => {
     recipeRows = [{
       ...recipeB,
-      ingredients: [{ item: "Kosher salt", amount: 1, unit: "tsp" }],
+      ingredient_sections: [{ label: null, ingredients: [{ item: "Kosher salt", amount: 1, unit: "tsp" }] }],
     }]
     configRow = {
       ...configRow,
@@ -316,7 +322,7 @@ describe("recipe contribution command route", () => {
   it("defaults missing family settings to false", async () => {
     recipeRows = [{
       ...recipeB,
-      ingredients: [{ item: "Black pepper", amount: 1, unit: "tsp" }],
+      ingredient_sections: [{ label: null, ingredients: [{ item: "Black pepper", amount: 1, unit: "tsp" }] }],
     }]
     configRow = {
       excluded_keywords: [],
@@ -348,7 +354,7 @@ describe("recipe contribution command route", () => {
   it("regenerates with enabled family settings only after an authoritative clear", async () => {
     recipeRows = [{
       ...recipeB,
-      ingredients: [{ item: "Kosher salt", amount: 1, unit: "tsp" }],
+      ingredient_sections: [{ label: null, ingredients: [{ item: "Kosher salt", amount: 1, unit: "tsp" }] }],
     }]
     let persistedState = {
       list: { ...currentList([], 0, 0), items: [] },

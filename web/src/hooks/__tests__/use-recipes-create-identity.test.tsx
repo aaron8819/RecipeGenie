@@ -56,8 +56,8 @@ function makeRecipe(id: string, name: string): Recipe {
     servings: 4,
     favorite: false,
     tags: [],
-    ingredients: [],
-    instructions: [],
+    ingredientSections: [],
+    instructionSections: [],
     image_url: null,
     created_at: "2026-03-01T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
@@ -69,13 +69,13 @@ function makeRecipeRow(id: string, name: string): RecipeRow {
     ...makeRecipe(id, name),
     id,
     recipe_uuid: id,
-    ingredients: [],
+    ingredient_sections: [],
+    instruction_sections: [],
     notes: [],
-    instruction_groups: null,
     prep_time_minutes: null,
     cook_time_minutes: null,
     total_time_minutes: null,
-  } as RecipeRow
+  } as unknown as RecipeRow
 }
 
 describe("useCreateRecipe identity reconciliation", () => {
@@ -121,8 +121,8 @@ describe("useCreateRecipe identity reconciliation", () => {
         category: "dinner",
         servings: 4,
         tags: [],
-        ingredients: [],
-        instructions: [],
+        ingredient_sections: [],
+        instruction_sections: [],
         image_url: null,
         favorite: false,
       })
@@ -190,8 +190,8 @@ describe("useCreateRecipe identity reconciliation", () => {
         recipeUuid: "11111111-1111-4111-8111-111111111111",
         name: "Retry Recipe",
         category: "dinner",
-        ingredients: [],
-        instructions: [],
+        ingredient_sections: [],
+        instruction_sections: [],
       })
     })
 
@@ -220,8 +220,8 @@ describe("useCreateRecipe identity reconciliation", () => {
     await expect(result.current.mutateAsync({
       name: "Same Name",
       category: "dinner",
-      ingredients: [],
-      instructions: [],
+      ingredient_sections: [],
+      instruction_sections: [],
     })).rejects.toMatchObject({ message: "insert failed" })
 
     expect(queryClient.getQueryData(recipesKey)).toEqual([existing])

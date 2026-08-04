@@ -21,6 +21,7 @@ import type { ShoppingItemOrderPreferences } from "./shopping-item-order"
 import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { getIngredientQuantityRange } from "./recipe-parser"
+import { flattenRecipeIngredients } from "./recipe-structure"
 import {
   normalizeScaleRatioV1,
   normalizeQuantityV1,
@@ -210,8 +211,8 @@ export function generateShoppingList(
   for (const recipe of recipes) {
     totalBaseServings += recipe.servings || 4
 
-    for (const [ingredientIndex, ingredient] of (
-      recipe.ingredients || []
+    for (const [ingredientIndex, ingredient] of flattenRecipeIngredients(
+      recipe.ingredientSections
     ).entries()) {
       const quantityRange = getIngredientQuantityRange(ingredient.amount)
       const resolved = resolveIngredientQuantity(ingredient)

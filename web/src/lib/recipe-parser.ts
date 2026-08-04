@@ -1,4 +1,9 @@
-import type { Ingredient } from "@/types/database"
+import type {
+  CanonicalIngredient,
+  Ingredient,
+  IngredientSection,
+  InstructionSection,
+} from "@/types/database"
 import {
   WHOLE_COUNT_UNIT,
   normalizeWholeCountUnit,
@@ -54,14 +59,12 @@ export interface ParsedInstructionGroup {
 export interface ParsedRecipe {
   name: string
   category?: string
-  ingredients: Ingredient[]
-  instructions: string[]
+  ingredientSections: IngredientSection[]
+  instructionSections: InstructionSection[]
   servings?: number
   yieldMetadata?: YieldMetadataV1
   notes?: string[]
   metadata?: ParsedRecipeMetadata
-  ingredientGroups?: ParsedIngredientGroup[]
-  instructionGroups?: ParsedInstructionGroup[]
   warnings: string[]
 }
 
@@ -74,7 +77,7 @@ export interface ParsedRecipe {
  * 3. Detect top-level sections
  * 4. Detect subgroup labels inside sections
  * 5. Parse ingredients, instructions, and notes
- * 6. Flatten to the current app model without dropping structure
+ * 6. Return canonical ordered sections
  */
 export function parseRecipeText(text: string): ParsedRecipe {
   const warnings: string[] = []
@@ -83,8 +86,8 @@ export function parseRecipeText(text: string): ParsedRecipe {
   if (lines.every((line) => !line.trimmed)) {
     return {
       name: "",
-      ingredients: [],
-      instructions: [],
+      ingredientSections: [],
+      instructionSections: [],
       warnings: ["No text to parse - paste recipe text above"],
     }
   }
@@ -153,11 +156,14 @@ export function parseRecipeText(text: string): ParsedRecipe {
   }
 
   const ingredients = flattenIngredientGroups(ingredientGroups)
-  const instructions = flattenInstructionGroupsForCurrentModel(
-    instructionGroups,
-    notes,
-    !hasMarkdownSections
-  )
+  const ingredientSections = ingredientGroups.map((group) => ({
+    label: group.label?.trim() || null,
+    ingredients: group.ingredients.map(stripIngredientGroupLabel),
+  }))
+  const instructionSections = instructionGroups.map((group) => ({
+    label: group.label?.trim() || null,
+    steps: [...group.steps],
+  }))
 
   if (!name || name === "Untitled Recipe") {
     warnings.push('No recipe name found - using "Untitled Recipe"')
@@ -201,8 +207,8 @@ export function parseRecipeText(text: string): ParsedRecipe {
   return {
     name: name || "Untitled Recipe",
     category,
-    ingredients,
-    instructions,
+    ingredientSections,
+    instructionSections,
     servings,
     yieldMetadata:
       preludeMetadata.servingsText && servings
@@ -212,10 +218,15 @@ export function parseRecipeText(text: string): ParsedRecipe {
           : undefined,
     notes: notes.length > 0 ? notes : undefined,
     metadata,
-    ingredientGroups: ingredientGroups.length > 0 ? ingredientGroups : undefined,
-    instructionGroups: instructionGroups.length > 0 ? instructionGroups : undefined,
     warnings,
   }
+}
+
+function stripIngredientGroupLabel(
+  ingredient: Ingredient
+): CanonicalIngredient {
+  const { groupLabel: _groupLabel, ...canonical } = ingredient
+  return canonical
 }
 
 function toRecipeLines(text: string): RecipeLine[] {
@@ -893,33 +904,6 @@ function parseNotesSection(lines: RecipeLine[]): string[] {
 
 function flattenIngredientGroups(groups: ParsedIngredientGroup[]): Ingredient[] {
   return groups.flatMap((group) => group.ingredients)
-}
-
-function flattenInstructionGroupsForCurrentModel(
-  groups: ParsedInstructionGroup[],
-  notes: string[],
-  includeStructureFallback: boolean
-): string[] {
-  if (!includeStructureFallback) {
-    return groups.flatMap((group) => group.steps)
-  }
-
-  const flattened: string[] = []
-
-  for (const group of groups) {
-    if (group.label) {
-      flattened.push(`${group.label}:`)
-    }
-
-    flattened.push(...group.steps)
-  }
-
-  if (notes.length > 0) {
-    flattened.push("Notes:")
-    flattened.push(...notes)
-  }
-
-  return flattened
 }
 
 function shouldWarnMissingIngredientAmount(

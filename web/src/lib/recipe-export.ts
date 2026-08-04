@@ -1,5 +1,5 @@
-import type { Recipe, Ingredient } from '@/types/database';
-import { getFlatRecipeInstructions } from '@/lib/recipe-structure';
+import type { CanonicalIngredient, Recipe } from '@/types/database';
+import { flattenRecipeIngredients } from '@/lib/recipe-structure';
 import { getIngredientDisplayUnit } from '@/lib/ingredient-units';
 import {
   getAuthoredYieldText,
@@ -10,7 +10,7 @@ import {
  * Convert an ingredient to a display string.
  * Uses originalText if available, otherwise reconstructs.
  */
-function ingredientToString(ing: Ingredient): string {
+function ingredientToString(ing: CanonicalIngredient): string {
   const resolved = resolveIngredientQuantity(ing);
   const parts: string[] = [];
   if (resolved.quantity) parts.push(resolved.quantity.authored);
@@ -55,24 +55,41 @@ export function recipesToSchemaOrg(
     ...(recipe.total_time_minutes
       ? { totalTime: minutesToDuration(recipe.total_time_minutes) }
       : {}),
-    recipeIngredient: (recipe.ingredients || []).map(
-      ingredientToString
-    ),
-    recipeInstructions: getFlatRecipeInstructions(recipe).map(
-      (step, i) => ({
-        '@type': 'HowToStep',
-        position: i + 1,
-        text: step,
-      })
-    ),
+    recipeIngredient: flattenRecipeIngredients(
+      recipe.ingredientSections
+    ).map(ingredientToString),
+    recipeInstructions: recipeInstructionsToSchemaOrg(recipe),
     recipeGenieData: {
-      version: 1,
+      version: 2,
       servings: recipe.servings,
       yieldMetadata: recipe.yield_metadata ?? null,
-      ingredients: recipe.ingredients ?? [],
+      ingredientSections: recipe.ingredientSections,
+      instructionSections: recipe.instructionSections,
     },
     dateCreated: recipe.created_at,
     dateModified: recipe.updated_at,
+  }));
+}
+
+function recipeInstructionsToSchemaOrg(recipe: Recipe) {
+  let position = 0;
+  const toSteps = (steps: string[]) => steps.map((step) => ({
+    '@type': 'HowToStep',
+    position: ++position,
+    text: step,
+  }));
+
+  if (
+    recipe.instructionSections.length === 1 &&
+    recipe.instructionSections[0].label === null
+  ) {
+    return toSteps(recipe.instructionSections[0].steps);
+  }
+
+  return recipe.instructionSections.map((section) => ({
+    '@type': 'HowToSection',
+    ...(section.label ? { name: section.label } : {}),
+    itemListElement: toSteps(section.steps),
   }));
 }
 
