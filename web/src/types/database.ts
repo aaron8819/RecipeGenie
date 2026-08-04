@@ -170,14 +170,13 @@ export type RecipeShareSnapshot = {
   category: string
   servings: number
   tags: string[]
-  ingredients: Ingredient[]
-  instructions: string[]
+  ingredient_sections: IngredientSection[]
+  instruction_sections: InstructionSection[]
   image_url: string | null
   prep_time_minutes?: number | null
   cook_time_minutes?: number | null
   total_time_minutes?: number | null
   notes?: string[] | null
-  instruction_groups?: RecipeInstructionGroup[] | null
   yield_metadata?: YieldMetadataV1 | null
 }
 
@@ -192,6 +191,9 @@ export type Recipe = Omit<
   RecipeBase,
   | "id"
   | "ingredients"
+  | "ingredient_sections"
+  | "instructions"
+  | "instruction_sections"
   | "notes"
   | "instruction_groups"
   | "recipe_uuid"
@@ -200,9 +202,9 @@ export type Recipe = Omit<
   | "total_time_minutes"
   | "yield_metadata"
 > & {
-  ingredients: Ingredient[]
+  ingredientSections: IngredientSection[]
+  instructionSections: InstructionSection[]
   notes?: string[] | null
-  instruction_groups?: RecipeInstructionGroup[] | null
   prep_time_minutes?: number | null
   cook_time_minutes?: number | null
   total_time_minutes?: number | null
@@ -217,14 +219,17 @@ type RecipeInsertBase = Database["public"]["Tables"]["recipes"]["Insert"]
 export type RecipeInsert = Omit<
   RecipeInsertBase,
   | "ingredients"
+  | "ingredient_sections"
+  | "instructions"
+  | "instruction_sections"
   | "notes"
   | "instruction_groups"
   | "recipe_uuid"
   | "yield_metadata"
 > & {
-  ingredients?: Ingredient[]
+  ingredient_sections?: IngredientSection[]
+  instruction_sections?: InstructionSection[]
   notes?: string[] | null
-  instruction_groups?: RecipeInstructionGroup[] | null
   yield_metadata?: YieldMetadataV1 | null
 }
 
@@ -232,14 +237,17 @@ type RecipeUpdateBase = Database["public"]["Tables"]["recipes"]["Update"]
 export type RecipeUpdate = Omit<
   RecipeUpdateBase,
   | "ingredients"
+  | "ingredient_sections"
+  | "instructions"
+  | "instruction_sections"
   | "notes"
   | "instruction_groups"
   | "recipe_uuid"
   | "yield_metadata"
 > & {
-  ingredients?: Ingredient[]
+  ingredient_sections?: IngredientSection[]
+  instruction_sections?: InstructionSection[]
   notes?: string[] | null
-  instruction_groups?: RecipeInstructionGroup[] | null
   yield_metadata?: YieldMetadataV1 | null
 }
 

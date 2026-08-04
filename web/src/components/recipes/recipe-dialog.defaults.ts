@@ -4,9 +4,11 @@ import {
 } from "@/lib/recipe-parser"
 import type { Ingredient, Recipe, RecipeInsert, RecipeInstructionGroup } from "@/types/database"
 import {
-  buildInstructionEditorGroups,
   createEmptyInstructionGroup,
-  getRecipeNotes,
+  editorGroupsToInstructionSections,
+  editorIngredientsToIngredientSections,
+  ingredientSectionsToEditorIngredients,
+  instructionSectionsToEditorGroups,
   normalizeInstructionGroupsForEditor,
   normalizeRecipeInstructionGroups,
   normalizeRecipeNotes,
@@ -108,12 +110,13 @@ export function buildEditingRecipeDialogFormValues(
     cookTimeMinutes: recipe.cook_time_minutes ?? null,
     totalTimeMinutes: recipe.total_time_minutes ?? null,
     tags: recipe.tags || [],
-    ingredients: normalizeRecipeIngredientsForEditing(recipe.ingredients || []),
-    instructionGroups: normalizeInstructionGroupsForEditor(buildInstructionEditorGroups(
-      recipe.instructions || [],
-      recipe.instruction_groups
-    )),
-    notes: getRecipeNotes(recipe).join("\n"),
+    ingredients: normalizeRecipeIngredientsForEditing(
+      ingredientSectionsToEditorIngredients(recipe.ingredientSections)
+    ),
+    instructionGroups: normalizeInstructionGroupsForEditor(
+      instructionSectionsToEditorGroups(recipe.instructionSections)
+    ),
+    notes: normalizeRecipeNotes(recipe.notes).join("\n"),
     imageUrl: recipe.image_url || null,
   }
 }
@@ -162,16 +165,16 @@ export function applyParsedRecipeToFormValues(
     cookTimeMinutes: parsedRecipe.metadata?.cookTimeMinutes ?? values.cookTimeMinutes,
     totalTimeMinutes: parsedRecipe.metadata?.totalTimeMinutes ?? values.totalTimeMinutes,
     ingredients:
-      parsedRecipe.ingredients.length > 0
-        ? normalizeRecipeIngredientsForEditing(parsedRecipe.ingredients)
+      parsedRecipe.ingredientSections.length > 0
+        ? normalizeRecipeIngredientsForEditing(
+            ingredientSectionsToEditorIngredients(parsedRecipe.ingredientSections)
+          )
         : values.ingredients,
     instructionGroups:
-      (parsedRecipe.instructionGroups && parsedRecipe.instructionGroups.length > 0) ||
-      parsedRecipe.instructions.length > 0
-        ? normalizeInstructionGroupsForEditor(buildInstructionEditorGroups(
-            parsedRecipe.instructions,
-            parsedRecipe.instructionGroups
-          ))
+      parsedRecipe.instructionSections.length > 0
+        ? normalizeInstructionGroupsForEditor(
+            instructionSectionsToEditorGroups(parsedRecipe.instructionSections)
+          )
         : values.instructionGroups,
     notes:
       parsedRecipe.notes && parsedRecipe.notes.length > 0
@@ -205,9 +208,10 @@ export function buildRecipeSubmissionData(
     cook_time_minutes: values.cookTimeMinutes,
     total_time_minutes: values.totalTimeMinutes,
     tags: values.tags || [],
-    ingredients: normalizeRecipeIngredientsForSubmission(values.ingredients),
-    instructions: instructionGroups.flatMap((group) => group.steps),
-    instruction_groups: instructionGroups,
+    ingredient_sections: editorIngredientsToIngredientSections(
+      normalizeRecipeIngredientsForSubmission(values.ingredients)
+    ),
+    instruction_sections: editorGroupsToInstructionSections(instructionGroups),
     notes,
     image_url: values.imageUrl,
   }

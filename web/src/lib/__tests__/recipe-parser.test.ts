@@ -10,6 +10,11 @@ import {
   STRUCTURED_LAMB_RECIPE_TEXT,
 } from './recipe-parser.fixtures';
 
+const flatIngredients = (result: ReturnType<typeof parseRecipeText>) =>
+  result.ingredientSections.flatMap((section) => section.ingredients);
+const flatInstructions = (result: ReturnType<typeof parseRecipeText>) =>
+  result.instructionSections.flatMap((section) => section.steps);
+
 describe('parseIngredientLine', () => {
   it.each([
     ['½–1', '0.5–1'],
@@ -172,24 +177,24 @@ describe('parseRecipeText', () => {
       totalTime: '25 minutes',
       totalTimeMinutes: 25,
     });
-    expect(result.ingredientGroups?.map((group) => group.label)).toEqual([
+    expect(result.ingredientSections?.map((group) => group.label)).toEqual([
       'Taco Meat',
       'Salad',
       'Cilantro-Lime Yogurt Dressing',
     ]);
-    expect(result.ingredientGroups?.map((group) => group.ingredients.length)).toEqual([
+    expect(result.ingredientSections?.map((group) => group.ingredients.length)).toEqual([
       8,
       11,
       11,
     ]);
-    expect(result.ingredients).toHaveLength(30);
-    expect(result.instructions).toHaveLength(11);
-    expect(result.instructionGroups?.[0].steps).toHaveLength(11);
+    expect(flatIngredients(result)).toHaveLength(30);
+    expect(flatInstructions(result)).toHaveLength(11);
+    expect(result.instructionSections?.[0].steps).toHaveLength(11);
     expect(result.notes).toHaveLength(4);
 
     const content = [
-      ...result.ingredients.map((ingredient) => ingredient.originalText),
-      ...result.instructions,
+      ...flatIngredients(result).map((ingredient) => ingredient.originalText),
+      ...flatInstructions(result),
       ...(result.notes || []),
     ];
     expect(content).not.toEqual(expect.arrayContaining([
@@ -217,40 +222,38 @@ describe('parseRecipeText', () => {
       totalTime: '45 minutes',
       totalTimeMinutes: 45,
     });
-    expect(result.ingredientGroups?.map((group) => group.label)).toEqual([
+    expect(result.ingredientSections?.map((group) => group.label)).toEqual([
       'Chicken',
       'Sesame Sauce',
     ]);
-    expect(result.ingredientGroups?.map((group) => group.ingredients.length)).toEqual([
+    expect(result.ingredientSections?.map((group) => group.ingredients.length)).toEqual([
       3,
       4,
     ]);
-    expect(result.ingredients).toHaveLength(7);
-    expect(result.ingredients[0]).toMatchObject({
+    expect(flatIngredients(result)).toHaveLength(7);
+    expect(flatIngredients(result)[0]).toMatchObject({
       amount: 1.5,
       unit: 'lb',
       item: 'boneless, skinless chicken thighs',
-      groupLabel: 'Chicken',
       originalText:
         '1½ lb boneless, skinless chicken thighs, cut into 1-inch pieces',
     });
-    expect(result.ingredients[1].originalText).toBe('¾ tsp kosher salt');
-    expect(result.ingredients[2].originalText).toBe('⅜ tsp black pepper');
-    expect(result.ingredients[6]).toMatchObject({
+    expect(flatIngredients(result)[1].originalText).toBe('¾ tsp kosher salt');
+    expect(flatIngredients(result)[2].originalText).toBe('⅜ tsp black pepper');
+    expect(flatIngredients(result)[6]).toMatchObject({
       amount: '0.5–1',
       unit: 'tsp',
       item: 'red pepper flakes',
-      groupLabel: 'Sesame Sauce',
       originalText: '½–1 tsp red pepper flakes',
     });
-    expect(result.instructionGroups?.[0].steps).toHaveLength(16);
-    expect(result.instructionGroups?.[0].steps[9]).toBe(
+    expect(result.instructionSections?.[0].steps).toHaveLength(16);
+    expect(result.instructionSections?.[0].steps[9]).toBe(
       'Stir until every piece is coated.'
     );
-    expect(result.instructionGroups?.[0].steps[13]).toBe(
+    expect(result.instructionSections?.[0].steps[13]).toBe(
       'Rest the chicken for two minutes. Keep the skillet uncovered so the coating stays crisp.'
     );
-    expect(result.instructionGroups?.[0].steps[15]).toBe(
+    expect(result.instructionSections?.[0].steps[15]).toBe(
       'Garnish with sesame seeds and serve.'
     );
     expect(result.notes).toEqual([
@@ -282,13 +285,13 @@ describe('parseRecipeText', () => {
 
     expect(result.name).toBe('Tomato Toast');
     expect(result.metadata).toBeUndefined();
-    expect(result.ingredientGroups).toHaveLength(1);
-    expect(result.ingredientGroups?.[0].label).toBeUndefined();
-    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+    expect(result.ingredientSections).toHaveLength(1);
+    expect(result.ingredientSections?.[0].label).toBeNull();
+    expect(flatIngredients(result).map((ingredient) => ingredient.item)).toEqual([
       'bread',
       'tomato',
     ]);
-    expect(result.instructionGroups?.[0].steps).toEqual([
+    expect(result.instructionSections?.[0].steps).toEqual([
       'Toast the bread.',
       'Top with tomato.',
     ]);
@@ -309,13 +312,13 @@ describe('parseRecipeText', () => {
 An ordinary note paragraph.`);
 
     expect(result.name).toBe('Layered Toast');
-    expect(result.ingredientGroups?.[0]).toMatchObject({
+    expect(result.ingredientSections?.[0]).toMatchObject({
       label: 'Spread',
     });
-    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+    expect(flatIngredients(result).map((ingredient) => ingredient.item)).toEqual([
       'butter',
     ]);
-    expect(result.instructions).toEqual(['Spread the butter.']);
+    expect(flatInstructions(result)).toEqual(['Spread the butter.']);
     expect(result.notes).toEqual(['An ordinary note paragraph.']);
   });
 
@@ -360,14 +363,14 @@ Keep refrigerated.`);
 + Refrigerate promptly
   for up to three days.`);
 
-    expect(result.ingredients).toHaveLength(2);
-    expect(result.ingredients[0]).toMatchObject({
+    expect(flatIngredients(result)).toHaveLength(2);
+    expect(flatIngredients(result)[0]).toMatchObject({
       item: 'chicken, cut into bite-size pieces',
       amount: 1,
       unit: 'lb',
       originalText: '1 lb chicken, cut into bite-size pieces',
     });
-    expect(result.instructions).toEqual([
+    expect(flatInstructions(result)).toEqual([
       'Simmer gently until the chicken is cooked through.',
     ]);
     expect(result.notes).toEqual([
@@ -393,10 +396,10 @@ Keep refrigerated.`);
 ## Notes
 - Serve warm.`);
 
-    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+    expect(flatIngredients(result).map((ingredient) => ingredient.item)).toEqual([
       'bread',
     ]);
-    expect(result.instructions).toEqual(['Toast the bread.']);
+    expect(flatInstructions(result)).toEqual(['Toast the bread.']);
     expect(result.notes).toEqual(['Serve warm.']);
   });
 
@@ -431,7 +434,7 @@ Servings: 4–6
 ## Notes
 - Serve hot.`);
 
-    expect(result.instructions).toEqual([]);
+    expect(flatInstructions(result)).toEqual([]);
     expect(result.notes).toEqual(['Serve hot.']);
     expect(result.warnings).toContain(
       'No instructions found - add a "Directions" or "Instructions" section'
@@ -460,8 +463,8 @@ Serve warm.`);
     expect(result.category).toBe('beef');
     expect(result.servings).toBe(4);
     expect(result.metadata).toBeUndefined();
-    expect(result.ingredients).toHaveLength(1);
-    expect(result.instructions).toEqual(['Simmer.']);
+    expect(flatIngredients(result)).toHaveLength(1);
+    expect(flatInstructions(result)).toEqual(['Simmer.']);
     expect(result.notes).toEqual(['Serve warm.']);
   });
 
@@ -475,8 +478,8 @@ Serve warm.`);
 ## Notes
 - Note bullet.`);
 
-    expect(result.ingredients).toEqual([]);
-    expect(result.instructions).toEqual(['Simmer.']);
+    expect(flatIngredients(result)).toEqual([]);
+    expect(flatInstructions(result)).toEqual(['Simmer.']);
     expect(result.notes).toEqual(['Note bullet.']);
   });
 
@@ -494,7 +497,7 @@ Serve warm.`);
 2. Simmer for ten minutes.`);
 
     expect(result.servings).toBe(6);
-    expect(result.instructionGroups?.[0].steps).toEqual([
+    expect(result.instructionSections?.[0].steps).toEqual([
       'Add the beans to the pot. Important: Keep all of their liquid.',
       'Simmer for ten minutes.',
     ]);
@@ -511,9 +514,9 @@ Serve warm.`);
 ## Instructions`);
 
     expect(result.name).toBe('Untitled Recipe');
-    expect(result.ingredients).toEqual([]);
-    expect(result.instructions).toEqual([]);
-    expect(result.ingredientGroups).toBeUndefined();
+    expect(flatIngredients(result)).toEqual([]);
+    expect(flatInstructions(result)).toEqual([]);
+    expect(result.ingredientSections).toEqual([]);
     expect(result.warnings).toEqual(expect.arrayContaining([
       'Unsupported Markdown section "Nutrition" was not imported.',
       'No recipe name found - using "Untitled Recipe"',
@@ -548,12 +551,12 @@ Cook the chicken.
 Add sauce.`;
 
     const result = parseRecipeText(text);
-    expect(result.ingredients).toHaveLength(3);
-    expect(result.ingredients[0].originalText)
+    expect(flatIngredients(result)).toHaveLength(3);
+    expect(flatIngredients(result)[0].originalText)
       .toBe('2 lbs chicken breast');
-    expect(result.ingredients[1].originalText)
+    expect(flatIngredients(result)[1].originalText)
       .toBe('1 tbsp soy sauce');
-    expect(result.ingredients[2].originalText)
+    expect(flatIngredients(result)[2].originalText)
       .toBe('3 cloves garlic, minced');
   });
 
@@ -574,7 +577,7 @@ Serve.`;
 
     const result = parseRecipeText(text);
 
-    expect(result.ingredients).toMatchObject([
+    expect(flatIngredients(result)).toMatchObject([
       { item: 'onion', amount: 1, unit: 'count', modifier: 'sliced' },
       { item: 'red bell pepper', amount: 1, unit: 'count', modifier: 'diced' },
       { item: 'eggs', amount: 2, unit: 'count' },
@@ -609,9 +612,9 @@ Instructions:
 Cook and serve.`;
 
     const result = parseRecipeText(text);
-    expect(result.ingredients).toHaveLength(10);
-    expect(result.ingredients.some((i) => i.item.toLowerCase().includes('sesame seeds'))).toBe(true);
-    expect(result.ingredients.some((i) => i.item.toLowerCase().includes('green onions'))).toBe(true);
+    expect(flatIngredients(result)).toHaveLength(10);
+    expect(flatIngredients(result).some((i) => i.item.toLowerCase().includes('sesame seeds'))).toBe(true);
+    expect(flatIngredients(result).some((i) => i.item.toLowerCase().includes('green onions'))).toBe(true);
   });
 
   it('parses field-prefixed metadata, grouped sections, and notes from structured recipe text', () => {
@@ -628,35 +631,33 @@ Cook and serve.`;
       totalTimeMinutes: 22,
     });
 
-    expect(result.ingredientGroups).toHaveLength(2);
-    expect(result.ingredientGroups?.[0].label).toBeUndefined();
-    expect(result.ingredientGroups?.[0].ingredients).toHaveLength(7);
-    expect(result.ingredientGroups?.[1].label).toBe('Pan Sauce');
-    expect(result.ingredientGroups?.[1].ingredients).toHaveLength(3);
+    expect(result.ingredientSections).toHaveLength(2);
+    expect(result.ingredientSections?.[0].label).toBeNull();
+    expect(result.ingredientSections?.[0].ingredients).toHaveLength(7);
+    expect(result.ingredientSections?.[1].label).toBe('Pan Sauce');
+    expect(result.ingredientSections?.[1].ingredients).toHaveLength(3);
 
-    expect(result.ingredients).toHaveLength(10);
-    expect(result.ingredients[7]).toMatchObject({
+    expect(flatIngredients(result)).toHaveLength(10);
+    expect(flatIngredients(result)[7]).toMatchObject({
       item: 'red wine',
       amount: 0.25,
       unit: 'cup',
-      groupLabel: 'Pan Sauce',
       alternatives: ['beef broth'],
       originalText: '1/4 cup red wine or beef broth',
     });
-    expect(result.ingredients[9]).toMatchObject({
+    expect(flatIngredients(result)[9]).toMatchObject({
       item: 'butter',
       amount: 1,
       unit: 'tbsp',
-      groupLabel: 'Pan Sauce',
     });
 
-    expect(result.instructionGroups).toHaveLength(2);
-    expect(result.instructionGroups?.[0].steps).toHaveLength(8);
-    expect(result.instructionGroups?.[1]).toMatchObject({
+    expect(result.instructionSections).toHaveLength(2);
+    expect(result.instructionSections?.[0].steps).toHaveLength(8);
+    expect(result.instructionSections?.[1]).toMatchObject({
       label: 'Pan Sauce',
     });
-    expect(result.instructionGroups?.[1].steps).toHaveLength(5);
-    expect(result.instructionGroups?.[1].steps[0]).toBe('Lower heat to medium.');
+    expect(result.instructionSections?.[1].steps).toHaveLength(5);
+    expect(result.instructionSections?.[1].steps[0]).toBe('Lower heat to medium.');
 
     expect(result.notes).toEqual([
       'Lamb shoulder chops are flavorful but slightly tougher than loin chops, so slicing along the natural seam after cooking improves tenderness.',
@@ -665,10 +666,10 @@ Cook and serve.`;
     ]);
   });
 
-  it('preserves grouped instructions and notes losslessly in the current flat model fallback', () => {
+  it('preserves grouped instructions and notes losslessly in canonical sections', () => {
     const result = parseRecipeText(STRUCTURED_LAMB_RECIPE_TEXT);
 
-    expect(result.instructions).toEqual([
+    expect(flatInstructions(result)).toEqual([
       'Remove lamb shoulder chops from the refrigerator 20–30 minutes before cooking. Pat dry thoroughly.',
       'Season both sides generously with salt and black pepper.',
       'Heat a heavy skillet (preferably cast iron) over medium-high heat until very hot.',
@@ -677,17 +678,14 @@ Cook and serve.`;
       'Flip and cook for 4–6 minutes on the second side.',
       'During the last minute of cooking, add butter, smashed garlic, and rosemary. Tilt the pan and spoon the melted butter over the chops repeatedly.',
       'Remove lamb from the pan when internal temperature reaches about 130°F for medium-rare. Rest for 5 minutes.',
-      'Pan Sauce:',
       'Lower heat to medium.',
       'Add red wine or beef broth to the skillet and scrape the browned bits from the pan.',
       'Add lemon juice and simmer for 1–2 minutes until slightly reduced.',
       'Stir in butter until the sauce becomes glossy.',
       'Spoon the pan sauce over the rested lamb chops and serve.',
-      'Notes:',
-      'Lamb shoulder chops are flavorful but slightly tougher than loin chops, so slicing along the natural seam after cooking improves tenderness.',
-      'Best served medium-rare to medium (130–140°F).',
-      'Pairs well with crispy potatoes, Greek salad, or roasted vegetables.',
     ]);
+    expect(result.instructionSections[1].label).toBe('Pan Sauce');
+    expect(result.notes).toHaveLength(3);
   });
 
   it('does not lose content from the structured regression fixture', () => {
@@ -695,15 +693,16 @@ Cook and serve.`;
 
     const flattenedContent = [
       result.name,
-      ...result.ingredients.map((ingredient) => ingredient.originalText || ingredient.item),
-      ...result.instructions,
+      ...flatIngredients(result).map((ingredient) => ingredient.originalText || ingredient.item),
+      ...flatInstructions(result),
+      ...result.instructionSections.map((section) => section.label).filter(Boolean),
       ...(result.notes || []),
     ].join('\n');
 
     expect(flattenedContent).toContain('Cast Iron Lamb Shoulder Chops with Garlic Herb Pan Sauce');
     expect(flattenedContent).toContain('1 sprig fresh rosemary (or thyme)');
     expect(flattenedContent).toContain('1/4 cup red wine or beef broth');
-    expect(flattenedContent).toContain('Pan Sauce:');
+    expect(flattenedContent).toContain('Pan Sauce');
     expect(flattenedContent).toContain('Lower heat to medium.');
     expect(flattenedContent).toContain('Best served medium-rare to medium (130–140°F).');
   });
@@ -719,7 +718,7 @@ WHAT YOU'LL NEED
 METHOD
 Step 1: Mash the avocados.`);
 
-    expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual([
+    expect(flatIngredients(result).map((ingredient) => ingredient.item)).toEqual([
       'avocados',
       'lime juice',
     ]);
@@ -731,7 +730,7 @@ Step 1: Mash the avocados.`);
     (heading) => {
       const result = parseRecipeText(`Tomato Toast\n\n${heading}\n2 tomatoes\n\nMETHOD\nSlice and serve.`);
 
-      expect(result.ingredients.map((ingredient) => ingredient.item)).toEqual(['tomatoes']);
+      expect(flatIngredients(result).map((ingredient) => ingredient.item)).toEqual(['tomatoes']);
       expect(result.warnings).not.toContain(`"${heading}" has no amount`);
     }
   );

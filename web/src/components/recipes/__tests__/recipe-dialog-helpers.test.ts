@@ -12,6 +12,7 @@ import {
   updateRecipeIngredientField,
 } from "../recipe-dialog.defaults"
 import type { Recipe } from "@/types/database"
+import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 import { formatRecipeQuantity } from "@/lib/recipe-quantity"
 import {
   analyzeIngredientDuplicates,
@@ -167,7 +168,10 @@ describe("recipe import helpers", () => {
       parseRecipeImportPreview("Toast\n\nIngredients:\n1 slice bread\n\nInstructions:\nToast it")
     ).toMatchObject({
       name: "Toast",
-      ingredients: [{ item: "bread", amount: 1, unit: "slice" }],
+      ingredientSections: [{
+        label: null,
+        ingredients: [{ item: "bread", amount: 1, unit: "slice" }],
+      }],
     })
   })
 
@@ -175,9 +179,9 @@ describe("recipe import helpers", () => {
     const preview = parseRecipeImportPreview(STRUCTURED_LAMB_RECIPE_TEXT)
 
     expect(preview).not.toBeNull()
-    expect(preview?.ingredientGroups?.[1].label).toBe("Pan Sauce")
-    expect(preview?.ingredients[7].groupLabel).toBe("Pan Sauce")
-    expect(preview?.instructions).toContain("Notes:")
+    expect(preview?.ingredientSections[1].label).toBe("Pan Sauce")
+    expect(preview?.ingredientSections[1].ingredients[0].item).toBeTruthy()
+    expect(preview?.instructionSections.flatMap((section) => section.steps)).not.toContain("Notes:")
     expect(preview?.notes).toHaveLength(3)
   })
 
@@ -193,16 +197,16 @@ describe("recipe import helpers", () => {
     expect(
       toParsedRecipeImport({
         name: "Soup",
-        ingredients: [{ item: "water", amount: 1, unit: "cup" }],
-        instructions: ["Boil"],
+        ingredientSections: [{ label: null, ingredients: [{ item: "water", amount: 1, unit: "cup" }] }],
+        instructionSections: [{ label: null, steps: ["Boil"] }],
         servings: 2,
         imageUrl: "https://example.com/soup.jpg",
         warnings: ["warning"],
       })
     ).toMatchObject({
       name: "Soup",
-      ingredients: [{ item: "water", amount: 1, unit: "cup" }],
-      instructions: ["Boil"],
+      ingredientSections: [{ label: null, ingredients: [{ item: "water", amount: 1, unit: "cup" }] }],
+      instructionSections: [{ label: null, steps: ["Boil"] }],
       servings: 2,
       warnings: ["warning"],
     })
@@ -215,7 +219,7 @@ describe("recipe dialog defaults helpers", () => {
       {
         ...parseRecipeImportPreview(
           "Tomatoes\n\nIngredients:\n1 (14 oz) can tomatoes\n\nInstructions:\nCook"
-        )!.ingredients[0],
+        )!.ingredientSections[0].ingredients[0],
       },
       true
     )
@@ -261,7 +265,7 @@ describe("recipe dialog defaults helpers", () => {
       ingredients: [scalar],
       instructionGroups: [{ steps: ["Cook"] }],
     })
-    const recipe = {
+    const recipe = canonicalizeRecipeFixture({
       id: "tomatoes-1",
       user_id: "user-1",
       name: saved.name,
@@ -269,31 +273,30 @@ describe("recipe dialog defaults helpers", () => {
       servings: saved.servings ?? 4,
       favorite: false,
       tags: saved.tags ?? [],
-      ingredients: saved.ingredients ?? [],
-      instructions: saved.instructions ?? [],
-      instruction_groups: saved.instruction_groups ?? null,
+      ingredientSections: saved.ingredient_sections ?? [],
+      instructionSections: saved.instruction_sections ?? [],
       notes: saved.notes ?? [],
       image_url: null,
       created_at: "2026-07-29T00:00:00.000Z",
       updated_at: "2026-07-29T00:00:00.000Z",
-    } satisfies Recipe
+    })
     const reopened = buildEditingRecipeDialogFormValues(recipe)
     const resaved = buildRecipeSubmissionData(reopened)
-    expect(resaved.ingredients?.[0].packageV1).toEqual(
-      saved.ingredients?.[0].packageV1
+    expect(resaved.ingredient_sections?.[0].ingredients[0].packageV1).toEqual(
+      saved.ingredient_sections?.[0].ingredients[0].packageV1
     )
     expect(
-      formatRecipeQuantity(resaved.ingredients![0], 4, 3).text
+      formatRecipeQuantity(resaved.ingredient_sections![0].ingredients[0], 4, 3).text
     ).toBe("¾ of a 28 oz can")
     expect(
-      formatRecipeQuantity(resaved.ingredients![0], 4, 3).text
+      formatRecipeQuantity(resaved.ingredient_sections![0].ingredients[0], 4, 3).text
     ).not.toContain("¾ (28 oz) cans")
   })
 
   it("deliberately transitions between package and ordinary units", () => {
     const packageIngredient = parseRecipeImportPreview(
       "Tomatoes\n\nIngredients:\n1 (14 oz) can tomatoes\n\nInstructions:\nCook"
-    )!.ingredients[0]
+    )!.ingredientSections[0].ingredients[0]
     const ordinary = updateRecipeIngredientField(
       packageIngredient,
       "unit",
@@ -383,12 +386,14 @@ describe("recipe dialog defaults helpers", () => {
       cook_time_minutes: null,
       total_time_minutes: null,
       tags: ["easy"],
-      ingredients: [
-        { item: "water", amount: 1, unit: "cup", modifier: "chilled" },
-        { item: "onion", amount: 1, unit: "count" },
-      ],
-      instructions: ["Boil", "Serve"],
-      instruction_groups: [{ steps: ["Boil", "Serve"] }],
+      ingredient_sections: [{
+        label: null,
+        ingredients: [
+          { item: "water", amount: 1, unit: "cup", modifier: "chilled" },
+          { item: "onion", amount: 1, unit: "count" },
+        ],
+      }],
+      instruction_sections: [{ label: null, steps: ["Boil", "Serve"] }],
       notes: [],
       image_url: null,
     })
@@ -419,11 +424,11 @@ describe("recipe dialog defaults helpers", () => {
       cook_time_minutes: null,
       total_time_minutes: null,
       tags: [],
-      ingredients: [
-        { item: "butter", amount: 1, unit: "tbsp", groupLabel: "Pan Sauce" },
-      ],
-      instructions: ["Cook"],
-      instruction_groups: [{ steps: ["Cook"] }],
+      ingredient_sections: [{
+        label: "Pan Sauce",
+        ingredients: [{ item: "butter", amount: 1, unit: "tbsp" }],
+      }],
+      instruction_sections: [{ label: null, steps: ["Cook"] }],
       notes: [],
       image_url: null,
     })
@@ -456,10 +461,9 @@ describe("recipe dialog defaults helpers", () => {
       cook_time_minutes: null,
       total_time_minutes: null,
       tags: [],
-      ingredients: [{ item: "water", amount: 1, unit: "cup" }],
-      instructions: ["Boil water", "Finish with butter"],
-      instruction_groups: [
-        { steps: ["Boil water"] },
+      ingredient_sections: [{ label: null, ingredients: [{ item: "water", amount: 1, unit: "cup" }] }],
+      instruction_sections: [
+        { label: null, steps: ["Boil water"] },
         { label: "Sauce", steps: ["Finish with butter"] },
       ],
       notes: ["Serve warm"],
@@ -485,8 +489,8 @@ describe("recipe dialog defaults helpers", () => {
         },
         {
           name: "",
-          ingredients: [{ item: "Bread", amount: 1, unit: "slice" }],
-          instructions: [],
+          ingredientSections: [{ label: null, ingredients: [{ item: "Bread", amount: 1, unit: "slice" }] }],
+          instructionSections: [],
           warnings: [],
         }
       )
@@ -522,16 +526,16 @@ describe("recipe dialog defaults helpers", () => {
     expect(submission.cook_time_minutes).toBe(12)
     expect(submission.total_time_minutes).toBe(22)
     expect(submission.notes).toHaveLength(3)
-    expect(submission.instructions).not.toContain("Notes:")
-    expect(submission.instructions).not.toContain("Pan Sauce:")
-    expect(submission.instruction_groups).toHaveLength(2)
-    expect(submission.instruction_groups?.[0].steps[0]).toContain("Remove lamb shoulder chops")
-    expect(submission.instruction_groups?.[1]).toMatchObject({
+    expect(submission.instruction_sections!.flatMap((section) => section.steps)).not.toContain("Notes:")
+    expect(submission.instruction_sections!.flatMap((section) => section.steps)).not.toContain("Pan Sauce:")
+    expect(submission.instruction_sections).toHaveLength(2)
+    expect(submission.instruction_sections![0].steps[0]).toContain("Remove lamb shoulder chops")
+    expect(submission.instruction_sections![1]).toMatchObject({
       label: "Pan Sauce",
     })
-    expect(submission.instruction_groups?.[1].steps[0]).toBe("Lower heat to medium.")
+    expect(submission.instruction_sections![1].steps[0]).toBe("Lower heat to medium.")
 
-    const hydrated = buildEditingRecipeDialogFormValues({
+    const hydrated = buildEditingRecipeDialogFormValues(canonicalizeRecipeFixture({
       id: "lamb-1",
       user_id: "user-1",
       name: submission.name,
@@ -539,9 +543,8 @@ describe("recipe dialog defaults helpers", () => {
       servings: submission.servings ?? 4,
       favorite: false,
       tags: submission.tags ?? [],
-      ingredients: submission.ingredients ?? [],
-      instructions: submission.instructions ?? [],
-      instruction_groups: submission.instruction_groups ?? null,
+      ingredientSections: submission.ingredient_sections,
+      instructionSections: submission.instruction_sections,
       notes: submission.notes ?? [],
       prep_time_minutes: submission.prep_time_minutes ?? null,
       cook_time_minutes: submission.cook_time_minutes ?? null,
@@ -549,7 +552,7 @@ describe("recipe dialog defaults helpers", () => {
       image_url: submission.image_url ?? null,
       created_at: "2026-03-10T00:00:00.000Z",
       updated_at: "2026-03-10T00:00:00.000Z",
-    } satisfies Recipe)
+    }))
 
     expect(hydrated.prepTimeMinutes).toBe(10)
     expect(hydrated.cookTimeMinutes).toBe(12)
@@ -585,7 +588,7 @@ describe("recipe dialog defaults helpers", () => {
     expect(applied.ingredients[3].groupLabel).toBe("Sesame Sauce")
     expect(applied.instructionGroups[0]?.steps).toHaveLength(16)
     expect(applied.notes).toContain("350°F")
-    expect(submission.instruction_groups?.[0].steps).toHaveLength(16)
+    expect(submission.instruction_sections![0].steps).toHaveLength(16)
     expect(submission.notes).toEqual([
       "Keep the frying oil close to 350°F.",
       "Sauce the chicken immediately before serving.",
@@ -646,8 +649,8 @@ describe("recipe dialog defaults helpers", () => {
         {
           name: "Roast Chicken",
           category: "chicken",
-          ingredients: [],
-          instructions: [],
+          ingredientSections: [],
+          instructionSections: [],
           warnings: [],
         },
         {
@@ -663,8 +666,8 @@ describe("recipe dialog defaults helpers", () => {
         {
           name: "Fish Tacos",
           category: "seafood",
-          ingredients: [],
-          instructions: [],
+          ingredientSections: [],
+          instructionSections: [],
           warnings: [],
         },
         {
@@ -810,7 +813,7 @@ Ingredients
     })
   })
 
-  it("separates legacy note label lines from instructions when hydrating older recipes", () => {
+  it("hydrates canonical instruction sections and notes without reinterpretation", () => {
     const hydrated = buildEditingRecipeDialogFormValues({
       id: "legacy-1",
       user_id: "user-1",
@@ -819,8 +822,9 @@ Ingredients
       servings: 4,
       favorite: false,
       tags: [],
-      ingredients: [{ item: "Butter", amount: 1, unit: "tbsp" }],
-      instructions: ["Pan Sauce:", "Whisk the sauce.", "Notes:", "Serve immediately."],
+      ingredientSections: [{ label: null, ingredients: [{ item: "Butter", amount: 1, unit: "tbsp" }] }],
+      instructionSections: [{ label: "Pan Sauce", steps: ["Whisk the sauce."] }],
+      notes: ["Serve immediately."],
       image_url: null,
       created_at: "2026-03-10T00:00:00.000Z",
       updated_at: "2026-03-10T00:00:00.000Z",

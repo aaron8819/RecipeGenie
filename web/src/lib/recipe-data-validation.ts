@@ -1,6 +1,8 @@
 import type {
+  CanonicalIngredient,
   Ingredient,
-  RecipeInstructionGroup,
+  IngredientSection,
+  InstructionSection,
   RecipeShareSnapshot,
   ShoppingItem,
   YieldMetadataV1,
@@ -42,10 +44,6 @@ type ValidationMode = "hydrate" | "persist"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value)
-}
-
-export function isLegacyEmptyRecipeShareSnapshot(value: unknown): boolean {
-  return isRecord(value) && Object.keys(value).length === 0
 }
 
 function boundedString(
@@ -264,55 +262,97 @@ function normalizeOptionalInteger(
     : undefined
 }
 
-function normalizeInstructionGroups(
+function normalizeIngredientSections(
   value: unknown,
   mode: ValidationMode
-): RecipeInstructionGroup[] | null | undefined {
-  if (value === undefined || value === null) return value
+): IngredientSection[] | null {
   if (
     !Array.isArray(value) ||
     value.length > RECIPE_DATA_LIMITS.instructionGroupsPerRecipe
   ) {
-    return undefined
+    return null
   }
-  const groups: RecipeInstructionGroup[] = []
+  const sections: IngredientSection[] = []
+  let totalIngredients = 0
+  for (const entry of value) {
+    if (
+      !isRecord(entry) ||
+      Object.keys(entry).length !== 2 ||
+      !("label" in entry) ||
+      !("ingredients" in entry) ||
+      (entry.label !== null &&
+        (typeof entry.label !== "string" ||
+          entry.label !== entry.label.trim() ||
+          entry.label.length === 0 ||
+          entry.label.length > RECIPE_DATA_LIMITS.groupLabelLength)) ||
+      !Array.isArray(entry.ingredients) ||
+      entry.ingredients.length === 0
+    ) {
+      return null
+    }
+    totalIngredients += entry.ingredients.length
+    if (
+      totalIngredients > RECIPE_DATA_LIMITS.ingredientsPerRecipe
+    ) {
+      return null
+    }
+    const ingredients: CanonicalIngredient[] = []
+    for (const value of entry.ingredients) {
+      if (isRecord(value) && "groupLabel" in value) return null
+      const ingredient = normalizeIngredient(value, mode)
+      if (!ingredient) return null
+      const { groupLabel: _groupLabel, ...canonical } = ingredient
+      ingredients.push(canonical)
+    }
+    sections.push({ label: entry.label, ingredients })
+  }
+  return sections
+}
+
+function normalizeInstructionSections(
+  value: unknown,
+  _mode: ValidationMode
+): InstructionSection[] | null {
+  if (
+    !Array.isArray(value) ||
+    value.length > RECIPE_DATA_LIMITS.instructionGroupsPerRecipe
+  ) {
+    return null
+  }
+  const sections: InstructionSection[] = []
   let totalSteps = 0
   for (const entry of value) {
-    if (!isRecord(entry)) return undefined
     if (
-      mode === "persist" &&
-      Object.keys(entry).some((key) => !["label", "steps"].includes(key))
+      !isRecord(entry) ||
+      Object.keys(entry).length !== 2 ||
+      !("label" in entry) ||
+      !("steps" in entry) ||
+      (entry.label !== null &&
+        (typeof entry.label !== "string" ||
+          entry.label !== entry.label.trim() ||
+          entry.label.length === 0 ||
+          entry.label.length > RECIPE_DATA_LIMITS.groupLabelLength))
     ) {
-      return undefined
+      return null
     }
-    const label = optionalString(
-      entry.label,
-      RECIPE_DATA_LIMITS.groupLabelLength
-    )
     const steps = normalizeStringArray(
       entry.steps,
       RECIPE_DATA_LIMITS.instructionsPerRecipe,
       RECIPE_DATA_LIMITS.instructionLength
     )
     if (
-      label === null ||
       !steps ||
-      (mode === "persist" &&
-        entry.label !== undefined &&
-        (typeof entry.label !== "string" || !label))
+      steps.length === 0
     ) {
-      return undefined
+      return null
     }
     totalSteps += steps.length
     if (totalSteps > RECIPE_DATA_LIMITS.instructionsPerRecipe) {
-      return undefined
+      return null
     }
-    groups.push({
-      ...(label ? { label } : {}),
-      steps,
-    })
+    sections.push({ label: entry.label, steps })
   }
-  return groups
+  return sections
 }
 
 export function normalizeRecipeShareSnapshot(
@@ -336,12 +376,14 @@ export function normalizeRecipeShareSnapshot(
     RECIPE_DATA_LIMITS.tagsPerRecipe,
     RECIPE_DATA_LIMITS.tagLength
   )
-  const instructions = normalizeStringArray(
-    value.instructions,
-    RECIPE_DATA_LIMITS.instructionsPerRecipe,
-    RECIPE_DATA_LIMITS.instructionLength
+  const ingredientSections = normalizeIngredientSections(
+    value.ingredient_sections,
+    mode
   )
-  const ingredients = normalizeIngredients(value.ingredients, mode)
+  const instructionSections = normalizeInstructionSections(
+    value.instruction_sections,
+    mode
+  )
   const parsedImageUrl =
     value.image_url === null
       ? null
@@ -355,8 +397,8 @@ export function normalizeRecipeShareSnapshot(
     !category ||
     !servings ||
     !tags ||
-    !instructions ||
-    !ingredients ||
+    !ingredientSections ||
+    !instructionSections ||
     (mode === "persist" &&
       value.image_url !== undefined &&
       value.image_url !== null &&
@@ -400,33 +442,19 @@ export function normalizeRecipeShareSnapshot(
         )
   if (mode === "persist" && !parsedNotes) return null
   const notes = parsedNotes || []
-  const parsedInstructionGroups = normalizeInstructionGroups(
-    value.instruction_groups,
-    mode
-  )
-  if (
-    mode === "persist" &&
-    value.instruction_groups !== undefined &&
-    parsedInstructionGroups === undefined
-  ) {
-    return null
-  }
-  const instructionGroups = parsedInstructionGroups ?? null
-
   return {
     name,
     category,
     servings,
     tags,
-    ingredients,
-    instructions,
+    ingredient_sections: ingredientSections,
+    instruction_sections: instructionSections,
     image_url: imageUrl,
     yield_metadata: yieldMetadata,
     prep_time_minutes: prepTime,
     cook_time_minutes: cookTime,
     total_time_minutes: totalTime,
     notes,
-    instruction_groups: instructionGroups,
   }
 }
 
@@ -438,15 +466,14 @@ export function recipeShareSnapshotForDisplay(
     category: "uncategorized",
     servings: 4,
     tags: [],
-    ingredients: [],
-    instructions: [],
+    ingredient_sections: [],
+    instruction_sections: [],
     image_url: null,
     yield_metadata: null,
     prep_time_minutes: null,
     cook_time_minutes: null,
     total_time_minutes: null,
     notes: [],
-    instruction_groups: null,
   }
 }
 

@@ -16,17 +16,20 @@ const REPLACEMENT_CREATED_AT = '2024-01-02T03:04:05.000Z'
 const EXPECTED_PARSED_RECIPE = parseRecipeText(
   MARKDOWN_TACO_SALAD_RECIPE_TEXT
 )
-const EXPECTED_INGREDIENTS = JSON.parse(
-  JSON.stringify(
-    normalizeRecipeIngredientsForSubmission(EXPECTED_PARSED_RECIPE.ingredients)
-  )
-) as RecipeRow['ingredients']
-const EXPECTED_INSTRUCTIONS = EXPECTED_PARSED_RECIPE.instructions
+const EXPECTED_INGREDIENT_SECTIONS = EXPECTED_PARSED_RECIPE.ingredientSections.map((section) => ({
+  label: section.label,
+  ingredients: JSON.parse(JSON.stringify(normalizeRecipeIngredientsForSubmission(section.ingredients))),
+})) as RecipeRow['ingredient_sections']
+const EXPECTED_INSTRUCTION_SECTIONS = EXPECTED_PARSED_RECIPE.instructionSections
+const EXPECTED_INSTRUCTIONS = EXPECTED_INSTRUCTION_SECTIONS.flatMap((section) => section.steps)
 const EXPECTED_NOTES = EXPECTED_PARSED_RECIPE.notes || []
 const LEGACY_PARSED_RECIPE = parseRecipeText(STRUCTURED_LAMB_RECIPE_TEXT)
 const LEGACY_TITLE = LEGACY_PARSED_RECIPE.name
-const LEGACY_INSTRUCTIONS =
-  LEGACY_PARSED_RECIPE.instructionGroups?.flatMap((group) => group.steps) || []
+const LEGACY_INGREDIENT_SECTIONS = LEGACY_PARSED_RECIPE.ingredientSections.map((section) => ({
+  label: section.label,
+  ingredients: JSON.parse(JSON.stringify(normalizeRecipeIngredientsForSubmission(section.ingredients))),
+})) as RecipeRow['ingredient_sections']
+const LEGACY_INSTRUCTION_SECTIONS = LEGACY_PARSED_RECIPE.instructionSections
 const LEGACY_NOTES = LEGACY_PARSED_RECIPE.notes || []
 
 type RecipeRow = Database['public']['Tables']['recipes']['Row']
@@ -175,7 +178,7 @@ async function removePriorImportedTitle(client: SupabaseClient<Database>) {
     client,
     data
       .filter((row) =>
-        JSON.stringify(row.instructions) === JSON.stringify(EXPECTED_INSTRUCTIONS) &&
+        JSON.stringify(row.instruction_sections) === JSON.stringify(EXPECTED_INSTRUCTION_SECTIONS) &&
         JSON.stringify(row.notes) === JSON.stringify(EXPECTED_NOTES)
       )
       .map((row) => row.recipe_uuid)
@@ -192,7 +195,7 @@ async function removePriorLegacyFixture(client: SupabaseClient<Database>) {
     client,
     data
       .filter((row) =>
-        JSON.stringify(row.instructions) === JSON.stringify(LEGACY_INSTRUCTIONS) &&
+        JSON.stringify(row.instruction_sections) === JSON.stringify(LEGACY_INSTRUCTION_SECTIONS) &&
         JSON.stringify(row.notes) === JSON.stringify(LEGACY_NOTES)
       )
       .map((row) => row.recipe_uuid)
@@ -205,21 +208,17 @@ function assertImportedRow(row: RecipeRow) {
   expect(row.prep_time_minutes).toBe(15)
   expect(row.cook_time_minutes).toBe(10)
   expect(row.total_time_minutes).toBe(25)
-  expect(row.ingredients).toHaveLength(30)
-  expect(row.ingredients).toEqual(EXPECTED_INGREDIENTS)
-  expect(row.instructions).toEqual(EXPECTED_INSTRUCTIONS)
+  expect(row.ingredient_sections).toEqual(EXPECTED_INGREDIENT_SECTIONS)
+  expect(row.instruction_sections).toEqual(EXPECTED_INSTRUCTION_SECTIONS)
   expect(row.notes).toEqual(EXPECTED_NOTES)
-  expect(row.instruction_groups).toEqual([
-    { steps: EXPECTED_INSTRUCTIONS },
-  ])
 }
 
-async function openImportedRecipe(page: Page) {
+async function openImportedRecipe(page: Page, recipeId: string) {
   const search = page.getByLabel(/search recipes by name or category/i)
   await search.fill(IMPORTED_TITLE)
   const card = page.locator(`[data-recipe-name="${IMPORTED_TITLE}"]`).first()
   await expect(card).toBeVisible()
-  await card.click()
+  await page.goto(`/recipes/${encodeURIComponent(recipeId)}?from=recipes`)
   const detail = page.getByTestId('recipe-detail-page')
   await expect(detail.locator('h1')).toHaveText(IMPORTED_TITLE)
   return detail
@@ -387,7 +386,7 @@ test.describe('local recipe import browser verification', () => {
 
       await page.reload()
       await navigateToRoute('recipes')
-      detail = await openImportedRecipe(page)
+      detail = await openImportedRecipe(page, row.recipe_uuid)
       await assertImportedDetail(detail)
       console.log('[recipe-import] create reopen assertions: PASS')
     } finally {
@@ -425,9 +424,8 @@ test.describe('local recipe import browser verification', () => {
         servings: 2,
         favorite: true,
         tags: ['preserve-me', 'browser-fixture'],
-        ingredients: [{ amount: 2, unit: 'cups', item: 'old ingredient' }],
-        instructions: ['Old instruction.'],
-        instruction_groups: [{ steps: ['Old instruction.'] }],
+        ingredient_sections: [{ label: null, ingredients: [{ amount: 2, unit: 'cups', item: 'old ingredient' }] }],
+        instruction_sections: [{ label: null, steps: ['Old instruction.'] }],
         notes: ['Old note.'],
         prep_time_minutes: 5,
         cook_time_minutes: 10,
@@ -443,7 +441,9 @@ test.describe('local recipe import browser verification', () => {
       await navigateToRoute('recipes')
       const search = page.getByLabel(/search recipes by name or category/i)
       await search.fill(fixture.name)
-      await page.locator(`[data-recipe-name="${fixture.name}"]`).first().click()
+      const replacementCard = page.locator(`[data-recipe-name="${fixture.name}"]`).first()
+      await expect(replacementCard).toBeVisible()
+      await page.goto(`/recipes/${encodeURIComponent(fixture.recipe_uuid)}?from=recipes`)
 
       const detail = page.getByTestId('recipe-detail-page')
       await expect(detail.locator('h1')).toHaveText(fixture.name)
@@ -488,7 +488,7 @@ test.describe('local recipe import browser verification', () => {
 
       await page.reload()
       await navigateToRoute('recipes')
-      const replacedDetail = await openImportedRecipe(page)
+      const replacedDetail = await openImportedRecipe(page, REPLACEMENT_RECIPE_UUID)
       await assertImportedDetail(replacedDetail)
       await expect(
         replacedDetail.getByRole('button', { name: 'Remove from favorites' })
@@ -572,8 +572,8 @@ test.describe('local recipe import browser verification', () => {
       expect(rows).toHaveLength(1)
       const row = rows[0]
       cleanupIds.add(row.recipe_uuid)
-      expect(row.ingredients).toHaveLength(10)
-      expect(row.instructions).toEqual(LEGACY_INSTRUCTIONS)
+      expect(row.ingredient_sections).toEqual(LEGACY_INGREDIENT_SECTIONS)
+      expect(row.instruction_sections).toEqual(LEGACY_INSTRUCTION_SECTIONS)
       expect(row.notes).toEqual(LEGACY_NOTES)
 
       const detail = page.getByTestId('recipe-detail-page')

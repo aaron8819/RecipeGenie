@@ -61,9 +61,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/013_allow_uuid_shopping_contribution_replacement.sql`
 - `supabase/migrations/014_add_recipe_yield_metadata.sql`
 - `supabase/migrations/015_add_shopping_exclusion_settings.sql`
+- `supabase/migrations/016_canonical_recipe_structure_cutover.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 15 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 16 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -84,6 +85,10 @@ Archived files are not replacement migrations and are not part of that chain.
   servings projection.
 - Migration 015 adds opt-in Salt-variant and Black-pepper-variant shopping
   exclusions. Both settings are non-null and default to `false`.
+- Migration `016` atomically backfills canonical ordered ingredient
+  and instruction sections, converts share snapshots, and switches privileged
+  recipe creation/acceptance to canonical fields. The old recipe columns remain
+  physically present as frozen comparison evidence and are not runtime authority.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -101,7 +106,7 @@ by a bad SQL migration:
 - Repairing those stale remote history entries to `reverted`, then rerunning `supabase db push`, aligned the migration ledger with the intentionally squashed repo state.
 
 The schema supports:
-- Recipe storage with ingredients, instructions, grouped instructions, notes, and images
+- Recipe storage with canonical ingredient and instruction sections, notes, and images
 - Pantry item management
 - User configuration and preferences
 - Recipe history tracking
@@ -129,38 +134,39 @@ Stores all recipe information including ingredients, instructions, and metadata.
 | `prep_time_minutes` | INTEGER | NULL | Optional prep time in minutes |
 | `cook_time_minutes` | INTEGER | NULL | Optional cook time in minutes |
 | `total_time_minutes` | INTEGER | NULL | Optional total time in minutes |
-| `ingredients` | JSONB | NOT NULL, DEFAULT '[]' | Array of ingredient objects — see structure below |
-| `instructions` | TEXT[] | NOT NULL, DEFAULT '{}' | Array of instruction steps |
+| `ingredient_sections` | JSONB | NOT NULL, DEFAULT '[]', validated | Canonical ordered ingredient sections |
+| `instruction_sections` | JSONB | NOT NULL, DEFAULT '[]', validated | Canonical ordered instruction sections |
 | `notes` | JSONB | NOT NULL, DEFAULT '[]' | Array of recipe note strings |
-| `instruction_groups` | JSONB | NULL | Array of grouped instruction objects for higher-fidelity imported recipes |
+| `ingredients` | JSONB | NOT NULL, DEFAULT '[]' | Stale legacy evidence; inactive and not synchronized after cutover |
+| `instructions` | TEXT[] | NOT NULL, DEFAULT '{}' | Stale legacy evidence; inactive and not synchronized after cutover |
+| `instruction_groups` | JSONB | NULL | Stale legacy evidence; inactive and not synchronized after cutover |
 | `image_url` | TEXT | NULL | URL or path to recipe image (Supabase Storage path or external URL) |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was created |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was last updated |
 
-**Ingredient JSONB structure:**
+**Canonical ingredient-section JSONB structure:**
 ```json
 [
   {
-    "item": "chicken thighs",
-    "unit": "lbs",
-    "amount": 1.5,
-    "modifier": "bone-in",
-    "alternatives": [],
-    "originalText": "1.5 lbs bone-in chicken thighs"
-  },
-  {
-    "item": "Greek yogurt (or sour cream)",
-    "unit": "cup",
-    "amount": 0.5,
-    "alternatives": ["sour cream"],
-    "originalText": "½ cup Greek yogurt or sour cream"
+    "label": "Sauce",
+    "ingredients": [
+      {
+        "item": "Greek yogurt (or sour cream)",
+        "unit": "cup",
+        "amount": 0.5,
+        "alternatives": ["sour cream"],
+        "originalText": "½ cup Greek yogurt or sour cream"
+      }
+    ]
   }
 ]
 ```
 
-All fields except `item`, `unit`, and `amount` are optional. `modifier` is a post-comma descriptor (e.g., "rinsed", "chopped"). `alternatives` are parsed from "X or Y" patterns; `item` stores the display string including the parenthetical "(or Y)". `originalText` captures the raw unparsed line for reference.
+Section order and ingredient order are authoritative. Labels are `string | null`,
+duplicate labels are allowed, every stored section is nonempty, and canonical
+ingredient objects cannot contain `groupLabel`.
 
-**Instruction group JSONB structure:**
+**Canonical instruction-section JSONB structure:**
 ```json
 [
   {
@@ -173,7 +179,9 @@ All fields except `item`, `unit`, and `amount` are optional. `modifier` is a pos
 ]
 ```
 
-`instruction_groups` is additive. `instructions` remains persisted for backward compatibility, simple textarea editing, and consumers that still expect a flat step list.
+Top-level empty arrays are valid. Section order and step order are authoritative;
+every stored section is nonempty. No trigger or dual-write path synchronizes the
+three stale legacy columns.
 
 ### pantry_items
 
@@ -372,7 +380,7 @@ copy-on-accept: recipient receives an independent recipe copy.
 | `recipient_email` | TEXT | NOT NULL | Recipient email entered by sender |
 | `source_recipe_id` | TEXT | NOT NULL | Derived sender-owned compatibility identity |
 | `source_recipe_uuid` | UUID | NULL | Canonical sender-owned recipe identity for active shares |
-| `source_recipe_snapshot` | JSONB | NOT NULL | Recipe content snapshot used to materialize recipient copy |
+| `source_recipe_snapshot` | JSONB | NOT NULL | Canonical recipe snapshot with `ingredient_sections` and `instruction_sections` used to materialize the recipient copy |
 | `message` | TEXT | NULL, `char_length(message) <= 300` | Optional sender note |
 | `status` | TEXT | NOT NULL, DEFAULT `'pending'`, CHECK in (`pending`, `accepted`, `declined`, `canceled`) | Share lifecycle state |
 | `accepted_recipe_id` | TEXT | NULL | Derived recipient compatibility identity created on accept |
@@ -529,12 +537,11 @@ Materializes a shared recipe snapshot into the recipient's `recipes` table and
 marks the share as accepted. Function is idempotent and returns the canonical
 `accepted_recipe_uuid` if called again after acceptance.
 
-The accepted snapshot now includes recipe times, notes, and `instruction_groups`
-alongside the legacy flat `instructions` payload. The validator accepts the
-explicitly supported legacy `{}` snapshot and applies database-owned defaults;
-all nonempty snapshots require the complete current field set. The
-security-definer function validates, creates the recipe, and writes accepted
-state and metadata in one transaction.
+Accepted snapshots carry canonical ingredient and instruction sections, recipe
+times, notes, and yield metadata. Legacy structure keys and `{}` snapshots are
+rejected. The security-definer function validates the complete snapshot,
+creates the recipe with canonical columns only, and writes accepted state and
+metadata in one transaction.
 
 **Parameters:**
 - `p_share_id` (UUID) - Share request ID
@@ -709,11 +716,12 @@ The repository now uses a baseline-first bootstrap strategy:
 13. **013_allow_uuid_shopping_contribution_replacement.sql** - Preserved UUID authority for content-only replacement of an existing contribution identity pair.
 14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and deep, atomic shared-snapshot validation for all copied recipe fields, including bounded instruction groups and images, exact quantities, ranges, packages, units, and yield metadata. Private validators are execution-revoked and the authenticated acceptance RPC rejects the whole snapshot before any recipient recipe or share-state mutation.
 15. **015_add_shopping_exclusion_settings.sql** - Added the non-null, default-false Salt-variant and Black-pepper-variant shopping exclusion settings to `user_config`.
+16. **016_canonical_recipe_structure_cutover.sql** - Atomically converted recipes and share snapshots to ordered canonical sections, added strict CHECK constraints, replaced canonical share acceptance and new-user seed writes, and froze the old structure columns as unsynchronized evidence for the removal slice.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through 015. The archived pre-baseline sequence is not replayed.
+  migration through `016`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -751,14 +759,18 @@ Pre-baseline historical evolution (for context only):
 
 ### Get all recipes for a user
 ```sql
-SELECT * FROM recipes 
+SELECT recipe_uuid, name, category, servings, ingredient_sections,
+       instruction_sections, notes, image_url, created_at, updated_at
+FROM recipes
 WHERE user_id = auth.uid() 
 ORDER BY created_at DESC;
 ```
 
 ### Get recipes by category
 ```sql
-SELECT * FROM recipes 
+SELECT recipe_uuid, name, category, servings, ingredient_sections,
+       instruction_sections, notes, image_url, created_at, updated_at
+FROM recipes
 WHERE user_id = auth.uid() 
   AND category = 'chicken'
 ORDER BY name;
@@ -832,7 +844,7 @@ This section is the operational runbook for schema changes in this repository. I
 5. Preflight the linked remote before pushing.
    From `web/`, run `npm run db:preflight`. For a separately reviewed
    single-migration rollout, pass the exact pending tail explicitly, for
-   example `npm run db:preflight -- --expected-pending 015`.
+   example `npm run db:preflight -- --expected-pending 016`.
 6. Push to the intentionally linked remote project.
    Run `npx supabase --workdir .. db push`.
 7. Regenerate types from the linked remote after a successful push.
@@ -876,7 +888,7 @@ Common drift signals:
 
 Concrete examples of when to stop and investigate:
 
-- The repository's tracked `001`-`015` chain and remote ledger do not align
+- The repository's tracked active chain and remote ledger do not align
   row-for-row after accounting for the documented baseline squash.
 - A teammate added a migration locally and you have not pulled it yet.
 - You are linked to the wrong Supabase project or environment.
@@ -962,7 +974,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 015, and the
+instructions. The current authoritative chain ends at migration 016, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

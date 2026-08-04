@@ -1,9 +1,10 @@
 # Canonical recipe structure design
 
-Scope: design and read-only production-data preflight only. This report was
-prepared from `origin/main` at
-`b5b2b11cee07f3cd9dcfa3c768faa5954b3077db`, including PR #38. No application
-code, database schema, migration, deployment, or production data was changed.
+Status: Slice B, the atomic canonical schema/runtime cutover, is implemented by
+migration `016_canonical_recipe_structure_cutover.sql` and the
+section-only runtime changes. Slice C physical legacy-column removal remains a
+separate follow-up. This document retains the original design and preflight
+evidence as the decision record.
 
 The production preflight ran on 2026-08-03 against the explicitly configured
 Recipe Genie Supabase project `eyaoahwzixqetjgfghsh`. It verified migration
@@ -59,14 +60,13 @@ an old writer to create post-backfill legacy-only changes. Use a controlled
 write pause, fail-closed conversion, and one section-only release. Do not solve
 that short deployment problem with long-lived dual writes or fallback reads.
 
-Recommended order:
+Implementation order:
 
-1. Add the pure converter, invariants, exhaustive fixtures, and checked-in
-   count-only preflight. Do not wire them into runtime reads or writes.
-2. In one coordinated cutover, add and backfill the canonical columns, convert
-   share snapshots, replace the share acceptance contract, and switch every
-   active application path to sections only. Leave old columns present but
-   inactive for a short verification window.
+1. Slice A added the pure converter, invariants, exhaustive fixtures, and
+   checked-in count-only preflight.
+2. Slice B added and backfilled the canonical columns, converted share
+   snapshots, replaced share acceptance, and switched every active application
+   path to sections only. Old columns remain present and inactive.
 3. In a second, immediately following cleanup PR, prove no readers/writers
    remain, drop the old columns, remove conversion-only code and compatibility
    tests, and regenerate database types.

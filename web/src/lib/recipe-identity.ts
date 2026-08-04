@@ -8,21 +8,37 @@ import type {
   WeeklyPlan,
 } from "@/types/database"
 import {
-  normalizeIngredients,
   normalizeShoppingItems,
   normalizeYieldMetadataForHydration,
 } from "./recipe-data-validation"
+import { validateRecipeStructure } from "./recipe-structure"
+import type { IngredientSection, InstructionSection } from "@/types/database"
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export type RecipeRow = Omit<
-  Database["public"]["Tables"]["recipes"]["Row"],
-  "yield_metadata"
-> & {
-  /** Optional only at the legacy hydration seam. New database rows include it. */
-  yield_metadata?: Database["public"]["Tables"]["recipes"]["Row"]["yield_metadata"]
-}
+type DatabaseRecipeRow = Database["public"]["Tables"]["recipes"]["Row"]
+export type RecipeRow = Pick<
+  DatabaseRecipeRow,
+  | "category"
+  | "cook_time_minutes"
+  | "created_at"
+  | "favorite"
+  | "id"
+  | "image_url"
+  | "ingredient_sections"
+  | "instruction_sections"
+  | "name"
+  | "notes"
+  | "prep_time_minutes"
+  | "recipe_uuid"
+  | "servings"
+  | "tags"
+  | "total_time_minutes"
+  | "updated_at"
+  | "user_id"
+  | "yield_metadata"
+>
 
 export function isRecipeUuid(value: string): boolean {
   return UUID_PATTERN.test(value)
@@ -41,19 +57,37 @@ export function createRecipeUuid(): string {
 
 /** The only database-row to application-recipe identity mapping seam. */
 export function mapRecipeRow(row: RecipeRow): Recipe {
-  const {
-    id: legacyId,
-    recipe_uuid: id,
-    ingredients: rawIngredients,
-    yield_metadata: rawYieldMetadata,
-    ...recipe
-  } = row
+  const rawIngredientSections = row.ingredient_sections
+  const rawInstructionSections = row.instruction_sections
+  const structure = {
+    ingredientSections: rawIngredientSections,
+    instructionSections: rawInstructionSections,
+  }
+  const validation = validateRecipeStructure(structure)
+  if (!validation.valid) {
+    throw new Error(
+      `Invalid canonical recipe structure: ${validation.issue.field}/${validation.issue.code}`
+    )
+  }
   return {
-    ...recipe,
-    ingredients: normalizeIngredients(rawIngredients, "hydrate") || [],
-    yield_metadata: normalizeYieldMetadataForHydration(rawYieldMetadata),
-    id,
-    legacyId,
+    category: row.category,
+    cook_time_minutes: row.cook_time_minutes,
+    created_at: row.created_at,
+    favorite: row.favorite,
+    image_url: row.image_url,
+    name: row.name,
+    notes: Array.isArray(row.notes) ? row.notes as string[] : [],
+    prep_time_minutes: row.prep_time_minutes,
+    servings: row.servings,
+    tags: row.tags,
+    total_time_minutes: row.total_time_minutes,
+    updated_at: row.updated_at,
+    user_id: row.user_id,
+    ingredientSections: rawIngredientSections as IngredientSection[],
+    instructionSections: rawInstructionSections as InstructionSection[],
+    yield_metadata: normalizeYieldMetadataForHydration(row.yield_metadata),
+    id: row.recipe_uuid,
+    legacyId: row.id,
   } as Recipe
 }
 

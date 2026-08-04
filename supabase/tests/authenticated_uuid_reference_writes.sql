@@ -156,7 +156,9 @@ select extensions.lives_ok($$
   ) values (
     '63111111-1111-4111-8111-111111111111', auth.uid(), 'stage2c-a@example.test',
     '62000000-0000-4000-8000-000000000002', 'stage2c-b@example.test',
-    '61111111-1111-4111-8111-111111111111', '{}'::jsonb, 'pending'
+    '61111111-1111-4111-8111-111111111111',
+    '{"name":"UUID-only share","category":"test","servings":4,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb,
+    'pending'
   )
 $$, 'UUID-only share creation succeeds');
 select extensions.is(
@@ -169,7 +171,9 @@ select extensions.throws_ok($$
     source_recipe_id, source_recipe_snapshot, status
   ) values (
     auth.uid(), 'stage2c-a@example.test', '62000000-0000-4000-8000-000000000002',
-    'stage2c-b@example.test', 'stage2c-a-2', '{}'::jsonb, 'pending'
+    'stage2c-b@example.test', 'stage2c-a-2',
+    '{"name":"Legacy-only share","category":"test","servings":4,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb,
+    'pending'
   )
 $$, '22023', 'active share source UUID is required', 'legacy-only active share rejects');
 select extensions.throws_ok($$
@@ -178,7 +182,9 @@ select extensions.throws_ok($$
     source_recipe_id, source_recipe_uuid, source_recipe_snapshot, status
   ) values (
     auth.uid(), 'stage2c-a@example.test', '62000000-0000-4000-8000-000000000002',
-    'stage2c-b@example.test', 'stage2c-a-2', '61111111-1111-4111-8111-111111111111', '{}'::jsonb, 'pending'
+    'stage2c-b@example.test', 'stage2c-a-2', '61111111-1111-4111-8111-111111111111',
+    '{"name":"Mismatched share","category":"test","servings":4,"tags":[],"ingredient_sections":[],"instruction_sections":[]}'::jsonb,
+    'pending'
   )
 $$, '23503', 'share source identities disagree', 'mismatched share source pair rejects');
 

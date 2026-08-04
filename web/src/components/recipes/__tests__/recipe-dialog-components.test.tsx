@@ -51,11 +51,17 @@ function parsedRecipe(overrides: Partial<ParsedRecipe> = {}): ParsedRecipe {
   return {
     name: "Roast Chicken",
     servings: 4,
-    ingredients: [
-      { item: "chicken", amount: 1, unit: "" },
-      { item: "salt", amount: 1, unit: "tsp" },
-    ],
-    instructions: ["Prep the chicken", "Roast until done"],
+    ingredientSections: [{
+      label: null,
+      ingredients: [
+        { item: "chicken", amount: 1, unit: "" },
+        { item: "salt", amount: 1, unit: "tsp" },
+      ],
+    }],
+    instructionSections: [{
+      label: null,
+      steps: ["Prep the chicken", "Roast until done"],
+    }],
     warnings: [],
     ...overrides,
   }
@@ -227,14 +233,13 @@ describe("RecipeImportSection", () => {
             totalTime: "45 minutes",
             totalTimeMinutes: 45,
           },
-          ingredients: [{ item: "chicken", amount: 1, unit: "lb" }],
-          ingredientGroups: [
+          ingredientSections: [
             {
               label: "Chicken",
               ingredients: [{ item: "chicken", amount: 1, unit: "lb" }],
             },
           ],
-          instructionGroups: [{ steps: ["Prep", "Cook"] }],
+          instructionSections: [{ label: null, steps: ["Prep", "Cook"] }],
           notes: ["Keep the oil at 350°F."],
           warnings: ["Trim ingredient spacing"],
         })}
@@ -274,7 +279,10 @@ describe("RecipeImportSection", () => {
         parseError={null}
         livePreview={null}
         parsedPreview={parsedRecipe({
-          ingredients: [{ item: "onion", amount: 1, unit: "count" }],
+          ingredientSections: [{
+            label: null,
+            ingredients: [{ item: "onion", amount: 1, unit: "count" }],
+          }],
         })}
         isImportingFromUrl={false}
         onImportUrlChange={() => {}}

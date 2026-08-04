@@ -128,7 +128,9 @@ export async function POST(request: Request) {
 
   const { data: sourceRecipe, error: recipeError } = await supabase
     .from('recipes')
-    .select('*')
+    .select(
+      'id,recipe_uuid,user_id,name,category,servings,yield_metadata,favorite,tags,ingredient_sections,instruction_sections,notes,image_url,prep_time_minutes,cook_time_minutes,total_time_minutes,created_at,updated_at'
+    )
     .eq('recipe_uuid', recipeId)
     .eq('user_id', user.id)
     .single();

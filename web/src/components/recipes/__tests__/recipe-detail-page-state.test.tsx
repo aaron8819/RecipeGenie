@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeDetailPage } from "../recipe-detail-page"
 import type { Recipe } from "@/types/database"
+import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 
 globalThis.React = React
 
@@ -88,7 +89,7 @@ vi.mock("../add-to-plan-dialog", () => ({
 }))
 
 function makeRecipe(): Recipe {
-  return {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Curry",
@@ -106,7 +107,7 @@ function makeRecipe(): Recipe {
     total_time_minutes: null,
     created_at: null,
     updated_at: null,
-  }
+  })
 }
 
 describe("RecipeDetailPage states", () => {

@@ -18,7 +18,11 @@ All three areas are more complicated than the product behavior requires.
 | --- | --- | --- |
 | Home navigation | Materially overcomplicated. The URL is not the navigation authority, so cookies, local storage, reconciliation cookies, custom events, session tokens, hidden panels, and manual scroll state recreate browser behavior. | Runtime, browser UX, reliability, and maintainability. |
 | Shopping | Severely overcomplicated. Recipe quantities and the rendered list have separate authorities, with overrides inferred by diffing them. Ordinary item actions still use whole-document read-modify-write despite the contribution command machinery. | Reliability, development speed, fewer round trips, and maintainability; byte/write-volume gains are unproven. |
-| Recipe structure | Materially overcomplicated for instructions and moderately overcomplicated for ingredients. Grouped instructions are persisted alongside a flat copy; ingredients are parsed into groups, flattened with labels, and regrouped for display. | Reliability, payload size, development speed, and maintainability; runtime gains are secondary. |
+| Recipe structure | Simplified in Slice B: ordered ingredient and instruction sections are now the only runtime/persistence authority. Boundary flattening remains only for Shopping and external formats. | Frozen legacy columns remain until the separately reviewed physical-removal slice. |
+
+The recipe-flow diagrams and inventories below capture the pre-cutover audit
+that motivated the change; they are historical evidence, not the current
+runtime contract. See `recipes-component.md` for the active boundary.
 
 Recommended priority:
 

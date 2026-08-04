@@ -11,14 +11,14 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - `recipe-dialog.tsx` still owns form/dialog orchestration, import parsing flow, and submit sequencing.
 - `recipe-list.tsx` still owns recipe browsing orchestration, including
   search/filter state and mobile-vs-desktop toolbar structure.
-- Recipe persistence now has first-class support for `prep_time_minutes`, `cook_time_minutes`, `total_time_minutes`, and `notes`, plus additive `instruction_groups` persistence.
-- Ingredient `groupLabel` metadata is preserved in the existing `ingredients`
-  JSON payload. The final detail view groups only non-empty ingredients by
-  normalized stored labels. First appearance determines group order, and
-  ingredient order remains stable within each group. Unlabeled ingredients use
-  one headingless group at their first appearance, while legacy recipes with
-  only unlabeled ingredients render as one ordinary list.
-- Legacy flat `instructions` remains persisted for compatibility and the current textarea-based edit model.
+- Recipe persistence uses ordered `ingredient_sections` and
+  `instruction_sections` as its only structure authority. Times, notes, and
+  authored yield metadata remain separate first-class fields.
+- Section and item order are authoritative. Labels are `string | null`, may
+  repeat, and are never encoded on canonical ingredient objects.
+- The physical `ingredients`, `instructions`, and `instruction_groups` columns
+  are frozen migration evidence. Runtime code neither reads nor writes them,
+  and there is no synchronization trigger or dual-write path.
 - `/recipes/[id]` is the canonical, query-backed full-page detail route.
   Recipes, Planner, and Shopping all navigate to the same detail component.
 - Recipe detail is action-complete for common follow-up actions:
@@ -54,7 +54,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/hooks/use-recipe-image-storage.ts` | Upload/delete boundary for Supabase-backed recipe image storage. |
 | `web/src/lib/recipe-parser.ts` | Plain-text recipe parsing. |
 | `web/src/lib/recipe-quantity.ts` | Canonical exact quantity/yield parsing, legacy adaptation, scaling, and display formatting. |
-| `web/src/lib/recipe-structure.ts` | Compatibility helpers for notes, grouped instructions, and flat/grouped rendering. |
+| `web/src/lib/recipe-structure.ts` | Canonical structure validation, one-time legacy conversion, editor-boundary conversion, and ordered flattening for external consumers. |
 | `web/src/lib/recipe-url-parser.ts` | Server-side URL fetch and recipe extraction. |
 | `web/src/lib/supabase/storage.ts` | Storage helpers including pure `getRecipeImageUrl()`. |
 
@@ -111,8 +111,8 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   recipes with a case-insensitive match; unknown categories retain the new
   recipe form's existing fallback. Paste-to-replace continues to preserve the
   current recipe category.
-  Markdown ingredient groups are persisted through each ingredient's
-  `groupLabel`; Markdown notes use the existing first-class notes array.
+  Markdown ingredient and instruction groups become canonical sections;
+  Markdown notes use the separate first-class notes array.
 - Imported and manually entered quantities preserve an additive `quantityV1`
   exact/range/qualitative representation, authored unit, and fixed-package
   metadata alongside the legacy amount/unit fields. Existing rows are adapted
@@ -124,15 +124,17 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Below the desktop breakpoint, pasted-text import uses a compact input phase followed by a full-height sectioned review inside the same create dialog. The raw source, latest parsed candidate, and canonical editable draft have separate ownership; returning to the source preserves draft corrections, and applying changed source requires confirmation when the draft was corrected.
 - Mobile import review reuses the Details, Ingredients, and Instructions section bodies with a sticky Back/Save footer. Desktop keeps the two-column paste preview and stacked create form.
 - Entered text or URL source, a parsed candidate, and an applied or corrected draft all count as unsaved import work. Dismissal uses the shared discard confirmation, and keeping work preserves the active phase, section, values, and focus target.
-- Import apply/save/reopen parity now preserves structured recipe times and notes directly, and preserves grouped instructions through additive `instruction_groups`.
+- Import apply/save/reopen parity preserves canonical section boundaries,
+  structured recipe times, and notes directly.
 - Edit mode has a paste-to-replace flow that reuses the text parser and applies parsed fields to the current recipe draft. It preserves the recipe id, category, tags, and image; replaces name/servings/times when parsed; replaces ingredients only when at least one ingredient is parsed; replaces instructions only when steps are parsed; and keeps existing notes unless parsed notes are present.
 
 ### Sharing
 
 - Share acceptance creates a recipient-owned copy from the snapshot payload.
 - Sharing is not a live-sync relationship between users.
-- Share snapshots now include recipe times, notes, grouped instructions, yield
-  metadata, and structured ingredient quantities.
+- Share snapshots contain canonical sections once, plus recipe times, notes,
+  yield metadata, and structured ingredient quantities. Legacy keys and `{}`
+  snapshots are rejected atomically.
 
 ### Quantity and yield compatibility
 
@@ -149,11 +151,10 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   extension so a Recipe Genie export/import round trip retains structured
   quantities and yield metadata.
 - URL import consumes structured Recipe Genie extension fields only when the
-  complete envelope is a non-array object with numeric `version: 1`, valid
-  structured ingredients, and valid yield metadata. Extra properties are
-  ignored for forward compatibility. Missing, malformed, or unsupported
-  versions or fields reject the extension atomically; import falls back to
-  standard schema.org fields without producing a structured/standard hybrid.
+  complete version 2 envelope has valid canonical ingredient and instruction
+  sections plus valid yield metadata. The version 1 adapter is confined to
+  this external import boundary. Malformed or unsupported extensions reject
+  atomically and import falls back to standard schema.org fields.
 - Edit hydration presents a valid structured quantity's authored text in the
   amount control. Saving continues to emit the normalized legacy amount/unit
   projection alongside unchanged authored metadata, while a deliberate amount
@@ -168,23 +169,19 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   returns the same controlled error before generating or persisting any
   replacement contribution.
 
-### Recipe structure compatibility
+### Canonical recipe structure
 
-- `recipe-structure.ts` is the canonical compatibility layer for ingredient
-  groups, recipe notes, and grouped instructions.
-- When `instruction_groups` exists, render and export flows should prefer it.
-- Older recipes that only have flat `instructions` must continue to render correctly.
-- Legacy `Notes:` label lines inside flat instructions are still supported at hydration/render time and should not be reintroduced into persisted notes-aware recipes.
-
-Slice A of the canonical recipe-structure design is checked in as a foundation
-only. `database.ts` defines `CanonicalIngredient`, `IngredientSection`,
-`InstructionSection`, `RecipeStructure`, and `RecipeContent` alongside the
-unchanged legacy runtime types. `recipe-structure.ts` owns the strict canonical
-validator, the deterministic legacy converter, and the two ordered boundary
-derivations `flattenRecipeIngredients()` and `flattenRecipeInstructions()`.
-Conversion results distinguish ordinary success, equivalent dual data,
-fail-closed conflicts, and malformed input without putting recipe content in
-classification evidence.
+- `Recipe.ingredientSections` and `Recipe.instructionSections` are the only
+  app-facing structure fields.
+- The form converts canonical sections to its sortable editor representation
+  once on hydration and converts back once on submission.
+- Detail and print render sections directly. Serving changes scale ingredient
+  quantities without changing section boundaries.
+- Shopping flattens ingredient sections exactly once at its aggregation
+  boundary, preserving global item ordinals. Schema.org export similarly
+  derives flat strings/`HowToSection` objects only at the external boundary.
+- The deterministic legacy converter remains only for migration/preflight and
+  the external Recipe Genie version 1 import adapter.
 
 The aggregate-only structural preflight lives at
 `supabase/verification/canonical_recipe_structure_preflight.sql`. Its default
@@ -197,10 +194,9 @@ PostgreSQL 16 instance, pass
 exits nonzero. Production reruns still require repository authorization and
 must never use fixture mode.
 
-No recipe read, write, import, sharing, export, Shopping, or form-state path
-uses the canonical foundation in Slice A. The atomic schema/runtime cutover and
-the later physical removal of legacy fields remain separate Slice B and Slice C
-work described in `canonical-recipe-structure-design.md`.
+Slice B is implemented. The later physical removal of frozen legacy columns and
+one-time migration-only conversion code remains the separate Slice C described
+in `canonical-recipe-structure-design.md`.
 
 ### Dialog discard protection
 

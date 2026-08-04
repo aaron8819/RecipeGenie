@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { LoadTemplateDialog } from "../load-template-dialog"
 import type { PlanTemplate, Recipe } from "@/types/database"
+import { canonicalizeRecipeFixture, type RecipeFixtureInput } from "@/test/recipe-fixtures"
 
 const deleteTemplateMutateAsync = vi.fn()
 const renameTemplateMutateAsync = vi.fn()
@@ -50,8 +51,8 @@ function templateFixture(overrides: Partial<PlanTemplate> = {}): PlanTemplate {
   }
 }
 
-function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Recipe",
@@ -65,7 +66,7 @@ function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
     created_at: null,
     updated_at: null,
     ...overrides,
-  }
+  })
 }
 
 describe("LoadTemplateDialog", () => {

@@ -349,7 +349,9 @@ async function executeCommand(request: Request, commandType: "add_or_replace" | 
     if (commandType === "add_or_replace") {
       const { data: recipes, error: recipeError } = await supabase
         .from("recipes")
-        .select("*")
+        .select(
+          "id,recipe_uuid,user_id,name,category,servings,yield_metadata,favorite,tags,ingredient_sections,instruction_sections,notes,image_url,prep_time_minutes,cook_time_minutes,total_time_minutes,created_at,updated_at"
+        )
         .in("recipe_uuid", input.recipeIds)
         .eq("user_id", user.id)
 

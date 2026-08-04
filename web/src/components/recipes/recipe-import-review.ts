@@ -4,21 +4,20 @@ import type { Ingredient, RecipeInstructionGroup } from '@/types/database'
 export type ImportReviewSection = 'details' | 'ingredients' | 'instructions'
 
 export function countImportInstructionSteps(candidate: ParsedRecipe): number {
-  if (candidate.instructionGroups?.length) {
-    return candidate.instructionGroups.reduce(
-      (total, group) => total + group.steps.filter((step) => step.trim()).length,
-      0
-    )
-  }
-
-  return candidate.instructions.filter((step) => step.trim()).length
+  return candidate.instructionSections.reduce(
+    (total, section) =>
+      total + section.steps.filter((step) => step.trim()).length,
+    0
+  )
 }
 
 export function canReviewImportedRecipe(
   candidate: ParsedRecipe | null
 ): boolean {
   return !!candidate &&
-    candidate.ingredients.some((ingredient) => ingredient.item.trim()) &&
+    candidate.ingredientSections.some((section) =>
+      section.ingredients.some((ingredient) => ingredient.item.trim())
+    ) &&
     countImportInstructionSteps(candidate) > 0
 }
 

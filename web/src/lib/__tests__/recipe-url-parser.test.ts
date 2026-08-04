@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { extractRecipeFromHtml } from '../recipe-url-parser';
 
+type ExtractedRecipe = NonNullable<ReturnType<typeof extractRecipeFromHtml>>;
+const flatIngredients = (result: ExtractedRecipe) =>
+  result.ingredientSections.flatMap((section) => section.ingredients);
+const flatInstructions = (result: ExtractedRecipe) =>
+  result.instructionSections.flatMap((section) => section.steps);
+
 const BASIC_JSONLD = `
 <html>
 <head>
@@ -115,18 +121,18 @@ describe('extractRecipeFromHtml', () => {
   it('should extract basic JSON-LD recipe', () => {
     const result = extractRecipeFromHtml(BASIC_JSONLD);
     expect(result.name).toBe('Classic Pancakes');
-    expect(result.ingredients).toHaveLength(4);
-    expect(result.ingredients[0].item).toBe('all-purpose flour');
-    expect(result.ingredients[0].amount).toBe(2);
-    expect(result.ingredients[0].originalText)
+    expect(flatIngredients(result)).toHaveLength(4);
+    expect(flatIngredients(result)[0].item).toBe('all-purpose flour');
+    expect(flatIngredients(result)[0].amount).toBe(2);
+    expect(flatIngredients(result)[0].originalText)
       .toBe('2 cups all-purpose flour');
-    expect(result.ingredients[2]).toMatchObject({
+    expect(flatIngredients(result)[2]).toMatchObject({
       item: 'eggs',
       amount: 2,
       unit: 'count',
     });
-    expect(result.instructions).toHaveLength(3);
-    expect(result.instructions[0])
+    expect(flatInstructions(result)).toHaveLength(3);
+    expect(flatInstructions(result)[0])
       .toBe('Mix dry ingredients.');
     expect(result.servings).toBe(12);
     expect(result.imageUrl)
@@ -137,13 +143,13 @@ describe('extractRecipeFromHtml', () => {
   it('should handle @graph-nested recipe', () => {
     const result = extractRecipeFromHtml(GRAPH_JSONLD);
     expect(result.name).toBe('Graph Tacos');
-    expect(result.ingredients).toHaveLength(2);
-    expect(result.ingredients[1]).toMatchObject({
+    expect(flatIngredients(result)).toHaveLength(2);
+    expect(flatIngredients(result)[1]).toMatchObject({
       item: 'tortillas',
       amount: 8,
       unit: 'count',
     });
-    expect(result.instructions).toHaveLength(2);
+    expect(flatInstructions(result)).toHaveLength(2);
     expect(result.servings).toBe(4);
   });
 
@@ -152,7 +158,7 @@ describe('extractRecipeFromHtml', () => {
     expect(result.name).toBe('My Awesome Recipe');
     expect(result.imageUrl)
       .toBe('https://example.com/img.jpg');
-    expect(result.ingredients).toHaveLength(0);
+    expect(flatIngredients(result)).toHaveLength(0);
     expect(result.warnings.length).toBeGreaterThan(0);
   });
 
@@ -166,7 +172,7 @@ describe('extractRecipeFromHtml', () => {
     const result =
       extractRecipeFromHtml(HOWTOSECTION_JSONLD);
     expect(result.name).toBe('Sectioned Recipe');
-    expect(result.instructions).toEqual([
+    expect(flatInstructions(result)).toEqual([
       'Wash rice.',
       'Soak 30 min.',
       'Boil water.',
@@ -237,7 +243,7 @@ describe('extractRecipeFromHtml', () => {
 
     const result = extractRecipeFromHtml(html);
 
-    expect(result.ingredients[0]).toMatchObject({
+    expect(flatIngredients(result)[0]).toMatchObject({
       item: 'flour',
       amount: 1,
       unit: 'cup',
@@ -286,11 +292,40 @@ describe('extractRecipeFromHtml', () => {
 
     const result = extractRecipeFromHtml(html);
 
-    expect(result.ingredients[0].quantityV1).toMatchObject({
+    expect(flatIngredients(result)[0].quantityV1).toMatchObject({
       authored: '0.50',
       value: { numerator: '1', denominator: '2' },
     });
     expect(result.servings).toBe(4);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('consumes canonical Recipe Genie extension version 2 without yield metadata', () => {
+    const html = `<script type="application/ld+json">${JSON.stringify({
+      '@type': 'Recipe',
+      name: 'Sectioned Recipe',
+      recipeIngredient: ['9 cups fallback'],
+      recipeInstructions: ['Fallback.'],
+      recipeGenieData: {
+        version: 2,
+        ingredientSections: [{
+          label: 'Sauce',
+          ingredients: [{ item: 'butter', amount: 1, unit: 'tbsp' }],
+        }],
+        instructionSections: [{ label: 'Finish', steps: ['Whisk.'] }],
+        yieldMetadata: null,
+      },
+    })}</script>`;
+
+    const result = extractRecipeFromHtml(html);
+
+    expect(result.ingredientSections).toEqual([{
+      label: 'Sauce',
+      ingredients: [{ item: 'butter', amount: 1, unit: 'tbsp' }],
+    }]);
+    expect(result.instructionSections).toEqual([
+      { label: 'Finish', steps: ['Whisk.'] },
+    ]);
     expect(result.warnings).toEqual([]);
   });
 
@@ -379,8 +414,8 @@ describe('extractRecipeFromHtml', () => {
 
     const result = extractRecipeFromHtml(html);
 
-    expect(result.ingredients).toHaveLength(1);
-    expect(result.ingredients[0]).toMatchObject({
+    expect(flatIngredients(result)).toHaveLength(1);
+    expect(flatIngredients(result)[0]).toMatchObject({
       item: 'fallback flour',
       amount: 1,
       unit: 'cup',
@@ -415,7 +450,7 @@ describe('extractRecipeFromHtml', () => {
 
     const result = extractRecipeFromHtml(html);
 
-    expect(result.ingredients[0].item).toBe('sugar');
+    expect(flatIngredients(result)[0].item).toBe('sugar');
     expect(result.servings).toBe(4);
     expect(result.warnings).toEqual([]);
   });

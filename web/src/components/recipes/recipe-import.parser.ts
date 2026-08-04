@@ -74,8 +74,8 @@ export function validateRecipeImportUrl(url: string): {
 export function toParsedRecipeImport(result: ExtractedRecipe): ParsedRecipe {
   return {
     name: result.name,
-    ingredients: result.ingredients,
-    instructions: result.instructions,
+    ingredientSections: result.ingredientSections,
+    instructionSections: result.instructionSections,
     servings: result.servings,
     yieldMetadata: result.yieldMetadata,
     warnings: result.warnings,

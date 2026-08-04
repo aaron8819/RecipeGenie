@@ -3,7 +3,6 @@ import type {
   Ingredient,
   IngredientSection,
   InstructionSection,
-  Recipe,
   RecipeContent,
   RecipeInstructionGroup,
 } from "@/types/database"
@@ -695,40 +694,9 @@ function malformed<T>(
   return { state: "malformed", issue: { field, code } }
 }
 
-type RecipeWithStructure = Pick<Recipe, "instructions" | "notes" | "instruction_groups">
-
 export interface RecipeIngredientGroup {
   label?: string
   ingredients: Ingredient[]
-}
-
-export function getRecipeIngredientGroups(
-  ingredients?: Ingredient[] | null
-): RecipeIngredientGroup[] {
-  const groups: RecipeIngredientGroup[] = []
-  const groupIndexes = new Map<string | undefined, number>()
-
-  for (const ingredient of ingredients ?? []) {
-    if (!ingredient.item.trim()) {
-      continue
-    }
-
-    const label = ingredient.groupLabel?.trim() || undefined
-    let groupIndex = groupIndexes.get(label)
-
-    if (groupIndex === undefined) {
-      groupIndex = groups.length
-      groupIndexes.set(label, groupIndex)
-      groups.push({
-        label,
-        ingredients: [],
-      })
-    }
-
-    groups[groupIndex].ingredients.push(ingredient)
-  }
-
-  return groups
 }
 
 export function createEmptyInstructionGroup(): RecipeInstructionGroup {
@@ -752,40 +720,36 @@ export function normalizeRecipeInstructionGroups(
     .filter((group) => group.steps.length > 0)
 }
 
-export function getRecipeNotes(recipe: RecipeWithStructure): string[] {
-  const explicitNotes = normalizeRecipeNotes(recipe.notes)
-  if (explicitNotes.length > 0) {
-    return explicitNotes
-  }
-
-  return splitLegacyNotesFromInstructions(recipe.instructions ?? []).notes
-}
-
-export function getRecipeInstructionGroups(recipe: RecipeWithStructure): RecipeInstructionGroup[] {
-  const explicitGroups = normalizeRecipeInstructionGroups(recipe.instruction_groups)
-  if (explicitGroups.length > 0) {
-    return explicitGroups
-  }
-
-  const { instructions } = splitLegacyNotesFromInstructions(recipe.instructions ?? [])
-  return parseInstructionLines(instructions).instructionGroups
-}
-
-export function getFlatRecipeInstructions(recipe: RecipeWithStructure): string[] {
-  return getRecipeInstructionGroups(recipe).flatMap((group) => group.steps)
-}
-
-export function buildInstructionEditorGroups(
-  instructions: string[],
-  instructionGroups?: RecipeInstructionGroup[] | null
-): RecipeInstructionGroup[] {
-  const normalizedGroups = normalizeRecipeInstructionGroups(instructionGroups)
-  const legacyInstructions = splitLegacyNotesFromInstructions(instructions).instructions
-  return (
-    normalizedGroups.length > 0
-      ? normalizedGroups
-      : parseInstructionLines(legacyInstructions).instructionGroups
+export function ingredientSectionsToEditorIngredients(
+  sections: IngredientSection[]
+): Ingredient[] {
+  return sections.flatMap((section) =>
+    section.ingredients.map((ingredient) => ({
+      ...cloneIngredient(ingredient),
+      ...(section.label ? { groupLabel: section.label } : {}),
+    }))
   )
+}
+
+export function editorIngredientsToIngredientSections(
+  ingredients: Ingredient[]
+): IngredientSection[] {
+  return buildIngredientSectionsFromConsecutiveRuns(ingredients)
+}
+
+export function instructionSectionsToEditorGroups(
+  sections: InstructionSection[]
+): RecipeInstructionGroup[] {
+  return sections.map((section) => ({
+    ...(section.label ? { label: section.label } : {}),
+    steps: [...section.steps],
+  }))
+}
+
+export function editorGroupsToInstructionSections(
+  groups: RecipeInstructionGroup[]
+): InstructionSection[] {
+  return normalizeRecipeInstructionGroups(groups).map(toInstructionSection)
 }
 
 export function normalizeInstructionGroupsForEditor(

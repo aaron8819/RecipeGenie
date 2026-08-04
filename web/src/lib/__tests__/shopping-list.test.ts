@@ -4,16 +4,20 @@ import {
   sortShoppingList,
   ensureCategoryInfo,
 } from '../shopping-list'
-import type { Recipe, PantryItem, ShoppingItem } from '@/types/database'
+import type { Ingredient, Recipe, PantryItem, ShoppingItem } from '@/types/database'
 import { parseIngredientLine } from '@/lib/recipe-parser'
+import {
+  canonicalizeRecipeFixture,
+  type RecipeFixtureInput,
+} from '@/test/recipe-fixtures'
 
 /**
  * Unit tests for shopping-list.ts business logic
  */
 
 // Helper to create a mock recipe
-function createMockRecipe(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function createMockRecipe(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: 'recipe-1',
     user_id: 'user-1',
     name: 'Test Recipe',
@@ -31,7 +35,7 @@ function createMockRecipe(overrides: Partial<Recipe> = {}): Recipe {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,
-  }
+  })
 }
 
 // Helper to create mock pantry item
@@ -874,7 +878,7 @@ describe('generateShoppingList', () => {
     }
 
     function generateWithSettings(
-      ingredients: Recipe['ingredients'],
+      ingredients: Ingredient[],
       settings = enabled,
       pantryItems: PantryItem[] = [],
       excludedKeywords: string[] = []

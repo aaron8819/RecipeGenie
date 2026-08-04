@@ -68,6 +68,10 @@ jobs:
         working-directory: web
         run: npm run test:stage2c-compatibility
 
+      - name: Verify Canonical Recipe Structure Migration and Rollback
+        working-directory: web
+        run: npm run test:canonical-recipe-structure-migration
+
       - name: Reset Local Database
         run: supabase db reset --local
 

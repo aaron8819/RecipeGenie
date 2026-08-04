@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest"
-import type { Recipe, ShoppingItem } from "@/types/database"
+import type { CanonicalIngredient, ShoppingItem } from "@/types/database"
 import { parseRecipeText } from "../recipe-parser"
 import { generateShoppingList } from "../shopping-list"
+import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 import {
   RECIPE_WORKFLOW_FIXTURE_INPUTS,
   RECIPE_WORKFLOW_FIXTURE_VERSION,
 } from "./fixtures/recipe-workflow.v1"
 
-function ingredientContract(ingredient: Recipe["ingredients"][number]) {
+function ingredientContract(ingredient: CanonicalIngredient) {
   return {
     item: ingredient.item,
     amount: ingredient.amount,
@@ -43,12 +44,13 @@ describe(`recipe workflow fixture corpus v${RECIPE_WORKFLOW_FIXTURE_VERSION}`, (
 
   it.each(RECIPE_WORKFLOW_FIXTURE_INPUTS)("$id", (fixture) => {
     const parsed = parseRecipeText(fixture.pastedText)
-    const recipe = {
+    const recipe = canonicalizeRecipeFixture({
       id: fixture.id,
       name: parsed.name,
       servings: parsed.servings ?? 4,
-      ingredients: parsed.ingredients,
-    } as Recipe
+      ingredientSections: parsed.ingredientSections,
+      instructionSections: parsed.instructionSections,
+    })
     const shopping = generateShoppingList([recipe], [], [])
 
     expect({
@@ -57,12 +59,13 @@ describe(`recipe workflow fixture corpus v${RECIPE_WORKFLOW_FIXTURE_VERSION}`, (
       parsed: {
         name: parsed.name,
         servings: parsed.servings,
-        ingredients: parsed.ingredients.map(ingredientContract),
-        instructions: parsed.instructions,
+        ingredientSections: parsed.ingredientSections.map((section) => ({
+          ...section,
+          ingredients: section.ingredients.map(ingredientContract),
+        })),
+        instructionSections: parsed.instructionSections,
         notes: parsed.notes,
         metadata: parsed.metadata,
-        ingredientGroups: parsed.ingredientGroups,
-        instructionGroups: parsed.instructionGroups,
         warnings: parsed.warnings,
       },
       shoppingContribution: {

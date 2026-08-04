@@ -6,6 +6,10 @@ import {
   scaleIngredientAmount,
 } from "../recipe-detail-page"
 import type { Recipe } from "@/types/database"
+import {
+  canonicalizeRecipeFixture,
+  type RecipeFixtureInput,
+} from "@/test/recipe-fixtures"
 
 globalThis.React = React
 
@@ -26,8 +30,8 @@ vi.mock("next/image", () => ({
   ),
 }))
 
-function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function makeRecipe(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Taco Salad",
@@ -53,7 +57,7 @@ function makeRecipe(overrides: Partial<Recipe> = {}): Recipe {
     created_at: "2026-03-01T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
     ...overrides,
-  }
+  })
 }
 
 function renderDetail(recipe = makeRecipe()) {

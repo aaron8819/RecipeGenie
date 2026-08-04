@@ -25,11 +25,32 @@ import {
   templateKeys,
 } from "@/lib/query-keys"
 import {
-  normalizeRecipeInstructionGroups,
   normalizeRecipeNotes,
+  validateRecipeStructure,
 } from "@/lib/recipe-structure"
 
 export { useCategories } from "@/hooks/shared/user-config"
+
+const RECIPE_SELECT = [
+  "id",
+  "recipe_uuid",
+  "user_id",
+  "name",
+  "category",
+  "servings",
+  "yield_metadata",
+  "favorite",
+  "tags",
+  "ingredient_sections",
+  "instruction_sections",
+  "notes",
+  "image_url",
+  "prep_time_minutes",
+  "cook_time_minutes",
+  "total_time_minutes",
+  "created_at",
+  "updated_at",
+].join(",")
 
 function buildRecipesKey(userId: string, options?: {
   category?: string | null
@@ -49,17 +70,22 @@ function buildRecipesKey(userId: string, options?: {
 }
 
 export function normalizeRecipeUpdates(updates: RecipeUpdate): RecipeUpdate {
+  if (
+    updates.ingredient_sections !== undefined ||
+    updates.instruction_sections !== undefined
+  ) {
+    const validation = validateRecipeStructure({
+      ingredientSections: updates.ingredient_sections ?? [],
+      instructionSections: updates.instruction_sections ?? [],
+    })
+    if (!validation.valid) {
+      throw new Error("Recipe sections are invalid")
+    }
+  }
   return {
     ...updates,
     ...(updates.tags !== undefined ? { tags: updates.tags ?? [] } : {}),
     ...(updates.notes !== undefined ? { notes: normalizeRecipeNotes(updates.notes) } : {}),
-    ...(updates.instruction_groups !== undefined
-      ? {
-          instruction_groups: updates.instruction_groups
-            ? normalizeRecipeInstructionGroups(updates.instruction_groups)
-            : null,
-        }
-      : {}),
   }
 }
 
@@ -144,7 +170,7 @@ export function useRecipes(options?: {
       // Default path: no tag filter — standard Supabase query with server-side filters.
       let query = supabase
         .from("recipes")
-        .select("*")
+        .select(RECIPE_SELECT)
         .order("name", { ascending: true })
 
       if (options?.category) {
@@ -191,13 +217,13 @@ export function useRecipe(id: string | null) {
       const supabase = getSupabase()
       const { data, error } = await supabase
         .from("recipes")
-        .select("*")
+        .select(RECIPE_SELECT)
         .eq("recipe_uuid", id)
         .eq("user_id", user!.id)
         .single()
 
       if (error) throw error
-      return mapRecipeRow(data as RecipeRow)
+      return mapRecipeRow(data as unknown as RecipeRow)
     },
     initialData: id ? findRecipeInCache(queryClient, ownerUserId, id) : undefined,
     enabled: !!id && !!user,
@@ -223,7 +249,7 @@ export function useCreateRecipe() {
       const supabase = getSupabase()
       const recipeInsert = supabase.from("recipes") as unknown as {
         insert: (values: Omit<RecipeInsert, "id" | "user_id"> & { id: string; recipe_uuid: string; user_id: string }) => {
-          select: () => {
+          select: (columns?: string) => {
             single: () => Promise<{
               data: RecipeRow | null
               error: { code?: string; message: string } | null
@@ -233,7 +259,7 @@ export function useCreateRecipe() {
       }
       const { data, error } = await recipeInsert
         .insert({ ...values, ...recipeUuidWrite(recipeUuid), user_id: user!.id })
-        .select()
+        .select(RECIPE_SELECT)
         .single()
 
       if (error?.code === "23505") {
@@ -241,11 +267,13 @@ export function useCreateRecipe() {
         // Reconcile that owned row instead of duplicating or changing identity.
         const { data: existing, error: readError } = await supabase
           .from("recipes")
-          .select("*")
+          .select(RECIPE_SELECT)
           .eq("recipe_uuid", recipeUuid)
           .eq("user_id", user!.id)
           .single()
-        if (!readError && existing) return mapRecipeRow(existing)
+        if (!readError && existing) {
+          return mapRecipeRow(existing as unknown as RecipeRow)
+        }
       }
       if (error) throw error
       return mapRecipeRow(data as RecipeRow)
@@ -275,12 +303,9 @@ export function useCreateRecipe() {
         total_time_minutes: recipe.total_time_minutes ?? null,
         favorite: recipe.favorite ?? false,
         tags: recipe.tags ?? [],
-        ingredients: recipe.ingredients ?? [],
-        instructions: recipe.instructions ?? [],
+        ingredientSections: recipe.ingredient_sections ?? [],
+        instructionSections: recipe.instruction_sections ?? [],
         notes: normalizeRecipeNotes(recipe.notes),
-        instruction_groups: recipe.instruction_groups
-          ? normalizeRecipeInstructionGroups(recipe.instruction_groups)
-          : null,
         image_url: recipe.image_url ?? null,
         created_at: now,
         updated_at: now,
@@ -362,7 +387,7 @@ export function useUpdateRecipe() {
         update: (values: RecipeUpdate) => {
           eq: (column: string, value: string) => {
             eq: (column: string, value: string) => {
-              select: () => {
+              select: (columns?: string) => {
             single: () => Promise<{ data: RecipeRow | null; error: { message: string } | null }>
               }
             }
@@ -373,7 +398,7 @@ export function useUpdateRecipe() {
         .update(normalizedUpdates)
         .eq("recipe_uuid", id)
         .eq("user_id", user!.id)
-        .select()
+        .select(RECIPE_SELECT)
         .single()
 
       if (error) throw error

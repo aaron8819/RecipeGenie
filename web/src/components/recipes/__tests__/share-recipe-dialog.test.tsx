@@ -3,6 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { ShareRecipeDialog } from "../share-recipe-dialog"
 import type { Recipe } from "@/types/database"
+import {
+  canonicalizeRecipeFixture,
+  type RecipeFixtureInput,
+} from "@/test/recipe-fixtures"
 
 globalThis.React = React
 
@@ -18,8 +22,8 @@ function deferred<T>() {
 
 const createShareMutateAsync = vi.fn()
 
-function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
-  return {
+function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
+  return canonicalizeRecipeFixture({
     id: "recipe-1",
     user_id: "user-1",
     name: "Pasta",
@@ -33,7 +37,7 @@ function recipeFixture(overrides: Partial<Recipe> = {}): Recipe {
     created_at: null,
     updated_at: null,
     ...overrides,
-  }
+  })
 }
 
 vi.mock("@/hooks/use-recipes", () => ({

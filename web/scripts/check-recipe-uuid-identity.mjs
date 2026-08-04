@@ -60,13 +60,19 @@ for (const contract of [
 }
 
 const mapper = read("src/lib/recipe-identity.ts")
-if (!/id:\s*legacyId,\s*recipe_uuid:\s*id/.test(mapper)) {
+if (
+  !/id:\s*legacyId,\s*recipe_uuid:\s*id/.test(mapper) &&
+  !/id:\s*row\.recipe_uuid,\s*legacyId:\s*row\.id/.test(mapper)
+) {
   failures.push("Recipe row mapper does not map recipe_uuid -> Recipe.id and id -> legacyId")
 }
 if (!/const id = assertRecipeUuid\(recipeUuid\)[\s\S]*return \{[\s\S]*\bid,[\s\S]*recipe_uuid: id/.test(mapper)) {
   failures.push("Recipe creation does not persist the temporary matching UUID/text compatibility pair")
 }
-if (!/id,\s*legacyId/.test(mapper)) {
+if (
+  !/id,\s*legacyId/.test(mapper) &&
+  !/id:\s*row\.recipe_uuid,\s*legacyId:\s*row\.id/.test(mapper)
+) {
   failures.push("Recipe mapper does not expose canonical and compatibility identities explicitly")
 }
 

@@ -6,12 +6,21 @@ import {
   rationalToNumber,
 } from './recipe-quantity';
 import { normalizeIngredients } from './recipe-data-validation';
-import type { Ingredient, YieldMetadataV1 } from '@/types/database';
+import {
+  editorIngredientsToIngredientSections,
+  validateRecipeStructure,
+} from './recipe-structure';
+import type {
+  Ingredient,
+  IngredientSection,
+  InstructionSection,
+  YieldMetadataV1,
+} from '@/types/database';
 
 export interface ExtractedRecipe {
   name: string;
-  ingredients: Ingredient[];
-  instructions: string[];
+  ingredientSections: IngredientSection[];
+  instructionSections: InstructionSection[];
   servings?: number;
   yieldMetadata?: YieldMetadataV1;
   imageUrl?: string;
@@ -19,8 +28,9 @@ export interface ExtractedRecipe {
 }
 
 type SupportedRecipeGenieData = {
-  ingredients: Ingredient[];
-  yieldMetadata: YieldMetadataV1;
+  ingredientSections: IngredientSection[];
+  instructionSections?: InstructionSection[];
+  yieldMetadata?: YieldMetadataV1;
 };
 
 /**
@@ -50,8 +60,8 @@ export function extractRecipeFromHtml(
       );
       return {
         name: ogName,
-        ingredients: [],
-        instructions: [],
+        ingredientSections: [],
+        instructionSections: [],
         imageUrl: ogImage || undefined,
         warnings,
       };
@@ -63,8 +73,8 @@ export function extractRecipeFromHtml(
     );
     return {
       name: '',
-      ingredients: [],
-      instructions: [],
+      ingredientSections: [],
+      instructionSections: [],
       warnings,
     };
   }
@@ -82,17 +92,19 @@ export function extractRecipeFromHtml(
       'Unsupported Recipe Genie extension ignored; standard recipe data used'
     );
   }
-  const ingredients = recipeGenieData?.ingredients
-    || parseRecipeIngredients(recipe.recipeIngredient);
-  if (ingredients.length === 0) {
+  const standardIngredients = parseRecipeIngredients(recipe.recipeIngredient);
+  const ingredientSections = recipeGenieData?.ingredientSections
+    || (standardIngredients.length > 0
+      ? [{ label: null, ingredients: standardIngredients }]
+      : []);
+  if (ingredientSections.length === 0) {
     warnings.push('No ingredients found');
   }
 
   // Extract instructions
-  const instructions = parseRecipeInstructions(
-    recipe.recipeInstructions
-  );
-  if (instructions.length === 0) {
+  const instructionSections = recipeGenieData?.instructionSections
+    || parseRecipeInstructions(recipe.recipeInstructions);
+  if (instructionSections.length === 0) {
     warnings.push('No instructions found');
   }
 
@@ -116,8 +128,8 @@ export function extractRecipeFromHtml(
 
   return {
     name,
-    ingredients,
-    instructions,
+    ingredientSections,
+    instructionSections,
     servings: parsedYield.servings,
     yieldMetadata: parsedYield.yieldMetadata,
     imageUrl,
@@ -205,51 +217,67 @@ function parseRecipeIngredients(
  */
 function parseRecipeInstructions(
   raw: unknown
-): string[] {
+): InstructionSection[] {
   if (!raw) return [];
 
   // Single string
   if (typeof raw === 'string') {
-    return raw
+    const steps = raw
       .split(/\n+/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+    return steps.length > 0 ? [{ label: null, steps }] : [];
   }
 
   if (!Array.isArray(raw)) return [];
 
-  const steps: string[] = [];
+  const sections: InstructionSection[] = [];
+  let ungroupedSteps: string[] = [];
+  const flushUngrouped = () => {
+    if (ungroupedSteps.length > 0) {
+      sections.push({ label: null, steps: ungroupedSteps });
+      ungroupedSteps = [];
+    }
+  };
 
   for (const item of raw) {
     if (typeof item === 'string') {
       const trimmed = item.trim();
-      if (trimmed) steps.push(trimmed);
+      if (trimmed) ungroupedSteps.push(trimmed);
     } else if (item && typeof item === 'object') {
-      // HowToStep
-      if (item.text) {
+      if (Array.isArray(item.itemListElement)) {
+        flushUngrouped();
+        const steps: string[] = [];
+        for (const sub of item.itemListElement) {
+          if (typeof sub === 'string') {
+            const text = sub.trim();
+            if (text) steps.push(text);
+          } else if (sub?.text) {
+            const text = typeof sub.text === 'string'
+              ? sub.text.trim()
+              : '';
+            if (text) steps.push(text);
+          }
+        }
+        if (steps.length > 0) {
+          sections.push({
+            label: typeof item.name === 'string' && item.name.trim()
+              ? item.name.trim()
+              : null,
+            steps,
+          });
+        }
+      } else if (item.text) {
         const text = typeof item.text === 'string'
           ? item.text.trim()
           : '';
-        if (text) steps.push(text);
-      }
-      // HowToSection with itemListElement
-      if (Array.isArray(item.itemListElement)) {
-        for (const sub of item.itemListElement) {
-          if (typeof sub === 'string') {
-            const t = sub.trim();
-            if (t) steps.push(t);
-          } else if (sub?.text) {
-            const t = typeof sub.text === 'string'
-              ? sub.text.trim()
-              : '';
-            if (t) steps.push(t);
-          }
-        }
+        if (text) ungroupedSteps.push(text);
       }
     }
   }
 
-  return steps;
+  flushUngrouped();
+  return sections;
 }
 
 /**
@@ -285,22 +313,42 @@ function supportedRecipeGenieData(
   if (
     !value ||
     typeof value !== 'object' ||
-    Array.isArray(value) ||
-    (value as Record<string, unknown>).version !== 1
+    Array.isArray(value)
   ) {
     return null;
   }
   const envelope = value as Record<string, unknown>;
-  const ingredients = normalizeIngredients(envelope.ingredients, 'persist');
-  if (!ingredients || !isValidYieldMetadata(envelope.yieldMetadata)) {
-    return null;
+  if (envelope.version === 2) {
+    const structure = {
+      ingredientSections: envelope.ingredientSections,
+      instructionSections: envelope.instructionSections,
+    };
+    const validation = validateRecipeStructure(structure);
+    if (
+      !validation.valid ||
+      (envelope.yieldMetadata !== null &&
+        envelope.yieldMetadata !== undefined &&
+        !isValidYieldMetadata(envelope.yieldMetadata))
+    ) return null;
+    return {
+      ingredientSections: structure.ingredientSections as IngredientSection[],
+      instructionSections: structure.instructionSections as InstructionSection[],
+      ...(isValidYieldMetadata(envelope.yieldMetadata)
+        ? { yieldMetadata: envelope.yieldMetadata }
+        : {}),
+    };
   }
+
+  if (envelope.version !== 1) return null;
+  if (!isValidYieldMetadata(envelope.yieldMetadata)) return null;
+  const ingredients = normalizeIngredients(envelope.ingredients, 'persist');
+  if (!ingredients) return null;
 
   // Version 1 is an atomic compatibility envelope. Unknown properties are
   // ignored for forward compatibility, but no supported field is consumed
   // unless every required version-1 field validates.
   return {
-    ingredients,
+    ingredientSections: editorIngredientsToIngredientSections(ingredients),
     yieldMetadata: envelope.yieldMetadata,
   };
 }

@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { checkRateLimit } from '@/lib/rate-limit';
-import {
-  isLegacyEmptyRecipeShareSnapshot,
-  normalizeRecipeShareSnapshot,
-} from '@/lib/recipe-data-validation';
+import { normalizeRecipeShareSnapshot } from '@/lib/recipe-data-validation';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -50,7 +47,6 @@ export async function POST(_request: Request, context: RouteContext) {
     );
   }
   if (
-    !isLegacyEmptyRecipeShareSnapshot(share.source_recipe_snapshot) &&
     !normalizeRecipeShareSnapshot(share.source_recipe_snapshot, 'persist')
   ) {
     return NextResponse.json(
