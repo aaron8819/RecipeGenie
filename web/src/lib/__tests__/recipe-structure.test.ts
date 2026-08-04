@@ -5,6 +5,7 @@ import {
   flattenRecipeInstructions,
   validateRecipeStructure,
 } from "@/lib/recipe-structure"
+import { parseIngredientLine } from "@/lib/recipe-parser"
 import type {
   Ingredient,
   IngredientSection,
@@ -186,6 +187,50 @@ describe("legacy ingredient conversion", () => {
     expect(result.evidence.ingredients).toBe("equivalent-dual")
   })
 
+  it("preserves explicit adjacent same-label sections in an equivalent dual form", () => {
+    const result = converted({
+      ingredients: [ingredient("a", "Sauce"), ingredient("b", "Sauce")],
+      ingredientGroups: [
+        { label: "Sauce", ingredients: [ingredient("a")] },
+        { label: "Sauce", ingredients: [ingredient("b")] },
+      ],
+      instructions: [],
+    })
+    expect(result.status).toBe("equivalent")
+    expect(result.content.ingredientSections).toEqual([
+      { label: "Sauce", ingredients: [ingredient("a")] },
+      { label: "Sauce", ingredients: [ingredient("b")] },
+    ])
+  })
+
+  it("compares every structured ingredient field in dual forms", () => {
+    const richIngredient = {
+      ...parseIngredientLine("1–2 (14 oz) cans tomatoes"),
+      shoppingCategory: "canned",
+      modifier: "drained",
+      alternatives: ["crushed tomatoes"],
+    }
+    const equivalent = converted({
+      ingredients: [{ ...richIngredient, groupLabel: "Sauce" }],
+      ingredientGroups: [{ label: "Sauce", ingredients: [richIngredient] }],
+      instructions: [],
+    })
+    expect(equivalent.status).toBe("equivalent")
+
+    const conflict = convertLegacyRecipeStructure({
+      ingredients: [{ ...richIngredient, groupLabel: "Sauce" }],
+      ingredientGroups: [{
+        label: "Sauce",
+        ingredients: [{ ...richIngredient, originalText: "different source text" }],
+      }],
+      instructions: [],
+    })
+    expect(conflict).toMatchObject({
+      status: "conflict",
+      conflicts: [{ field: "ingredients", precedence: "none" }],
+    })
+  })
+
   it("fails closed when flat and grouped forms conflict", () => {
     const result = convertLegacyRecipeStructure({
       ingredients: [ingredient("a")],
@@ -211,6 +256,16 @@ describe("legacy ingredient conversion", () => {
     expect(
       convertLegacyRecipeStructure({ ingredients: null, instructions: [] })
     ).toMatchObject({ status: "malformed" })
+    expect(
+      convertLegacyRecipeStructure({
+        ingredients: null,
+        ingredientGroups: [{ label: null, ingredients: [ingredient("salt")] }],
+        instructions: [],
+      })
+    ).toMatchObject({
+      status: "malformed",
+      issue: { field: "ingredients", code: "invalid-top-level" },
+    })
     expect(
       convertLegacyRecipeStructure({ ingredients: {}, instructions: [] })
     ).toMatchObject({ status: "malformed" })
@@ -354,6 +409,16 @@ describe("legacy instruction and note conversion", () => {
     expect(
       convertLegacyRecipeStructure({ ingredients: [], instructions: null })
     ).toMatchObject({ status: "malformed" })
+    expect(
+      convertLegacyRecipeStructure({
+        ingredients: [],
+        instructions: null,
+        instructionGroups: [{ label: null, steps: ["Grouped."] }],
+      })
+    ).toMatchObject({
+      status: "malformed",
+      issue: { field: "instructions", code: "invalid-top-level" },
+    })
     expect(
       convertLegacyRecipeStructure({ ingredients: [], instructions: [null] })
     ).toMatchObject({

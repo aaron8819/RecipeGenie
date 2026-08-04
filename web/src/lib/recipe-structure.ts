@@ -348,7 +348,7 @@ function validateInstructionSections(
 function normalizeLegacyFlatIngredients(
   value: unknown
 ): NormalizedRepresentation<Ingredient[]> {
-  if (value === undefined || value === null) return { state: "absent" }
+  if (value === undefined) return { state: "absent" }
   if (
     !Array.isArray(value) ||
     value.length > RECIPE_DATA_LIMITS.ingredientsPerRecipe
@@ -416,7 +416,7 @@ function normalizeLegacyIngredientGroups(
 function normalizeLegacyFlatInstructions(
   value: unknown
 ): NormalizedRepresentation<string[]> {
-  if (value === undefined || value === null) return { state: "absent" }
+  if (value === undefined) return { state: "absent" }
   if (
     !Array.isArray(value) ||
     value.length > RECIPE_DATA_LIMITS.instructionsPerRecipe
@@ -541,7 +541,7 @@ function chooseIngredientSections(
   classification: IngredientConversionClassification
 } {
   if (flat && grouped) {
-    if (structuresEqual(flat, grouped)) {
+    if (ingredientSectionsMatchLegacyFlatForm(flat, grouped)) {
       return {
         sections: grouped,
         classification:
@@ -556,6 +556,18 @@ function chooseIngredientSections(
     sections,
     classification: grouped ? "grouped-only" : "flat-only",
   }
+}
+
+function ingredientSectionsMatchLegacyFlatForm(
+  flat: IngredientSection[],
+  grouped: IngredientSection[]
+): boolean {
+  const flattenWithLabels = (sections: IngredientSection[]) =>
+    sections.flatMap((section) =>
+      section.ingredients.map((ingredient) => [section.label, ingredient])
+    )
+
+  return structuresEqual(flattenWithLabels(flat), flattenWithLabels(grouped))
 }
 
 function chooseInstructionSections(

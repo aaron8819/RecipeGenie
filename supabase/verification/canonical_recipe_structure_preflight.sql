@@ -11,6 +11,8 @@
 -- fail-closed handling for a conflicting row.
 -- Neither path selects or emits recipe content, row identities, or user data.
 
+set default_transaction_read_only = on;
+
 \if :{?canonical_recipe_structure_fixture_mode}
   \echo 'canonical recipe structure preflight: synthetic fixture mode'
 \else
@@ -79,7 +81,6 @@
   $guards$;
 \endif
 
-set default_transaction_read_only = on;
 begin transaction read only;
 set local statement_timeout = '30s';
 set local lock_timeout = '5s';
@@ -394,7 +395,8 @@ recipe_checks as (
             )
           )
           or (select count(*) from group_step_rows as step
-            where step.row_key = recipe.row_key) > 2000
+            where step.row_key = recipe.row_key
+              and step.step is not null and step.step <> '') > 2000
         )
       ) as instruction_groups_invalid
   from recipe_source as recipe
@@ -664,6 +666,8 @@ select :'canonical_structure_result'::jsonb;
         ->>'equivalent_dual_instruction_rows')::integer = 1
       and (:'canonical_structure_result'::jsonb
         ->>'conflicting_dual_instruction_rows')::integer = 0
+      and (:'canonical_structure_result'::jsonb
+        ->>'entirely_empty_recipe_rows')::integer = 1
       and (:'canonical_structure_result'::jsonb
         ->>'nonconsecutive_repeated_ingredient_label_rows')::integer = 1
       and (:'canonical_structure_result'::jsonb

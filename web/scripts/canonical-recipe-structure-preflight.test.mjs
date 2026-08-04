@@ -12,6 +12,9 @@ describe("canonical recipe structure preflight", () => {
   it("is structurally read-only and always rolls back", () => {
     expect(sql).toContain("set default_transaction_read_only = on;")
     expect(sql).toContain("begin transaction read only;")
+    expect(sql.indexOf("set default_transaction_read_only = on;")).toBeLessThan(
+      sql.indexOf("do $guards$")
+    )
     expect(sql).toContain("set local statement_timeout = '30s';")
     expect(sql).toContain("set local lock_timeout = '5s';")
     expect(sql.match(/\brollback;/gu)?.length).toBeGreaterThanOrEqual(3)
@@ -46,6 +49,7 @@ describe("canonical recipe structure preflight", () => {
     expect(sql).toContain("->>'grouped_only_instruction_rows')::integer = 1")
     expect(sql).toContain("->>'equivalent_dual_instruction_rows')::integer = 1")
     expect(sql).toContain("->>'conflicting_dual_instruction_rows')::integer = 1")
+    expect(sql).toContain("->>'entirely_empty_recipe_rows')::integer = 1")
     expect(sql).toContain("raise exception 'canonical recipe structure preflight found malformed or conflicting rows'")
   })
 })
