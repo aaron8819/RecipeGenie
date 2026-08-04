@@ -268,6 +268,7 @@ try {
         $text=[IO.File]::ReadAllText((Join-Path $root 'Confirm-RecipeGenieMigration016Restore.ps1'))
         Must ($text -notmatch '(?i)pg_restore|RECIPE_GENIE_PRODUCTION_DATABASE_URL|supabase(?:\.exe)?\s+(?:db|migration)|\bdb\s+push\b')
         Must ($text -match 'RECIPE_GENIE_DISPOSABLE_RESTORE_DATABASE_URL')
+        Must ($text -notmatch '\$LASTEXITCODE')
     }
     Case 'migration 014 definition binds the production identity and exact pre-state' {
         $definition=Get-RecipeGenieMigrationBackupDefinition $migration014Path
