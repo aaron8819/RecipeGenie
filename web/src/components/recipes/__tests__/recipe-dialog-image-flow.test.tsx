@@ -322,8 +322,8 @@ function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
     servings: 4,
     favorite: false,
     tags: [],
-    ingredients: [{ item: "Carrot", amount: 1, unit: "" }],
-    instructions: ["Cook"],
+    fixtureIngredients: [{ item: "Carrot", amount: 1, unit: "" }],
+    fixtureInstructions: ["Cook"],
     image_url: null,
     created_at: "2026-03-01T00:00:00.000Z",
     updated_at: "2026-03-01T00:00:00.000Z",
@@ -507,7 +507,7 @@ describe("RecipeDialog image orchestration", () => {
     const ingredient = parseIngredientLine("0.50 cup sugar")
     const recipe = recipeFixture({
       id: "authored-amount",
-      ingredients: [ingredient],
+      fixtureIngredients: [ingredient],
     })
     const first = renderEditDialog(recipe)
 
@@ -576,7 +576,7 @@ describe("RecipeDialog image orchestration", () => {
   it("rebuilds sized-package metadata from the actual unit edit callback", async () => {
     const recipe = recipeFixture({
       id: "sized-package",
-      ingredients: [parseIngredientLine("1 (14 oz) can tomatoes")],
+      fixtureIngredients: [parseIngredientLine("1 (14 oz) can tomatoes")],
     })
     renderEditDialog(recipe)
 

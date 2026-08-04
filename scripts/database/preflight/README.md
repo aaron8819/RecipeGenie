@@ -16,6 +16,8 @@ Migration 013 uses 013_allow_uuid_shopping_contribution_replacement.sql. It requ
 
 Migration 014 uses 014_add_recipe_yield_metadata.sql. It requires the authoritative ledger to contain exactly 001 through 013, verifies that `recipes.yield_metadata` is absent, checks the hardened recipe-share RPC and recipient-update predecessor contracts, and rejects every pending snapshot that the post-migration acceptance validator would reject. All six required snapshot keys (`name`, `category`, `servings`, `tags`, `ingredients`, and `instructions`) are checked explicitly with null-safe type predicates.
 
+Migration 017 uses 017_remove_legacy_recipe_structure.sql. It requires the authoritative ledger to contain exactly 001 through 016, verifies the exact post-016 canonical and legacy recipe columns plus the canonical validators and writers, and rejects invalid canonical recipe rows or share snapshots. It returns aggregate pass/fail evidence only and rolls back unconditionally.
+
 The parity matrix contains 185 explicit complete-snapshot expectations: 36 accepted and 149 rejected. Its categories are 89 general snapshot/metadata fixtures, 49 ingredient quantity-range fixtures, and 47 recipe yield-range fixtures. The original 171 fixtures remain in their original order; the 10 quantity branch fixtures and 4 yield-boundary fixtures are appended.
 
 The focused rule-to-fixture mapping is:

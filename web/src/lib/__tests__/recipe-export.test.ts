@@ -20,7 +20,7 @@ function makeRecipe(
     total_time_minutes: null,
     favorite: false,
     tags: ['quick', 'easy'],
-    ingredients: [
+    fixtureIngredients: [
       {
         item: 'flour',
         amount: 2,
@@ -33,12 +33,12 @@ function makeRecipe(
         unit: 'tbsp',
       },
     ],
-    instructions: [
+    fixtureInstructions: [
       'Mix ingredients.',
       'Bake at 350F.',
     ],
     notes: [],
-    instruction_groups: null,
+    fixtureInstructionGroups: null,
     image_url: 'https://example.com/img.jpg',
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-02T00:00:00Z',
@@ -98,7 +98,7 @@ describe('recipesToSchemaOrg', () => {
   it('should handle recipe with modifier', () => {
     const result = recipesToSchemaOrg([
       makeRecipe({
-        ingredients: [
+        fixtureIngredients: [
           {
             item: 'onion',
             amount: 1,
@@ -115,7 +115,7 @@ describe('recipesToSchemaOrg', () => {
   it('should suppress whole/count units while preserving measured units', () => {
     const result = recipesToSchemaOrg([
       makeRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'onion', amount: 1, unit: 'count' },
           { item: 'rice', amount: 1, unit: 'cup' },
         ],
@@ -174,7 +174,7 @@ describe('recipesToSchemaOrg', () => {
 
     const result = recipesToSchemaOrg([
       makeRecipe({
-        ingredients: [ingredient],
+        fixtureIngredients: [ingredient],
         yield_metadata: yieldMetadata,
       }),
     ])[0];

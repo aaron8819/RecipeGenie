@@ -30,7 +30,7 @@ Never paste the database URL or Management API token into chat, a command argume
 
 The token is required because database-schema evidence alone cannot identify a Supabase project. Before any database connection or output directory is created, the script makes exactly one TLS Management API metadata read to `GET /v1/projects/{expected-ref}`. It requires an exact returned `ref`, `ACTIVE_HEALTHY` status, a present and internally consistent `database.host`, and endpoint compatibility. API errors, timeouts, malformed or duplicate JSON fields, redirects, missing fields, inactive status, and contradictions fail closed; Management API unavailability is never downgraded to a warning. The token is sent only in the Authorization header, is never a child-process argument, and is included in in-memory redaction inputs. No full response, token, database URL, or raw credential-bearing username is recorded in the manifest or summary.
 
-The checkout must also have been linked independently with the Supabase CLI. The script reads `supabase/.temp/project-ref` and requires both it and `RECIPE_GENIE_PRODUCTION_PROJECT_REF` to equal `eyaoahwzixqetjgfghsh`. The separate read-only database probe requires `current_database() = postgres`, the permitted current-user policy, a server version, `public.recipes`, `public.pantry_items`, `public.user_config`, and the definition-specific exact migration ledger. Migration 014 requires `001` through `013`; migrations 012 and 013 remain supported with their exact earlier ledgers. Missing or contradictory local or control-plane evidence fails closed; connected schema/ledger disagreement stops before `pg_dump`.
+The checkout must also have been linked independently with the Supabase CLI. The script reads `supabase/.temp/project-ref` and requires both it and `RECIPE_GENIE_PRODUCTION_PROJECT_REF` to equal `eyaoahwzixqetjgfghsh`. The separate read-only database probe requires `current_database() = postgres`, the permitted current-user policy, a server version, `public.recipes`, `public.pantry_items`, `public.user_config`, and the definition-specific exact migration ledger. Migration 017 requires `001` through `016`; migrations 012, 013, 014, and 016 remain supported with their migration-specific ledgers. Missing or contradictory local or control-plane evidence fails closed; connected schema/ledger disagreement stops before `pg_dump`.
 
 In Supabase Dashboard, obtain the project reference from Project Settings / General, the direct connection string from Connect / Direct connection, and the database password from the project database credentials (reset it if it is not available). Check the server major version in Dashboard or with the documented read-only select version() query. The repository local major is 17, but the script queries the connected server and requires matching pg_dump major version.
 
@@ -53,6 +53,9 @@ Run the migration-014 identity and SQL preflight without creating a backup:
 Create and validate a logical backup:
 
     pwsh -File .\scripts\database\Backup-RecipeGenieProduction.ps1 -DestinationRoot 'C:\Users\<user>\RecipeGenieBackups'
+
+For the cleanup migration, add
+`-MigrationPath supabase/migrations/017_remove_legacy_recipe_structure.sql`.
 
 For a deliberately supplied compatible session pooler:
 
@@ -100,7 +103,13 @@ The destination must be outside every worktree registered in the repository, not
 
 The database URL is parsed once and supplied to PostgreSQL tools through temporary PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, and PGSSLMODE process environment values. It is never a command argument. Logs, manifest, summary, and emitted failures redact literal/URL-encoded passwords, full PostgreSQL URLs and query strings, Supabase tokens/service-role-like keys, JWTs, and temporary CLI-login credential patterns.
 
-Each backup is bound to one supported migration definition and its matching read-only preflight. A definition fixes the expected applied migration range, pending migration number and path, production project reference, and restore policy. SHA-256 values are computed from the exact Git blobs at `gitCommitSha`; the manifest records both paths, hashes, and commit identity. The migration assertion requires the current HEAD, clean-filter worktree content, manifest commit, migration hash, and preflight hash all to agree. Migrations 012, 013, 014, and 016 always require `restoreVerified=true`, even if the caller omits `-RequireRestoreVerification`.
+Each backup is bound to one supported migration definition and its matching read-only preflight. A definition fixes the expected applied migration range, pending migration number and path, production project reference, and restore policy. SHA-256 values are computed from the exact Git blobs at `gitCommitSha`; the manifest records both paths, hashes, and commit identity. The migration assertion requires the current HEAD, clean-filter worktree content, manifest commit, migration hash, and preflight hash all to agree. Migrations 012, 013, 014, 016, and 017 always require `restoreVerified=true`, even if the caller omits `-RequireRestoreVerification`.
+
+For migration 017, the archive contract requires the post-016 canonical recipe
+tables, validators, acceptance/new-user writers, and exact ledger through 016.
+Its preflight validates canonical recipe and share structure without returning
+customer content. It does not replace or modify the commit-bound migration-016
+recovery artifacts.
 
 Migration 016 is the one narrow exception to the usual same-commit layout. Its recovery tooling must land before the reviewed cutover, so `-EvidenceCommitSha` identifies the exact reviewed commit containing migration 016 and its canonical aggregate preflight while `toolingCommitSha` identifies the recovery implementation. Both commits and all five Git-blob hashes (migration, preflight, restore preparation, restore finalization, and restore assertion) are recorded and checked. Other migrations reject a separate evidence commit, and unrecognized future migrations remain unsupported.
 

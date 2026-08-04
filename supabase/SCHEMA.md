@@ -62,9 +62,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/014_add_recipe_yield_metadata.sql`
 - `supabase/migrations/015_add_shopping_exclusion_settings.sql`
 - `supabase/migrations/016_canonical_recipe_structure_cutover.sql`
+- `supabase/migrations/017_remove_legacy_recipe_structure.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 16 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 17 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -87,8 +88,10 @@ Archived files are not replacement migrations and are not part of that chain.
   exclusions. Both settings are non-null and default to `false`.
 - Migration `016` atomically backfills canonical ordered ingredient
   and instruction sections, converts share snapshots, and switches privileged
-  recipe creation/acceptance to canonical fields. The old recipe columns remain
-  physically present as frozen comparison evidence and are not runtime authority.
+  recipe creation/acceptance to canonical fields.
+- Migration `017` removes the superseded physical recipe-structure columns and
+  migration-only conversion functions. Canonical sections remain the only
+  persisted recipe structure.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -137,9 +140,6 @@ Stores all recipe information including ingredients, instructions, and metadata.
 | `ingredient_sections` | JSONB | NOT NULL, DEFAULT '[]', validated | Canonical ordered ingredient sections |
 | `instruction_sections` | JSONB | NOT NULL, DEFAULT '[]', validated | Canonical ordered instruction sections |
 | `notes` | JSONB | NOT NULL, DEFAULT '[]' | Array of recipe note strings |
-| `ingredients` | JSONB | NOT NULL, DEFAULT '[]' | Stale legacy evidence; inactive and not synchronized after cutover |
-| `instructions` | TEXT[] | NOT NULL, DEFAULT '{}' | Stale legacy evidence; inactive and not synchronized after cutover |
-| `instruction_groups` | JSONB | NULL | Stale legacy evidence; inactive and not synchronized after cutover |
 | `image_url` | TEXT | NULL | URL or path to recipe image (Supabase Storage path or external URL) |
 | `created_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was created |
 | `updated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when recipe was last updated |
@@ -180,8 +180,8 @@ ingredient objects cannot contain `groupLabel`.
 ```
 
 Top-level empty arrays are valid. Section order and step order are authoritative;
-every stored section is nonempty. No trigger or dual-write path synchronizes the
-three stale legacy columns.
+every stored section is nonempty. There is no alternate persisted recipe
+structure or dual-write path.
 
 ### pantry_items
 
@@ -717,11 +717,12 @@ The repository now uses a baseline-first bootstrap strategy:
 14. **014_add_recipe_yield_metadata.sql** - Added versioned authored-yield metadata and deep, atomic shared-snapshot validation for all copied recipe fields, including bounded instruction groups and images, exact quantities, ranges, packages, units, and yield metadata. Private validators are execution-revoked and the authenticated acceptance RPC rejects the whole snapshot before any recipient recipe or share-state mutation.
 15. **015_add_shopping_exclusion_settings.sql** - Added the non-null, default-false Salt-variant and Black-pepper-variant shopping exclusion settings to `user_config`.
 16. **016_canonical_recipe_structure_cutover.sql** - Atomically converted recipes and share snapshots to ordered canonical sections, added strict CHECK constraints, replaced canonical share acceptance and new-user seed writes, and froze the old structure columns as unsynchronized evidence for the removal slice.
+17. **017_remove_legacy_recipe_structure.sql** - Removed the frozen recipe structure columns and migration-only converters after the section-only cutover, preserving canonical content and validators.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `016`. The archived pre-baseline sequence is not replayed.
+  migration through `017`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -811,7 +812,8 @@ ORDER BY created_at DESC;
 - All timestamps use `TIMESTAMPTZ` (timezone-aware timestamps)
 - User-owned tables require their owner columns to be set for proper RLS
   enforcement; shares require sender and recipient ownership
-- The `recipes.ingredients` field uses JSONB for flexible ingredient storage
+- Recipe ingredient and instruction structure is stored only in the validated
+  `ingredient_sections` and `instruction_sections` JSONB columns
 - The `shopping_list.items` field uses JSONB for flexible shopping list item storage
 - `shopping_list` row payloads now use `rowId` as the stable identity field across `items`, `already_have`, and `excluded`
 - Default recipes are automatically created for new users via the `on_auth_user_created` trigger
@@ -974,7 +976,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 016, and the
+instructions. The current authoritative chain ends at migration 017, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

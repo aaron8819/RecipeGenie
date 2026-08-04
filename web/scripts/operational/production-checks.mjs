@@ -6,7 +6,7 @@ const EXPECTED_TABLES = [
 
 const EXPECTED_COLUMNS = [
   "recipes.recipe_uuid", "recipes.ingredient_sections", "recipes.instruction_sections",
-  "recipes.ingredients", "recipes.user_id",
+  "recipes.user_id",
   "weekly_plans.recipe_uuids", "weekly_plans.day_assignment_recipe_uuids", "weekly_plans.made_recipe_uuids",
   "plan_templates.recipe_uuids", "plan_templates.day_assignment_recipe_uuids",
   "recipe_history.recipe_uuid", "recipe_shares.source_recipe_uuid", "recipe_shares.accepted_recipe_uuid",
@@ -197,7 +197,19 @@ export function createDatabaseChecks(expectedMigration) {
         const rows = await query(`select jsonb_build_object(
           'recipe_audits', to_regclass('public.recipe_audits'),
           'legacy_made_rpc', to_regprocedure('public.toggle_weekly_recipe_made(text,text,boolean,timestamp with time zone)'),
-          'obsolete_uuid_text_rpc', to_regprocedure('public.toggle_weekly_recipe_made(uuid,text,boolean,timestamp with time zone)')
+          'obsolete_uuid_text_rpc', to_regprocedure('public.toggle_weekly_recipe_made(uuid,text,boolean,timestamp with time zone)'),
+          'legacy_recipe_structure_columns', (
+            select case when count(*) = 0 then null else count(*) end
+            from information_schema.columns
+            where table_schema = 'public' and table_name = 'recipes'
+              and column_name in ('ingredients', 'instructions', 'instruction_groups')
+          ),
+          'legacy_recipe_structure_converter', coalesce(
+            to_regprocedure('private.recipe_ingredient_sections_from_legacy(jsonb)'),
+            to_regprocedure('private.recipe_instruction_sections_from_flat(text[])'),
+            to_regprocedure('private.recipe_instruction_sections_from_groups(jsonb)'),
+            to_regprocedure('private.recipe_notes_from_legacy(jsonb,text[])')
+          )
         ) as retired`)
         const present = Object.entries(rows[0].retired).filter(([, value]) => value !== null).map(([name]) => name)
         if (present.length) throw new Error(`retired objects still present: ${present.join(", ")}`)

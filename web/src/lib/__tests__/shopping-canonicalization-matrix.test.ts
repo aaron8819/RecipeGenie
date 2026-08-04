@@ -15,7 +15,7 @@ function recipe(id: string, ingredients: Ingredient[]): Recipe {
     id,
     name: `Recipe ${id}`,
     servings: 4,
-    ingredients,
+    fixtureIngredients: ingredients,
   })
 }
 

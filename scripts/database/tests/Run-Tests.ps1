@@ -15,6 +15,8 @@ $migration014Path = 'supabase/migrations/014_add_recipe_yield_metadata.sql'
 $preflight014Path = 'scripts/database/preflight/014_add_recipe_yield_metadata.sql'
 $migration016Path = 'supabase/migrations/016_canonical_recipe_structure_cutover.sql'
 $preflight016Path = 'supabase/verification/canonical_recipe_structure_preflight.sql'
+$migration017Path = 'supabase/migrations/017_remove_legacy_recipe_structure.sql'
+$preflight017Path = 'scripts/database/preflight/017_remove_legacy_recipe_structure.sql'
 $migration016Commit = '172958fe5a413f4c8ced08b431b3ead82dc92bf7'
 $restore016Path = 'scripts/database/restore/016_canonical_recipe_structure_cutover.sql'
 $restore016PreparationPath = 'scripts/database/restore/016_prepare_clean_restore.sql'
@@ -25,6 +27,7 @@ $ledger012 = @('001','002','003','004','005','006','007','008','009','010','011'
 $ledger013 = @('001','002','003','004','005','006','007','008','009','010','011','012')
 $ledger014 = @('001','002','003','004','005','006','007','008','009','010','011','012','013')
 $ledger016 = @('001','002','003','004','005','006','007','008','009','010','011','012','013','014','015')
+$ledger017 = @('001','002','003','004','005','006','007','008','009','010','011','012','013','014','015','016')
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('rg-backup-tests-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($temp) | Out-Null
 $passed = 0
@@ -315,7 +318,16 @@ try {
         Must (($definition.RequiredArchiveTables -join ',') -ceq 'public.recipes,public.recipe_shares,supabase_migrations.schema_migrations')
         Must (($definition.RequiredArchiveFunctions -join ',') -ceq 'private.recipe_share_snapshot_is_valid,public.accept_recipe_share,public.handle_new_user')
     }
-    Case 'unsupported future migration definition fails closed' { Throws { Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/017_unknown.sql' } 'not supported' }
+    Case 'migration 017 definition binds canonical cleanup without legacy recovery dependencies' {
+        $definition=Get-RecipeGenieMigrationBackupDefinition $migration017Path
+        Must (($definition.ExpectedAppliedMigrationVersions -join ',') -ceq ($ledger017 -join ','))
+        Must ($definition.PendingMigrationVersion -ceq '017')
+        Must ($definition.PreflightPath -ceq $preflight017Path)
+        Must (($definition.RequiredArchiveTables -join ',') -ceq 'public.recipes,public.recipe_shares,supabase_migrations.schema_migrations')
+        Must (($definition.RequiredArchiveFunctions -join ',') -ceq 'private.recipe_ingredient_sections_are_valid,private.recipe_instruction_sections_are_valid,private.recipe_share_snapshot_is_valid,public.accept_recipe_share,public.handle_new_user')
+        Must (-not $definition.PSObject.Properties['RestoreAssertionPath'])
+    }
+    Case 'unsupported future migration definition fails closed' { Throws { Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/018_unknown.sql' } 'not supported' }
 
     $backupScriptText = [IO.File]::ReadAllText((Join-Path $root 'Backup-RecipeGenieProduction.ps1'))
     Case 'normal search path catalog identity passes with unqualified regclass display' {
@@ -634,8 +646,20 @@ try {
         Must ($finalize -match 'create trigger on_auth_user_created')
         Must ($prepare -notmatch '(?i)drop\s+(?:schema|table)')
     }
+    Case 'migration 017 preflight is read-only and requires the exact canonical baseline' {
+        $sql=[IO.File]::ReadAllText((Join-Path $repo $preflight017Path))
+        Must ($sql -match '(?im)^begin transaction read only;\s*$')
+        Must ($sql -match '(?im)^rollback;\s*$')
+        Must ($sql -match '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016')
+        Must ($sql -match 'recipe_ingredient_sections_are_valid')
+        Must ($sql -match 'recipe_instruction_sections_are_valid')
+        Must ($sql -match 'recipe_share_snapshot_is_valid')
+        Must ($sql -notmatch '(?i)select\s+.*(?:name|ingredient_sections|instruction_sections|source_recipe_snapshot)\s+from')
+    }
 
     Case 'valid fixture passes' { Must ((Verify (Fixture 'valid')).ExitCode -eq 0) }
+    Case 'migration 017 backup verification accepts the exact 016 baseline' { Must ((Verify (Fixture 'migration-017-valid' $migration017Path $ledger017)).ExitCode -eq 0) }
+    Case 'migration 017 backup verification rejects an unexpected ledger' { Must ((Verify (Fixture 'migration-017-ledger' $migration017Path ($ledger017 + '017'))).ExitCode -ne 0) }
     Case 'migration 016 backup verification accepts exact reviewed evidence' { Must ((Verify (Fixture 'migration-016-valid' $migration016Path $ledger016)).ExitCode -eq 0) }
     Case 'migration 016 backup verification rejects a different evidence commit' {
         $d=Fixture 'migration-016-wrong-head' $migration016Path $ledger016

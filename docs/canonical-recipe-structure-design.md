@@ -1,10 +1,10 @@
 # Canonical recipe structure design
 
 Status: Slice B, the atomic canonical schema/runtime cutover, is implemented by
-migration `016_canonical_recipe_structure_cutover.sql` and the
-section-only runtime changes. Slice C physical legacy-column removal remains a
-separate follow-up. This document retains the original design and preflight
-evidence as the decision record.
+migration `016_canonical_recipe_structure_cutover.sql`. Slice C is implemented
+by migration `017_remove_legacy_recipe_structure.sql` and its section-only
+runtime cleanup. This document retains the original design and preflight
+evidence as the decision record; pre-cutover inventories below are historical.
 
 The production preflight ran on 2026-08-03 against the explicitly configured
 Recipe Genie Supabase project `eyaoahwzixqetjgfghsh`. It verified migration
@@ -66,10 +66,10 @@ Implementation order:
    checked-in count-only preflight.
 2. Slice B added and backfilled the canonical columns, converted share
    snapshots, replaced share acceptance, and switched every active application
-   path to sections only. Old columns remain present and inactive.
-3. In a second, immediately following cleanup PR, prove no readers/writers
-   remain, drop the old columns, remove conversion-only code and compatibility
-   tests, and regenerate database types.
+   path to sections only. Old columns remained present and inactive.
+3. Slice C proved no readers/writers remained, dropped the old columns, removed
+   conversion-only code and temporary compatibility tests, and regenerated
+   database types.
 
 Steps 2 and 3 should be two short sequential PRs. Combining them would remove
 the best post-cutover comparison evidence at the moment it is most useful.
@@ -497,11 +497,13 @@ per-row flags, or background work.
 
 ### 7.3 Step 3: cleanup
 
-Drop `recipes.ingredients`, `recipes.instructions`, and
-`recipes.instruction_groups`; remove `groupLabel` from ingredient validators and
-types; remove the three legacy share snapshot fields; remove one-time
-conversion code, note/label fallbacks, and dual-model tests; regenerate database
-types; and update canonical documentation.
+Completed by migration 017 and its runtime cleanup: dropped
+`recipes.ingredients`, `recipes.instructions`, and
+`recipes.instruction_groups`; removed the three legacy share snapshot fields
+from active types and validators; removed one-time conversion code,
+note/label fallbacks, and dual-model tests; regenerated database types; and
+updated canonical documentation. Transient editor rows and the external
+Recipe Genie version 1 adapter retain `groupLabel` only at explicit boundaries.
 
 The exact deletion gate is:
 
@@ -628,6 +630,9 @@ compatibility remains only at the external v1 JSON-LD import boundary.
 
 ### Slice C — physical cleanup
 
+**Status:** Implemented by migration `017_remove_legacy_recipe_structure.sql`
+and the accompanying runtime/type/test cleanup.
+
 **Entry state:** exact deployed Slice B release passes the deletion gate.
 
 **Scope:** drop legacy recipe/share fields and remove every one-time converter,
@@ -639,7 +644,8 @@ snapshots/validators; regenerate types.
 
 **Expected deletions:** all permanent dual-read/write/fallback code, migration
 converter code outside immutable SQL history, legacy `{}` share acceptance,
-`groupLabel`, and dual-model tests.
+persisted `groupLabel`, and dual-model tests. The transient sortable-editor row
+projection and external version 1 adapter remain explicit boundaries.
 
 **Main risk:** missed external or SQL reader. The repository-wide call-site and
 catalog audit is the hard gate.

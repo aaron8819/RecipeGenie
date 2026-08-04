@@ -14,5 +14,6 @@
   "013_allow_uuid_shopping_contribution_replacement.sql": "962c030ebeb57ec5f2951b7517597fe586c287c2b9a9cba87eded2a9ba0699e8",
   "014_add_recipe_yield_metadata.sql": "b47a74d12e3eaff4e095f46a55d6e9fcba17b83befe5b269305eea443620305d",
   "015_add_shopping_exclusion_settings.sql": "e5fb67487e73cf7534645a7a1735f704f85b4da3561d60f34b839c02a574054a",
-  "016_canonical_recipe_structure_cutover.sql": "ba9d69bedff0f977df6dfaecb7ada1c55c181062129499eab7c2d5b4265c5b13"
+  "016_canonical_recipe_structure_cutover.sql": "ba9d69bedff0f977df6dfaecb7ada1c55c181062129499eab7c2d5b4265c5b13",
+  "017_remove_legacy_recipe_structure.sql": "2a2e9a28fd88f3b41674576ebd292a129899235616fbe888e6feb396169a98d2"
 }

@@ -15,12 +15,12 @@ const RECIPES = [
     servings: 4,
     favorite: true,
     tags: ['quick', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 1.5, unit: 'lb', item: 'chicken breasts' },
       { amount: 2, unit: 'count', item: 'lemons' },
       { amount: 3, unit: 'cloves', item: 'garlic' },
     ],
-    instructions: ['Season the chicken.', 'Sear until golden.', 'Add lemon and finish in the oven.'],
+    fixtureInstructions: ['Season the chicken.', 'Sear until golden.', 'Add lemon and finish in the oven.'],
   },
   {
     recipe_uuid: '10000000-0000-4000-8000-000000000002',
@@ -29,12 +29,12 @@ const RECIPES = [
     servings: 6,
     favorite: false,
     tags: ['vegetarian', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 1, unit: 'count', item: 'cauliflower' },
       { amount: 2, unit: 'cups', item: 'chickpeas' },
       { amount: 1, unit: 'can', item: 'coconut milk' },
     ],
-    instructions: ['Toast the spices.', 'Simmer the vegetables.', 'Fold in chickpeas and coconut milk.'],
+    fixtureInstructions: ['Toast the spices.', 'Simmer the vegetables.', 'Fold in chickpeas and coconut milk.'],
   },
   {
     recipe_uuid: '10000000-0000-4000-8000-000000000003',
@@ -43,11 +43,11 @@ const RECIPES = [
     servings: 4,
     favorite: true,
     tags: ['sheet-pan', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 4, unit: 'count', item: 'salmon fillets' },
       { amount: 1, unit: 'lb', item: 'asparagus' },
     ],
-    instructions: ['Heat the oven.', 'Arrange salmon and asparagus.', 'Roast until flaky.'],
+    fixtureInstructions: ['Heat the oven.', 'Arrange salmon and asparagus.', 'Roast until flaky.'],
   },
   {
     recipe_uuid: '10000000-0000-4000-8000-000000000004',
@@ -56,12 +56,12 @@ const RECIPES = [
     servings: 8,
     favorite: false,
     tags: ['batch', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 1, unit: 'lb', item: 'ground beef' },
       { amount: 2, unit: 'cans', item: 'black beans' },
       { amount: 1, unit: 'can', item: 'diced tomatoes' },
     ],
-    instructions: ['Brown the beef.', 'Add all ingredients to the slow cooker.', 'Cook on low for 6 hours.'],
+    fixtureInstructions: ['Brown the beef.', 'Add all ingredients to the slow cooker.', 'Cook on low for 6 hours.'],
   },
   {
     recipe_uuid: '10000000-0000-4000-8000-000000000005',
@@ -70,12 +70,12 @@ const RECIPES = [
     servings: 6,
     favorite: false,
     tags: ['lunch', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 12, unit: 'oz', item: 'rotini' },
       { amount: 2, unit: 'cups', item: 'cherry tomatoes' },
       { amount: 1, unit: 'count', item: 'cucumber' },
     ],
-    instructions: ['Cook and cool the pasta.', 'Chop the vegetables.', 'Toss with dressing.'],
+    fixtureInstructions: ['Cook and cool the pasta.', 'Chop the vegetables.', 'Toss with dressing.'],
   },
   {
     recipe_uuid: '10000000-0000-4000-8000-000000000006',
@@ -84,7 +84,7 @@ const RECIPES = [
     servings: 10,
     favorite: true,
     tags: ['weekend', 'long-form', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 1, unit: 'lb', item: 'ground beef' },
       { amount: 1, unit: 'lb', item: 'italian sausage' },
       { amount: 2, unit: 'cans', item: 'crushed tomatoes' },
@@ -94,7 +94,7 @@ const RECIPES = [
       { amount: 12, unit: 'count', item: 'lasagna noodles' },
       { amount: 1, unit: 'bunch', item: 'fresh basil' },
     ],
-    instructions: [
+    fixtureInstructions: [
       'Brown the beef and sausage in a heavy pot.',
       'Drain excess fat and add the tomatoes.',
       'Simmer the sauce gently for 45 minutes.',
@@ -116,11 +116,11 @@ const RECIPES = [
     servings: 4,
     favorite: false,
     tags: ['breakfast', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 8, unit: 'count', item: 'eggs' },
       { amount: 8, unit: 'count', item: 'corn tortillas' },
     ],
-    instructions: ['Scramble the eggs.', 'Warm the tortillas.', 'Assemble and serve.'],
+    fixtureInstructions: ['Scramble the eggs.', 'Warm the tortillas.', 'Assemble and serve.'],
   },
   {
     recipe_uuid: '10000000-0000-4000-8000-000000000008',
@@ -129,11 +129,11 @@ const RECIPES = [
     servings: 4,
     favorite: false,
     tags: ['comfort', 'fixture'],
-    ingredients: [
+    fixtureIngredients: [
       { amount: 1.5, unit: 'cups', item: 'arborio rice' },
       { amount: 12, unit: 'oz', item: 'mushrooms' },
     ],
-    instructions: ['Sauté the mushrooms.', 'Toast the rice.', 'Add stock gradually while stirring.'],
+    fixtureInstructions: ['Sauté the mushrooms.', 'Toast the rice.', 'Add stock gradually while stirring.'],
   },
 ]
 
@@ -181,12 +181,16 @@ async function checked(error, operation) {
 }
 
 async function seedRepresentativeData(client, userId) {
-  const recipeRows = RECIPES.map(({ ingredients, instructions, ...recipe }) => ({
+  const recipeRows = RECIPES.map(({
+    fixtureIngredients,
+    fixtureInstructions,
+    ...recipe
+  }) => ({
     ...recipe,
     id: recipe.recipe_uuid,
     user_id: userId,
-    ingredient_sections: [{ label: null, ingredients }],
-    instruction_sections: [{ label: null, steps: instructions }],
+    ingredient_sections: [{ label: null, ingredients: fixtureIngredients }],
+    instruction_sections: [{ label: null, steps: fixtureInstructions }],
     notes: [],
   }))
   const { error: recipeError } = await client.from('recipes').insert(recipeRows)
