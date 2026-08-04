@@ -49,7 +49,7 @@ if (-not $ConfirmDisposableTarget) {
 $databaseUrl = [Environment]::GetEnvironmentVariable($databaseUrlVariable, 'Process')
 if ([string]::IsNullOrWhiteSpace($databaseUrl)) { throw "Required environment variable $databaseUrlVariable is missing." }
 $connection = ConvertFrom-DisposableRestoreDatabaseUrl -DatabaseUrl $databaseUrl
-$literalSecrets = @($databaseUrl, $connection.Password, [Uri]::EscapeDataString($connection.Password))
+$literalSecrets = @($databaseUrl)
 
 $manifestPath = Join-Path $BackupDirectory 'manifest.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'manifest.json is missing.' }
