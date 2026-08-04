@@ -10,6 +10,9 @@ const runtimeFiles = [
   "src/app/api/recipe-shares/route.ts",
   "src/app/api/recipe-shares/[id]/accept/route.ts",
   "src/app/api/shopping/recipe-contributions/route.ts",
+  "scripts/bootstrap-local-e2e.mjs",
+  "scripts/operational/audit-checks.mjs",
+  "scripts/operational/production-checks.mjs",
 ]
 
 const forbidden = [
@@ -19,6 +22,7 @@ const forbidden = [
   { label: "removed ingredient regrouping helper", pattern: /\bgetRecipeIngredientGroups\b/ },
   { label: "removed instruction regrouping helper", pattern: /\bgetRecipeInstructionGroups\b/ },
   { label: "wildcard recipe select", pattern: /\.from\(["']recipes["']\)[\s\S]{0,120}?\.select\(["']\*["']\)/ },
+  { label: "legacy persisted ingredient column", pattern: /\br\.ingredients\b|select\s+recipe_uuid,\s*ingredients\b/ },
 ]
 
 const failures = []

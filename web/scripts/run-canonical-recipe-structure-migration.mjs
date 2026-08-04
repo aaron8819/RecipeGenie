@@ -80,6 +80,7 @@ insert into public.recipes (
     {"item":"flour","amount":1,"unit":"cup","groupLabel":"Dough","originalText":"1 cup flour","modifier":"sifted","alternatives":["bread flour"]},
     {"item":"water","amount":0.5,"unit":"cup","groupLabel":"Dough","authoredUnit":"cups","quantityV1":{"version":1,"kind":"exact","value":{"numerator":"1","denominator":"2"},"authored":"1/2","lexeme":"1/2","source":"authored"}},
     {"item":"salt","amount":1,"unit":"tsp"},
+    "kosher salt",
     {"item":"oil","amount":1,"unit":"tbsp","groupLabel":"Dough"}
   ]'::jsonb,
   array['Mix.', 'Rest.', 'Bake.'],
@@ -97,9 +98,9 @@ insert into public.recipe_shares (
   '{
     "name":"Canonical cutover fixture","category":"test","servings":4,"tags":["fixture"],
     "ingredients":[{"item":"flour","amount":1,"unit":"cup","groupLabel":"Dough","originalText":"1 cup flour"}],
-    "instructions":["Mix.","Bake."],
+    "instructions":["Mix.","Bake.","Notes:","Share tail."],
     "instruction_groups":[{"label":"Dough","steps":["Mix."]},{"label":"Finish","steps":["Bake."]}],
-    "image_url":"","notes":["Keep covered."],"prep_time_minutes":10,"cook_time_minutes":20,"total_time_minutes":30,
+    "image_url":"","notes":null,"prep_time_minutes":10,"cook_time_minutes":20,"total_time_minutes":30,
     "yield_metadata":{"version":1,"authoredText":"4 servings","kind":"servings","scalingBasis":{"numerator":"4","denominator":"1"},"value":{"numerator":"4","denominator":"1"}}
   }'::jsonb
 );
@@ -119,6 +120,8 @@ begin
      or v_recipe.ingredient_sections #>> '{0,ingredients,0,originalText}' <> '1 cup flour'
      or v_recipe.ingredient_sections #>> '{0,ingredients,1,quantityV1,value,numerator}' <> '1'
      or v_recipe.ingredient_sections #>> '{1,label}' is not null
+     or v_recipe.ingredient_sections #>> '{1,ingredients,1,item}' <> 'kosher salt'
+     or v_recipe.ingredient_sections #>> '{1,ingredients,1,originalText}' <> 'kosher salt'
      or v_recipe.ingredient_sections #>> '{2,label}' <> 'Dough'
   then raise exception 'ingredient conversion assertion failed'; end if;
   if v_recipe.instruction_sections <> '[{"label":"Dough","steps":["Mix.","Rest."]},{"label":"Finish","steps":["Bake."]}]'::jsonb
@@ -132,6 +135,7 @@ begin
      or not (v_snapshot ?& array['ingredient_sections','instruction_sections'])
      or v_snapshot #>> '{ingredient_sections,0,label}' <> 'Dough'
      or v_snapshot #>> '{instruction_sections,1,label}' <> 'Finish'
+     or v_snapshot #>> '{notes,0}' <> 'Share tail.'
      or v_snapshot #>> '{yield_metadata,authoredText}' <> '4 servings'
   then raise exception 'share conversion assertion failed'; end if;
 end;

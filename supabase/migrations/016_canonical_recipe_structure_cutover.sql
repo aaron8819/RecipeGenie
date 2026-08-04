@@ -132,11 +132,24 @@ begin
      or exists (
        select 1
        from jsonb_array_elements(p_value) as ingredient
-       where not private.recipe_ingredient_is_valid(ingredient)
-          or (
-            ingredient ? 'groupLabel'
-            and jsonb_typeof(ingredient->'groupLabel') not in ('string', 'null')
-          )
+       where not (
+         (
+           jsonb_typeof(ingredient) = 'string'
+           and length(ingredient #>> '{}') <= 2048
+           and nullif(trim(ingredient #>> '{}'), '') is not null
+         )
+         or (
+           jsonb_typeof(ingredient) = 'object'
+           and private.recipe_ingredient_is_valid(
+             case
+               when jsonb_typeof(ingredient->'groupLabel') = 'string'
+                 and nullif(trim(ingredient->>'groupLabel'), '') is null
+                 then ingredient - 'groupLabel'
+               else ingredient
+             end
+           )
+         )
+       )
      ) then
     raise exception 'legacy ingredient structure is malformed';
   end if;
@@ -144,7 +157,15 @@ begin
   with items as (
     select
       item_order,
-      ingredient - 'groupLabel' as ingredient,
+      case
+        when jsonb_typeof(ingredient) = 'string' then jsonb_build_object(
+          'item', ingredient #>> '{}',
+          'amount', null,
+          'unit', '',
+          'originalText', ingredient #>> '{}'
+        )
+        else ingredient - 'groupLabel'
+      end as ingredient,
       case
         when jsonb_typeof(ingredient->'groupLabel') = 'string'
           then nullif(trim(ingredient->>'groupLabel'), '')
@@ -187,6 +208,25 @@ begin
   end if;
   return v_result;
 end;
+$$;
+
+create or replace function private.recipe_ingredient_sections_flatten(
+  p_value jsonb
+)
+returns jsonb
+language sql
+immutable
+set search_path = ''
+as $$
+  select coalesce(
+    jsonb_agg(ingredient order by section_order, ingredient_order),
+    '[]'::jsonb
+  )
+  from jsonb_array_elements(p_value) with ordinality
+    as sections(section_value, section_order)
+  cross join lateral jsonb_array_elements(
+    section_value->'ingredients'
+  ) with ordinality as ingredients(ingredient, ingredient_order)
 $$;
 
 create or replace function private.recipe_instruction_sections_from_flat(
@@ -359,23 +399,30 @@ immutable
 set search_path = ''
 as $$
 declare
-  v_result jsonb;
+  v_result jsonb := '[]'::jsonb;
   v_notes_index integer;
 begin
-  if jsonb_typeof(p_notes) <> 'array'
-     or jsonb_array_length(p_notes) > 2000
-     or exists (
-       select 1 from jsonb_array_elements(p_notes) as note
-       where jsonb_typeof(note) <> 'string'
-          or length(note #>> '{}') > 10000
-          or nullif(trim(note #>> '{}'), '') is null
-     ) then
-    raise exception 'legacy notes are malformed';
+  if p_notes is not null and jsonb_typeof(p_notes) <> 'null' then
+    if jsonb_typeof(p_notes) <> 'array'
+       or jsonb_array_length(p_notes) > 2000
+       or exists (
+         select 1 from jsonb_array_elements(p_notes) as note
+         where jsonb_typeof(note) <> 'string'
+            or length(note #>> '{}') > 10000
+            or nullif(trim(note #>> '{}'), '') is null
+       ) then
+      raise exception 'legacy notes are malformed';
+    end if;
+
+    select coalesce(
+      jsonb_agg(to_jsonb(trim(note #>> '{}')) order by note_order),
+      '[]'::jsonb
+    )
+    into v_result
+    from jsonb_array_elements(p_notes) with ordinality
+      as notes(note, note_order);
   end if;
 
-  select coalesce(jsonb_agg(to_jsonb(trim(note #>> '{}')) order by note_order), '[]'::jsonb)
-  into v_result
-  from jsonb_array_elements(p_notes) with ordinality as notes(note, note_order);
   if jsonb_array_length(v_result) > 0 then return v_result; end if;
 
   select instruction_order into v_notes_index
@@ -426,7 +473,26 @@ begin
   if exists (
     select 1 from public.recipe_shares
     where source_recipe_snapshot = '{}'::jsonb
-       or not private.recipe_share_snapshot_is_valid(source_recipe_snapshot)
+       or not private.recipe_share_snapshot_is_valid(
+         source_recipe_snapshot
+           - 'instruction_groups'
+         || jsonb_build_object(
+           'ingredients', private.recipe_ingredient_sections_flatten(
+             private.recipe_ingredient_sections_from_legacy(
+               source_recipe_snapshot->'ingredients'
+             )
+           ),
+           'instructions', private.recipe_instruction_sections_flatten(
+             private.recipe_instruction_sections_from_flat(
+               array(
+                 select jsonb_array_elements_text(
+                   source_recipe_snapshot->'instructions'
+                 )
+               )
+             )
+           )
+         )
+       )
        or private.recipe_ingredient_sections_from_legacy(
          source_recipe_snapshot->'ingredients'
        ) is null
@@ -443,6 +509,14 @@ begin
            source_recipe_snapshot->'instruction_groups'
          ) is null
        )
+       or private.recipe_notes_from_legacy(
+         source_recipe_snapshot->'notes',
+         array(
+           select jsonb_array_elements_text(
+             source_recipe_snapshot->'instructions'
+           )
+         )
+       ) is null
   ) then
     raise exception 'canonical share conversion precondition failed';
   end if;
@@ -519,8 +593,16 @@ set source_recipe_snapshot =
               source_recipe_snapshot->'instructions'
             )
           )
+          )
+      end,
+    'notes', private.recipe_notes_from_legacy(
+      source_recipe_snapshot->'notes',
+      array(
+        select jsonb_array_elements_text(
+          source_recipe_snapshot->'instructions'
         )
-      end
+      )
+    )
   );
 
 alter table public.recipes
@@ -740,6 +822,7 @@ $$;
 alter function private.recipe_ingredient_sections_are_valid(jsonb) owner to postgres;
 alter function private.recipe_instruction_sections_are_valid(jsonb) owner to postgres;
 alter function private.recipe_ingredient_sections_from_legacy(jsonb) owner to postgres;
+alter function private.recipe_ingredient_sections_flatten(jsonb) owner to postgres;
 alter function private.recipe_instruction_sections_from_flat(text[]) owner to postgres;
 alter function private.recipe_instruction_sections_from_groups(jsonb) owner to postgres;
 alter function private.recipe_instruction_sections_flatten(jsonb) owner to postgres;
@@ -752,6 +835,7 @@ revoke all privileges on function
   private.recipe_ingredient_sections_are_valid(jsonb),
   private.recipe_instruction_sections_are_valid(jsonb),
   private.recipe_ingredient_sections_from_legacy(jsonb),
+  private.recipe_ingredient_sections_flatten(jsonb),
   private.recipe_instruction_sections_from_flat(text[]),
   private.recipe_instruction_sections_from_groups(jsonb),
   private.recipe_instruction_sections_flatten(jsonb),
