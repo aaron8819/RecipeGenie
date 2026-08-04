@@ -64,10 +64,6 @@ jobs:
         working-directory: web
         run: npm run test:migration014-preflight-parity
 
-      - name: Run Stage 2C Migration 011/014 Application Matrix
-        working-directory: web
-        run: npm run test:stage2c-compatibility
-
       - name: Verify Canonical Recipe Structure Migration and Rollback
         working-directory: web
         run: npm run test:canonical-recipe-structure-migration

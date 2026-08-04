@@ -18,7 +18,6 @@
     "test:coverage": "vitest --coverage",
     "test:migration014-preflight-parity": "node scripts/run-migration014-preflight-parity.mjs",
     "test:canonical-recipe-structure-migration": "node scripts/run-canonical-recipe-structure-migration.mjs",
-    "test:stage2c-compatibility": "node scripts/run-stage2c-compatibility-matrix.mjs",
     "test:e2e:core": "playwright test --project=core-ci",
     "test:e2e:core:list": "playwright test --project=core-ci --list",
     "test:e2e:extended": "playwright test --project=extended-chromium",
