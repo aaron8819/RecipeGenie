@@ -11,6 +11,7 @@ import {
 import {
   normalizeScaleRatioV1,
   parseRationalLexeme,
+  rationalToNumber,
   scaleQuantityV1,
 } from "./recipe-quantity"
 import type { RecipeShoppingContribution } from "./shopping-contributions"
@@ -23,6 +24,7 @@ import {
   type ShoppingDocumentStateV1,
   type ShoppingItemOverrideV1,
   type ShoppingManualItemV1,
+  type ProjectedShoppingRow,
   type ShoppingRecipeIngredientV1,
 } from "./shopping-document"
 import {
@@ -31,7 +33,10 @@ import {
   type AggregateKey,
   type ShoppingQuantity,
 } from "./shopping-ingredient-resolution"
-import { createShoppingPurchaseKey } from "./shopping-list-normalization"
+import {
+  createShoppingPurchaseKey,
+  normalizeUnit,
+} from "./shopping-list-normalization"
 
 export type CurrentShoppingPreferencesV1 = {
   categoryOverrides?: Record<string, string> | null
@@ -60,6 +65,42 @@ export type ShoppingConversionResult =
   | { ok: true; state: ShoppingDocumentStateV1 }
   | { ok: false; issues: ShoppingConversionIssue[] }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value)
+}
+
+function isFiniteAmount(value: unknown): value is number | null {
+  return value === null ||
+    (typeof value === "number" && Number.isFinite(value) && value >= 0)
+}
+
+function isCurrentItem(value: unknown, requireBucket = false): value is ShoppingItem & {
+  bucket?: ShoppingBucket
+} {
+  if (!isRecord(value) || typeof value.item !== "string" || !value.item.trim() ||
+      !isFiniteAmount(value.amount) || typeof value.unit !== "string" ||
+      typeof value.categoryKey !== "string" || !value.categoryKey.trim() ||
+      typeof value.categoryOrder !== "number" || !Number.isFinite(value.categoryOrder) ||
+      (value.rowId !== undefined &&
+        (typeof value.rowId !== "string" || !value.rowId.trim())) ||
+      (value.checked !== undefined && typeof value.checked !== "boolean")) {
+    return false
+  }
+  if (requireBucket &&
+      value.bucket !== "items" && value.bucket !== "already_have" &&
+      value.bucket !== "excluded") return false
+  if (value.additionalAmounts !== undefined &&
+      (!Array.isArray(value.additionalAmounts) ||
+        !value.additionalAmounts.every((amount) => isRecord(amount) &&
+          isFiniteAmount(amount.amount) && amount.amount !== null &&
+          typeof amount.unit === "string"))) return false
+  return value.sources === undefined ||
+    (Array.isArray(value.sources) && value.sources.every((source) =>
+      isRecord(source) && typeof source.recipeName === "string" &&
+      (source.recipeId === undefined || typeof source.recipeId === "string") &&
+      (source.originalItem === undefined || typeof source.originalItem === "string")))
+}
+
 function quantityOf(item: ShoppingItem): ShoppingQuantity | null {
   if (item.amount == null && !item.exactQuantityV1 && !item.exactPackageV1)
     return null
@@ -70,6 +111,54 @@ function quantityOf(item: ShoppingItem): ShoppingQuantity | null {
     exactPackageV1: item.exactPackageV1,
     exactAuthoredUnit: item.exactAuthoredUnit,
   }
+}
+
+function additionalQuantitiesOf(item: ShoppingItem): ShoppingQuantity[] {
+  return (item.additionalAmounts || []).map((quantity) => ({
+    amount: quantity.amount,
+    unit: normalizeUnit(quantity.unit),
+  }))
+}
+
+function pantryMatchKeys(item: ShoppingItem, ingredientKey: string): string[] {
+  const alternativeMatch = item.item.match(/\s+\(or\s+(.+)\)$/i)
+  const alternatives = alternativeMatch
+    ? alternativeMatch[1].split(",").map((value) => createShoppingPurchaseKey(value))
+    : []
+  return [...new Set([ingredientKey, ...alternatives])]
+}
+
+function ingredientKeyOf(item: ShoppingItem): string {
+  const alternativeMatch = item.item.match(/^(.+?)\s+\(or\s+.+\)$/i)
+  return createShoppingPurchaseKey(
+    alternativeMatch ? alternativeMatch[1] : item.item,
+    item.amount,
+    item.unit
+  )
+}
+
+function exclusionFamilyOf(item: ShoppingItem) {
+  if (/\s+\(or\s+.+\)$/i.test(item.item)) return null
+  const sourceFamilies = (item.sources || []).flatMap((source) =>
+    source.originalItem
+      ? [matchIngredientExclusionFamily({
+          item: source.originalItem,
+          amount: source.originalAmount ?? null,
+          unit: source.originalUnit || item.unit,
+          modifier: source.prepIntent,
+        })]
+      : [])
+  if (sourceFamilies.length > 0) {
+    const family = sourceFamilies[0]
+    return family && sourceFamilies.every((candidate) => candidate === family)
+      ? family
+      : null
+  }
+  return matchIngredientExclusionFamily({
+    item: item.item,
+    amount: item.amount,
+    unit: item.unit,
+  })
 }
 
 function aggregateKeyFor(
@@ -93,29 +182,43 @@ function ingredientFromContributionItem(
   item: ShoppingItem,
   recipeId: string,
   scaleV1: RationalV1
-): ShoppingRecipeIngredientV1 {
-  const ingredientKey = createShoppingPurchaseKey(item.item, item.amount, item.unit)
-  const exclusionFamily = matchIngredientExclusionFamily({
-    item: item.item,
-    amount: item.amount,
-    unit: item.unit,
-  })
+): ShoppingRecipeIngredientV1[] {
+  const ingredientKey = ingredientKeyOf(item)
+  const exclusionFamily = exclusionFamilyOf(item)
   const unscaledQuantity = item.exactQuantityV1
     ? scaleQuantityV1(item.exactQuantityV1, {
         numerator: scaleV1.denominator,
         denominator: scaleV1.numerator,
-      }) || item.exactQuantityV1
+      }) || undefined
     : undefined
-  return {
+  const ingredient: ShoppingRecipeIngredientV1 = {
     ingredientKey,
-    aggregateKey: aggregateKeyFor(item, recipeId, unscaledQuantity),
+    aggregateKey: createShoppingAggregateKey(
+      ingredientKey,
+      item.structuredSourceKey
+        ? createShoppingAggregateDiscriminator(
+            recipeId,
+            unscaledQuantity || null,
+            item.exactPackageV1,
+            item.unit
+          ) || ["unresolved-structured", recipeId]
+        : null
+    ),
     displayName: item.item,
     quantity: quantityOf(item),
     purchaseUnit: item.unit || "",
     defaultCategoryKey: item.categoryKey,
-    pantryMatchKeys: [ingredientKey],
+    pantryMatchKeys: pantryMatchKeys(item, ingredientKey),
     exclusionFamily: exclusionFamily || undefined,
   }
+  return [
+    ingredient,
+    ...additionalQuantitiesOf(item).map((quantity) => ({
+      ...ingredient,
+      quantity,
+      purchaseUnit: quantity.unit,
+    })),
+  ]
 }
 
 function currentRows(list: ShoppingList): Array<{
@@ -131,8 +234,14 @@ function currentRows(list: ShoppingList): Array<{
     items.map((item, index) => ({ bucket, item, index })))
 }
 
-function sameQuantity(left: ShoppingQuantity | null, right: ShoppingQuantity | null): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
+function sameQuantity(item: ShoppingItem, projected: ProjectedShoppingRow): boolean {
+  return JSON.stringify({
+    quantity: quantityOf(item),
+    additionalQuantities: additionalQuantitiesOf(item),
+  }) === JSON.stringify({
+    quantity: projected.quantity,
+    additionalQuantities: projected.additionalQuantities || [],
+  })
 }
 
 function manualId(item: ShoppingItem, bucket: ShoppingBucket, index: number): string {
@@ -182,8 +291,11 @@ export function convertShoppingPersistenceV1(
   const recipeIds = new Set<string>()
   const aggregateKeysByLegacyKey = new Map<string, Set<AggregateKey>>()
   for (const [index, contribution] of contributions.entries()) {
-    if (!contribution || typeof contribution.recipeId !== "string" ||
-        !contribution.recipeId || !Array.isArray(contribution.items) ||
+    if (!isRecord(contribution) || typeof contribution.recipeId !== "string" ||
+        !contribution.recipeId || typeof contribution.recipeName !== "string" ||
+        !contribution.recipeName.trim() || !Array.isArray(contribution.items) ||
+        (contribution.normalizationVersion !== 1 &&
+          contribution.normalizationVersion !== 2) ||
         recipeIds.has(contribution.recipeId)) {
       issues.push({
         code: "malformed",
@@ -196,7 +308,11 @@ export function convertShoppingPersistenceV1(
     const scaleV1: RationalV1 | null =
       normalizeScaleRatioV1(contribution.scaleV1) ||
       normalizeScaleRatioV1(parseRationalLexeme(String(contribution.scale)))
-    if (!scaleV1 || !Number.isFinite(contribution.servings) || contribution.servings <= 0) {
+    const exactScale = scaleV1 ? rationalToNumber(scaleV1) : null
+    if (!scaleV1 || typeof contribution.scale !== "number" ||
+        !Number.isFinite(contribution.scale) || contribution.scale <= 0 ||
+        exactScale === null || Math.abs(exactScale - contribution.scale) > 0.000001 ||
+        !Number.isFinite(contribution.servings) || contribution.servings <= 0) {
       issues.push({
         code: "malformed",
         path: `contributions.${index}`,
@@ -204,10 +320,36 @@ export function convertShoppingPersistenceV1(
       })
       continue
     }
-    const ingredients = contribution.items.map((item) =>
+    const invalidItemIndex = contribution.items.findIndex((item) =>
+      !isCurrentItem(item, true))
+    if (invalidItemIndex >= 0) {
+      issues.push({
+        code: "malformed",
+        path: `contributions.${index}.items.${invalidItemIndex}`,
+        message: "Malformed frozen contribution row",
+      })
+      continue
+    }
+    const unscalableItemIndex = contribution.items.findIndex((item) => {
+      if (!item.exactQuantityV1) return false
+      return !scaleQuantityV1(item.exactQuantityV1, {
+        numerator: scaleV1.denominator,
+        denominator: scaleV1.numerator,
+      })
+    })
+    if (unscalableItemIndex >= 0) {
+      issues.push({
+        code: "malformed",
+        path: `contributions.${index}.items.${unscalableItemIndex}.exactQuantityV1`,
+        message: "Frozen exact quantity cannot be restored to its source scale",
+      })
+      continue
+    }
+    const ingredientGroups = contribution.items.map((item) =>
       ingredientFromContributionItem(item, contribution.recipeId, scaleV1))
+    const ingredients = ingredientGroups.flat()
     contribution.items.forEach((item, itemIndex) => {
-      const aggregateKey = ingredients[itemIndex].aggregateKey
+      const aggregateKey = ingredientGroups[itemIndex][0].aggregateKey
       for (const legacyKey of legacyContributionKeys(item)) {
         const matches = aggregateKeysByLegacyKey.get(legacyKey) || new Set()
         matches.add(aggregateKey)
@@ -215,8 +357,10 @@ export function convertShoppingPersistenceV1(
       }
     })
     const keyCounts = new Map<string, number>()
-    for (const ingredient of ingredients)
+    for (const ingredientGroup of ingredientGroups) {
+      const ingredient = ingredientGroup[0]
       keyCounts.set(ingredient.aggregateKey, (keyCounts.get(ingredient.aggregateKey) || 0) + 1)
+    }
     for (const [key, count] of keyCounts) {
       if (count > 1) issues.push({
         code: "identity-collision",
@@ -235,6 +379,28 @@ export function convertShoppingPersistenceV1(
   if (issues.length > 0) return { ok: false, issues }
 
   const preferences = input.preferences
+  if (preferences !== undefined && (!isRecord(preferences) ||
+      (preferences.categoryOverrides != null &&
+        (!isRecord(preferences.categoryOverrides) ||
+          !Object.values(preferences.categoryOverrides).every((value) =>
+            typeof value === "string"))) ||
+      (preferences.customCategories != null && !Array.isArray(preferences.customCategories)) ||
+      (preferences.categoryOrder != null &&
+        (!Array.isArray(preferences.categoryOrder) ||
+          !preferences.categoryOrder.every((value) => typeof value === "string"))) ||
+      (preferences.excludedKeywords != null &&
+        (!Array.isArray(preferences.excludedKeywords) ||
+          !preferences.excludedKeywords.every((value) => typeof value === "string"))) ||
+      (preferences.excludeSaltVariants != null &&
+        typeof preferences.excludeSaltVariants !== "boolean") ||
+      (preferences.excludeBlackPepperVariants != null &&
+        typeof preferences.excludeBlackPepperVariants !== "boolean"))) {
+    return { ok: false, issues: [{
+      code: "malformed",
+      path: "preferences",
+      message: "Malformed current Shopping preferences",
+    }] }
+  }
   document.preferences.customCategories = [...(preferences?.customCategories || [])]
   document.preferences.categoryOrder = [...(preferences?.categoryOrder || [])]
   document.preferences.excludeSaltVariants = preferences?.excludeSaltVariants ?? false
@@ -252,16 +418,22 @@ export function convertShoppingPersistenceV1(
   const order: RowRef[] = []
 
   for (const { bucket, item, index } of currentRows(currentList)) {
-    if (!item || typeof item.item !== "string" || typeof item.categoryKey !== "string") {
+    if (!isCurrentItem(item)) {
       issues.push({ code: "malformed", path: `${bucket}.${index}`, message: "Malformed rendered row" })
       continue
     }
-    const sourceIds = new Set((item.sources || []).flatMap((source) =>
+    const sources = item.sources || []
+    const sourceIds = new Set(sources.flatMap((source) =>
       source.recipeId ? [source.recipeId] : []))
     const activeIds = [...sourceIds].filter((id) => recipeIds.has(id))
-    const unknownRecipeSource = (item.sources || []).some((source) =>
-      source.recipeId && !recipeIds.has(source.recipeId))
-    if (activeIds.length > 0 && (unknownRecipeSource || activeIds.length !== sourceIds.size)) {
+    const unknownRecipeSource = sources.some((source) =>
+      source.recipeId
+        ? !recipeIds.has(source.recipeId)
+        : source.recipeName !== "Manual")
+    const hasManualSource = sources.some((source) =>
+      !source.recipeId && source.recipeName === "Manual")
+    if (activeIds.length > 0 &&
+        (unknownRecipeSource || hasManualSource || activeIds.length !== sourceIds.size)) {
       issues.push({
         code: "ambiguous-row",
         path: `${bucket}.${index}`,
@@ -271,13 +443,23 @@ export function convertShoppingPersistenceV1(
     }
 
     if (activeIds.length === 0) {
-      const hasNonManualProvenance = (item.sources || []).some((source) =>
-        source.recipeId || (source.recipeName && source.recipeName !== "Manual"))
-      if (hasNonManualProvenance) {
+      const explicitManual = sources.length > 0 && sources.every((source) =>
+        !source.recipeId && source.recipeName === "Manual")
+      const preservedLegacyManual = sources.length === 0 &&
+        currentList.legacy_items_preserved === true
+      if (!explicitManual && !preservedLegacyManual) {
         issues.push({
           code: "ambiguous-row",
           path: `${bucket}.${index}`,
           message: "Legacy recipe row cannot be deterministically assigned",
+        })
+        continue
+      }
+      if ((item.additionalAmounts || []).length > 0) {
+        issues.push({
+          code: "ambiguous-row",
+          path: `${bucket}.${index}`,
+          message: "Manual item with additional amounts is not representable in ShoppingDocumentV1",
         })
         continue
       }
@@ -330,7 +512,17 @@ export function convertShoppingPersistenceV1(
     const base = baseByKey.get(key)!
     const override: ShoppingItemOverrideV1 = {}
     if (item.item !== base.displayName) override.displayName = item.item
-    if (!sameQuantity(quantityOf(item), base.quantity)) override.quantity = quantityOf(item)
+    if (!sameQuantity(item, base)) {
+      if ((item.additionalAmounts || []).length > 0) {
+        issues.push({
+          code: "ambiguous-row",
+          path: `${bucket}.${index}`,
+          message: "Quantity override with additional amounts is not representable in ShoppingDocumentV1",
+        })
+        continue
+      }
+      override.quantity = quantityOf(item)
+    }
     if (item.categoryKey !== base.categoryKey) override.categoryKey = item.categoryKey
     if (bucket !== base.bucket) override.bucket = bucket
     if (item.checked) override.checked = true

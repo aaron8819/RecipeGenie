@@ -49,6 +49,7 @@ export type ResolvedShoppingIngredient = {
   defaultCategoryOrder: number
   pantryMatchKeys: IngredientKey[]
   exclusionFamily?: IngredientExclusionFamily
+  citrusPrep?: "juiced" | "zested"
   sourceOrdinal: number
   runtime: {
     amount: number
@@ -193,6 +194,12 @@ export function resolveShoppingIngredient({
     purchaseUnit
   )
   const exclusionFamily = matchIngredientExclusionFamily(ingredient)
+  const citrusPrep =
+    (purchase.purchaseName === "lemon" || purchase.purchaseName === "lime") &&
+    purchaseUnit === "count" &&
+    (purchase.prepIntent === "juiced" || purchase.prepIntent === "zested")
+      ? purchase.prepIntent
+      : undefined
 
   return {
     ingredientKey,
@@ -213,6 +220,7 @@ export function resolveShoppingIngredient({
     defaultCategoryOrder,
     pantryMatchKeys,
     exclusionFamily: exclusionFamily || undefined,
+    citrusPrep,
     sourceOrdinal,
     runtime: {
       amount,

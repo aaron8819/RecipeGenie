@@ -5,6 +5,7 @@ import {
   type RecipeShoppingContribution,
 } from "../shopping-contributions"
 import { convertShoppingPersistenceV1 } from "../shopping-document-converter"
+import { projectShoppingDocument } from "../shopping-document"
 
 function row(
   amount: number,
@@ -156,6 +157,70 @@ describe("convertShoppingPersistenceV1", () => {
     if (result.ok) expect(result.state.document.itemOverrides).toEqual({})
   })
 
+  it("preserves incompatible contribution quantities without turning them into overrides", () => {
+    const recipe = contribution("a", 1)
+    recipe.items[0].additionalAmounts = [{ amount: 8, unit: "oz" }]
+    const result = convertShoppingPersistenceV1({
+      currentList: list({
+        items: [row(1, [{ recipeId: "a", recipeName: "Recipe a" }], {
+          additionalAmounts: [{ amount: 8, unit: "oz" }],
+        })],
+      }),
+      contributions: [recipe],
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.document.recipeEntries.a.ingredients).toHaveLength(2)
+    expect(projectShoppingDocument(result.state.document).rows[0]).toMatchObject({
+      quantity: { amount: 1, unit: "cup" },
+      additionalQuantities: [{ amount: 8, unit: "oz" }],
+    })
+    expect(result.state.document.itemOverrides).toEqual({})
+  })
+
+  it("fails closed for an unrepresentable override with additional quantities", () => {
+    const recipe = contribution("a", 1)
+    recipe.items[0].additionalAmounts = [{ amount: 8, unit: "oz" }]
+    const result = convertShoppingPersistenceV1({
+      currentList: list({
+        items: [row(1, [{ recipeId: "a", recipeName: "Recipe a" }], {
+          additionalAmounts: [{ amount: 4, unit: "oz" }],
+        })],
+      }),
+      contributions: [recipe],
+    })
+    expect(result).toMatchObject({ ok: false, issues: [{ code: "ambiguous-row" }] })
+  })
+
+  it("retains primary and alternative Pantry identities from frozen source evidence", () => {
+    const recipe = contribution("a", 1)
+    recipe.items[0] = {
+      ...recipe.items[0],
+      item: "yogurt (or sour cream)",
+      sources: [{
+        recipeId: "a",
+        recipeName: "Recipe a",
+        originalItem: "yogurt",
+      }],
+    }
+    const result = convertShoppingPersistenceV1({
+      currentList: list({ already_have: [{ ...recipe.items[0] }] }),
+      contributions: [recipe],
+      pantryItems: [{ item: "sour cream" } as PantryItem],
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.state.document.recipeEntries.a.ingredients[0].pantryMatchKeys).toEqual([
+      "yogurt",
+      "sour cream",
+    ])
+    expect(projectShoppingDocument(
+      result.state.document,
+      [{ item: "sour cream" } as PantryItem]
+    ).alreadyHave).toHaveLength(1)
+  })
+
   it("fails closed for ambiguous mixed provenance", () => {
     const result = convertShoppingPersistenceV1({
       currentList: list({
@@ -169,12 +234,51 @@ describe("convertShoppingPersistenceV1", () => {
     expect(result).toMatchObject({ ok: false, issues: [{ code: "ambiguous-row" }] })
   })
 
+  it("fails closed when a rendered row mixes recipe and Manual provenance", () => {
+    const result = convertShoppingPersistenceV1({
+      currentList: list({
+        items: [row(2, [
+          { recipeId: "a", recipeName: "Recipe a" },
+          { recipeName: "Manual" },
+        ])],
+      }),
+      contributions: [contribution("a", 1)],
+    })
+    expect(result).toMatchObject({ ok: false, issues: [{ code: "ambiguous-row" }] })
+  })
+
+  it("fails closed instead of dropping a manual item's additional amount", () => {
+    const result = convertShoppingPersistenceV1({
+      currentList: list({
+        items: [row(1, [{ recipeName: "Manual" }], {
+          rowId: "manual-a",
+          additionalAmounts: [{ amount: 8, unit: "oz" }],
+        })],
+      }),
+      contributions: [],
+    })
+    expect(result).toMatchObject({ ok: false, issues: [{ code: "ambiguous-row" }] })
+  })
+
   it("fails closed for malformed current persistence", () => {
     const malformed = list() as any
     malformed.items = null
     expect(convertShoppingPersistenceV1({
       currentList: malformed,
       contributions: [],
+    })).toMatchObject({ ok: false, issues: [{ code: "malformed" }] })
+  })
+
+  it("returns a malformed issue instead of throwing for a corrupt contribution row", () => {
+    const malformed = contribution("a", 1) as any
+    malformed.items = [null]
+    expect(() => convertShoppingPersistenceV1({
+      currentList: list(),
+      contributions: [malformed],
+    })).not.toThrow()
+    expect(convertShoppingPersistenceV1({
+      currentList: list(),
+      contributions: [malformed],
     })).toMatchObject({ ok: false, issues: [{ code: "malformed" }] })
   })
 })

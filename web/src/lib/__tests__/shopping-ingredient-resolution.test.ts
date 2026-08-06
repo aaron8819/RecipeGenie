@@ -102,4 +102,16 @@ describe("resolveShoppingIngredient", () => {
     expect(first.aggregateKey).toBe(equivalent.aggregateKey)
     expect(first.aggregateKey).not.toBe(distinct.aggregateKey)
   })
+
+  it("retains the narrow citrus overlap intent needed by the projector", () => {
+    const resolved = resolveShoppingIngredient({
+      ingredient: { item: "lemon, zested", amount: 1, unit: "count" },
+      recipeId: "recipe-a",
+    })
+    expect(resolved).toMatchObject({
+      ingredientKey: "lemon",
+      purchaseUnit: "count",
+      citrusPrep: "zested",
+    })
+  })
 })

@@ -265,6 +265,7 @@ type ShoppingDocumentV1 = {
       defaultCategoryKey: string
       pantryMatchKeys: IngredientKey[]
       exclusionFamily?: 'salt' | 'black-pepper'
+      citrusPrep?: 'juiced' | 'zested'
     }>
   }>
 
@@ -386,6 +387,10 @@ Shopping consumes the resolved output and does not normalize names again in
 the projector. Raw unresolved ingredient data remains in the recipe and is not
 duplicated in the Shopping document. A compact display/source label may be
 stored only when the current UI actually renders it.
+
+The narrow optional `citrusPrep` source field retains the existing rule that
+juice and zest needs for the same lemon or lime in one recipe overlap rather
+than add. It is resolver output needed for aggregation, not rendered-row state.
 
 After this boundary is authoritative, projection-time calls to
 `createShoppingPurchaseKey()`, `canonicalizeStoredContributionKey()`,

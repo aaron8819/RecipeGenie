@@ -42,6 +42,7 @@ function entry(
       defaultCategoryKey: resolved.defaultCategoryKey,
       pantryMatchKeys: resolved.pantryMatchKeys,
       exclusionFamily: resolved.exclusionFamily,
+      citrusPrep: resolved.citrusPrep,
     }],
   }
 }
@@ -114,6 +115,34 @@ describe("Shopping document projection", () => {
     expect(projectShoppingDocument(document).rows).toHaveLength(2)
   })
 
+  it("does not double-count one recipe's overlapping citrus prep", () => {
+    const document = createEmptyShoppingDocument()
+    const citrus = (item: string) => {
+      const resolved = resolveShoppingIngredient({
+        ingredient: { item, amount: 1, unit: "count" },
+        recipeId: "a",
+      })
+      return {
+        ingredientKey: resolved.ingredientKey,
+        aggregateKey: resolved.aggregateKey,
+        displayName: resolved.displayName,
+        quantity: resolved.quantity,
+        purchaseUnit: resolved.purchaseUnit,
+        defaultCategoryKey: resolved.defaultCategoryKey,
+        pantryMatchKeys: resolved.pantryMatchKeys,
+        citrusPrep: resolved.citrusPrep,
+      }
+    }
+    document.recipeEntries.a = {
+      recipeId: "a",
+      recipeName: "Recipe a",
+      selectedServings: 4,
+      scaleV1: { numerator: "1", denominator: "1" },
+      ingredients: [citrus("lemon, juiced"), citrus("lemon, zested")],
+    }
+    expect(projectShoppingDocument(document).rows[0].quantity?.amount).toBe(1)
+  })
+
   it("reprojects replacement recipe quantities at a new scale", () => {
     const document = createEmptyShoppingDocument()
     document.recipeEntries.a = entry("a", "milk", 1, { unit: "cup" })
@@ -156,20 +185,17 @@ describe("Shopping document projection", () => {
     const original = structuredClone(document)
     expect(projectShoppingDocument(document).items).toHaveLength(1)
     expect(projectShoppingDocument(document, [{ item: "kosher salt" } as PantryItem]).alreadyHave).toHaveLength(1)
-    expect(projectShoppingDocument(document, [], {
-      exclude_salt_variants: true,
-      exclude_black_pepper_variants: false,
-    }).excluded[0].excludedBy).toBe("Salt variants")
+    document.preferences.excludeSaltVariants = true
+    expect(projectShoppingDocument(document).excluded[0].excludedBy).toBe("Salt variants")
+    document.preferences.excludeSaltVariants = false
     expect(document).toEqual(original)
   })
 
   it("keeps bare pepper visible under black-pepper exclusion", () => {
     const document = createEmptyShoppingDocument()
     document.recipeEntries.a = entry("a", "pepper", 1, { unit: "tsp" })
-    expect(projectShoppingDocument(document, [], {
-      exclude_salt_variants: false,
-      exclude_black_pepper_variants: true,
-    }).items).toHaveLength(1)
+    document.preferences.excludeBlackPepperVariants = true
+    expect(projectShoppingDocument(document).items).toHaveLength(1)
   })
 })
 
@@ -178,7 +204,7 @@ describe("Shopping document reducers", () => {
     let state: ShoppingDocumentStateV1 = { document: createEmptyShoppingDocument(), contentRevision: 0 }
     state = applyShoppingDocumentMutation(state, { type: "upsertRecipe", entry: entry("a", "apple") })
     const key = state.document.recipeEntries.a.ingredients[0].aggregateKey
-    state = applyShoppingDocumentMutation(state, { type: "setChecked", aggregateKey: key, checked: true })
+    state = applyShoppingDocumentMutation(state, { type: "setChecked", rowRef: `derived:${key}`, checked: true })
     state = applyShoppingDocumentMutation(state, { type: "rescaleRecipe", entry: entry("a", "milk", 2, { unit: "cup" }) })
     expect(Object.keys(state.document.recipeEntries)).toEqual(["a"])
     expect(state.document.itemOverrides).toEqual({})
@@ -199,11 +225,41 @@ describe("Shopping document reducers", () => {
     ] as const
     for (const mutation of mutations) state = applyShoppingDocumentMutation(state, mutation)
     state = applyShoppingDocumentMutation(state, { type: "setOrder", order: ["manual:m", `derived:${key}`] })
-    state = applyShoppingDocumentMutation(state, { type: "editManualItem", item: { ...state.document.manualItems[0], checked: true } })
+    state = applyShoppingDocumentMutation(state, {
+      type: "editManualItem",
+      id: "m",
+      changes: { displayName: "foil roll" },
+    })
+    state = applyShoppingDocumentMutation(state, {
+      type: "setChecked",
+      rowRef: "manual:m",
+      checked: true,
+    })
     expect(state.document.order).toEqual(["manual:m", `derived:${key}`])
+    expect(state.document.manualItems[0].displayName).toBe("foil roll")
     expect(state.document.manualItems[0].checked).toBe(true)
     state = applyShoppingDocumentMutation(state, { type: "deleteManualItem", id: "m" })
     expect(state.document.order).toEqual([`derived:${key}`])
+  })
+
+  it("writes a category override and its future ingredient preference together", () => {
+    let state: ShoppingDocumentStateV1 = {
+      document: createEmptyShoppingDocument(),
+      contentRevision: 2,
+    }
+    state = applyShoppingDocumentMutation(state, {
+      type: "upsertRecipe",
+      entry: entry("a", "apple"),
+    })
+    const ingredient = state.document.recipeEntries.a.ingredients[0]
+    state = applyShoppingDocumentMutation(state, {
+      type: "setCategoryOverride",
+      aggregateKey: ingredient.aggregateKey,
+      categoryKey: "pantry",
+    })
+    expect(state.document.itemOverrides[ingredient.aggregateKey].categoryKey).toBe("pantry")
+    expect(state.document.preferences.categoryByIngredient[ingredient.ingredientKey]).toBe("pantry")
+    expect(state.contentRevision).toBe(4)
   })
 
   it("increments once for a change and replays idempotently on a refetched document", () => {
@@ -216,6 +272,27 @@ describe("Shopping document reducers", () => {
     }, mutation)
     expect(applied.contentRevision).toBe(11)
     expect(replayed.contentRevision).toBe(20)
+  })
+
+  it("replays a manual checked intent without overwriting concurrent fields", () => {
+    const document = createEmptyShoppingDocument()
+    document.manualItems.push({
+      id: "m",
+      displayName: "concurrently renamed foil",
+      quantity: null,
+      categoryKey: "misc",
+      bucket: "items",
+      checked: false,
+    })
+    const replayed = applyShoppingDocumentMutation(
+      { document, contentRevision: 8 },
+      { type: "setChecked", rowRef: "manual:m", checked: true }
+    )
+    expect(replayed.document.manualItems[0]).toMatchObject({
+      displayName: "concurrently renamed foil",
+      checked: true,
+    })
+    expect(replayed.contentRevision).toBe(9)
   })
 
   it("complete clears content intent and retains preferences", () => {

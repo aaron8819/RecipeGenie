@@ -37,6 +37,7 @@ export type ShoppingRecipeIngredientV1 = {
   defaultCategoryKey: string
   pantryMatchKeys: IngredientKey[]
   exclusionFamily?: "salt" | "black-pepper"
+  citrusPrep?: "juiced" | "zested"
 }
 
 export type ShoppingRecipeEntryV1 = {
@@ -164,6 +165,7 @@ function validIngredient(value: unknown): value is ShoppingRecipeIngredientV1 {
     "defaultCategoryKey",
     "pantryMatchKeys",
     "exclusionFamily",
+    "citrusPrep",
   ])) return false
   return isNonEmptyString(value.ingredientKey) &&
     isNonEmptyString(value.aggregateKey) &&
@@ -177,7 +179,11 @@ function validIngredient(value: unknown): value is ShoppingRecipeIngredientV1 {
     new Set(value.pantryMatchKeys).size === value.pantryMatchKeys.length &&
     (value.exclusionFamily === undefined ||
       value.exclusionFamily === "salt" ||
-      value.exclusionFamily === "black-pepper")
+      value.exclusionFamily === "black-pepper") &&
+    (value.citrusPrep === undefined ||
+      ((value.citrusPrep === "juiced" || value.citrusPrep === "zested") &&
+        (value.ingredientKey === "lemon" || value.ingredientKey === "lime") &&
+        value.purchaseUnit === "count"))
 }
 
 function validOverride(value: unknown): value is ShoppingItemOverrideV1 {
@@ -425,6 +431,21 @@ function mergeQuantity(
   return { primary, additional: [...next, incoming] }
 }
 
+type CitrusPrepNeeds = { juiced: number; zested: number }
+
+function citrusAmountToMerge(
+  prepByRecipe: Map<string, CitrusPrepNeeds>,
+  recipeId: string,
+  prep: "juiced" | "zested",
+  amount: number
+): number {
+  const previous = prepByRecipe.get(recipeId) || { juiced: 0, zested: 0 }
+  const previousApplied = Math.max(previous.juiced, previous.zested)
+  const next = { ...previous, [prep]: previous[prep] + amount }
+  prepByRecipe.set(recipeId, next)
+  return Math.max(next.juiced, next.zested) - previousApplied
+}
+
 function derivedClassification(
   occurrences: Occurrence[],
   pantry: Set<string>,
@@ -454,11 +475,10 @@ function derivedClassification(
 
 export function projectShoppingDocument(
   document: ShoppingDocumentV1,
-  pantryItems: PantryItem[] = [],
-  exclusionSettings?: IngredientExclusionSettings
+  pantryItems: PantryItem[] = []
 ): ShoppingDocumentProjection {
   const pantry = new Set(pantryItems.map((item) => createShoppingPurchaseKey(item.item)))
-  const settings = exclusionSettings || {
+  const settings: IngredientExclusionSettings = {
     exclude_salt_variants: document.preferences.excludeSaltVariants,
     exclude_black_pepper_variants: document.preferences.excludeBlackPepperVariants,
   }
@@ -477,8 +497,22 @@ export function projectShoppingDocument(
     if (override?.suppressed) continue
     let quantity: ShoppingQuantity | null = null
     let additionalQuantities: ShoppingQuantity[] = []
+    const citrusPrepByRecipe = new Map<string, CitrusPrepNeeds>()
     for (const occurrence of occurrences) {
-      const merged = mergeQuantity(quantity, additionalQuantities, occurrence.quantity)
+      const occurrenceQuantity = occurrence.citrusPrep &&
+          occurrence.quantity?.amount != null &&
+          occurrence.quantity.unit === "count"
+        ? {
+            ...occurrence.quantity,
+            amount: citrusAmountToMerge(
+              citrusPrepByRecipe,
+              occurrence.recipeId,
+              occurrence.citrusPrep,
+              occurrence.quantity.amount
+            ),
+          }
+        : occurrence.quantity
+      const merged = mergeQuantity(quantity, additionalQuantities, occurrenceQuantity)
       quantity = merged.primary
       additionalQuantities = merged.additional
     }
@@ -548,7 +582,7 @@ export type ShoppingDocumentMutation =
   | { type: "upsertRecipe"; entry: ShoppingRecipeEntryV1 }
   | { type: "rescaleRecipe"; entry: ShoppingRecipeEntryV1 }
   | { type: "removeRecipe"; recipeId: string }
-  | { type: "setChecked"; aggregateKey: AggregateKey; checked: boolean }
+  | { type: "setChecked"; rowRef: RowRef; checked: boolean }
   | { type: "setQuantityOverride"; aggregateKey: AggregateKey; quantity: ShoppingQuantity | null | undefined }
   | { type: "setDisplayNameOverride"; aggregateKey: AggregateKey; displayName?: string }
   | { type: "setCategoryOverride"; aggregateKey: AggregateKey; categoryKey?: string }
@@ -557,7 +591,11 @@ export type ShoppingDocumentMutation =
   | { type: "setIngredientCategory"; ingredientKey: IngredientKey; categoryKey?: string }
   | { type: "setOrder"; order: RowRef[] }
   | { type: "addManualItem"; item: ShoppingManualItemV1 }
-  | { type: "editManualItem"; item: ShoppingManualItemV1 }
+  | {
+      type: "editManualItem"
+      id: string
+      changes: Partial<Omit<ShoppingManualItemV1, "id">>
+    }
   | { type: "deleteManualItem"; id: string }
   | { type: "complete" }
 
@@ -617,10 +655,23 @@ function reduceDocument(
       delete recipeEntries[mutation.recipeId]
       return pruneDocument({ ...document, recipeEntries })
     }
-    case "setChecked":
-      return updateOverride(document, mutation.aggregateKey, (current) =>
-        mutation.checked ? { ...current, checked: true } :
-          Object.fromEntries(Object.entries(current).filter(([key]) => key !== "checked")))
+    case "setChecked": {
+      if (mutation.rowRef.startsWith("derived:")) {
+        const aggregateKey = mutation.rowRef.slice("derived:".length)
+        return updateOverride(document, aggregateKey, (current) =>
+          mutation.checked ? { ...current, checked: true } :
+            Object.fromEntries(Object.entries(current).filter(([key]) => key !== "checked")))
+      }
+      const id = mutation.rowRef.slice("manual:".length)
+      if (!document.manualItems.some((item) => item.id === id)) return document
+      return {
+        ...document,
+        manualItems: document.manualItems.map((item) =>
+          item.id === id && item.checked !== mutation.checked
+            ? { ...item, checked: mutation.checked }
+            : item),
+      }
+    }
     case "setQuantityOverride":
       return updateOverride(document, mutation.aggregateKey, (current) => {
         if (mutation.quantity === undefined)
@@ -634,13 +685,28 @@ function reduceDocument(
         else delete next.displayName
         return next
       })
-    case "setCategoryOverride":
-      return updateOverride(document, mutation.aggregateKey, (current) => {
-        const next = { ...current }
-        if (mutation.categoryKey) next.categoryKey = mutation.categoryKey
-        else delete next.categoryKey
-        return next
-      })
+    case "setCategoryOverride": {
+        const updated = updateOverride(document, mutation.aggregateKey, (current) => {
+          const next = { ...current }
+          if (mutation.categoryKey) next.categoryKey = mutation.categoryKey
+          else delete next.categoryKey
+          return next
+        })
+        if (updated === document) return document
+        const ingredientKeys = new Set(Object.values(document.recipeEntries)
+          .flatMap((entry) => entry.ingredients)
+          .filter((ingredient) => ingredient.aggregateKey === mutation.aggregateKey)
+          .map((ingredient) => ingredient.ingredientKey))
+        const categoryByIngredient = { ...updated.preferences.categoryByIngredient }
+        for (const ingredientKey of ingredientKeys) {
+          if (mutation.categoryKey) categoryByIngredient[ingredientKey] = mutation.categoryKey
+          else delete categoryByIngredient[ingredientKey]
+        }
+        return {
+          ...updated,
+          preferences: { ...updated.preferences, categoryByIngredient },
+        }
+    }
     case "setBucketOverride":
       return updateOverride(document, mutation.aggregateKey, (current) => {
         const next = { ...current }
@@ -670,11 +736,27 @@ function reduceDocument(
       return document.manualItems.some((item) => item.id === mutation.item.id)
         ? document
         : { ...document, manualItems: [...document.manualItems, mutation.item] }
-    case "editManualItem":
-      return document.manualItems.some((item) => item.id === mutation.item.id)
-        ? { ...document, manualItems: document.manualItems.map((item) =>
-            item.id === mutation.item.id ? mutation.item : item) }
-        : document
+    case "editManualItem": {
+      if (!document.manualItems.some((item) => item.id === mutation.id)) return document
+      return {
+        ...document,
+        manualItems: document.manualItems.map((item) => {
+          if (item.id !== mutation.id) return item
+          const next = { ...item }
+          if (mutation.changes.displayName !== undefined)
+            next.displayName = mutation.changes.displayName
+          if (mutation.changes.quantity !== undefined)
+            next.quantity = mutation.changes.quantity
+          if (mutation.changes.categoryKey !== undefined)
+            next.categoryKey = mutation.changes.categoryKey
+          if (mutation.changes.bucket !== undefined)
+            next.bucket = mutation.changes.bucket
+          if (mutation.changes.checked !== undefined)
+            next.checked = mutation.changes.checked
+          return next
+        }),
+      }
+    }
     case "deleteManualItem":
       return pruneDocument({ ...document, manualItems: document.manualItems.filter((item) =>
         item.id !== mutation.id) })
