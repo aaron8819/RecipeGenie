@@ -57,6 +57,15 @@ Create and validate a logical backup:
 For the cleanup migration, add
 `-MigrationPath supabase/migrations/017_remove_legacy_recipe_structure.sql`.
 
+After an operator restores that exact archive to an already prepared loopback
+disposable target, record migration-017 restore evidence with:
+
+    pwsh -File .\scripts\database\Confirm-RecipeGenieMigration017Restore.ps1 -BackupDirectory '<backup-directory>' -ExpectedProjectReference '<project-ref>' -ConfirmDisposableTarget
+
+The confirmation is read-only against the disposable database. Restore
+execution and the preparation/finalization procedure remain separately
+authorized operator steps.
+
 For a deliberately supplied compatible session pooler:
 
     pwsh -File .\scripts\database\Backup-RecipeGenieProduction.ps1 -DestinationRoot 'C:\Users\<user>\RecipeGenieBackups' -AllowSessionPooler
@@ -105,11 +114,13 @@ The database URL is parsed once and supplied to PostgreSQL tools through tempora
 
 Each backup is bound to one supported migration definition and its matching read-only preflight. A definition fixes the expected applied migration range, pending migration number and path, production project reference, and restore policy. SHA-256 values are computed from the exact Git blobs at `gitCommitSha`; the manifest records both paths, hashes, and commit identity. The migration assertion requires the current HEAD, clean-filter worktree content, manifest commit, migration hash, and preflight hash all to agree. Migrations 012, 013, 014, 016, and 017 always require `restoreVerified=true`, even if the caller omits `-RequireRestoreVerification`.
 
-For migration 017, the archive contract requires the post-016 canonical recipe
-tables, validators, acceptance/new-user writers, and exact ledger through 016.
-Its preflight validates canonical recipe and share structure without returning
-customer content. It does not replace or modify the commit-bound migration-016
-recovery artifacts.
+For migration 017, the archive contract requires the exact post-016 recipe and
+share tables, canonical validators, migration-016 converters, acceptance/new-user
+writers, aggregate recipe/share counts, and ledger through 016. The manifest
+binds the migration-017 restore assertion and preparation/finalization hashes to
+the same tooling commit. Its preflight and restore assertion validate canonical
+recipe/share structure without returning customer content. These files do not
+replace or modify the commit-bound migration-016 recovery artifacts.
 
 Migration 016 is the one narrow exception to the usual same-commit layout. Its recovery tooling must land before the reviewed cutover, so `-EvidenceCommitSha` identifies the exact reviewed commit containing migration 016 and its canonical aggregate preflight while `toolingCommitSha` identifies the recovery implementation. Both commits and all five Git-blob hashes (migration, preflight, restore preparation, restore finalization, and restore assertion) are recorded and checked. Other migrations reject a separate evidence commit, and unrecognized future migrations remain unsupported.
 
@@ -152,9 +163,20 @@ Control-plane verification confirms project metadata and endpoint compatibility;
 
 An isolated compatible Supabase project or Supabase-local environment is preferred. Generic PostgreSQL is acceptable only when every required schema/extension is supported. Supabase-managed configuration, Auth platform configuration, global roles, secrets, and Storage object payloads need separate recovery treatment. Storage object files in recipe-images are not in database.dump.
 
-The Free-plan operating model has no assumed Supabase-managed PITR. For migration 016 only, `Confirm-RecipeGenieMigration016Restore.ps1` may update `restoreVerified` and `restoreVerification` after an operator has restored the exact unchanged archive to a compatible Supabase-local disposable target. The confirmation script is read-only against that target, accepts loopback database URLs only through `RECIPE_GENIE_DISPOSABLE_RESTORE_DATABASE_URL`, rechecks the archive and commit-bound assertion hashes, and records only aggregate matches. It does not restore an archive, contact production, authorize migration execution, or set `storageFilesBackedUp=true`.
+The Free-plan operating model has no assumed Supabase-managed PITR. For migrations 016 and 017, the matching `Confirm-RecipeGenieMigration*Restore.ps1` script may update `restoreVerified` and `restoreVerification` after an operator has restored the exact unchanged archive to a compatible Supabase-local disposable target. Each confirmation script is read-only against that target, accepts loopback database URLs only through `RECIPE_GENIE_DISPOSABLE_RESTORE_DATABASE_URL`, rechecks the archive and commit-bound assertion hashes, and records only aggregate matches. It does not restore an archive, contact production, authorize migration execution, or set `storageFilesBackedUp=true`.
 
 The migration-016 assertion requires the exact 001-through-015 ledger, the legacy recipe-structure columns, absence of the post-016 canonical columns/functions/constraints, the pre-016 share validator and RPCs, the `auth.users` insert trigger bound to `public.handle_new_user()`, matching recipe/share counts, and zero invalid share snapshots. Use the repository backup command with both `-MigrationPath supabase/migrations/016_canonical_recipe_structure_cutover.sql` and the exact reviewed `-EvidenceCommitSha`, restore that archive under the existing separately authorized disposable-restore procedure, then run the confirmation script with `-ConfirmDisposableTarget`. Because the archive intentionally excludes the managed `auth` schema and cannot know about functions introduced after it was created, an exact clean recovery from the post-016 state uses the commit-bound `016_prepare_clean_restore.sql` before `pg_restore` and `016_finalize_clean_restore.sql` afterward. Preparation fails unless the ledger/schema are exactly post-016, detaches the external Auth trigger, and removes only migration-016 functions and constraints that would block the archive clean phase. Finalization fails unless the archive restored the exact pre-016 state, then recreates the same trigger binding. The aggregate assertion fails if any expected recovery state is absent or changed. The final migration gate repeats the same migration path and evidence commit arguments.
+
+The migration-017 assertion requires the exact 001-through-016 ledger, both
+canonical and frozen legacy columns, canonical constraints, validators and
+conversion helpers, the Auth trigger binding, matching recipe/share counts, and
+valid canonical recipe/share structure. `017_prepare_clean_restore.sql` fails
+unless the disposable target is exactly post-017, detaches the external Auth
+trigger, and removes only the surviving canonical constraints and validators
+that would block the archive clean phase. `017_finalize_clean_restore.sql`
+requires the restored post-016 schema and recreates the trigger binding. The
+migration-017 confirmation rejects production or remote endpoints and records
+only the assertion hashes and aggregate booleans.
 
 Emergency recovery outline: stop writes, verify the exact artifact/hash and recovery target, obtain restore authorization, provision an isolated compatible target, restore without suppressing errors, validate ledger/schema/data/security objects, then choose a reviewed forward repair or controlled cutover. Do not overwrite production as an exploratory restore.
 

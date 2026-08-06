@@ -25,6 +25,7 @@ try {
     $definition = Get-RecipeGenieMigrationBackupDefinition -MigrationPath $MigrationPath
     if ($ExpectedProjectReference -cne $definition.ExpectedProjectReference) { throw 'Expected project reference is not the approved Recipe Genie production project.' }
     $allowExternalEvidence = $definition.PSObject.Properties['AllowExternalEvidenceCommit'] -and $definition.AllowExternalEvidenceCommit -eq $true
+    $hasBoundRestoreEvidence = $null -ne $definition.PSObject.Properties['RestoreAssertionPath']
     if ($allowExternalEvidence) {
         if ($EvidenceCommitSha -cne [string]$definition.ExpectedEvidenceCommitSha) { throw 'Migration 016 requires the exact approved evidence commit SHA.' }
         $evidenceCommit = $EvidenceCommitSha
@@ -56,7 +57,8 @@ try {
         if (-not (Test-Path -LiteralPath $preflightFullPath -PathType Leaf) -or -not (Test-GitPathMatchesCommit $repositoryRoot $evidenceCommit $preflightPath $gitExecutablePath)) {
             throw 'Migration preflight worktree file does not match the recorded commit.'
         }
-    } else {
+    }
+    if ($hasBoundRestoreEvidence) {
         $restoreAssertionPath = [string]$definition.RestoreAssertionPath
         $restoreAssertionHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $toolingCommit -RepositoryRelativePath $restoreAssertionPath -GitExecutablePath $gitExecutablePath
         if ($manifest.restoreAssertion.path -ne $restoreAssertionPath -or $manifest.restoreAssertion.commitSha -ne $toolingCommit -or $manifest.restoreAssertion.sha256 -ne $restoreAssertionHash) {

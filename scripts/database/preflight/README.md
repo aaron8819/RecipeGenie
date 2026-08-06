@@ -32,4 +32,7 @@ CI evaluates every fixture independently first against schema 013 plus the compl
 
 The expected application evidence is the deployed Stage 2C application-ahead compatibility bridge plus the deletion-integrity repair. Repository history records those as deployed, but an operator must verify the authorized production application version at execution time. SQL must not infer it.
 
-Do not run a preflight merely because a backup exists. Migrations 012 through 014 change active-write or RPC authority and separately require a verified disposable restore.
+Do not run a preflight merely because a backup exists. Migrations 012 through
+014 and destructive migration 017 separately require a verified disposable
+restore. Migration 017 binds its aggregate-only post-016 restore assertion and
+preparation/finalization procedure to the backup tooling commit.
