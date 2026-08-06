@@ -637,6 +637,16 @@ adding safety.
   projector and converter are proven without creating a second runtime
   persistence authority.
 
+Implementation note (PR 1): `ShoppingDocumentV1` remains pure domain code and
+is not read or written by the current Shopping runtime. The CAS
+`content_revision` is represented by a small state envelope rather than being
+added to the JSON document. `resolveShoppingIngredient()`, the validator,
+projector, and reducers are intended to survive the cutover; the resolver's
+current-generator compatibility fields and `convertShoppingPersistenceV1()`
+are temporary cutover helpers. PR 2 still owns the atomic persistence switch
+and deletion of the contribution, command, rendered-bucket, repair, and split
+configuration machinery.
+
 ### PR 2: Atomic document cutover and physical cleanup
 
 - **Scope:** Add migration 018 for the document/revision contract, convert and

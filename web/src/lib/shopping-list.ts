@@ -14,30 +14,19 @@ import { categorizeIngredient, getExcludedKeyword } from "./shopping-categories"
 import {
   createShoppingPurchaseKey,
   normalizeItemName,
-  normalizeShoppingPurchase,
   normalizeUnit,
 } from "./shopping-list-normalization"
 import type { ShoppingItemOrderPreferences } from "./shopping-item-order"
 import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
-import { getIngredientQuantityRange } from "./recipe-parser"
 import { flattenRecipeIngredients } from "./recipe-structure"
-import {
-  normalizeScaleRatioV1,
-  normalizeQuantityV1,
-  parseRationalLexeme,
-  rationalToNumber,
-  resolveIngredientQuantity,
-  scalePackageV1,
-  scaleQuantityV1,
-} from "./recipe-quantity"
 import {
   INGREDIENT_EXCLUSION_REASONS,
   isIngredientExclusionEnabled,
-  matchIngredientExclusionFamily,
   type IngredientExclusionFamily,
   type IngredientExclusionSettings,
 } from "./ingredient-exclusion-families"
+import { resolveShoppingIngredient } from "./shopping-ingredient-resolution"
 
 export interface ShoppingListResult {
   items: ShoppingItem[]
@@ -203,66 +192,32 @@ export function generateShoppingList(
   >()
 
   let totalBaseServings = 0
-  const validatedScale =
-    normalizeScaleRatioV1(exactScaleV1) ||
-    normalizeScaleRatioV1(parseRationalLexeme(String(scale))) ||
-    undefined
-
   for (const recipe of recipes) {
     totalBaseServings += recipe.servings || 4
 
     for (const [ingredientIndex, ingredient] of flattenRecipeIngredients(
       recipe.ingredientSections
     ).entries()) {
-      const quantityRange = getIngredientQuantityRange(ingredient.amount)
-      const resolved = resolveIngredientQuantity(ingredient)
-      const structuredQuantity = normalizeQuantityV1(resolved.quantity)
-      const structuredScale =
-        structuredQuantity?.kind === "exact" ||
-        structuredQuantity?.kind === "range"
-          ? validatedScale
-          : undefined
-      const exactQuantity =
-        structuredScale && structuredQuantity
-          ? scaleQuantityV1(structuredQuantity, structuredScale)
-          : undefined
-      const exactPackage =
-        structuredScale && resolved.packageV1
-          ? scalePackageV1(resolved.packageV1, structuredScale) || undefined
-          : undefined
-      const sourceAwareStructured =
-        exactQuantity?.kind === "range" || Boolean(exactPackage)
-      const exactScalarAmount =
-        exactQuantity?.kind === "exact"
-          ? rationalToNumber(exactQuantity.value)
-          : null
-      const compatibilityUnit = exactPackage
-        ? `${exactPackage.type} (${exactPackage.size.lexeme} ${exactPackage.size.authoredUnit})`
-        : ingredient.unit || ""
-      const exclusionFamily = matchIngredientExclusionFamily(ingredient)
-      const purchase = normalizeShoppingPurchase({
-        item: ingredient.item,
-        amount:
-          exactQuantity
-            ? exactScalarAmount
-            : typeof ingredient.amount === "number"
-              ? ingredient.amount
-              : quantityRange?.start ?? null,
-        unit: exactQuantity
-          ? compatibilityUnit
-          : quantityRange
-            ? ingredient.unit || ""
-            : ingredient.unit || "",
-        modifier: ingredient.modifier,
+      const resolved = resolveShoppingIngredient({
+        ingredient,
+        scale,
+        exactScaleV1,
+        recipeId: recipe.id,
+        sourceOrdinal: ingredientIndex,
       })
+      const {
+        amount,
+        unit,
+        preserveExactFraction,
+        sourceAwareStructured,
+        exactQuantityV1: exactQuantity,
+        exactPackageV1: exactPackage,
+        exactAuthoredUnit,
+        exactScaleV1: structuredScale,
+        purchase,
+      } = resolved.runtime
       const itemName = purchase.purchaseName
-      const amount = exactQuantity
-        ? purchase.purchaseQuantity || 0
-        : (purchase.purchaseQuantity || 0) * scale
-      const unit = normalizeUnit(purchase.purchaseUnit || "")
-      const preserveExactFraction =
-        purchase.purchaseQuantity === purchase.originalQuantity &&
-        unit === normalizeUnit(purchase.originalUnit || "")
+      const exclusionFamily = resolved.exclusionFamily || null
       const shoppingCategory = ingredient.shoppingCategory
       const recipeKey = recipe.id || recipe.name
       const source = {
@@ -278,13 +233,11 @@ export function generateShoppingList(
         exactScaleV1: structuredScale,
         exactQuantityV1: exactQuantity,
         exactPackageV1: exactPackage,
-        exactAuthoredUnit: resolved.authoredUnit,
+        exactAuthoredUnit,
       }
 
       // Build display name with alternatives if present (normalized to lowercase)
-      const displayItem = ingredient.alternatives?.length
-        ? `${itemName} (or ${ingredient.alternatives.map(a => normalizeItemName(a)).join(', ')})`
-        : itemName
+      const displayItem = resolved.displayName
 
       const [effectiveCategoryKey, effectiveCategoryOrder] = categorizeIngredient(
         displayItem,
@@ -372,7 +325,7 @@ export function generateShoppingList(
           exactPackageV1:
             sourceAwareStructured ? exactPackage : undefined,
           exactAuthoredUnit:
-            sourceAwareStructured ? resolved.authoredUnit : undefined,
+            sourceAwareStructured ? exactAuthoredUnit : undefined,
           structuredSourceKey,
           exclusionFamily,
         })
