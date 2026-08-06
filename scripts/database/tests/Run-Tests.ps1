@@ -15,16 +15,23 @@ $migration014Path = 'supabase/migrations/014_add_recipe_yield_metadata.sql'
 $preflight014Path = 'scripts/database/preflight/014_add_recipe_yield_metadata.sql'
 $migration016Path = 'supabase/migrations/016_canonical_recipe_structure_cutover.sql'
 $preflight016Path = 'supabase/verification/canonical_recipe_structure_preflight.sql'
+$migration017Path = 'supabase/migrations/017_remove_legacy_recipe_structure.sql'
+$preflight017Path = 'scripts/database/preflight/017_remove_legacy_recipe_structure.sql'
 $migration016Commit = '172958fe5a413f4c8ced08b431b3ead82dc92bf7'
 $restore016Path = 'scripts/database/restore/016_canonical_recipe_structure_cutover.sql'
 $restore016PreparationPath = 'scripts/database/restore/016_prepare_clean_restore.sql'
 $restore016FinalizationPath = 'scripts/database/restore/016_finalize_clean_restore.sql'
+$confirm017Path = 'scripts/database/Confirm-RecipeGenieMigration017Restore.ps1'
+$restore017Path = 'scripts/database/restore/017_remove_legacy_recipe_structure.sql'
+$restore017PreparationPath = 'scripts/database/restore/017_prepare_clean_restore.sql'
+$restore017FinalizationPath = 'scripts/database/restore/017_finalize_clean_restore.sql'
 $migrationPath = $migration014Path
 $preflightPath = $preflight014Path
 $ledger012 = @('001','002','003','004','005','006','007','008','009','010','011')
 $ledger013 = @('001','002','003','004','005','006','007','008','009','010','011','012')
 $ledger014 = @('001','002','003','004','005','006','007','008','009','010','011','012','013')
 $ledger016 = @('001','002','003','004','005','006','007','008','009','010','011','012','013','014','015')
+$ledger017 = @('001','002','003','004','005','006','007','008','009','010','011','012','013','014','015','016')
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('rg-backup-tests-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($temp) | Out-Null
 $passed = 0
@@ -58,17 +65,18 @@ function Fixture($name, [string]$selectedMigrationPath=$migrationPath, [string[]
     $definition = Get-RecipeGenieMigrationBackupDefinition $selectedMigrationPath
     if ($ledgerVersions.Count -eq 0) { $ledgerVersions = $definition.ExpectedAppliedMigrationVersions }
     $externalEvidence = $definition.PSObject.Properties['AllowExternalEvidenceCommit'] -and $definition.AllowExternalEvidenceCommit -eq $true
+    $boundRestoreEvidence = $null -ne $definition.PSObject.Properties['RestoreAssertionPath']
     $evidenceCommit = if ($externalEvidence) { $migration016Commit } else { $headCommit }
     $selectedPreflightPath = if ($definition.PSObject.Properties['PreflightPath']) { [string]$definition.PreflightPath } else { 'scripts/database/preflight/' + [IO.Path]::GetFileName($selectedMigrationPath) }
     $selectedMigrationHash = EvidenceHash $selectedMigrationPath $evidenceCommit
     $selectedPreflightHash = EvidenceHash $selectedPreflightPath $evidenceCommit
-    $restoreAssertion = if ($externalEvidence) {
-        [ordered]@{path=$restore016Path;commitSha=$headCommit;sha256=(EvidenceHash $restore016Path);worktreeMatchesCommit=$true}
+    $restoreAssertion = if ($boundRestoreEvidence) {
+        [ordered]@{path=[string]$definition.RestoreAssertionPath;commitSha=$headCommit;sha256=(EvidenceHash ([string]$definition.RestoreAssertionPath));worktreeMatchesCommit=$true}
     } else { $null }
-    $restoreProcedure = if ($externalEvidence) {
+    $restoreProcedure = if ($boundRestoreEvidence) {
         [ordered]@{
-            preparation=[ordered]@{path=$restore016PreparationPath;commitSha=$headCommit;sha256=(EvidenceHash $restore016PreparationPath);worktreeMatchesCommit=$true}
-            finalization=[ordered]@{path=$restore016FinalizationPath;commitSha=$headCommit;sha256=(EvidenceHash $restore016FinalizationPath);worktreeMatchesCommit=$true}
+            preparation=[ordered]@{path=[string]$definition.RestorePreparationPath;commitSha=$headCommit;sha256=(EvidenceHash ([string]$definition.RestorePreparationPath));worktreeMatchesCommit=$true}
+            finalization=[ordered]@{path=[string]$definition.RestoreFinalizationPath;commitSha=$headCommit;sha256=(EvidenceHash ([string]$definition.RestoreFinalizationPath));worktreeMatchesCommit=$true}
         }
     } else { $null }
     $dir = Join-Path $temp $name
@@ -86,12 +94,12 @@ function Fixture($name, [string]$selectedMigrationPath=$migrationPath, [string[]
         preflight=[ordered]@{path=$selectedPreflightPath;commitSha=$evidenceCommit;sha256=$selectedPreflightHash;readOnly=$true;countOnly=$true;source=if($externalEvidence){'exact-git-commit'}else{'tooling-worktree'};worktreeMatchesCommit=(-not $externalEvidence)}
         restoreAssertion=$restoreAssertion
         restoreProcedure=$restoreProcedure
-        backupScope=[ordered]@{type='logical-database-custom-archive';includedSchemas=@('public','private','supabase_migrations');includesStorageObjectPayloads=$false;includesSupabaseManagedAuthConfiguration=$false;includesGlobalRoles=$false;includesSecrets=$false;requiredTables=if($externalEvidence){@($definition.RequiredArchiveTables)}else{@()};requiredFunctions=if($externalEvidence){@($definition.RequiredArchiveFunctions)}else{@()}}
-        recoveryCounts=if($externalEvidence){[ordered]@{recipes=0;recipeShares=0}}else{$null}
+        backupScope=[ordered]@{type='logical-database-custom-archive';includedSchemas=@('public','private','supabase_migrations');includesStorageObjectPayloads=$false;includesSupabaseManagedAuthConfiguration=$false;includesGlobalRoles=$false;includesSecrets=$false;requiredTables=if($boundRestoreEvidence){@($definition.RequiredArchiveTables)}else{@()};requiredFunctions=if($boundRestoreEvidence){@($definition.RequiredArchiveFunctions)}else{@()}}
+        recoveryCounts=if($boundRestoreEvidence){[ordered]@{recipes=0;recipeShares=0}}else{$null}
         toolVersions=[ordered]@{git='git version 2.50.1'}
         artifacts=@([ordered]@{fileName='database.dump';sizeBytes=6;sha256=$hash})
         archiveContents=[ordered]@{migrationLedgerFound=$true;expectedApplicationMarkersFound=$true;requiredTablesFound=$true;requiredFunctionsFound=$true}
-        commandResults=[ordered]@{serverVersionQueryExitCode=0;identityQueryExitCode=0;recoveryScopeQueryExitCode=if($externalEvidence){0}else{$null};pgDumpExitCode=0;pgRestoreListExitCode=0}
+        commandResults=[ordered]@{serverVersionQueryExitCode=0;identityQueryExitCode=0;recoveryScopeQueryExitCode=if($boundRestoreEvidence){0}else{$null};pgDumpExitCode=0;pgRestoreListExitCode=0}
         dumpCompleted=$true;archiveValidated=$true;restoreVerified=$false;restoreVerification=$null
         storageFilesBackedUp=$false;backupStatus='successful';migrationAuthorizationGranted=$false
     }
@@ -123,6 +131,15 @@ function AddMigration016RestoreEvidence($dir) {
             shareCountMatched=$true
             shareSnapshotsValid=$true
         }
+    }
+}
+function AddMigration017RestoreEvidence($dir) {
+    AddMigration016RestoreEvidence $dir
+    Edit $dir {
+        param($m)
+        $m.restoreVerification | Add-Member -NotePropertyName canonicalColumnsPresent -NotePropertyValue $true
+        $m.restoreVerification | Add-Member -NotePropertyName canonicalConstraintsPresent -NotePropertyValue $true
+        $m.restoreVerification | Add-Member -NotePropertyName recipesCanonical -NotePropertyValue $true
     }
 }
 function Verify($dir,$expected=$ref,$age=60) {
@@ -271,6 +288,18 @@ try {
         Must ($text -notmatch '\$LASTEXITCODE')
         Must ($text -notmatch '\$literalSecrets\s*=\s*@\([^\r\n]*\$connection\.Password')
     }
+    Case 'migration 017 restore confirmation requires explicit disposable-target acknowledgement' {
+        $result=Child (Join-Path $root 'Confirm-RecipeGenieMigration017Restore.ps1') @('-BackupDirectory',('"'+$temp+'"'),'-ExpectedProjectReference',$ref)
+        Must ($result.ExitCode -ne 0 -and $result.Output -match 'ConfirmDisposableTarget')
+    }
+    Case 'migration 017 restore confirmation rejects production and remote endpoints before access' {
+        $oldUrl=$env:RECIPE_GENIE_DISPOSABLE_RESTORE_DATABASE_URL
+        try {
+            $env:RECIPE_GENIE_DISPOSABLE_RESTORE_DATABASE_URL="postgresql://postgres:fixture@db.$ref.supabase.co/postgres"
+            $result=Child (Join-Path $root 'Confirm-RecipeGenieMigration017Restore.ps1') @('-BackupDirectory',('"'+$temp+'"'),'-ExpectedProjectReference',$ref,'-ConfirmDisposableTarget')
+            Must ($result.ExitCode -ne 0 -and $result.Output -match 'loopback')
+        } finally { $env:RECIPE_GENIE_DISPOSABLE_RESTORE_DATABASE_URL=$oldUrl }
+    }
     Case 'migration 014 definition binds the production identity and exact pre-state' {
         $definition=Get-RecipeGenieMigrationBackupDefinition $migration014Path
         Must ($definition.ExpectedProjectReference -ceq $ref)
@@ -315,7 +344,18 @@ try {
         Must (($definition.RequiredArchiveTables -join ',') -ceq 'public.recipes,public.recipe_shares,supabase_migrations.schema_migrations')
         Must (($definition.RequiredArchiveFunctions -join ',') -ceq 'private.recipe_share_snapshot_is_valid,public.accept_recipe_share,public.handle_new_user')
     }
-    Case 'unsupported future migration definition fails closed' { Throws { Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/017_unknown.sql' } 'not supported' }
+    Case 'migration 017 definition binds exact canonical cleanup recovery evidence' {
+        $definition=Get-RecipeGenieMigrationBackupDefinition $migration017Path
+        Must (($definition.ExpectedAppliedMigrationVersions -join ',') -ceq ($ledger017 -join ','))
+        Must ($definition.PendingMigrationVersion -ceq '017')
+        Must ($definition.PreflightPath -ceq $preflight017Path)
+        Must (($definition.RequiredArchiveTables -join ',') -ceq 'public.recipes,public.recipe_shares,supabase_migrations.schema_migrations')
+        Must (($definition.RequiredArchiveFunctions -join ',') -ceq 'private.recipe_ingredient_sections_are_valid,private.recipe_instruction_sections_are_valid,private.recipe_share_snapshot_is_valid,private.recipe_ingredient_sections_from_legacy,private.recipe_ingredient_sections_flatten,private.recipe_instruction_sections_from_flat,private.recipe_instruction_sections_from_groups,private.recipe_instruction_sections_flatten,private.recipe_notes_from_legacy,private.recipe_instruction_groups_are_valid,public.accept_recipe_share,public.handle_new_user')
+        Must ($definition.RestoreAssertionPath -ceq $restore017Path)
+        Must ($definition.RestorePreparationPath -ceq $restore017PreparationPath)
+        Must ($definition.RestoreFinalizationPath -ceq $restore017FinalizationPath)
+    }
+    Case 'unsupported future migration definition fails closed' { Throws { Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/018_unknown.sql' } 'not supported' }
 
     $backupScriptText = [IO.File]::ReadAllText((Join-Path $root 'Backup-RecipeGenieProduction.ps1'))
     Case 'normal search path catalog identity passes with unqualified regclass display' {
@@ -634,8 +674,38 @@ try {
         Must ($finalize -match 'create trigger on_auth_user_created')
         Must ($prepare -notmatch '(?i)drop\s+(?:schema|table)')
     }
+    Case 'migration 017 preflight is read-only and requires the exact canonical baseline' {
+        $sql=[IO.File]::ReadAllText((Join-Path $repo $preflight017Path))
+        Must ($sql -match '(?im)^begin transaction read only;\s*$')
+        Must ($sql -match '(?im)^rollback;\s*$')
+        Must ($sql -match '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016')
+        Must ($sql -match 'recipe_ingredient_sections_are_valid')
+        Must ($sql -match 'recipe_instruction_sections_are_valid')
+        Must ($sql -match 'recipe_share_snapshot_is_valid')
+        Must ($sql -notmatch '(?i)select\s+.*(?:name|ingredient_sections|instruction_sections|source_recipe_snapshot)\s+from')
+    }
+    Case 'migration 017 restore tooling is aggregate-only and schema-specific' {
+        $assertion=[IO.File]::ReadAllText((Join-Path $repo $restore017Path))
+        $prepare=[IO.File]::ReadAllText((Join-Path $repo $restore017PreparationPath))
+        $finalize=[IO.File]::ReadAllText((Join-Path $repo $restore017FinalizationPath))
+        $confirmation=[IO.File]::ReadAllText((Join-Path $repo $confirm017Path))
+        Must ($assertion -match '(?im)^begin transaction read only;\s*$')
+        Must ($assertion -match '(?im)^rollback;\s*$')
+        Must ($assertion -match '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016')
+        Must ($assertion -match 'canonicalColumnsPresent')
+        Must ($assertion -match 'canonicalConstraintsPresent')
+        Must ($assertion -notmatch '(?i)select\s+.*(?:name|ingredient_sections|instruction_sections|source_recipe_snapshot|user_id|recipient)\s+from')
+        Must ($prepare -match '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017')
+        Must ($prepare -match 'drop trigger on_auth_user_created')
+        Must ($finalize -match 'restored post-016 ledger')
+        Must ($finalize -match 'create trigger on_auth_user_created')
+        Must ($confirmation -match 'Only migration 017 restore evidence is supported')
+        Must ($confirmation -notmatch '(?i)pg_restore|RECIPE_GENIE_PRODUCTION_DATABASE_URL|supabase(?:\.exe)?\s+(?:db|migration)|\bdb\s+push\b')
+    }
 
     Case 'valid fixture passes' { Must ((Verify (Fixture 'valid')).ExitCode -eq 0) }
+    Case 'migration 017 backup verification accepts the exact 016 baseline' { Must ((Verify (Fixture 'migration-017-valid' $migration017Path $ledger017)).ExitCode -eq 0) }
+    Case 'migration 017 backup verification rejects an unexpected ledger' { Must ((Verify (Fixture 'migration-017-ledger' $migration017Path ($ledger017 + '017'))).ExitCode -ne 0) }
     Case 'migration 016 backup verification accepts exact reviewed evidence' { Must ((Verify (Fixture 'migration-016-valid' $migration016Path $ledger016)).ExitCode -eq 0) }
     Case 'migration 016 backup verification rejects a different evidence commit' {
         $d=Fixture 'migration-016-wrong-head' $migration016Path $ledger016
@@ -729,6 +799,16 @@ try {
         $d=Fixture 'migration-016-gate' $migration016Path $ledger016
         AddMigration016RestoreEvidence $d
         Must ((Gate $d @('-MigrationPath',$migration016Path,'-EvidenceCommitSha',$migration016Commit)).ExitCode -eq 0)
+    }
+    Case 'migration 017 gate rejects a manually flipped restore flag' {
+        $d=Fixture 'migration-017-restore-invalid' $migration017Path $ledger017
+        Edit $d {param($m)$m.restoreVerified=$true;$m.restoreVerification=$null}
+        Must ((Verify $d).ExitCode -ne 0)
+    }
+    Case 'migration 017 gate accepts complete bound restore evidence' {
+        $d=Fixture 'migration-017-gate' $migration017Path $ledger017
+        AddMigration017RestoreEvidence $d
+        Must ((Gate $d @('-MigrationPath',$migration017Path)).ExitCode -eq 0)
     }
     Case 'restore gate fails when false' { Must ((Gate (Fixture 'restore-false') @('-RequireRestoreVerification')).ExitCode -ne 0) }
     Case 'restore gate passes only when true' { $d=Fixture 'restore-true' $migration012Path $ledger012;Edit $d {param($m)$m.restoreVerified=$true;$m.restoreVerification=[pscustomobject]@{verifiedAtUtc=[DateTimeOffset]::UtcNow.ToString('o')}};Must ((Gate $d @('-MigrationPath',$migration012Path,'-RequireRestoreVerification')).ExitCode -eq 0) }

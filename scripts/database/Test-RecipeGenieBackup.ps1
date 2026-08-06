@@ -30,6 +30,7 @@ try {
     $definition = Get-RecipeGenieMigrationBackupDefinition -MigrationPath ([string]$manifest.migration.path)
     if ($ExpectedProjectReference -cne $definition.ExpectedProjectReference) { throw 'Backup does not identify the approved Recipe Genie production project.' }
     $allowExternalEvidence = $definition.PSObject.Properties['AllowExternalEvidenceCommit'] -and $definition.AllowExternalEvidenceCommit -eq $true
+    $hasBoundRestoreEvidence = $null -ne $definition.PSObject.Properties['RestoreAssertionPath']
     $identity = $manifest.identityVerification
     if ($identity.verified -ne $true -or
         $identity.expectedProjectReference -ne $ExpectedProjectReference -or
@@ -84,13 +85,13 @@ try {
         -not $preflightSourceIsValid) {
         throw "Migration preflight evidence is incomplete or is not commit-bound."
     }
-    if ($allowExternalEvidence) {
+    if ($hasBoundRestoreEvidence) {
         if ($manifest.toolingCommitSha -notmatch '^[0-9a-f]{40}$' -or
             $manifest.restoreAssertion.path -ne [string]$definition.RestoreAssertionPath -or
             $manifest.restoreAssertion.commitSha -ne $manifest.toolingCommitSha -or
             $manifest.restoreAssertion.sha256 -notmatch '^[0-9a-f]{64}$' -or
             $manifest.restoreAssertion.worktreeMatchesCommit -ne $true) {
-            throw 'Migration 016 restore assertion evidence is incomplete or invalid.'
+            throw 'Migration restore assertion evidence is incomplete or invalid.'
         }
         foreach ($stage in @(
             [pscustomobject]@{ Name = 'preparation'; Path = [string]$definition.RestorePreparationPath },
@@ -101,7 +102,7 @@ try {
                 $entry.commitSha -ne $manifest.toolingCommitSha -or
                 $entry.sha256 -notmatch '^[0-9a-f]{64}$' -or
                 $entry.worktreeMatchesCommit -ne $true) {
-                throw "Migration 016 restore $($stage.Name) evidence is incomplete or invalid."
+                throw "Migration restore $($stage.Name) evidence is incomplete or invalid."
             }
         }
     }
@@ -116,7 +117,7 @@ try {
         $manifest.backupScope.includesSecrets -ne $false) {
         throw "Backup scope is missing or ambiguous."
     }
-    if ($allowExternalEvidence) {
+    if ($hasBoundRestoreEvidence) {
         $requiredTables = @($manifest.backupScope.requiredTables)
         $requiredFunctions = @($manifest.backupScope.requiredFunctions)
         if ((Compare-Object @($definition.RequiredArchiveTables) $requiredTables) -or
@@ -124,7 +125,7 @@ try {
             $null -eq $manifest.recoveryCounts -or
             [int64]$manifest.recoveryCounts.recipes -lt 0 -or
             [int64]$manifest.recoveryCounts.recipeShares -lt 0) {
-            throw 'Migration 016 recovery scope or aggregate source counts are missing or invalid.'
+            throw 'Migration recovery scope or aggregate source counts are missing or invalid.'
         }
     }
     if ($manifest.backupStatus -ne 'successful') { throw "Backup status is not successful." }
@@ -132,16 +133,16 @@ try {
     if ($manifest.archiveValidated -ne $true) { throw "Archive structure was not validated." }
     if ($manifest.archiveContents.migrationLedgerFound -ne $true) { throw "Authoritative migration ledger marker is missing." }
     if ($manifest.archiveContents.expectedApplicationMarkersFound -ne $true) { throw "Expected Recipe Genie archive markers are missing." }
-    if ($allowExternalEvidence -and
+    if ($hasBoundRestoreEvidence -and
         ($manifest.archiveContents.requiredTablesFound -ne $true -or $manifest.archiveContents.requiredFunctionsFound -ne $true)) {
-        throw 'Migration 016 archive is missing required recipe/share recovery objects.'
+        throw 'Migration archive is missing required recipe/share recovery objects.'
     }
     foreach ($name in @('serverVersionQueryExitCode','identityQueryExitCode','pgDumpExitCode','pgRestoreListExitCode')) {
         $property = $manifest.commandResults.PSObject.Properties[$name]
         if ($null -eq $property -or $property.Value -ne 0) { throw "Command result $name is missing or unsuccessful." }
     }
-    if ($allowExternalEvidence -and $manifest.commandResults.recoveryScopeQueryExitCode -ne 0) {
-        throw 'Migration 016 recovery-scope query evidence is missing or unsuccessful.'
+    if ($hasBoundRestoreEvidence -and $manifest.commandResults.recoveryScopeQueryExitCode -ne 0) {
+        throw 'Migration recovery-scope query evidence is missing or unsuccessful.'
     }
     foreach ($log in @(Get-ChildItem -LiteralPath (Join-Path $BackupDirectory 'logs') -File -ErrorAction SilentlyContinue)) {
         if (Test-RecipeGenieSensitiveText ([IO.File]::ReadAllText($log.FullName))) { throw "A persisted log contains credential-shaped content." }
@@ -167,7 +168,7 @@ try {
     if ($age.TotalMinutes -lt -5) { throw "Backup creation timestamp is unacceptably in the future." }
     if ($age.TotalMinutes -gt $MaximumAgeMinutes) { throw "Backup is older than the allowed maximum age." }
 
-    if ($allowExternalEvidence -and $manifest.restoreVerified -eq $true) {
+    if ($hasBoundRestoreEvidence -and $manifest.restoreVerified -eq $true) {
         $restoreTimestamp = [DateTimeOffset]::MinValue
         $restore = $manifest.restoreVerification
         if ($null -eq $restore -or
@@ -184,7 +185,13 @@ try {
             $restore.recipeCountMatched -ne $true -or
             $restore.shareCountMatched -ne $true -or
             $restore.shareSnapshotsValid -ne $true) {
-            throw 'Migration 016 disposable restore evidence is incomplete or invalid.'
+            throw 'Migration disposable restore evidence is incomplete or invalid.'
+        }
+        if ($definition.PendingMigrationVersion -eq '017' -and
+            ($restore.canonicalColumnsPresent -ne $true -or
+             $restore.canonicalConstraintsPresent -ne $true -or
+             $restore.recipesCanonical -ne $true)) {
+            throw 'Migration 017 canonical restore evidence is incomplete or invalid.'
         }
     }
 

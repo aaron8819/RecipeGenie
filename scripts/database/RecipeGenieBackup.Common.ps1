@@ -216,6 +216,38 @@ function Get-RecipeGenieMigrationBackupDefinition {
                 )
             }
         }
+        'supabase/migrations/017_remove_legacy_recipe_structure.sql' {
+            [ordered]@{
+                MigrationPath = $normalizedPath
+                PendingMigrationVersion = '017'
+                ExpectedAppliedMigrationVersions = @('001','002','003','004','005','006','007','008','009','010','011','012','013','014','015','016')
+                ExpectedProjectReference = 'eyaoahwzixqetjgfghsh'
+                RequireRestoreVerification = $true
+                PreflightPath = 'scripts/database/preflight/017_remove_legacy_recipe_structure.sql'
+                RestoreAssertionPath = 'scripts/database/restore/017_remove_legacy_recipe_structure.sql'
+                RestorePreparationPath = 'scripts/database/restore/017_prepare_clean_restore.sql'
+                RestoreFinalizationPath = 'scripts/database/restore/017_finalize_clean_restore.sql'
+                RequiredArchiveTables = @(
+                    'public.recipes',
+                    'public.recipe_shares',
+                    'supabase_migrations.schema_migrations'
+                )
+                RequiredArchiveFunctions = @(
+                    'private.recipe_ingredient_sections_are_valid',
+                    'private.recipe_instruction_sections_are_valid',
+                    'private.recipe_share_snapshot_is_valid',
+                    'private.recipe_ingredient_sections_from_legacy',
+                    'private.recipe_ingredient_sections_flatten',
+                    'private.recipe_instruction_sections_from_flat',
+                    'private.recipe_instruction_sections_from_groups',
+                    'private.recipe_instruction_sections_flatten',
+                    'private.recipe_notes_from_legacy',
+                    'private.recipe_instruction_groups_are_valid',
+                    'public.accept_recipe_share',
+                    'public.handle_new_user'
+                )
+            }
+        }
         default { throw 'Migration is not supported by the Recipe Genie production backup gate.' }
     }
     [pscustomobject]$definition

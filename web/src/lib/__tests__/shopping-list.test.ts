@@ -25,12 +25,12 @@ function createMockRecipe(overrides: RecipeFixtureInput = {}): Recipe {
     servings: 4,
     favorite: false,
     tags: [],
-    ingredients: [
+    fixtureIngredients: [
       { item: 'Chicken Breast', amount: 1, unit: 'lb' },
       { item: 'Garlic', amount: 3, unit: 'cloves' },
       { item: 'Olive Oil', amount: 2, unit: 'tbsp' },
     ],
-    instructions: ['Step 1', 'Step 2'],
+    fixtureInstructions: ['Step 1', 'Step 2'],
     image_url: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -73,7 +73,7 @@ describe('generateShoppingList', () => {
 
     it('should normalize item names to lowercase', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'CHICKEN BREAST', amount: 1, unit: 'lb' },
           { item: 'Olive Oil', amount: 2, unit: 'tbsp' },
         ],
@@ -86,7 +86,7 @@ describe('generateShoppingList', () => {
 
     it('should normalize units', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Flour', amount: 2, unit: 'CUPS' },
           { item: 'Sugar', amount: 3, unit: 'tablespoons' },
         ],
@@ -102,7 +102,7 @@ describe('generateShoppingList', () => {
 
     it('should preserve exact unconverted recipe fractions', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Sugar', amount: 1 / 3, unit: 'cup' },
           { item: 'Yeast', amount: 1 / 5, unit: 'tsp' },
         ],
@@ -120,12 +120,12 @@ describe('generateShoppingList', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
         name: 'Recipe 1',
-        ingredients: [{ item: 'Chicken Breast', amount: 1, unit: 'lb' }],
+        fixtureIngredients: [{ item: 'Chicken Breast', amount: 1, unit: 'lb' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
         name: 'Recipe 2',
-        ingredients: [{ item: 'Chicken Breast', amount: 2, unit: 'lb' }],
+        fixtureIngredients: [{ item: 'Chicken Breast', amount: 2, unit: 'lb' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -139,11 +139,11 @@ describe('generateShoppingList', () => {
     it('should merge compatible units (cups + fl oz)', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
-        ingredients: [{ item: 'Milk', amount: 1, unit: 'cup' }],
+        fixtureIngredients: [{ item: 'Milk', amount: 1, unit: 'cup' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
-        ingredients: [{ item: 'Milk', amount: 8, unit: 'fl oz' }],
+        fixtureIngredients: [{ item: 'Milk', amount: 8, unit: 'fl oz' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -158,11 +158,11 @@ describe('generateShoppingList', () => {
     it('should use additionalAmounts for incompatible units', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
-        ingredients: [{ item: 'Cheese', amount: 1, unit: 'cup' }],
+        fixtureIngredients: [{ item: 'Cheese', amount: 1, unit: 'cup' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
-        ingredients: [{ item: 'Cheese', amount: 8, unit: 'oz' }],
+        fixtureIngredients: [{ item: 'Cheese', amount: 8, unit: 'oz' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -177,15 +177,15 @@ describe('generateShoppingList', () => {
     it('should consolidate repeated incompatible additional amounts across recipes', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
-        ingredients: [{ item: 'Cheese', amount: 1, unit: 'cup' }],
+        fixtureIngredients: [{ item: 'Cheese', amount: 1, unit: 'cup' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
-        ingredients: [{ item: 'Cheese', amount: 8, unit: 'oz' }],
+        fixtureIngredients: [{ item: 'Cheese', amount: 8, unit: 'oz' }],
       })
       const recipe3 = createMockRecipe({
         id: 'recipe-3',
-        ingredients: [{ item: 'Cheese', amount: 4, unit: 'oz' }],
+        fixtureIngredients: [{ item: 'Cheese', amount: 4, unit: 'oz' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2, recipe3], [], [])
@@ -198,7 +198,7 @@ describe('generateShoppingList', () => {
       const recipe = createMockRecipe({
         id: 'recipe-1',
         name: 'Recipe 1',
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Salt', amount: 1, unit: 'tsp' },
           { item: 'Salt', amount: 0.5, unit: 'tsp' },
         ],
@@ -213,11 +213,11 @@ describe('generateShoppingList', () => {
     it('should canonicalize singular and plural onions before merging', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
-        ingredients: [{ item: 'Onions', amount: 1, unit: '' }],
+        fixtureIngredients: [{ item: 'Onions', amount: 1, unit: '' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
-        ingredients: [{ item: 'Onion', amount: 2, unit: '' }],
+        fixtureIngredients: [{ item: 'Onion', amount: 2, unit: '' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -230,11 +230,11 @@ describe('generateShoppingList', () => {
     it('should preserve extra-virgin olive oil as a distinct product', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
-        ingredients: [{ item: 'Extra Virgin Olive Oil', amount: 2, unit: 'tbsp' }],
+        fixtureIngredients: [{ item: 'Extra Virgin Olive Oil', amount: 2, unit: 'tbsp' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
-        ingredients: [{ item: 'olive oil', amount: 1, unit: 'tbsp' }],
+        fixtureIngredients: [{ item: 'olive oil', amount: 1, unit: 'tbsp' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -248,11 +248,11 @@ describe('generateShoppingList', () => {
     it('should keep garlic count forms separate when units differ', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
-        ingredients: [{ item: 'Garlic', amount: 3, unit: 'cloves' }],
+        fixtureIngredients: [{ item: 'Garlic', amount: 3, unit: 'cloves' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
-        ingredients: [{ item: 'Garlic', amount: 1, unit: '' }],
+        fixtureIngredients: [{ item: 'Garlic', amount: 1, unit: '' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -268,7 +268,7 @@ describe('generateShoppingList', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
         name: 'Pollo Asado Tacos',
-        ingredients: [
+        fixtureIngredients: [
           { item: 'juice of 2 limes', amount: null, unit: '' },
           { item: 'lime wedges', amount: null, unit: '' },
         ],
@@ -276,7 +276,7 @@ describe('generateShoppingList', () => {
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
         name: 'Shredded Chipotle Beef',
-        ingredients: [{ item: 'lime', amount: null, unit: '' }],
+        fixtureIngredients: [{ item: 'lime', amount: null, unit: '' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -298,12 +298,12 @@ describe('generateShoppingList', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
         name: 'Pollo Asado Tacos',
-        ingredients: [{ item: 'diced onion', amount: null, unit: '' }],
+        fixtureIngredients: [{ item: 'diced onion', amount: null, unit: '' }],
       })
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
         name: 'Turkey Bolognese',
-        ingredients: [{ item: 'onion', amount: 1, unit: '' }],
+        fixtureIngredients: [{ item: 'onion', amount: 1, unit: '' }],
       })
 
       const result = generateShoppingList([recipe1, recipe2], [], [])
@@ -322,7 +322,7 @@ describe('generateShoppingList', () => {
 
     it('should not merge unsafe produce-adjacent ingredients', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'lemon juice', amount: 4, unit: 'tbsp' },
           { item: 'lime', amount: null, unit: '' },
           { item: 'green onion', amount: 1, unit: '' },
@@ -356,7 +356,7 @@ describe('generateShoppingList', () => {
       const recipe = createMockRecipe({
         id: 'recipe-1',
         name: 'Pollo Asado Tacos',
-        ingredients: [
+        fixtureIngredients: [
           { item: 'juice of 2 limes', amount: null, unit: '' },
           { item: 'lime', amount: null, unit: '' },
           { item: 'lime wedges', amount: null, unit: '' },
@@ -396,7 +396,7 @@ describe('generateShoppingList', () => {
       const recipe1 = createMockRecipe({
         id: 'recipe-1',
         name: 'Chimichurri Steak Bowls',
-        ingredients: [
+        fixtureIngredients: [
           { item: 'juice of 0.5 lemon', amount: null, unit: '' },
           { item: 'zest of 0.5 lemon', amount: null, unit: '' },
         ],
@@ -404,7 +404,7 @@ describe('generateShoppingList', () => {
       const recipe2 = createMockRecipe({
         id: 'recipe-2',
         name: 'CAVA Bowls with Honey Harissa Chicken',
-        ingredients: [
+        fixtureIngredients: [
           { item: 'lemon juice', amount: 1, unit: 'tbsp' },
           { item: 'zest of 1 lemon', amount: null, unit: '' },
         ],
@@ -432,7 +432,7 @@ describe('generateShoppingList', () => {
   describe('pantry filtering', () => {
     it('should move pantry items to alreadyHave', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Chicken Breast', amount: 1, unit: 'lb' },
           { item: 'Garlic', amount: 3, unit: 'cloves' },
         ],
@@ -449,7 +449,7 @@ describe('generateShoppingList', () => {
 
     it('should match pantry items case-insensitively', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'GARLIC', amount: 3, unit: 'cloves' }],
+        fixtureIngredients: [{ item: 'GARLIC', amount: 3, unit: 'cloves' }],
       })
       const pantryItems = [createMockPantryItem('Garlic')]
 
@@ -463,7 +463,7 @@ describe('generateShoppingList', () => {
   describe('pantry matching with alternatives', () => {
     it('should move item to alreadyHave when primary item matches pantry', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
       })
       const pantryItems = [createMockPantryItem('yogurt')]
 
@@ -475,7 +475,7 @@ describe('generateShoppingList', () => {
 
     it('should move item to alreadyHave when first alternative matches pantry', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream', 'greek yogurt'] }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream', 'greek yogurt'] }],
       })
       const pantryItems = [createMockPantryItem('sour cream')]
 
@@ -487,7 +487,7 @@ describe('generateShoppingList', () => {
 
     it('should move item to alreadyHave when second alternative matches pantry', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream', 'greek yogurt'] }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream', 'greek yogurt'] }],
       })
       const pantryItems = [createMockPantryItem('greek yogurt')]
 
@@ -499,7 +499,7 @@ describe('generateShoppingList', () => {
 
     it('should match alternatives case-insensitively', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['Sour Cream'] }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['Sour Cream'] }],
       })
       const pantryItems = [createMockPantryItem('sour cream')]
 
@@ -511,7 +511,7 @@ describe('generateShoppingList', () => {
 
     it('should keep item in shopping list when neither primary nor alternatives match pantry', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
       })
       const pantryItems = [createMockPantryItem('milk')]
 
@@ -523,7 +523,7 @@ describe('generateShoppingList', () => {
 
     it('should keep item in shopping list when alternatives array is empty', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: [] }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: [] }],
       })
       const pantryItems = [createMockPantryItem('sour cream')]
 
@@ -535,7 +535,7 @@ describe('generateShoppingList', () => {
 
     it('should keep item in shopping list when alternatives is undefined', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup' }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup' }],
       })
       const pantryItems = [createMockPantryItem('sour cream')]
 
@@ -547,7 +547,7 @@ describe('generateShoppingList', () => {
 
     it('should move to excluded when primary item keyword is excluded, even if alternative matches pantry', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
+        fixtureIngredients: [{ item: 'yogurt', amount: 1, unit: 'cup', alternatives: ['sour cream'] }],
       })
       const pantryItems = [createMockPantryItem('sour cream')]
       const excludedKeywords = ['yogurt']
@@ -564,7 +564,7 @@ describe('generateShoppingList', () => {
   describe('keyword exclusion', () => {
     it('should move excluded items to excluded list', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Chicken Breast', amount: 1, unit: 'lb' },
           { item: 'Salt', amount: 1, unit: 'tsp' },
         ],
@@ -582,7 +582,7 @@ describe('generateShoppingList', () => {
 
     it('should use exact match for exclusion (not partial)', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Black Pepper', amount: 1, unit: 'tsp' },
           { item: 'Pepper', amount: 1, unit: '' },
         ],
@@ -600,7 +600,7 @@ describe('generateShoppingList', () => {
 
     it('should not exclude item when only its alternative matches excluded keyword', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'Paprika', amount: 1, unit: 'tsp', alternatives: ['red pepper'] }],
+        fixtureIngredients: [{ item: 'Paprika', amount: 1, unit: 'tsp', alternatives: ['red pepper'] }],
       })
       const result = generateShoppingList([recipe], [], ['red pepper'])
       // 'paprika' is the primary key — exclusion only checks primary, not alternatives
@@ -611,7 +611,7 @@ describe('generateShoppingList', () => {
 
     it('should match excluded keyword with surrounding whitespace', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'Salt', amount: 1, unit: 'tsp' }],
+        fixtureIngredients: [{ item: 'Salt', amount: 1, unit: 'tsp' }],
       })
       const result = generateShoppingList([recipe], [], ['  salt  '])
       expect(result.excluded).toHaveLength(1)
@@ -620,7 +620,7 @@ describe('generateShoppingList', () => {
 
     it('should place item in alreadyHave when it matches both pantry and excluded keyword', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'Salt', amount: 1, unit: 'tsp' }],
+        fixtureIngredients: [{ item: 'Salt', amount: 1, unit: 'tsp' }],
       })
       // Pantry check runs before exclusion check — pantry match wins
       const result = generateShoppingList([recipe], [createMockPantryItem('salt')], ['salt'])
@@ -634,7 +634,7 @@ describe('generateShoppingList', () => {
     it('should scale ingredient amounts by scale factor', () => {
       const recipe = createMockRecipe({
         servings: 4,
-        ingredients: [{ item: 'Chicken', amount: 1, unit: 'lb' }],
+        fixtureIngredients: [{ item: 'Chicken', amount: 1, unit: 'lb' }],
       })
 
       const result = generateShoppingList([recipe], [], [], 2.0)
@@ -648,7 +648,7 @@ describe('generateShoppingList', () => {
     it('should handle fractional scaling', () => {
       const recipe = createMockRecipe({
         servings: 4,
-        ingredients: [{ item: 'Flour', amount: 2, unit: 'cups' }],
+        fixtureIngredients: [{ item: 'Flour', amount: 2, unit: 'cups' }],
       })
 
       const result = generateShoppingList([recipe], [], [], 0.5)
@@ -660,7 +660,7 @@ describe('generateShoppingList', () => {
 
     it('preserves and scales both endpoints of a structured range', () => {
       const recipe = createMockRecipe({
-        ingredients: [parseIngredientLine('1–2 tbsp sugar')],
+        fixtureIngredients: [parseIngredientLine('1–2 tbsp sugar')],
       })
 
       const result = generateShoppingList(
@@ -695,7 +695,7 @@ describe('generateShoppingList', () => {
 
     it('keeps scaled package size and count as immutable Shopping metadata', () => {
       const recipe = createMockRecipe({
-        ingredients: [parseIngredientLine('1–2 (14 oz) cans tomatoes')],
+        fixtureIngredients: [parseIngredientLine('1–2 (14 oz) cans tomatoes')],
       })
 
       const result = generateShoppingList(
@@ -731,7 +731,7 @@ describe('generateShoppingList', () => {
   describe('category assignment', () => {
     it('should assign categories based on ingredient keywords', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Chicken Breast', amount: 1, unit: 'lb' },
           { item: 'Broccoli', amount: 2, unit: 'cups' },
           { item: 'Butter', amount: 2, unit: 'tbsp' },
@@ -751,7 +751,7 @@ describe('generateShoppingList', () => {
 
     it('should apply user category overrides', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'Tofu', amount: 1, unit: 'lb' }],
+        fixtureIngredients: [{ item: 'Tofu', amount: 1, unit: 'lb' }],
       })
       const userOverrides = { tofu: 'protein' }
 
@@ -763,7 +763,7 @@ describe('generateShoppingList', () => {
 
     it('should categorize guacamole as fresh produce by default', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: 'Guacamole', amount: 1, unit: 'cup' }],
+        fixtureIngredients: [{ item: 'Guacamole', amount: 1, unit: 'cup' }],
       })
 
       const result = generateShoppingList([recipe], [], [])
@@ -776,7 +776,7 @@ describe('generateShoppingList', () => {
   describe('sorting', () => {
     it('should sort items by category order, then alphabetically', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Zucchini', amount: 1, unit: '' },
           { item: 'Apple', amount: 2, unit: '' },
           { item: 'Chicken', amount: 1, unit: 'lb' },
@@ -801,7 +801,7 @@ describe('generateShoppingList', () => {
 
     it('should sort generated items by learned in-category shopping preference before alphabetical fallback', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Garlic', amount: 1, unit: '' },
           { item: 'Arugula', amount: 1, unit: 'cup' },
           { item: 'Avocado', amount: 1, unit: '' },
@@ -827,7 +827,7 @@ describe('generateShoppingList', () => {
   describe('edge cases', () => {
     it('should handle ingredients with null/zero amounts', () => {
       const recipe = createMockRecipe({
-        ingredients: [
+        fixtureIngredients: [
           { item: 'Salt', amount: null, unit: '' },
           { item: 'Pepper', amount: 0, unit: '' },
         ],
@@ -843,7 +843,7 @@ describe('generateShoppingList', () => {
     })
 
     it('should handle empty ingredients array', () => {
-      const recipe = createMockRecipe({ ingredients: [] })
+      const recipe = createMockRecipe({ fixtureIngredients: [] })
 
       const result = generateShoppingList([recipe], [], [])
 
@@ -861,7 +861,7 @@ describe('generateShoppingList', () => {
 
     it('should handle special characters in item names', () => {
       const recipe = createMockRecipe({
-        ingredients: [{ item: "Frank's Hot Sauce", amount: 1, unit: 'tbsp' }],
+        fixtureIngredients: [{ item: "Frank's Hot Sauce", amount: 1, unit: 'tbsp' }],
       })
 
       const result = generateShoppingList([recipe], [], [])
@@ -884,7 +884,7 @@ describe('generateShoppingList', () => {
       excludedKeywords: string[] = []
     ) {
       return generateShoppingList(
-        [createMockRecipe({ ingredients })],
+        [createMockRecipe({ fixtureIngredients: ingredients })],
         pantryItems,
         excludedKeywords,
         1,

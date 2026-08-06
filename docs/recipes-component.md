@@ -16,9 +16,9 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   authored yield metadata remain separate first-class fields.
 - Section and item order are authoritative. Labels are `string | null`, may
   repeat, and are never encoded on canonical ingredient objects.
-- The physical `ingredients`, `instructions`, and `instruction_groups` columns
-  are frozen migration evidence. Runtime code neither reads nor writes them,
-  and there is no synchronization trigger or dual-write path.
+- Migration `017_remove_legacy_recipe_structure.sql` removes the physical
+  `ingredients`, `instructions`, and `instruction_groups` columns. Canonical
+  sections are the only persisted recipe structure.
 - `/recipes/[id]` is the canonical, query-backed full-page detail route.
   Recipes, Planner, and Shopping all navigate to the same detail component.
 - Recipe detail is action-complete for common follow-up actions:
@@ -54,7 +54,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/hooks/use-recipe-image-storage.ts` | Upload/delete boundary for Supabase-backed recipe image storage. |
 | `web/src/lib/recipe-parser.ts` | Plain-text recipe parsing. |
 | `web/src/lib/recipe-quantity.ts` | Canonical exact quantity/yield parsing, legacy adaptation, scaling, and display formatting. |
-| `web/src/lib/recipe-structure.ts` | Canonical structure validation, one-time legacy conversion, editor-boundary conversion, and ordered flattening for external consumers. |
+| `web/src/lib/recipe-structure.ts` | Canonical structure validation, editor-boundary conversion, and ordered flattening for explicit consumers. |
 | `web/src/lib/recipe-url-parser.ts` | Server-side URL fetch and recipe extraction. |
 | `web/src/lib/supabase/storage.ts` | Storage helpers including pure `getRecipeImageUrl()`. |
 
@@ -180,7 +180,8 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Shopping flattens ingredient sections exactly once at its aggregation
   boundary, preserving global item ordinals. Schema.org export similarly
   derives flat strings/`HowToSection` objects only at the external boundary.
-- The deterministic legacy converter remains only for migration/preflight and
+- Historical SQL migrations and their verification fixtures retain the
+  deterministic cutover evidence. Runtime legacy conversion remains only in
   the external Recipe Genie version 1 import adapter.
 
 The aggregate-only structural preflight lives at
@@ -194,9 +195,11 @@ PostgreSQL 16 instance, pass
 exits nonzero. Production reruns still require repository authorization and
 must never use fixture mode.
 
-Slice B is implemented. The later physical removal of frozen legacy columns and
-one-time migration-only conversion code remains the separate Slice C described
-in `canonical-recipe-structure-design.md`.
+Slice B and the separately reviewed Slice C cleanup are implemented. Migration
+`017_remove_legacy_recipe_structure.sql` removes the frozen columns and
+migration-only database converters; runtime models and generated types expose
+only canonical sections. Flat Schema.org/version 1 input, export, Shopping, and
+the sortable editor projection remain explicit non-persistence boundaries.
 
 ### Dialog discard protection
 

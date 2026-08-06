@@ -24,6 +24,7 @@ if ([string]::IsNullOrWhiteSpace($projectReference)) { throw "Required environme
 if ([string]::IsNullOrWhiteSpace($accessToken)) { throw "Required environment variable $accessTokenVariable is missing." }
 $definition = Get-RecipeGenieMigrationBackupDefinition -MigrationPath $MigrationPath
 $allowExternalEvidence = $definition.PSObject.Properties['AllowExternalEvidenceCommit'] -and $definition.AllowExternalEvidenceCommit -eq $true
+$hasBoundRestoreEvidence = $null -ne $definition.PSObject.Properties['RestoreAssertionPath']
 if ($projectReference -cne $definition.ExpectedProjectReference) {
     throw "Required environment variable $projectReferenceVariable must identify the approved Recipe Genie production project."
 }
@@ -333,16 +334,16 @@ select current_database(), current_user, current_setting('server_version_num'), 
         throw 'Migration 016 backup requires a clean recovery-tooling worktree through archive creation.'
     }
 
-    if ($definition.PendingMigrationVersion -eq '016') {
+    if ($hasBoundRestoreEvidence) {
         $scopeOut = Join-Path $logsDirectory 'recovery-scope.stdout.log'
         $scopeErr = Join-Path $logsDirectory 'recovery-scope.stderr.log'
         $scopeSql = 'begin transaction read only; select count(*)::text || ''|'' || (select count(*)::text from public.recipe_shares) from public.recipes; rollback;'
         $scopeArguments = @('-X','--no-psqlrc','-At','--set=ON_ERROR_STOP=1','--command',$scopeSql)
         $scopeResult = Invoke-RecipeGenieNativeProcess -ExecutablePath $tools.psql -ArgumentList $scopeArguments -StdOutPath $scopeOut -StdErrPath $scopeErr -LiteralSecrets $literalSecrets
         $manifest.commandResults.recoveryScopeQueryExitCode = $scopeResult.ExitCode
-        Assert-NativeExitCode $scopeResult 'Migration 016 recovery-scope query'
+        Assert-NativeExitCode $scopeResult "Migration $($definition.PendingMigrationVersion) recovery-scope query"
         $scopeLine = [IO.File]::ReadAllLines($scopeOut) | Where-Object { $_ -match '^\d+\|\d+$' } | Select-Object -First 1
-        if (-not $scopeLine) { throw 'Migration 016 recovery counts are missing or malformed.' }
+        if (-not $scopeLine) { throw "Migration $($definition.PendingMigrationVersion) recovery counts are missing or malformed." }
         $scopeParts = $scopeLine.Split('|', 2)
         $manifest.recoveryCounts = [ordered]@{
             recipes = [int64]$scopeParts[0]

@@ -190,12 +190,9 @@ type RecipeBase = Database["public"]["Tables"]["recipes"]["Row"]
 export type Recipe = Omit<
   RecipeBase,
   | "id"
-  | "ingredients"
   | "ingredient_sections"
-  | "instructions"
   | "instruction_sections"
   | "notes"
-  | "instruction_groups"
   | "recipe_uuid"
   | "prep_time_minutes"
   | "cook_time_minutes"
@@ -218,12 +215,9 @@ export type Recipe = Omit<
 type RecipeInsertBase = Database["public"]["Tables"]["recipes"]["Insert"]
 export type RecipeInsert = Omit<
   RecipeInsertBase,
-  | "ingredients"
   | "ingredient_sections"
-  | "instructions"
   | "instruction_sections"
   | "notes"
-  | "instruction_groups"
   | "recipe_uuid"
   | "yield_metadata"
 > & {
@@ -236,12 +230,9 @@ export type RecipeInsert = Omit<
 type RecipeUpdateBase = Database["public"]["Tables"]["recipes"]["Update"]
 export type RecipeUpdate = Omit<
   RecipeUpdateBase,
-  | "ingredients"
   | "ingredient_sections"
-  | "instructions"
   | "instruction_sections"
   | "notes"
-  | "instruction_groups"
   | "recipe_uuid"
   | "yield_metadata"
 > & {

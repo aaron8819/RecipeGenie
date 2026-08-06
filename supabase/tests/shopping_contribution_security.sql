@@ -10,10 +10,13 @@ delete from public.recipes where user_id in (
   '31000000-0000-4000-8000-000000000001',
   '32000000-0000-4000-8000-000000000002'
 );
-insert into public.recipes(id, recipe_uuid, user_id, name, category, servings, ingredients, instructions)
+insert into public.recipes(
+  id, recipe_uuid, user_id, name, category, servings,
+  ingredient_sections, instruction_sections
+)
 values
-  ('contrib-a', '31111111-1111-4111-8111-111111111111', '31000000-0000-4000-8000-000000000001', 'A', 'test', 4, '[]', '{}'),
-  ('contrib-b', '32333333-3333-4333-8333-333333333333', '32000000-0000-4000-8000-000000000002', 'B', 'test', 4, '[]', '{}');
+  ('contrib-a', '31111111-1111-4111-8111-111111111111', '31000000-0000-4000-8000-000000000001', 'A', 'test', 4, '[]', '[]'),
+  ('contrib-b', '32333333-3333-4333-8333-333333333333', '32000000-0000-4000-8000-000000000002', 'B', 'test', 4, '[]', '[]');
 
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '31000000-0000-4000-8000-000000000001', true);

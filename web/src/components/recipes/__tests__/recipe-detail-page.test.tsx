@@ -42,13 +42,13 @@ function makeRecipe(overrides: RecipeFixtureInput = {}): Recipe {
     total_time_minutes: 35,
     favorite: false,
     tags: ["quick"],
-    ingredients: [
+    fixtureIngredients: [
       { item: "Lettuce", amount: 1, unit: "whole", groupLabel: "Salad" },
       { item: "Beans", amount: 2, unit: "cup", groupLabel: "Salad" },
       { item: "Lime juice", amount: 2, unit: "tbsp", groupLabel: "Dressing" },
     ],
-    instructions: ["Build the salad", "Add the dressing"],
-    instruction_groups: [
+    fixtureInstructions: ["Build the salad", "Add the dressing"],
+    fixtureInstructionGroups: [
       { label: "Salad", steps: ["Build the salad"] },
       { label: "Finish", steps: ["Add the dressing"] },
     ],
@@ -144,7 +144,7 @@ describe("RecipeDetailContent", () => {
       groupLabel: "Sauce",
     }
     const group = { label: "Sauce", ingredients: [ingredient] }
-    const recipe = makeRecipe({ ingredients: group.ingredients })
+    const recipe = makeRecipe({ fixtureIngredients: group.ingredients })
     const originalIngredient = structuredClone(ingredient)
     const originalGroup = structuredClone(group)
     const originalRecipe = structuredClone(recipe)
@@ -212,7 +212,7 @@ describe("RecipeDetailContent", () => {
 
   it("scales numeric quantities locally without mutating stored recipe data", () => {
     const recipe = makeRecipe({
-      ingredients: [
+      fixtureIngredients: [
         { item: "Stock", amount: "about 0.5–1", unit: "cup" },
         { item: "Spice", amount: "1/2 - 1 1/2", unit: "tsp" },
         { item: "Beans", amount: 2, unit: "cup" },
@@ -237,7 +237,7 @@ describe("RecipeDetailContent", () => {
   it("keeps the selected yield unchanged after repeated overflow attempts", () => {
     renderDetail(makeRecipe({
       servings: 1,
-      ingredients: [
+      fixtureIngredients: [
         { item: "Flour", amount: 100000000, unit: "cup" },
       ],
     }))
@@ -254,7 +254,7 @@ describe("RecipeDetailContent", () => {
 
   it("renders the approved taco quantities exactly at three servings", () => {
     renderDetail(makeRecipe({
-      ingredients: [
+      fixtureIngredients: [
         { item: "ground beef", amount: 1, unit: "lb" },
         { item: "chili powder", amount: 1, unit: "tsp" },
         { item: "smoked paprika", amount: 0.5, unit: "tsp", originalText: "½ tsp smoked paprika" },
@@ -285,7 +285,7 @@ describe("RecipeDetailContent", () => {
 
   it("scales recognized ranges and preserves unsupported or missing amounts", () => {
     renderDetail(makeRecipe({
-      ingredients: [
+      fixtureIngredients: [
         { item: "Tomatoes", amount: "2-3", unit: "" },
         { item: "Pepper", amount: "a pinch", unit: "" },
         { item: "Salt", amount: null, unit: "" },
@@ -333,9 +333,9 @@ describe("RecipeDetailContent", () => {
       prep_time_minutes: null,
       cook_time_minutes: null,
       total_time_minutes: null,
-      ingredients: [],
-      instructions: [],
-      instruction_groups: null,
+      fixtureIngredients: [],
+      fixtureInstructions: [],
+      fixtureInstructionGroups: null,
       notes: [],
     }))
 

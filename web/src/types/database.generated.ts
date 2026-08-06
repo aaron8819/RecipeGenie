@@ -153,10 +153,7 @@ export type Database = {
           id: string
           image_url: string | null
           ingredient_sections: Json
-          ingredients: Json
-          instruction_groups: Json | null
           instruction_sections: Json
-          instructions: string[]
           name: string
           notes: Json
           prep_time_minutes: number | null
@@ -176,10 +173,7 @@ export type Database = {
           id: string
           image_url?: string | null
           ingredient_sections?: Json
-          ingredients?: Json
-          instruction_groups?: Json | null
           instruction_sections?: Json
-          instructions?: string[]
           name: string
           notes?: Json
           prep_time_minutes?: number | null
@@ -199,10 +193,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           ingredient_sections?: Json
-          ingredients?: Json
-          instruction_groups?: Json | null
           instruction_sections?: Json
-          instructions?: string[]
           name?: string
           notes?: Json
           prep_time_minutes?: number | null
@@ -483,10 +474,7 @@ export type Database = {
           id: string
           image_url: string | null
           ingredient_sections: Json
-          ingredients: Json
-          instruction_groups: Json | null
           instruction_sections: Json
-          instructions: string[]
           name: string
           notes: Json
           prep_time_minutes: number | null

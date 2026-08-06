@@ -11,6 +11,10 @@ const migrationSql = readFileSync(
   "../supabase/migrations/016_canonical_recipe_structure_cutover.sql",
   "utf8"
 )
+const cleanupSql = readFileSync(
+  "../supabase/migrations/017_remove_legacy_recipe_structure.sql",
+  "utf8"
+)
 
 function formatResult(result) {
   return [
@@ -142,6 +146,69 @@ end;
 $$;
 `
 
+const captureCanonicalStateSql = `
+create temporary table expected_recipe_content as
+select recipe_uuid, ingredient_sections, instruction_sections, notes
+from public.recipes;
+
+create temporary table expected_share_content as
+select id, source_recipe_snapshot
+from public.recipe_shares;
+`
+
+const cleanupAssertionsSql = `
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'recipes'
+      and column_name in ('ingredients', 'instructions', 'instruction_groups')
+  ) then raise exception 'cleanup left legacy recipe columns behind'; end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'recipes'
+      and column_name = 'ingredient_sections'
+  ) or not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'recipes'
+      and column_name = 'instruction_sections'
+  ) then raise exception 'cleanup removed canonical recipe columns'; end if;
+
+  if to_regprocedure('private.recipe_ingredient_sections_are_valid(jsonb)') is null
+     or to_regprocedure('private.recipe_instruction_sections_are_valid(jsonb)') is null
+     or to_regprocedure('private.recipe_share_snapshot_is_valid(jsonb)') is null then
+    raise exception 'cleanup removed canonical validators';
+  end if;
+
+  if to_regprocedure('private.recipe_ingredient_sections_from_legacy(jsonb)') is not null
+     or to_regprocedure('private.recipe_instruction_sections_from_flat(text[])') is not null
+     or to_regprocedure('private.recipe_instruction_sections_from_groups(jsonb)') is not null
+     or to_regprocedure('private.recipe_notes_from_legacy(jsonb,text[])') is not null then
+    raise exception 'cleanup retained conversion-only functions';
+  end if;
+
+  if exists (
+    (select recipe_uuid, ingredient_sections, instruction_sections, notes
+     from public.recipes
+     except table expected_recipe_content)
+    union all
+    (table expected_recipe_content
+     except select recipe_uuid, ingredient_sections, instruction_sections, notes
+     from public.recipes)
+  ) then raise exception 'cleanup changed canonical recipe content'; end if;
+
+  if exists (
+    (select id, source_recipe_snapshot from public.recipe_shares
+     except table expected_share_content)
+    union all
+    (table expected_share_content
+     except select id, source_recipe_snapshot from public.recipe_shares)
+  ) then raise exception 'cleanup changed canonical share content'; end if;
+end;
+$$;
+`
+
 const invalidFixtureSql = `${usersSql}
 insert into public.recipes (
   id, user_id, name, category, servings, tags, ingredients, instructions, instruction_groups
@@ -172,16 +239,40 @@ end;
 $$;
 `
 
+const cleanupPrerequisiteAssertionsSql = `
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'recipes'
+      and column_name in ('ingredient_sections', 'instruction_sections')
+  ) then raise exception 'failed cleanup changed the pre-016 schema'; end if;
+  if (
+    select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'recipes'
+      and column_name in ('ingredients', 'instructions', 'instruction_groups')
+  ) <> 3 then raise exception 'failed cleanup removed legacy columns'; end if;
+end;
+$$;
+`
+
 let restoredLatest = false
 try {
   runSupabase(["db", "reset", "--local", "--version", "015", "--no-seed"])
   let container = databaseContainer()
-  psql(container, validFixtureSql)
-  psql(container, migrationSql)
-  psql(container, successAssertionsSql)
+  const cleanupRejected = psql(container, cleanupSql, false)
+  if (
+    cleanupRejected.status === 0 ||
+    !`${cleanupRejected.stdout}\n${cleanupRejected.stderr}`.includes(
+      "canonical recipe cleanup requires the exact post-016 columns"
+    )
+  ) {
+    throw new Error(
+      `Expected the pre-016 schema to reject cleanup\n${formatResult(cleanupRejected)}`
+    )
+  }
+  psql(container, cleanupPrerequisiteAssertionsSql)
 
-  runSupabase(["db", "reset", "--local", "--version", "015", "--no-seed"])
-  container = databaseContainer()
   psql(container, invalidFixtureSql)
   const rejected = psql(container, migrationSql, false)
   if (rejected.status === 0 || !`${rejected.stdout}\n${rejected.stderr}`.includes("conflicting legacy instruction representations")) {
@@ -189,10 +280,18 @@ try {
   }
   psql(container, rollbackAssertionsSql)
 
+  psql(container, validFixtureSql)
+  psql(container, migrationSql)
+  psql(container, successAssertionsSql)
+  psql(
+    container,
+    `${captureCanonicalStateSql}\n${cleanupSql}\n${cleanupAssertionsSql}`
+  )
+
   runSupabase(["db", "reset", "--local", "--no-seed"])
   restoredLatest = true
 } finally {
   if (!restoredLatest) runSupabase(["db", "reset", "--local", "--no-seed"])
 }
 
-console.log("Canonical recipe-structure migration conversion and atomic rollback fixtures passed.")
+console.log("Canonical recipe-structure cutover and cleanup fixtures passed.")

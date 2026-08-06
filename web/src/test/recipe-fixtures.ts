@@ -1,7 +1,4 @@
-import {
-  editorGroupsToInstructionSections,
-  editorIngredientsToIngredientSections,
-} from "@/lib/recipe-structure"
+import { editorIngredientsToIngredientSections } from "@/lib/recipe-structure"
 import type {
   Ingredient,
   Recipe,
@@ -14,20 +11,20 @@ export type RecipeFixtureInput = Omit<
 > & {
   ingredientSections?: Recipe["ingredientSections"]
   instructionSections?: Recipe["instructionSections"]
-  ingredients?: Ingredient[]
-  instructions?: string[]
-  instruction_groups?: RecipeInstructionGroup[] | null
+  fixtureIngredients?: Ingredient[]
+  fixtureInstructions?: string[]
+  fixtureInstructionGroups?: RecipeInstructionGroup[] | null
 }
 
 export function canonicalizeRecipeFixture(
   input: RecipeFixtureInput
 ): Recipe {
   const {
-    ingredients,
-    instructions,
-    instruction_groups: instructionGroups,
     ingredientSections,
     instructionSections,
+    fixtureIngredients,
+    fixtureInstructions,
+    fixtureInstructionGroups,
     ...recipe
   } = input
 
@@ -46,13 +43,16 @@ export function canonicalizeRecipeFixture(
     ...recipe,
     ingredientSections:
       ingredientSections ??
-      editorIngredientsToIngredientSections(ingredients ?? []),
+      editorIngredientsToIngredientSections(fixtureIngredients ?? []),
     instructionSections:
       instructionSections ??
-      (instructionGroups
-        ? editorGroupsToInstructionSections(instructionGroups)
-        : instructions && instructions.length > 0
-          ? [{ label: null, steps: instructions }]
+      (fixtureInstructionGroups
+        ? fixtureInstructionGroups.map((group) => ({
+            label: group.label?.trim() || null,
+            steps: [...group.steps],
+          }))
+        : fixtureInstructions && fixtureInstructions.length > 0
+          ? [{ label: null, steps: fixtureInstructions }]
           : []),
   } as Recipe
 }

@@ -67,8 +67,8 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Recipe detail is query-backed and now owns common follow-up actions such as add-to-plan, add-to-shopping, and mark-made entry points.
 - Persisted recipe structure is canonical ordered ingredient and instruction
   sections. Active reads, writes, import, sharing, detail, and Shopping use
-  those sections only; the old physical structure columns are frozen until
-  their separately reviewed removal migration.
+  those sections only. Migration 017 physically removes the superseded flat
+  and grouped recipe-structure columns.
 
 ### Shopping
 

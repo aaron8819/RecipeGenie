@@ -46,16 +46,17 @@ insert into auth.users(id, email) values
   ('72000000-0000-4000-8000-000000000002', 'deletion-owner-b@example.test');
 
 insert into public.recipes(
-  id, recipe_uuid, user_id, name, category, servings, ingredients, instructions
+  id, recipe_uuid, user_id, name, category, servings,
+  ingredient_sections, instruction_sections
 ) values
   ('71111111-1111-4111-8111-111111111111', '71111111-1111-4111-8111-111111111111',
-   '71000000-0000-4000-8000-000000000001', 'Delete target', 'test', 4, '[]', '{}'),
+   '71000000-0000-4000-8000-000000000001', 'Delete target', 'test', 4, '[]', '[]'),
   ('71222222-2222-4222-8222-222222222222', '71222222-2222-4222-8222-222222222222',
-   '71000000-0000-4000-8000-000000000001', 'Keep target', 'test', 4, '[]', '{}'),
+   '71000000-0000-4000-8000-000000000001', 'Keep target', 'test', 4, '[]', '[]'),
   ('71333333-3333-4333-8333-333333333333', '71333333-3333-4333-8333-333333333333',
-   '71000000-0000-4000-8000-000000000001', 'Defect fixture', 'test', 4, '[]', '{}'),
+   '71000000-0000-4000-8000-000000000001', 'Defect fixture', 'test', 4, '[]', '[]'),
   ('72444444-4444-4444-8244-444444444444', '72444444-4444-4444-8244-444444444444',
-   '72000000-0000-4000-8000-000000000002', 'Other owner', 'test', 4, '[]', '{}');
+   '72000000-0000-4000-8000-000000000002', 'Other owner', 'test', 4, '[]', '[]');
 
 insert into public.weekly_plans(
   user_id, week_date, recipe_uuids, day_assignment_recipe_uuids, made_recipe_uuids
