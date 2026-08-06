@@ -172,11 +172,18 @@ canonical and frozen legacy columns, canonical constraints, validators and
 conversion helpers, the Auth trigger binding, matching recipe/share counts, and
 valid canonical recipe/share structure. `017_prepare_clean_restore.sql` fails
 unless the disposable target is exactly post-017, detaches the external Auth
-trigger, and removes only the surviving canonical constraints and validators
-that would block the archive clean phase. `017_finalize_clean_restore.sql`
-requires the restored post-016 schema and recreates the trigger binding. The
-migration-017 confirmation rejects production or remote endpoints and records
-only the assertion hashes and aggregate booleans.
+trigger, verifies and removes the local `recipe_history.id` identity metadata,
+and removes only the surviving canonical constraints and validators that would
+block the archive clean phase. This identity step is specific to the reviewed
+migration-017 archive: production 016 stores the same automatic ID generation
+as an owned sequence/default, whose clean-restore `DROP DEFAULT` cannot run
+against an identity column. `017_finalize_clean_restore.sql` requires that
+owned sequence/default to be restored with the post-016 schema and recreates
+the trigger binding. The migration-017 confirmation rejects production or
+remote endpoints and records the original `afcd8dc` backup binding plus the
+exact descendant recovery-tooling commit and aggregate assertion hashes. The
+final migration gate therefore supplies `-EvidenceCommitSha
+afcd8dc331b0d928cb2ef8ea96667c8f52096744`.
 
 Emergency recovery outline: stop writes, verify the exact artifact/hash and recovery target, obtain restore authorization, provision an isolated compatible target, restore without suppressing errors, validate ledger/schema/data/security objects, then choose a reviewed forward repair or controlled cutover. Do not overwrite production as an exploratory restore.
 
