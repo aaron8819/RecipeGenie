@@ -3,18 +3,20 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ShoppingListView } from "../shopping-list"
 import { UndoToastProvider, useUndoToast } from "@/components/ui/undo-toast"
-import type { ShoppingItem, ShoppingList, UserConfig } from "@/types/database"
+import type { ShoppingConfig, ShoppingItem, ShoppingList } from "@/types/database"
 
 globalThis.React = React
 
 type ResolveFn = () => void
 
 const shoppingListeners = new Set<() => void>()
-const removeItemMutate = vi.fn<(rowId: string) => void>()
+const removeItemMutate = vi.fn()
 const removeRecipeItemsMutate = vi.fn<
   (recipe: { recipeId?: string; recipeName: string }) => void
 >()
-const clearListMutate = vi.fn<() => void>()
+const clearListMutate = vi.fn()
+let removedRecipeRows: ShoppingItem[] = []
+let clearedList: ShoppingList | null = null
 const moveToListMutate = vi.fn<
   (item: ShoppingItem, options?: { onSuccess?: () => void; onError?: () => void }) => void
 >()
@@ -43,7 +45,7 @@ vi.mock("next/navigation", () => ({
 }))
 
 let currentShoppingList: ShoppingList
-let currentConfig: UserConfig
+let currentConfig: ShoppingConfig
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>
 
 function notifyShoppingListeners() {
@@ -85,8 +87,11 @@ function insertEntriesAtIndices(currentItems: ShoppingItem[], entries: Array<{ i
 }
 
 function makeItem(item: string, overrides: Partial<ShoppingItem> = {}): ShoppingItem {
+  const suppliedRowId = overrides.rowId || `manual:${item}`
+  const rowId = suppliedRowId.startsWith("manual:") || suppliedRowId.startsWith("derived:")
+    ? suppliedRowId
+    : `manual:${suppliedRowId}`
   return {
-    rowId: `row-${item}`,
     item,
     amount: 1,
     unit: "",
@@ -95,6 +100,7 @@ function makeItem(item: string, overrides: Partial<ShoppingItem> = {}): Shopping
     sources: [{ recipeName: "Manual" }],
     checked: false,
     ...overrides,
+    rowId,
   }
 }
 
@@ -113,25 +119,14 @@ function makeList(overrides: Partial<ShoppingList> = {}): ShoppingList {
   }
 }
 
-function makeConfig(overrides: Partial<UserConfig> = {}): UserConfig {
+function makeConfig(overrides: Partial<ShoppingConfig> = {}): ShoppingConfig {
   return {
-    user_id: "user-1",
-    categories: ["Produce"],
-    default_selection: {},
     category_overrides: {},
     custom_categories: [],
     category_order: null,
-    shopping_item_order: {},
     exclude_salt_variants: false,
     exclude_black_pepper_variants: false,
     excluded_keywords: [],
-    history_exclusion_days: 10,
-    week_start_day: 1,
-    onboarding_completed_at: null,
-    excluded_days: [],
-    preferred_days: null,
-    auto_assign_days: true,
-    enabled_planner_categories: null,
     ...overrides,
   }
 }
@@ -287,7 +282,13 @@ vi.mock("@/hooks/use-shopping", () => ({
   }),
   useRemoveShoppingItem: () => ({
     mutate: removeItemMutate,
-    mutateAsync: vi.fn(async (rowId: string) => removeItemMutate(rowId)),
+    isPending: false,
+  }),
+  useRestoreShoppingItem: () => ({
+    mutate: (item: ShoppingItem) => updateShoppingList((list) => ({
+      ...list,
+      items: [...list.items, item],
+    })),
     isPending: false,
   }),
   useRemoveRecipeItems: () => ({
@@ -297,9 +298,17 @@ vi.mock("@/hooks/use-shopping", () => ({
     ),
     isPending: false,
   }),
+  useRestoreRecipeItems: () => ({
+    mutate: () => updateShoppingList((list) => ({ ...list, items: [...list.items, ...removedRecipeRows] })),
+    isPending: false,
+  }),
   useClearShoppingList: () => ({
     mutate: clearListMutate,
     mutateAsync: vi.fn(async () => clearListMutate()),
+    isPending: false,
+  }),
+  useRestoreShoppingContent: () => ({
+    mutate: () => { if (clearedList) setShoppingList(clearedList) },
     isPending: false,
   }),
   useCheckOffItem: () => ({
@@ -548,15 +557,19 @@ vi.mock("@/hooks/use-shopping", () => ({
     originalConsoleError(message, ...args)
   })
 
-  removeItemMutate.mockImplementation((rowId: string) => {
+  removeItemMutate.mockImplementation((item: ShoppingItem, options?: { onSuccess?: (item: ShoppingItem) => void }) => {
     updateShoppingList((prev) => ({
       ...prev,
-      items: prev.items.filter((item) => item.rowId !== rowId),
+      items: prev.items.filter((candidate) => candidate.rowId !== item.rowId),
     }))
+    options?.onSuccess?.(item)
   })
 
-  removeRecipeItemsMutate.mockImplementation((recipe) => {
+  removeRecipeItemsMutate.mockImplementation((recipe, options?: { onSuccess?: (value: { entry: object }) => void }) => {
     const recipeName = recipe.recipeName
+    removedRecipeRows = currentShoppingList.items.filter(
+      (item) => (item.sources || []).some((source) => source.recipeName === recipeName)
+    )
     updateShoppingList((prev) => ({
       ...prev,
       items: prev.items.filter(
@@ -569,9 +582,11 @@ vi.mock("@/hooks/use-shopping", () => ({
         (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
       ),
     }))
+    options?.onSuccess?.({ entry: {} })
   })
 
-  clearListMutate.mockImplementation(() => {
+  clearListMutate.mockImplementation((_value?: unknown, options?: { onSuccess?: (value: object) => void }) => {
+    clearedList = cloneList(currentShoppingList)
     updateShoppingList((prev) => ({
       ...prev,
       items: [],
@@ -582,6 +597,7 @@ vi.mock("@/hooks/use-shopping", () => ({
       total_servings: 0,
       custom_order: false,
     }))
+    options?.onSuccess?.({})
   })
 
   moveToListMutate.mockImplementation((item: ShoppingItem, options) => {
@@ -815,7 +831,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    const row = screen.getByTestId("shopping-row-row-garlic-clove")
+    const row = screen.getByTestId("shopping-row-manual:row-garlic-clove")
 
     act(() => {
       fireEvent.touchStart(row, {
@@ -832,11 +848,11 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(addToPantryAndRemoveMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ rowId: "row-garlic-clove" }),
+      expect.objectContaining({ rowId: "manual:row-garlic-clove" }),
       expect.any(Object)
     )
     expect(currentShoppingList.items.map((item) => item.rowId)).toEqual([])
-    expect(currentShoppingList.already_have.map((item) => item.rowId)).toEqual(["row-garlic-clove"])
+    expect(currentShoppingList.already_have.map((item) => item.rowId)).toEqual(["manual:row-garlic-clove"])
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getByRole("alert")).toHaveTextContent('Moved "garlic" to pantry')
   })
@@ -1034,10 +1050,13 @@ describe("ShoppingListView orchestration", () => {
 
     expect(screen.getByText("Fresh Produce")).toBeInTheDocument()
     expect(screen.getByText("garlic")).toBeInTheDocument()
-    expect(removeItemMutate).not.toHaveBeenCalled()
+    expect(removeItemMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "manual:garlic" }),
+      expect.any(Object)
+    )
   })
 
-  it("commits the deferred delete once the undo window expires", async () => {
+  it("keeps an immediate delete committed after the undo window expires", async () => {
     currentShoppingList = makeList({
       items: [makeItem("garlic")],
     })
@@ -1055,7 +1074,10 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(removeItemMutate).toHaveBeenCalledTimes(1)
-    expect(removeItemMutate).toHaveBeenCalledWith("row-garlic")
+    expect(removeItemMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "manual:garlic" }),
+      expect.any(Object)
+    )
     expect(screen.queryByText("garlic")).not.toBeInTheDocument()
     expect(screen.queryByText("Fresh Produce")).not.toBeInTheDocument()
   })
@@ -1076,7 +1098,10 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(removeItemMutate).toHaveBeenCalledTimes(1)
-    expect(removeItemMutate).toHaveBeenCalledWith("row-garlic")
+    expect(removeItemMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: "manual:garlic" }),
+      expect.any(Object)
+    )
     expect(screen.queryByText("garlic")).not.toBeInTheDocument()
   })
 
@@ -1098,7 +1123,7 @@ describe("ShoppingListView orchestration", () => {
       fireEvent.click(screen.getAllByRole("button", { name: "Remove from list" })[0])
     })
 
-    expect(removeItemMutate).not.toHaveBeenCalled()
+    expect(removeItemMutate).toHaveBeenCalledTimes(2)
     expect(screen.getByRole("alert")).toHaveTextContent('"garlic" removed from list')
     expect(screen.queryByText("onion")).not.toBeInTheDocument()
 
@@ -1108,14 +1133,13 @@ describe("ShoppingListView orchestration", () => {
 
     expect(screen.getByText("garlic")).toBeInTheDocument()
     expect(screen.queryByText("onion")).not.toBeInTheDocument()
-    expect(removeItemMutate).not.toHaveBeenCalled()
+    expect(removeItemMutate).toHaveBeenCalledTimes(2)
 
     act(() => {
       vi.advanceTimersByTime(5200)
     })
 
-    expect(removeItemMutate).toHaveBeenCalledTimes(1)
-    expect(removeItemMutate).toHaveBeenCalledWith("row-onion")
+    expect(removeItemMutate).toHaveBeenCalledTimes(2)
     expect(screen.queryByText("onion")).not.toBeInTheDocument()
   })
 
@@ -1140,7 +1164,7 @@ describe("ShoppingListView orchestration", () => {
       fireEvent.click(screen.getAllByRole("button", { name: 'Remove all items from Stew' })[0])
     })
 
-    expect(screen.getByText("garlic")).toBeInTheDocument()
+    expect(screen.queryByText("garlic")).not.toBeInTheDocument()
     expect(screen.getByText("rice")).toBeInTheDocument()
     expect(screen.getByRole("alert")).toHaveTextContent('Items from "Stew" removed')
 
@@ -1148,7 +1172,7 @@ describe("ShoppingListView orchestration", () => {
       fireEvent.click(screen.getByRole("button", { name: "Undo" }))
     })
 
-    expect(removeRecipeItemsMutate).not.toHaveBeenCalled()
+    expect(removeRecipeItemsMutate).toHaveBeenCalledTimes(1)
     expect(screen.getByText("garlic")).toBeInTheDocument()
     expect(screen.getAllByText("Stew").length).toBeGreaterThan(0)
   })
@@ -1176,7 +1200,7 @@ describe("ShoppingListView orchestration", () => {
       fireEvent.click(screen.getByRole("button", { name: "Undo" }))
     })
 
-    expect(clearListMutate).not.toHaveBeenCalled()
+    expect(clearListMutate).toHaveBeenCalledTimes(1)
     expect(screen.getByText("garlic")).toBeInTheDocument()
     expectCategoryExpanded("produce", true)
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
@@ -1242,21 +1266,21 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(moveToListMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ rowId: "row-milk-cup" }),
+      expect.objectContaining({ rowId: "manual:row-milk-cup" }),
       expect.any(Object)
     )
     expect(moveExcludedMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ rowId: "row-salt-tsp" }),
+      expect.objectContaining({ rowId: "manual:row-salt-tsp" }),
       expect.any(Object)
     )
     expectCategoryExpanded("produce", true)
     expect(currentShoppingList.items.map((item) => item.rowId)).toEqual([
-      "row-apples",
-      "row-milk-cup",
-      "row-salt-tsp",
+      "manual:row-apples",
+      "manual:row-milk-cup",
+      "manual:row-salt-tsp",
     ])
-    expect(currentShoppingList.already_have.map((item) => item.rowId)).toEqual(["row-milk-bottle"])
-    expect(currentShoppingList.excluded.map((item) => item.rowId)).toEqual(["row-salt-tbsp"])
+    expect(currentShoppingList.already_have.map((item) => item.rowId)).toEqual(["manual:row-milk-bottle"])
+    expect(currentShoppingList.excluded.map((item) => item.rowId)).toEqual(["manual:row-salt-tbsp"])
   })
 
   it("keeps pantry and excluded sections reachable when active items are empty", async () => {
@@ -1350,7 +1374,7 @@ describe("ShoppingListView orchestration", () => {
 
     expect(updateShoppingItemMutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({
-        item: expect.objectContaining({ rowId: "row-garlic" }),
+        item: expect.objectContaining({ rowId: "manual:row-garlic" }),
         updates: {
           itemName: "shallots",
           amount: 0.5,

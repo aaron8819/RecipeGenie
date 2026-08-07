@@ -1,5 +1,5 @@
 import type { ShoppingItem } from "@/types/database"
-import { requireShoppingRowId } from "@/lib/shopping-row-identity"
+import { requireShoppingRowRef } from "@/lib/shopping-row-reference"
 
 export type CategoryIntent = "expanded" | "collapsed"
 export type CategoryIntentByKey = Map<string, CategoryIntent>
@@ -21,7 +21,7 @@ export function deriveCategoryContent(items: ShoppingItem[]): CategoryContentByK
       uncheckedRowIds: new Set<string>(),
     }
     const target = item.checked ? content.checkedRowIds : content.uncheckedRowIds
-    target.add(requireShoppingRowId(item, "category expansion state"))
+    target.add(requireShoppingRowRef(item, "category expansion state"))
     contentByKey.set(categoryKey, content)
   })
 

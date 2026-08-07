@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "017_remove_legacy_recipe_structure"
+export const EXPECTED_LATEST_MIGRATION = "018_shopping_document_cutover"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

@@ -71,8 +71,8 @@ vi.mock("@/hooks/use-undo-toast", () => ({
   }),
 }))
 
-vi.mock("@/hooks/shared/user-config", () => ({
-  useUserConfig: () => userConfigState,
+vi.mock("@/hooks/use-shopping", () => ({
+  useShoppingConfig: () => userConfigState,
   useUpdateIngredientExclusionSetting: () => ({
     mutate: updateIngredientExclusionMutate,
     isPending: ingredientExclusionMutationState.isPending,

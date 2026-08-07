@@ -159,23 +159,6 @@ function currentMonday() {
     .join('-')
 }
 
-function shoppingItem({ rowId, item, amount, unit, categoryKey, categoryOrder, checked }) {
-  return {
-    rowId,
-    item,
-    amount,
-    unit,
-    categoryKey,
-    categoryOrder,
-    checked,
-    sources: [{
-      recipeId: RECIPES[0].recipe_uuid,
-      legacyRecipeId: RECIPES[0].recipe_uuid,
-      recipeName: RECIPES[0].name,
-    }],
-  }
-}
-
 async function checked(error, operation) {
   if (error) throw new Error(`${operation} failed: ${error.message}`)
 }
@@ -198,34 +181,39 @@ async function seedRepresentativeData(client, userId) {
 
   const { error: configError } = await client.from('user_config').update({
     onboarding_completed_at: new Date().toISOString(),
-    excluded_keywords: ['cilantro'],
-    custom_categories: [{ id: 'empty-local-fixture', name: 'Empty Local Fixture', order: 9 }],
-    shopping_item_order: {},
     week_start_day: 1,
   }).eq('user_id', userId)
   await checked(configError, 'Local user configuration seed')
 
-  const items = [
-    shoppingItem({ rowId: 'fixture-lemons', item: 'lemons', amount: 2, unit: 'count', categoryKey: 'produce', categoryOrder: 1, checked: false }),
-    shoppingItem({ rowId: 'fixture-chicken', item: 'chicken breasts', amount: 1.5, unit: 'lb', categoryKey: 'protein', categoryOrder: 4, checked: false }),
-    shoppingItem({ rowId: 'fixture-yogurt', item: 'greek yogurt', amount: 1, unit: 'cup', categoryKey: 'dairy', categoryOrder: 5, checked: false }),
-    shoppingItem({ rowId: 'fixture-tortillas', item: 'corn tortillas', amount: 8, unit: 'count', categoryKey: 'bakery', categoryOrder: 3, checked: true }),
-    shoppingItem({ rowId: 'fixture-beans', item: 'black beans', amount: 2, unit: 'cans', categoryKey: 'pantry', categoryOrder: 6, checked: true }),
+  const manualItem = (id, displayName, amount, unit, categoryKey, bucket = 'items', checked = false) => ({
+    id, displayName, quantity: amount == null ? null : { amount, unit }, categoryKey, bucket, checked,
+  })
+  const manualItems = [
+    manualItem('fixture-lemons', 'lemons', 2, 'count', 'produce'),
+    manualItem('fixture-chicken', 'chicken breasts', 1.5, 'lb', 'protein'),
+    manualItem('fixture-yogurt', 'greek yogurt', 1, 'cup', 'dairy'),
+    manualItem('fixture-tortillas', 'corn tortillas', 8, 'count', 'bakery', 'items', true),
+    manualItem('fixture-beans', 'black beans', 2, 'cans', 'pantry', 'items', true),
+    manualItem('fixture-oats', 'rolled oats', 2, 'cups', 'pantry', 'already_have'),
+    manualItem('fixture-cilantro', 'cilantro', 1, 'bunch', 'produce', 'excluded'),
   ]
   const { error: shoppingError } = await client.from('shopping_list').update({
-    items,
-    already_have: [
-      shoppingItem({ rowId: 'fixture-oats', item: 'rolled oats', amount: 2, unit: 'cups', categoryKey: 'pantry', categoryOrder: 6, checked: false }),
-    ],
-    excluded: [
-      { ...shoppingItem({ rowId: 'fixture-cilantro', item: 'cilantro', amount: 1, unit: 'bunch', categoryKey: 'produce', categoryOrder: 1, checked: false }), excludedBy: 'cilantro' },
-    ],
-    custom_order: false,
-    generated_at: new Date().toISOString(),
-    scale: 1,
-    source_recipe_uuids: [],
-    source_recipes: [],
-    total_servings: 4,
+    document: {
+      schemaVersion: 1,
+      recipeEntries: {},
+      manualItems,
+      itemOverrides: {},
+      order: manualItems.map((item) => `manual:${item.id}`),
+      preferences: {
+        categoryByIngredient: {},
+        customCategories: [{ id: 'empty-local-fixture', name: 'Empty Local Fixture', order: 9 }],
+        categoryOrder: [],
+        excludedIngredientKeys: ['cilantro'],
+        excludeSaltVariants: false,
+        excludeBlackPepperVariants: false,
+      },
+    },
+    content_revision: 1,
   }).eq('user_id', userId)
   await checked(shoppingError, 'Representative shopping seed')
 
@@ -281,11 +269,7 @@ async function main() {
     const { error } = await admin.auth.admin.deleteUser(existingUserId)
     if (error) throw error
 
-    for (const table of [
-      'recipes',
-      'shopping_recipe_contributions',
-      'shopping_contribution_commands',
-    ]) {
+    for (const table of ['recipes']) {
       const { count, error: residueError } = await admin
         .from(table)
         .select('*', { count: 'exact', head: true })

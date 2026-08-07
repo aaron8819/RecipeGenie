@@ -37,8 +37,11 @@ import {
   useAddShoppingItem,
   useUpdateShoppingItem,
   useRemoveShoppingItem,
+  useRestoreShoppingItem,
   useRemoveRecipeItems,
+  useRestoreRecipeItems,
   useClearShoppingList,
+  useRestoreShoppingContent,
   useCheckOffItem,
   useBulkCheckOff,
   useMoveToShoppingList,
@@ -48,7 +51,6 @@ import {
   useShoppingConfig,
   useUpdateShoppingConfig,
   useAddToPantryAndRemove,
-  useShoppingPendingActions,
 } from "@/hooks/use-shopping"
 import { getCategoryByKey } from "@/lib/shopping-categories"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
@@ -59,7 +61,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
 import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
-import { createShoppingRowId } from "@/lib/shopping-row-identity"
+import { createShoppingManualItemId } from "@/lib/shopping-row-reference"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import { useRecipes } from "@/hooks/use-recipes"
 import {
@@ -675,8 +677,11 @@ export function ShoppingListView() {
   const addItem = useAddShoppingItem()
   const updateItem = useUpdateShoppingItem()
   const removeItem = useRemoveShoppingItem()
+  const restoreItem = useRestoreShoppingItem()
   const removeRecipeItems = useRemoveRecipeItems()
+  const restoreRecipeItems = useRestoreRecipeItems()
   const clearList = useClearShoppingList()
+  const restoreShoppingContent = useRestoreShoppingContent()
   const checkOffItem = useCheckOffItem()
   const bulkCheckOff = useBulkCheckOff()
   const moveToList = useMoveToShoppingList()
@@ -685,11 +690,6 @@ export function ShoppingListView() {
   const saveCategoryOverride = useSaveCategoryOverride()
   const addToPantryAndRemove = useAddToPantryAndRemove()
   const undoToast = useUndoToast()
-  const pendingActions = useShoppingPendingActions({
-    removeItemCommit: removeItem,
-    removeRecipeCommit: removeRecipeItems,
-    clearListCommit: clearList,
-  })
 
   // Handle clicking on a recipe tag
   const handleRecipeTagClick = useCallback((recipeId: string | undefined, recipeName: string) => {
@@ -721,21 +721,39 @@ export function ShoppingListView() {
     setManualEditError(null)
   }, [])
 
-  // Handle item removal with undo
   const handleRemoveItem = useCallback((item: ShoppingItem) => {
-    pendingActions.enqueueRemoveItem(item)
-  }, [pendingActions])
+    removeItem.mutate(item, {
+      onSuccess: (removed) => {
+        undoToast.show({
+          message: `"${removed.item}" removed from list`,
+          onUndo: () => restoreItem.mutate(removed),
+        })
+      },
+    })
+  }, [removeItem, restoreItem, undoToast])
 
-  // Handle recipe items removal with undo
   const handleRemoveRecipeItems = useCallback((recipeId: string | undefined, recipeName: string) => {
     if (!recipeId) return
-    pendingActions.enqueueRemoveRecipe({ recipeId, recipeName })
-  }, [pendingActions])
+    removeRecipeItems.mutate({ recipeId, recipeName }, {
+      onSuccess: ({ entry }) => {
+        undoToast.show({
+          message: `Items from "${recipeName || 'recipe'}" removed`,
+          onUndo: entry ? () => restoreRecipeItems.mutate(entry) : undefined,
+        })
+      },
+    })
+  }, [removeRecipeItems, restoreRecipeItems, undoToast])
 
-  // Handle clear list with undo
   const handleClearListWithUndo = useCallback(() => {
-    pendingActions.enqueueClearList()
-  }, [pendingActions])
+    clearList.mutate(undefined, {
+      onSuccess: (content) => {
+        undoToast.show({
+          message: 'Shopping list cleared',
+          onUndo: () => restoreShoppingContent.mutate(content),
+        })
+      },
+    })
+  }, [clearList, restoreShoppingContent, undoToast])
 
   // Handle bulk check-off (check all items in a category)
   const handleBulkCheckOff = useCallback((items: ShoppingItem[]) => {
@@ -835,9 +853,7 @@ export function ShoppingListView() {
 
   // Show cached data immediately even while fetching (stale-while-revalidate)
   const displayShoppingList = createDisplayShoppingList(shoppingList)
-  const projectedShoppingList = useMemo(() => {
-    return createDisplayShoppingList(pendingActions.projectShoppingList(displayShoppingList))
-  }, [displayShoppingList, pendingActions])
+  const projectedShoppingList = displayShoppingList
   
   const mergedAlreadyHave = useMemo(() => {
     return mergeAlreadyHaveItems(projectedShoppingList.already_have || [])
@@ -1064,7 +1080,10 @@ export function ShoppingListView() {
         const normalized = item.toLowerCase().trim()
         setActiveAdditions(prev => new Set(prev).add(normalized))
         try {
-          await addItem.mutateAsync({ itemName: item, rowId: createShoppingRowId() })
+          await addItem.mutateAsync({
+            itemName: item,
+            rowId: createShoppingManualItemId(),
+          })
           addedItems.push(item)
         } catch (error) {
           if (isAlreadyInShoppingListError(error)) {
@@ -1277,7 +1296,7 @@ export function ShoppingListView() {
       // Save category override for future shopping lists
       try {
         await saveCategoryOverride.mutateAsync({
-          itemName: draggedItem.item,
+          item: draggedItem,
           categoryKey: newCategory,
         })
       } catch (error) {

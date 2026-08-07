@@ -18,8 +18,6 @@ export const AUDIT_CHECKS = [
       union all select 'share:' || id::text from public.recipe_shares s
         where not exists (select 1 from auth.users u where u.id = s.sender_user_id)
            or not exists (select 1 from auth.users u where u.id = s.recipient_user_id)
-      union all select 'contribution:' || recipe_uuid::text from public.shopping_recipe_contributions c
-        where not exists (select 1 from auth.users u where u.id = c.user_id)
     ) select count(*)::integer as record_count,
       coalesce((select array_agg(identifier) from (select identifier from invalid order by identifier limit $1) samples), '{}'::text[]) as sample_ids
     from invalid`,
@@ -154,68 +152,15 @@ export const AUDIT_CHECKS = [
     from invalid`,
   ),
   check(
-    "shopping-contribution-authority",
+    "shopping-document-validity",
     "ERROR",
-    "Each frozen contribution must resolve to one same-owner recipe, agree across UUID/legacy identities, and contain a valid single-recipe snapshot.",
-    "Re-add or remove the affected recipe through the shopping contribution command after reviewing the frozen snapshot; do not patch the projection directly.",
-    `with invalid as (
-      select c.recipe_uuid::text as identifier
-      from public.shopping_recipe_contributions c
-      left join public.recipes r on r.recipe_uuid = c.recipe_uuid and r.user_id = c.user_id
-      where r.recipe_uuid is null or r.id <> c.recipe_id
-        or jsonb_typeof(c.snapshot) <> 'object'
-        or jsonb_typeof(c.snapshot->'items') <> 'array'
-        or exists (
-          select 1 from jsonb_array_elements(
-            case when jsonb_typeof(c.snapshot->'items') = 'array' then c.snapshot->'items' else '[]'::jsonb end
-          ) item
-          cross join lateral jsonb_array_elements(
-            case when jsonb_typeof(item.value->'sources') = 'array' then item.value->'sources' else '[]'::jsonb end
-          ) source
-          where nullif(source.value->>'recipeUuid', '') is distinct from c.recipe_uuid::text
-        )
-    ) select count(*)::integer as record_count,
-      coalesce((select array_agg(identifier) from (select identifier from invalid order by identifier limit $1) samples), '{}'::text[]) as sample_ids
-    from invalid`,
-  ),
-  check(
-    "shopping-projection-lifecycle",
-    "ERROR",
-    "Shopping source mirrors must resolve to same-owner recipes, and one row identity cannot occupy active, pantry/already-have, and excluded buckets simultaneously.",
-    "Regenerate the list from authoritative contributions or use the normal restore/remove lifecycle action after reviewing manual overrides.",
-    `with bucket_rows as (
-      select s.user_id, 'shopping:' || left(md5(s.user_id::text), 16) as identifier,
-        item.value->>'rowId' as row_id, bucket.name
-      from public.shopping_list s
-      cross join lateral (values ('items', s.items), ('already_have', s.already_have), ('excluded', s.excluded)) bucket(name, value)
-      cross join lateral jsonb_array_elements(
-        case when jsonb_typeof(bucket.value) = 'array' then bucket.value else '[]'::jsonb end
-      ) item
-      where nullif(item.value->>'rowId', '') is not null
-    ), invalid as (
-      select 'shopping:' || left(md5(s.user_id::text), 16) as identifier
-      from public.shopping_list s
-      where s.source_recipes <> private.resolve_owned_recipe_legacy_array(s.user_id, s.source_recipe_uuids)
-      union all
-      select identifier from bucket_rows group by user_id, identifier, row_id having count(distinct name) > 1
-    ) select count(*)::integer as record_count,
-      coalesce((select array_agg(identifier) from (select distinct identifier from invalid order by identifier limit $1) samples), '{}'::text[]) as sample_ids
-    from invalid`,
-  ),
-  check(
-    "shopping-projection-totals",
-    "WARNING",
-    "The authoritative contribution command stores total servings as the sum of active contribution servings.",
-    "Re-run an idempotent contribution command from fresh state to rebuild the compatibility projection after reviewing concurrent/manual changes.",
+    "Every Shopping row must contain a valid ShoppingDocumentV1 and a nonnegative content revision.",
+    "Stop Shopping writes for the affected owner and repair the document through an explicitly reviewed forward migration.",
     `with invalid as (
       select 'shopping:' || left(md5(s.user_id::text), 16) as identifier
       from public.shopping_list s
-      left join lateral (
-        select coalesce(sum(c.servings), 0)::integer as expected_servings
-        from public.shopping_recipe_contributions c where c.user_id = s.user_id
-      ) totals on true
-      where coalesce(s.total_servings, 0) <> totals.expected_servings
-        and exists (select 1 from public.shopping_recipe_contributions c where c.user_id = s.user_id)
+      where not public.is_shopping_document_v1(s.document)
+        or s.content_revision < 0
     ) select count(*)::integer as record_count,
       coalesce((select array_agg(identifier) from (select identifier from invalid order by identifier limit $1) samples), '{}'::text[]) as sample_ids
     from invalid`,

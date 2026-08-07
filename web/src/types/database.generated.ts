@@ -207,187 +207,61 @@ export type Database = {
         }
         Relationships: []
       }
-      shopping_contribution_commands: {
-        Row: {
-          command_fingerprint: string
-          command_type: string
-          created_at: string
-          idempotency_key: string
-          user_id: string
-        }
-        Insert: {
-          command_fingerprint: string
-          command_type: string
-          created_at?: string
-          idempotency_key: string
-          user_id: string
-        }
-        Update: {
-          command_fingerprint?: string
-          command_type?: string
-          created_at?: string
-          idempotency_key?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       shopping_list: {
         Row: {
-          already_have: Json | null
-          contribution_overrides: Json
-          contribution_revision: number
-          custom_order: boolean | null
-          excluded: Json | null
-          generated_at: string | null
-          items: Json | null
-          legacy_items_preserved: boolean
-          scale: number | null
-          source_recipe_uuids: string[]
-          source_recipes: string[] | null
-          total_servings: number | null
-          user_id: string
-        }
-        Insert: {
-          already_have?: Json | null
-          contribution_overrides?: Json
-          contribution_revision?: number
-          custom_order?: boolean | null
-          excluded?: Json | null
-          generated_at?: string | null
-          items?: Json | null
-          legacy_items_preserved?: boolean
-          scale?: number | null
-          source_recipe_uuids?: string[]
-          source_recipes?: string[] | null
-          total_servings?: number | null
-          user_id: string
-        }
-        Update: {
-          already_have?: Json | null
-          contribution_overrides?: Json
-          contribution_revision?: number
-          custom_order?: boolean | null
-          excluded?: Json | null
-          generated_at?: string | null
-          items?: Json | null
-          legacy_items_preserved?: boolean
-          scale?: number | null
-          source_recipe_uuids?: string[]
-          source_recipes?: string[] | null
-          total_servings?: number | null
-          user_id?: string
-        }
-        Relationships: []
-      }
-      shopping_recipe_contributions: {
-        Row: {
-          created_at: string
-          idempotency_key: string
-          normalization_version: number
-          recipe_id: string
-          recipe_uuid: string
-          scale: number
-          servings: number
-          snapshot: Json
+          content_revision: number
+          document: Json
           updated_at: string
           user_id: string
         }
         Insert: {
-          created_at?: string
-          idempotency_key: string
-          normalization_version: number
-          recipe_id?: string
-          recipe_uuid: string
-          scale: number
-          servings: number
-          snapshot: Json
+          content_revision?: number
+          document?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
-          created_at?: string
-          idempotency_key?: string
-          normalization_version?: number
-          recipe_id?: string
-          recipe_uuid?: string
-          scale?: number
-          servings?: number
-          snapshot?: Json
+          content_revision?: number
+          document?: Json
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "shopping_recipe_contributions_recipe_id_fkey"
-            columns: ["recipe_id"]
-            isOneToOne: false
-            referencedRelation: "recipes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "shopping_recipe_contributions_recipe_uuid_fkey"
-            columns: ["recipe_uuid"]
-            isOneToOne: false
-            referencedRelation: "recipes"
-            referencedColumns: ["recipe_uuid"]
-          },
-        ]
+        Relationships: []
       }
       user_config: {
         Row: {
           auto_assign_days: boolean | null
           categories: string[] | null
-          category_order: Json | null
-          category_overrides: Json | null
-          custom_categories: Json | null
           default_selection: Json | null
           enabled_planner_categories: string[] | null
-          exclude_black_pepper_variants: boolean
-          exclude_salt_variants: boolean
           excluded_days: number[] | null
-          excluded_keywords: string[] | null
           history_exclusion_days: number | null
           onboarding_completed_at: string | null
           preferred_days: number[] | null
-          shopping_item_order: Json
           user_id: string
           week_start_day: number | null
         }
         Insert: {
           auto_assign_days?: boolean | null
           categories?: string[] | null
-          category_order?: Json | null
-          category_overrides?: Json | null
-          custom_categories?: Json | null
           default_selection?: Json | null
           enabled_planner_categories?: string[] | null
-          exclude_black_pepper_variants?: boolean
-          exclude_salt_variants?: boolean
           excluded_days?: number[] | null
-          excluded_keywords?: string[] | null
           history_exclusion_days?: number | null
           onboarding_completed_at?: string | null
           preferred_days?: number[] | null
-          shopping_item_order?: Json
           user_id: string
           week_start_day?: number | null
         }
         Update: {
           auto_assign_days?: boolean | null
           categories?: string[] | null
-          category_order?: Json | null
-          category_overrides?: Json | null
-          custom_categories?: Json | null
           default_selection?: Json | null
           enabled_planner_categories?: string[] | null
-          exclude_black_pepper_variants?: boolean
-          exclude_salt_variants?: boolean
           excluded_days?: number[] | null
-          excluded_keywords?: string[] | null
           history_exclusion_days?: number | null
           onboarding_completed_at?: string | null
           preferred_days?: number[] | null
-          shopping_item_order?: Json
           user_id?: string
           week_start_day?: number | null
         }
@@ -438,30 +312,6 @@ export type Database = {
     }
     Functions: {
       accept_recipe_share: { Args: { p_share_id: string }; Returns: string }
-      apply_recipe_shopping_contribution_command: {
-        Args: {
-          p_command_type: string
-          p_contribution_overrides: Json
-          p_contributions: Json
-          p_expected_revision: number
-          p_idempotency_key: string
-          p_projection: Json
-          p_remove_recipe_ids: string[]
-        }
-        Returns: Json
-      }
-      apply_recipe_shopping_contribution_uuid_command: {
-        Args: {
-          p_command_type: string
-          p_contribution_overrides: Json
-          p_contributions: Json
-          p_expected_revision: number
-          p_idempotency_key: string
-          p_projection: Json
-          p_remove_recipe_uuids: string[]
-        }
-        Returns: Json
-      }
       delete_recipe: { Args: { p_recipe_uuid: string }; Returns: string }
       delete_tag: { Args: { p_tag: string }; Returns: undefined }
       filter_recipes_by_tags: {
@@ -502,18 +352,25 @@ export type Database = {
         }[]
       }
       get_recipe_identity_compat_usage: { Args: never; Returns: number }
-      get_recipe_shopping_contribution_state: { Args: never; Returns: Json }
+      is_shopping_document_v1: { Args: { p_document: Json }; Returns: boolean }
       merge_tags: {
         Args: { p_source_tag: string; p_target_tag: string }
         Returns: undefined
       }
-      move_shopping_item_to_pantry: {
-        Args: { p_pantry_qty: number; p_pantry_unit: string; p_row_id: string }
+      move_shopping_document_item_to_pantry: {
+        Args: {
+          p_document: Json
+          p_expected_revision: number
+          p_item: string
+          p_pantry_qty: number
+          p_pantry_unit: string
+        }
         Returns: {
+          content_revision: number
+          document: Json
           pantry_item: Json
           pantry_was_inserted: boolean
-          removed_item: Json
-          shopping_list_updated_at: string
+          updated_at: string
         }[]
       }
       rename_tag: {
@@ -523,14 +380,6 @@ export type Database = {
       resolve_recipe_identity: {
         Args: { p_legacy_id?: string; p_recipe_uuid?: string }
         Returns: string
-      }
-      toggle_shopping_item_checked: {
-        Args: { p_row_id: string }
-        Returns: {
-          checked: boolean
-          row_id: string
-          updated_at: string
-        }[]
       }
       toggle_weekly_recipe_made: {
         Args: {

@@ -1,6 +1,10 @@
 # Shopping persistence simplification design
 
-Scope: design only. This audit is based on `origin/main` at
+Status: implemented by `018_shopping_document_cutover.sql` and the
+`ShoppingDocumentV1` runtime on 2026-08-07. The remainder of this document
+preserves the approved design and cutover rationale.
+
+Original scope: design only. This audit is based on `origin/main` at
 `afcd8dc331b0d928cb2ef8ea96667c8f52096744`, including migration 017. The
 evidence is static application, test, documentation, schema, and migration
 inspection. No application code, schema, migration, data, local Supabase,

@@ -81,7 +81,6 @@ for (const required of [
   /\.eq\("recipe_uuid", id\)/,
   /recipeUuidWrite\(recipeUuid\)/,
   /mapRecipeRow/,
-  /runRecipeContributionCommand\("DELETE"/,
   /deleteRecipeByUuid\([\s\S]*getSupabase\(\),[\s\S]*id,[\s\S]*user!\.id/,
 ]) {
   if (!required.test(recipeHooks)) failures.push(`recipe hook UUID seam missing: ${required}`)
@@ -130,7 +129,6 @@ for (const forbidden of [
 const activeLegacyIdUsers = [
   "src/hooks/use-planner.ts",
   "src/hooks/use-plan-templates.ts",
-  "src/app/api/shopping/recipe-contributions/route.ts",
   "src/app/api/recipe-shares/route.ts",
   "src/lib/query-keys.ts",
 ]
@@ -165,22 +163,6 @@ for (const required of [
 const templates = read("src/hooks/use-plan-templates.ts")
 for (const required of [/recipe_uuids: recipeIds/, /day_assignment_recipe_uuids:/]) {
   if (!required.test(templates)) failures.push(`template UUID contract missing: ${required}`)
-}
-
-const contributionRoute = read("src/app/api/shopping/recipe-contributions/route.ts")
-if (!contributionRoute.includes("apply_recipe_shopping_contribution_uuid_command")) {
-  failures.push("shopping contribution route is not UUID-addressed")
-}
-if (/recipeNames/.test(contributionRoute) || /\.in\("name"/.test(contributionRoute)) {
-  failures.push("shopping contribution route retains recipe-name identity resolution")
-}
-for (const forbidden of [
-  /recipeIds:\s*input\.recipeIds/,
-  /idempotencyKey:\s*input\.idempotencyKey/,
-]) {
-  if (forbidden.test(contributionRoute)) {
-    failures.push(`shopping contribution logs expose raw identity metadata: ${forbidden}`)
-  }
 }
 
 const shareRoute = read("src/app/api/recipe-shares/route.ts")

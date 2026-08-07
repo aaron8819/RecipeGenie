@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-08-01*
+*Last updated: 2026-08-07*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -16,7 +16,6 @@ This document describes the complete database schema for the Recipe Genie applic
   - [recipe_history](#recipe_history)
   - [weekly_plans](#weekly_plans)
   - [shopping_list](#shopping_list)
-  - [shopping_recipe_contributions](#shopping_recipe_contributions)
   - [recipe_shares](#recipe_shares)
   - [plan_templates](#plan_templates)
 - [Storage Buckets](#storage-buckets)
@@ -63,35 +62,38 @@ enforce those ownership boundaries.
 - `supabase/migrations/015_add_shopping_exclusion_settings.sql`
 - `supabase/migrations/016_canonical_recipe_structure_cutover.sql`
 - `supabase/migrations/017_remove_legacy_recipe_structure.sql`
+- `supabase/migrations/018_shopping_document_cutover.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 17 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 18 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
 
 - `recipes.recipe_uuid` is the canonical application identity.
 - Active application reads, writes, planner/template references, sharing,
-  history, shopping contributions, and deletion use UUID identity.
+  history, Shopping document recipe entries, and deletion use UUID identity.
 - `recipes.id` remains the physical text primary key. Text reference
   columns/arrays and JSON keys remain as derived or validated compatibility
   mirrors while Stage 3 has not run.
 - Unresolved historical recipe evidence may retain a text alias with nullable
   UUID linkage. No UUID is invented for a deleted or unresolved recipe.
-- Migration 013 preserves UUID authority when an existing shopping
-  contribution is replaced without rewriting its unchanged identity pair.
+- Migration 013 historically preserved UUID authority for the contribution
+  model that migration 018 removes.
 - Migration 014 adds versioned authored-yield metadata and hardens shared
   snapshot acceptance with private, non-executable structured quantity,
   package, rational, unit, and yield validators while preserving the numeric
   servings projection.
-- Migration 015 adds opt-in Salt-variant and Black-pepper-variant shopping
-  exclusions. Both settings are non-null and default to `false`.
+- Migration 015 historically added Shopping exclusions to `user_config`;
+  migration 018 moves them into `ShoppingDocumentV1.preferences`.
 - Migration `016` atomically backfills canonical ordered ingredient
   and instruction sections, converts share snapshots, and switches privileged
   recipe creation/acceptance to canonical fields.
 - Migration `017` removes the superseded physical recipe-structure columns and
   migration-only conversion functions. Canonical sections remain the only
   persisted recipe structure.
+- Migration `018` atomically converts legacy Shopping state into one canonical
+  document with one CAS revision, then removes contribution-era persistence.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -205,16 +207,9 @@ Stores user-specific configuration and preferences.
 | `user_id` | UUID | PRIMARY KEY, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the config |
 | `categories` | TEXT[] | DEFAULT ARRAY['chicken', 'beef', 'turkey', 'lamb', 'vegetarian'] | Available recipe categories |
 | `default_selection` | JSONB | DEFAULT '{"chicken": 2, "beef": 1, "turkey": 1, "lamb": 1, "vegetarian": 1}' | Default number of recipes per category for meal planning |
-| `excluded_keywords` | TEXT[] | DEFAULT '{}' | Whole normalized ingredient names to exclude from shopping generation |
-| `exclude_salt_variants` | BOOLEAN | NOT NULL, DEFAULT FALSE | Whether approved standalone Salt aliases are excluded from newly generated shopping contributions |
-| `exclude_black_pepper_variants` | BOOLEAN | NOT NULL, DEFAULT FALSE | Whether approved standalone Black pepper aliases are excluded from newly generated shopping contributions |
 | `history_exclusion_days` | INTEGER | DEFAULT 7 | Number of days to exclude recently made recipes |
 | `week_start_day` | INTEGER | DEFAULT 1 | Day of week that starts the meal plan (1 = Monday) |
 | `onboarding_completed_at` | TIMESTAMPTZ | DEFAULT NULL | Timestamp when the user completed onboarding |
-| `category_overrides` | JSONB | DEFAULT '{}' | User-defined category overrides for shopping list items (maps item names to category keys) |
-| `custom_categories` | JSONB | DEFAULT '[]' | User-defined shopping categories: `[{ "id": "uuid", "name": "Category Name", "order": number }]` |
-| `category_order` | JSONB | DEFAULT NULL | Custom order for all categories (array of category keys), null uses default order |
-| `shopping_item_order` | JSONB | DEFAULT '{}' | User-learned item order within shopping categories (maps category keys to ordered normalized item names) |
 | `excluded_days` | INTEGER[] | DEFAULT '{}' | Day indices (0-6) to exclude from meal placement. 0=Sunday, 1=Monday, etc. |
 | `preferred_days` | INTEGER[] | DEFAULT NULL | Preferred day indices (0-6) for meal placement, or null for no preference |
 | `auto_assign_days` | BOOLEAN | DEFAULT TRUE | Whether to automatically assign days to recipes when generating a meal plan |
@@ -223,42 +218,6 @@ Canonical default planner categories are: `chicken`, `beef`, `turkey`, `lamb`,
 `vegetarian`. The baseline includes the normalization formerly introduced by
 the archived pre-baseline migration
 `026_normalize_legacy_steak_defaults.sql`.
-
-**Example category_overrides JSONB:**
-```json
-{
-  "sun dried tomatoes": "pantry",
-  "olive oil": "pantry"
-}
-```
-
-**Example custom_categories JSONB:**
-```json
-[
-  {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "Asian Market",
-    "order": 9
-  },
-  {
-    "id": "660e8400-e29b-41d4-a716-446655440001",
-    "name": "Specialty Store",
-    "order": 10
-  }
-]
-```
-
-**Example category_order JSONB:**
-```json
-["produce", "dairy", "protein", "custom_550e8400-e29b-41d4-a716-446655440000", "pantry", "frozen"]
-```
-
-**Example shopping_item_order JSONB:**
-```json
-{
-  "produce": ["blueberries", "guacamole", "pico de gallo", "basil", "mushrooms", "lemon", "lime", "avocado", "tomato", "pepper", "onion", "garlic", "potato", "cilantro", "parsley", "cucumber", "banana"]
-}
-```
 
 ### recipe_history
 
@@ -305,66 +264,38 @@ This assigns recipe-1 to Sunday (0), recipe-2 to Wednesday (3), and recipe-3 to 
 
 ### shopping_list
 
-Stores the user's shopping list state.
+Stores one canonical Shopping document per user. Recipe-derived rows are
+projected from document recipe entries and live Pantry state; rendered buckets
+are not persisted.
 
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `user_id` | UUID | PRIMARY KEY, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the shopping list |
-| `items` | JSONB | DEFAULT '[]' | Array of shopping list items |
-| `already_have` | JSONB | DEFAULT '[]' | Items marked as already owned |
-| `excluded` | JSONB | DEFAULT '[]' | Items excluded from the list |
-| `source_recipes` | TEXT[] | DEFAULT '{}' | Derived compatibility source-recipe identities |
-| `source_recipe_uuids` | UUID[] | NOT NULL, DEFAULT '{}' | Canonical ordered source-recipe identities |
-| `scale` | NUMERIC | DEFAULT 1.0 | Scaling factor applied to the list |
-| `total_servings` | INTEGER | DEFAULT 0 | Total number of servings across all recipes |
-| `custom_order` | BOOLEAN | DEFAULT FALSE | Whether the list has been manually reordered (disables auto-sorting) |
-| `contribution_revision` | BIGINT | NOT NULL, DEFAULT 0 | Compare-and-swap revision for recipe contribution projection writes |
-| `contribution_overrides` | JSONB | NOT NULL, DEFAULT '{}' | Manual quantity, presentation, ordering, and lifecycle overrides |
-| `legacy_items_preserved` | BOOLEAN | NOT NULL, DEFAULT TRUE | Whether ambiguous pre-contribution JSON is conservatively retained |
-| `generated_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp when list was generated |
+| `document` | JSONB | NOT NULL, validated as `ShoppingDocumentV1` | Recipe entries, manual items, explicit overrides, order, and Shopping preferences |
+| `content_revision` | BIGINT | NOT NULL, DEFAULT 0 | Compare-and-swap revision; every write advances exactly once |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last successful document write |
 
-**Shopping item JSONB structure:**
+**Document outline:**
 ```json
-[
-  {
-    "rowId": "01HV6Q2G7M9X3J7N8K4S5T6U7V",
-    "item": "garlic",
-    "amount": 2,
-    "unit": "clove",
-    "categoryKey": "produce",
-    "categoryOrder": 1,
-    "checked": false,
-    "sources": [{ "recipeName": "Chicken Stir Fry" }]
+{
+  "schemaVersion": 1,
+  "recipeEntries": {},
+  "manualItems": [],
+  "itemOverrides": {},
+  "order": [],
+  "preferences": {
+    "categoryByIngredient": {},
+    "customCategories": [],
+    "categoryOrder": [],
+    "excludedIngredientKeys": [],
+    "excludeSaltVariants": false,
+    "excludeBlackPepperVariants": false
   }
-]
+}
 ```
 
-`rowId` is the stable identity contract for shopping rows across `items`,
-`already_have`, and `excluded`. Client mutations, drag-and-drop ids, and
-server RPCs must target rows by `rowId`, not by item name.
-Every `shopping_list` update advances `contribution_revision` unless the
-authoritative command already supplied the next revision. This makes
-concurrent manual edits visible to the command's compare-and-swap retry.
-
-### shopping_recipe_contributions
-
-Stores the authoritative frozen quantitative snapshot for each active recipe
-contribution. The physical primary key remains `(user_id, recipe_id)`, while
-`recipe_uuid` is the canonical application identity and is unique per owner.
-`shopping_list` is the compatibility projection.
-
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `user_id` | UUID | PRIMARY KEY, FOREIGN KEY → `auth.users(id)` | Contribution owner |
-| `recipe_id` | TEXT | PRIMARY KEY, FOREIGN KEY → `recipes(id)` | Derived compatibility identity |
-| `recipe_uuid` | UUID | NOT NULL, FOREIGN KEY → `recipes(recipe_uuid)`, UNIQUE with `user_id` | Canonical contribution identity |
-| `servings` | INTEGER | NOT NULL, > 0 | Frozen effective servings |
-| `scale` | NUMERIC | NOT NULL, > 0 | Frozen scale used during generation |
-| `normalization_version` | INTEGER | NOT NULL, > 0 | Generation/normalization contract version |
-| `snapshot` | JSONB | NOT NULL object | Frozen generated contribution items and recipe display snapshot |
-| `idempotency_key` | TEXT | NOT NULL | Last command identity that wrote the row |
-| `created_at` | TIMESTAMPTZ | NOT NULL | Creation timestamp |
-| `updated_at` | TIMESTAMPTZ | NOT NULL | Last replacement timestamp |
+Stable rendered row references are `manual:<id>` or
+`derived:<aggregateKey>` and are never a second persisted authority.
 
 ### recipe_shares
 
@@ -479,9 +410,8 @@ All tables use the same pattern: users can only access rows where `auth.uid() = 
 - **user_config**: `users_own_config` - Users can only access their own config
 - **recipe_history**: `users_own_history` - Users can only access their own history
 - **weekly_plans**: `users_own_plans` - Users can only access their own plans
-- **shopping_list**: `users_own_shopping` - Users can only access their own shopping list
-- **shopping_recipe_contributions**: authenticated users can read their own
-  contribution rows; writes go through the guarded UUID command
+- **shopping_list**: authenticated users can select their own row and update
+  only `document` plus `content_revision`; insert/delete remain trigger/service operations
 - **recipe_shares**:
   - `users_own_recipe_shares_select` - Sender or recipient can read share rows
   - `users_create_recipe_shares` - Sender can insert rows with `sender_user_id = auth.uid()`
@@ -490,7 +420,7 @@ All tables use the same pattern: users can only access rows where `auth.uid() = 
 
 Ordinary user-owned table policies use owner checks equivalent to
 `auth.uid() = user_id`. Shares use sender/recipient-specific policies, and
-contribution writes are intentionally restricted to RPC execution. Authenticated
+Shopping writes are column-scoped and revision-guarded. Authenticated
 table updates on shares are limited to `status` and `responded_at`; accepted
 state and acceptance metadata can only be written by `accept_recipe_share()`.
 
@@ -574,36 +504,12 @@ TEXT)`, `merge_tags(p_source_tag TEXT, p_target_tag TEXT)`, and
 `SECURITY INVOKER` functions with empty `search_path`, table RLS enabled, and
 execution granted only to `authenticated`.
 
-### toggle_shopping_item_checked(p_row_id TEXT)
+### Shopping document writes
 
-Atomically toggles the `checked` flag for a shopping row identified by
-`rowId` inside `shopping_list.items`. Uses the authenticated user from
-`auth.uid()`.
-
-**Parameters:**
-- `p_row_id` (TEXT) - Stable shopping row identity
-
-**Returns:** `TABLE(row_id TEXT, checked BOOLEAN, updated_at TIMESTAMPTZ)`
-
-**Language:** `plpgsql`
-
-### Recipe shopping contribution RPCs
-
-`get_recipe_shopping_contribution_state()` returns the authenticated user's
-shopping projection and contribution rows from one consistent database
-snapshot. `apply_recipe_shopping_contribution_uuid_command(...)` is the active
-authenticated write contract. It accepts UUID recipe identities, locks that
-user's shopping row, checks `contribution_revision`, validates ownership,
-deduplicates retries by idempotency key, replaces/removes contribution rows,
-and commits the derived compatibility projection in the same transaction.
-
-The UUID apply function is `SECURITY DEFINER` because authenticated clients
-have read-only access to contribution rows. It derives identity only from
-`auth.uid()`, uses an empty `search_path`, accepts no caller-selected user ID,
-and is executable only by `authenticated`. The text
-`apply_recipe_shopping_contribution_command(...)` helper remains
-postgres-internal compatibility behavior and is not granted to application
-roles.
+Ordinary Shopping mutations are authenticated, RLS-protected table updates
+that match `content_revision` and supply its next value. The revision trigger
+requires an exact increment of one. The client refetches and replays once when
+the conditional update returns no row.
 
 ### UUID recipe identity RPCs
 
@@ -617,19 +523,20 @@ roles.
 - `get_recipe_identity_compat_usage()` exposes only the aggregate compatibility
   counter used to evaluate future Stage 3 cleanup.
 
-### move_shopping_item_to_pantry(p_row_id TEXT, p_pantry_qty NUMERIC, p_pantry_unit TEXT)
+### move_shopping_document_item_to_pantry(...)
 
-Atomically removes a shopping row identified by `rowId` from
-`shopping_list.items`, appends it to `shopping_list.already_have`, and upserts
-the normalized pantry item into `pantry_items`. Uses the authenticated user
-from `auth.uid()`.
+Atomically applies a Shopping document CAS and inserts the normalized Pantry
+item. Uses the authenticated user from `auth.uid()` and fails with SQLSTATE
+`40001` when the expected revision is stale.
 
 **Parameters:**
-- `p_row_id` (TEXT) - Stable shopping row identity
+- `p_expected_revision` (BIGINT) - Expected document revision
+- `p_document` (JSONB) - Replayed next Shopping document
+- `p_item` (TEXT) - Normalized Pantry identity source
 - `p_pantry_qty` (NUMERIC) - Pantry quantity fallback when the row amount is null
 - `p_pantry_unit` (TEXT) - Pantry unit fallback when the row unit is empty
 
-**Returns:** `TABLE(removed_item JSONB, pantry_item JSONB, shopping_list_updated_at TIMESTAMPTZ, pantry_was_inserted BOOLEAN)`
+**Returns:** the updated document/revision plus Pantry row and insertion status
 
 **Language:** `plpgsql`
 
@@ -688,10 +595,7 @@ auth.users (Supabase Auth)
 
 - User-owned tables reference `auth.users(id)` with `ON DELETE CASCADE`;
   `recipe_shares` uses both `sender_user_id` and `recipient_user_id`.
-- `shopping_recipe_contributions.recipe_id` references `recipes(id)` and
-  `recipe_uuid` references `recipes(recipe_uuid)`, both with
-  `ON DELETE RESTRICT`; recipe deletion is coordinated by the UUID RPC.
-- Planner/template arrays, JSON assignment keys, shopping-list provenance, and
+- Planner/template arrays, JSON assignment keys, and
   share/history UUID columns are synchronized identity fields rather than
   ordinary scalar foreign keys.
 - `recipe_history.recipe_id` is intentionally not an enforced foreign key, so
@@ -718,11 +622,12 @@ The repository now uses a baseline-first bootstrap strategy:
 15. **015_add_shopping_exclusion_settings.sql** - Added the non-null, default-false Salt-variant and Black-pepper-variant shopping exclusion settings to `user_config`.
 16. **016_canonical_recipe_structure_cutover.sql** - Atomically converted recipes and share snapshots to ordered canonical sections, added strict CHECK constraints, replaced canonical share acceptance and new-user seed writes, and froze the old structure columns as unsynchronized evidence for the removal slice.
 17. **017_remove_legacy_recipe_structure.sql** - Removed the frozen recipe structure columns and migration-only converters after the section-only cutover, preserving canonical content and validators.
+18. **018_shopping_document_cutover.sql** - Atomically converted Shopping state to `ShoppingDocumentV1`, installed the single-revision CAS contract and Pantry bridge, and removed contribution-era tables, columns, RPCs, and Shopping fields from `user_config`.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `017`. The archived pre-baseline sequence is not replayed.
+  migration through `018`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -976,7 +881,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 017, and the
+instructions. The current authoritative chain ends at migration 018, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

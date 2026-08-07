@@ -6,8 +6,6 @@ import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
-import { getActivePrincipalId } from "@/lib/principal-session"
-import { runRecipeContributionCommand } from "@/lib/shopping-contribution-client"
 import { deleteRecipeByUuid } from "@/lib/recipe-deletion"
 import {
   createRecipeUuid,
@@ -466,33 +464,7 @@ export function useDeleteRecipe() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const compatibilityResult = await deleteRecipeByUuid(
-        getSupabase(),
-        id,
-        user!.id,
-        async (recipeUuid) => {
-          const contributionResult = await runRecipeContributionCommand("DELETE", {
-            recipeIds: [recipeUuid],
-            idempotencyKey: crypto.randomUUID(),
-          })
-          if (getActivePrincipalId() === ownerUserId) {
-            queryClient.setQueryData(
-              shoppingKeys.detail(ownerUserId),
-              contributionResult.shopping_list
-            )
-          }
-          return { shoppingList: contributionResult.shopping_list }
-        }
-      )
-      if (
-        compatibilityResult?.shoppingList
-        && getActivePrincipalId() === ownerUserId
-      ) {
-        queryClient.setQueryData(
-          shoppingKeys.detail(ownerUserId),
-          compatibilityResult.shoppingList
-        )
-      }
+      await deleteRecipeByUuid(getSupabase(), id, user!.id)
       return id
     },
     // Optimistic update
