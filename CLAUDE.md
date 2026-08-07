@@ -45,8 +45,8 @@ global auth-state file.
 
 **Key layers:**
 - `web/src/app/(authenticated)/` — Shared authenticated shell and route-owned screens for Recipes, Planner, Pantry, and Shopping; `/` redirects to `/recipes`
-- `web/src/hooks/` — All data access via TanStack Query hooks (`useQuery` for reads, `useMutation` for writes). Shopping hooks in `hooks/shopping/` (barrel via `use-shopping.ts`). Key hooks: `use-recipes.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-pantry-match.ts`, `use-undo-toast.ts`
-- `web/src/lib/` — Pure business logic, no React dependencies. Core algorithms: `meal-planner.ts`, `shopping-list.ts`, `shopping-list-merging.ts`, `shopping-list-normalization.ts`, `recipe-parser.ts`, `recipe-url-parser.ts` (URL import/JSON-LD), `recipe-export.ts` (JSON/text export), `pantry-matcher.ts` (ingredient matching), `recipe-sharing.ts` (share lifecycle), `rate-limit.ts` (Upstash Redis), `url-safety.ts` (SSRF guard), `planner-utils.ts`, `planner-colors.ts`, `user-config.ts`
+- `web/src/hooks/` — All data access via TanStack Query hooks (`useQuery` for reads, `useMutation` for writes). Shopping hooks in `hooks/shopping/` (barrel via `use-shopping.ts`). Key hooks: `use-recipes.ts`, `use-recipe-shares.ts`, `use-recipe-import.ts`, `use-plan-templates.ts`, `use-undo-toast.ts`
+- `web/src/lib/` — Pure business logic, no React dependencies. Core algorithms: `meal-planner.ts`, `shopping-document.ts`, `shopping-ingredient-resolution.ts`, `shopping-list-normalization.ts`, `recipe-parser.ts`, `recipe-url-parser.ts` (URL import/JSON-LD), `recipe-export.ts` (JSON/text export), `recipe-sharing.ts` (share lifecycle), `rate-limit.ts` (Upstash Redis), `url-safety.ts` (SSRF guard), `planner-utils.ts`, `planner-colors.ts`, `user-config.ts`
 - `web/src/app/api/` — Server-side API routes: `recipe-import/route.ts` (URL fetch + JSON-LD parse, rate-limited), `recipe-shares/` (create, inbox, sent, accept, decline routes)
 - `web/src/components/` — Organized by domain: `auth/`, `recipes/`, `planner/`, `pantry/`, `shopping/`, `layout/`, `ui/` (shadcn primitives)
 - `web/src/types/database.ts` — All Supabase table types
@@ -70,7 +70,7 @@ global auth-state file.
 
 **URL import** (`lib/recipe-url-parser.ts`): Server-side URL fetch via `/api/recipe-import`. Extracts JSON-LD `Recipe` schema with Cheerio fallback. SSRF-guarded by `url-safety.ts` (blocks private IPs). Rate-limited via Upstash Redis (`lib/rate-limit.ts`).
 
-**Pantry matching** (`lib/pantry-matcher.ts`): Fuzzy ingredient-to-pantry matching for "What Can I Make?" feature. Checks primary item name and `alternatives[]`.
+**Pantry satisfaction** (`lib/shopping-document.ts`): Live Shopping projection checks resolver-produced Pantry candidates and the supported Salt/Black pepper semantic families. There is no active "What Can I Make?" feature.
 
 **Recipe export** (`lib/recipe-export.ts`): Serializes recipes to JSON or plain-text format for download.
 
@@ -145,7 +145,7 @@ Before starting work, match your task to a doc below and read it first.
 | Planner (components, hooks, lib, day assignments) | `docs/planner-component.md` |
 | Shopping (components, hooks, merging, normalization, hook tests) | `docs/shopping-component.md` |
 | Recipes (components, hooks, parser, CRUD, tags, detail dialog, URL import, sharing) | `docs/recipes-component.md` |
-| Pantry (components, hooks, excluded keywords, What Can I Make?) | `docs/pantry-component.md` |
+| Pantry (components, hooks, exclusions, Shopping satisfaction) | `docs/pantry-component.md` |
 | Database (schema, migrations, RLS, new tables/columns) | `supabase/SCHEMA.md` |
 | E2E tests (writing, debugging, fixtures) | `web/tests/README.md` |
 | Architectural decisions or major refactors | `decisions.md` |

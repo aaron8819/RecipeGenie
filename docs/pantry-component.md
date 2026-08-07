@@ -1,6 +1,7 @@
 # Pantry Domain Reference
 
-Use this doc when working on pantry items, shopping exclusions, pantry-driven recipe matching, or pantry-to-shopping flows.
+Use this doc when working on pantry items, Shopping exclusions, or
+Pantry-to-Shopping flows.
 
 This is a domain reference. Canonical project-wide boundaries live in [`./ARCHITECTURE_GUARDRAILS.md`](./ARCHITECTURE_GUARDRAILS.md).
 
@@ -9,19 +10,17 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | File | Responsibility |
 |------|----------------|
 | `web/src/components/pantry/pantry-list.tsx` | Main pantry UI for pantry items, built-in family exclusions, and exact exclusions. |
-| `web/src/components/pantry/what-can-i-make.tsx` | Pantry-driven recipe-match view. |
 | `web/src/hooks/use-pantry.ts` | Pantry item and excluded-keyword data access. |
-| `web/src/hooks/use-pantry-match.ts` | Pantry match orchestration against recipe data. |
 | `web/src/hooks/shopping/use-shopping-document.ts` | Document-aware Pantry-to-Shopping bridge flows. |
-| `web/src/lib/pantry-matcher.ts` | Pantry matching logic. |
-| `web/src/lib/shopping-list.ts` | Downstream consumer of pantry data when generating shopping lists. |
-| `web/src/lib/shopping-categories.ts` | Exact-match excluded-keyword helper logic. |
+| `web/src/lib/shopping-ingredient-resolution.ts` | Resolver-produced purchase identity, Pantry candidates, and supported semantic-family evidence. |
+| `web/src/lib/shopping-document.ts` | Live Pantry satisfaction and exclusion classification during Shopping projection. |
+| `web/src/lib/ingredient-exclusion-families.ts` | Shared Salt and Black pepper family authority. |
 
 ## Boundaries
 
 - Components must not access Supabase directly.
 - Hooks own pantry reads and writes.
-- Pantry matching and excluded-keyword helpers stay pure.
+- Pantry satisfaction and exclusion helpers stay pure.
 - Cross-domain pantry and shopping movement logic belongs in hooks, not components.
 
 ## Important Behaviors
@@ -32,7 +31,13 @@ the shared authenticated shell.
 ### Pantry items
 
 - Pantry items are normalized case-insensitively.
-- Pantry presence is joined live during Shopping projection and classifies matching ingredients as `already_have`.
+- Pantry presence is joined live during Shopping projection and classifies
+  matching ingredients as `already_have`.
+- Satisfaction uses resolver-produced exact/alternative candidates, bounded
+  lemon/lime whole-fruit candidates for explicit juice or zest usage, and the
+  shared Salt/Black pepper family evidence.
+- Pantry satisfaction is directional and does not change Shopping aggregation
+  identity.
 
 ### Excluded keywords
 
@@ -52,8 +57,9 @@ the shared authenticated shell.
 
 ### What Can I Make
 
-- Pantry matching checks primary ingredient names and `alternatives[]`.
-- Excluded keywords do not participate in recipe-match scoring.
+There is no active "What Can I Make?" implementation. If the feature is
+restored, it should consume the resolver-backed Pantry satisfaction contract
+rather than introduce a separate matcher.
 
 ## Relationship To Other Docs
 

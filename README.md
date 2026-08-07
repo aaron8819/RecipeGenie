@@ -15,7 +15,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
   - Save and reload named plan templates
   - Calendar view with day assignments and swap/undo support
 - **Smart Shopping Lists**: Automatically aggregate ingredients from selected recipes with drag-and-drop reordering, custom categories, and category ordering to match your store layout
-- **Pantry Tracking**: Mark items you have on hand; "What Can I Make?" shows recipes you can cook now
+- **Pantry Tracking**: Mark items you have on hand so matching recipe ingredients are classified as already available in Shopping
 - **Multi-User Support**: Each user has their own private data via Supabase Auth
 - **Responsive UI**: Desktop header and mobile bottom navigation use shareable routes; Stitch design (Outfit, Playfair, sage/terracotta palette)
 - **Cloud Deployment**: Host on Vercel for access from anywhere
