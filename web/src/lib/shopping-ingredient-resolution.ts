@@ -231,7 +231,7 @@ export function resolveShoppingIngredient({
         purchase.purchaseQuantity === purchase.originalQuantity &&
         purchaseUnit === normalizeUnit(purchase.originalUnit || ""),
       sourceAwareStructured,
-      exactQuantityV1: sourceAwareStructured ? exactQuantity : undefined,
+      exactQuantityV1: exactQuantity,
       exactPackageV1: sourceAwareStructured ? exactPackage : undefined,
       exactAuthoredUnit: resolved.authoredUnit,
       exactScaleV1: structuredScale,

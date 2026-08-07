@@ -240,11 +240,16 @@ describe("recipe contribution command route", () => {
     ])
     expect(writeCalls[1][1].p_projection.items[0].amount).toBe(6.5)
     expect(result.shopping_list.items[0].amount).toBe(6.5)
+    const firstRecipeBContribution =
+      writeCalls[0][1].p_contributions[0].snapshot
     const recipeBContribution = writeCalls[1][1].p_contributions[0].snapshot
     expect(recipeBContribution.exactScaleV1).toEqual({
       numerator: "3",
       denominator: "4",
     })
+    expect(recipeBContribution.items[0].sources[0]).toEqual(
+      firstRecipeBContribution.items[0].sources[0]
+    )
     expect(recipeBContribution.items[0].sources[0]).toMatchObject({
       exactScaleV1: { numerator: "3", denominator: "4" },
       exactQuantityV1: {
@@ -252,6 +257,43 @@ describe("recipe contribution command route", () => {
         kind: "exact",
         value: { numerator: "3", denominator: "2" },
       },
+    })
+  })
+
+  it("replays provenance without exact quantity metadata unchanged", async () => {
+    recipeRows = [{
+      ...recipeB,
+      ingredient_sections: [{
+        label: null,
+        ingredients: [{ item: "milk", amount: null, unit: "" }],
+      }],
+    }]
+    const request = new Request("http://localhost/api/shopping/recipe-contributions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipeIds: [RECIPE_B],
+        scale: 1,
+        idempotencyKey: "quantity-absent-replay",
+      }),
+    })
+
+    const response = await POST(request)
+    const writeCalls = rpcMock.mock.calls.filter(
+      ([functionName]) => functionName === "apply_recipe_shopping_contribution_uuid_command"
+    )
+
+    expect(response.status).toBe(200)
+    expect(writeCalls).toHaveLength(2)
+    const firstSource =
+      writeCalls[0][1].p_contributions[0].snapshot.items[0].sources[0]
+    const replayedSource =
+      writeCalls[1][1].p_contributions[0].snapshot.items[0].sources[0]
+    expect(replayedSource).toEqual(firstSource)
+    expect(replayedSource).not.toHaveProperty("exactQuantityV1")
+    expect(replayedSource).toMatchObject({
+      recipeId: RECIPE_B,
+      recipeName: "Recipe B",
     })
   })
 
