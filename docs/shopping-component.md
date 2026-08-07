@@ -1,101 +1,56 @@
 # Shopping Domain Reference
 
-Use this doc when working on shopping-list generation, item state, category management, pantry/excluded-keyword integration, or shopping-specific optimistic flows.
+Shopping persistence is a single `ShoppingDocumentV1` JSON document per user,
+guarded by one `content_revision`. The document stores recipe inputs, manual
+items, explicit row overrides, order, and Shopping preferences. Rendered
+`items`, `already_have`, and `excluded` rows are projections and are never
+persisted.
 
-This is a domain reference. Canonical project-wide boundaries live in [`./ARCHITECTURE_GUARDRAILS.md`](./ARCHITECTURE_GUARDRAILS.md).
-
-## Current State
-
-- The shopping presentation extraction wave is complete.
-- `shopping-list.tsx` still owns meaningful orchestration and optimistic UX behavior.
-- Shopping logic is intentionally split between hooks for data access and pure library helpers for deterministic list generation.
-
-## Key Files
+## Key files
 
 | File | Responsibility |
 |------|----------------|
-| `web/src/components/shopping/shopping-list.tsx` | Main shopping UI orchestration, DnD ownership, filtering/grouping orchestration, and optimistic interaction flow. |
-| `web/src/components/shopping/shopping-list-components.tsx` | Presentation-only shopping sections extracted from the main component. |
-| `web/src/components/shopping/shopping-settings-modal.tsx` | Shopping configuration UI. |
-| `web/src/hooks/shopping/use-shopping-list.ts` | Fetch/generate/save the shopping list. |
-| `web/src/hooks/shopping/use-shopping-items.ts` | Item add/remove/check/reorder behavior. |
-| `web/src/hooks/shopping/use-shopping-recipes.ts` | Remove recipe-derived items from the list. |
-| `web/src/hooks/shopping/use-shopping-categories.ts` | Category overrides and custom-category management. |
-| `web/src/hooks/shopping/use-shopping-pantry.ts` | Pantry-to-shopping bridge flows. |
-| `web/src/hooks/shopping/shared.ts` | Shared shopping optimistic helpers and constants. |
-| `web/src/lib/shopping-list.ts` | Main aggregation pipeline for recipes into shopping items. |
-| `web/src/lib/shopping-list-normalization.ts` | Unit and ingredient-name normalization. |
-| `web/src/lib/shopping-ingredient-canonicalization.ts` | Pure, narrow purchase-identity canonicalization and controlled display pluralization. |
-| `web/src/lib/shopping-list-merging.ts` | Merge-compatible-unit logic. |
-| `web/src/lib/shopping-categories.ts` | Category lookup and excluded-keyword matching. |
+| `web/src/lib/shopping-document.ts` | Strict validator, deterministic projector, and pure mutation reducers. |
+| `web/src/lib/shopping-ingredient-resolution.ts` | Resolves canonical Shopping ingredients from recipe structure. |
+| `web/src/hooks/shopping/use-shopping-document.ts` | The only runtime Shopping read/write seam; CAS, replay, Pantry bridge, and UI adapters. |
+| `web/src/components/shopping/shopping-list.tsx` | Shopping UI orchestration and immediate inverse-write Undo UX. |
+| `supabase/migrations/018_shopping_document_cutover.sql` | Atomic legacy conversion and physical schema cutover. |
 
-## Boundaries
+## Persistence contract
 
-- Components must not fetch or mutate Supabase directly.
-- Hooks own shopping reads, writes, cache invalidation, and optimistic updates.
-- Library helpers remain pure and deterministic.
-- Multi-step shopping writes use RPCs where the operation must be atomic.
+- `shopping_list` contains only `user_id`, `document`, `content_revision`, and
+  `updated_at`.
+- Every normal mutation applies one pure reducer and writes with
+  `WHERE content_revision = expected`, advancing the revision exactly once.
+- On conflict the client refetches, replays the same intent once, and retries
+  once. A second conflict is surfaced to the user.
+- Recipe entries are keyed by immutable recipe UUID and there is at most one
+  active entry per recipe.
+- Manual IDs and derived aggregate keys produce stable `manual:*` and
+  `derived:*` row references. Row-targeted actions fail closed without one.
+- Delete, clear, and recipe removal happen immediately. Undo is a new inverse
+  document mutation; there is no delayed commit queue.
 
-## Important Behaviors
+## Projection and Pantry
 
-### Shopping generation
+Projection combines the document with live Pantry rows. Classification order
+is Pantry, exact exclusion, enabled unanimous built-in family, then visible.
+Explicit persisted bucket overrides win. Moving a row to Pantry uses
+`move_shopping_document_item_to_pantry(...)`, which performs the Shopping CAS
+and Pantry insertion in one transaction.
 
-Shopping generation takes selected recipes plus pantry/config data and produces three buckets:
-
-- `items`
-- `already_have`
-- `excluded`
-
-The aggregation pipeline recognizes the two opt-in ingredient exclusion
-families from the complete structured ingredient immediately before purchase
-normalization, then preserves the existing normalization, compatible-amount
-merging, and categorization behavior. Final classification precedence is
-pantry, exact excluded keyword, enabled unanimous built-in family, then visible
-item. Every occurrence in an aggregate must independently match the same family.
-
-Frozen contribution projection keeps its existing bucket behavior unless a
-contributor carries `Salt variants` or `Black pepper variants`. In that case,
-the aggregate defaults to excluded only when every contributor is excluded for
-that same reason; mixed or unprovable aggregates default to visible. Persisted
-lifecycle overrides still win. No family provenance is added to sources and
-normalization version 2 is unchanged.
-
-Purchase identity uses an explicit structured canonicalization result: base name,
-identity modifiers, preparation modifiers, optionality, display name, and merge
-key. Only controlled singular/plural aliases and high-confidence preparation
-terms are collapsed. Variety, size, product type, processing state, and effective
-shopping category remain identity-defining. New frozen recipe contributions use
-normalization version 2; version-1 snapshots are upgraded only in memory during
-projection so stored snapshots and existing row IDs remain unchanged.
-
-### Pending state
-
-Per-item pending state matters. Do not disable all shopping actions behind a single mutation-level `isPending` flag when only one item is changing.
-
-### Document jump navigation
-
-Shopping owns `/shopping` and scrolls with the document under the shared authenticated shell.
-
-- Section jumps call `scrollIntoView()` on the target section.
-- Target sections use CSS scroll margins to clear sticky navigation.
-- Mobile jump navigation should avoid smooth scrolling when sticky UI is present.
-
-### Pantry bridge
-
-Pantry integration is not a presentational concern. Cross-list mutation logic belongs in hooks, especially flows that move items between `items` and `already_have`.
-
-## Intentionally Not Being Refactored Further
-
-- The remaining complexity in `shopping-list.tsx` is mostly orchestration and optimistic UX wiring.
-- Do not split that orchestration further unless a clearly pure helper seam or a boundary violation appears.
+Shopping preferences—including exact exclusions, family toggles, category
+overrides, custom categories, and category order—live inside the document.
+`user_config` contains planner/onboarding preferences only.
 
 ## Verification
 
 Run from `web/`:
 
 ```bash
-npm run test -- --run
-npx playwright test shopping-list.spec.ts --project=chromium
+npm run typecheck
+npm run test -- --run src/lib/__tests__/shopping-document.test.ts src/lib/__tests__/shopping-document-persistence.test.ts
+supabase test db --local --workdir ..
 ```
 
-Last updated: 2026-08-03
+Last updated: 2026-08-07

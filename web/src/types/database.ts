@@ -163,7 +163,14 @@ export type ShoppingItem = {
   legacyRecipeProvenance?: boolean
 }
 
-export type ShoppingItemOrderPreferences = Record<string, string[]>
+export type ShoppingConfig = {
+  category_overrides: Record<string, string>
+  custom_categories: CustomShoppingCategory[]
+  category_order: string[] | null
+  excluded_keywords: string[]
+  exclude_salt_variants: boolean
+  exclude_black_pepper_variants: boolean
+}
 
 export type RecipeShareSnapshot = {
   name: string
@@ -247,12 +254,9 @@ export type PantryItem = Database["public"]["Tables"]["pantry_items"]["Row"]
 type UserConfigBase = Database["public"]["Tables"]["user_config"]["Row"]
 export type UserConfig = Omit<
   UserConfigBase,
-  "default_selection" | "category_overrides" | "custom_categories" | "shopping_item_order"
+  "default_selection"
 > & {
   default_selection: Record<string, number>
-  category_overrides: Record<string, string>
-  custom_categories: CustomShoppingCategory[]
-  shopping_item_order: ShoppingItemOrderPreferences
 }
 
 type RecipeHistoryBase = Database["public"]["Tables"]["recipe_history"]["Row"]
@@ -270,25 +274,16 @@ export type WeeklyPlan = Omit<
   day_assignments: Record<string, number> | null
 }
 
-type ShoppingListBase = Database["public"]["Tables"]["shopping_list"]["Row"]
-export type ShoppingList = Omit<
-  ShoppingListBase,
-  | "items"
-  | "already_have"
-  | "excluded"
-  | "contribution_revision"
-  | "contribution_overrides"
-  | "legacy_items_preserved"
-  | "source_recipe_uuids"
-> & {
+export type ShoppingList = {
+  user_id: string
   items: ShoppingItem[]
   already_have: ShoppingItem[]
   excluded: ShoppingItem[]
-  contribution_revision?: number
-  contribution_overrides?: Json
-  legacy_items_preserved?: boolean
-  /** Database-maintained compatibility mirror; application use begins in Stage 2B. */
-  readonly source_recipe_uuids?: string[]
+  source_recipes: string[]
+  scale: number
+  total_servings: number
+  custom_order: boolean
+  generated_at?: string
 }
 
 type RecipeShareBase = Database["public"]["Tables"]["recipe_shares"]["Row"]

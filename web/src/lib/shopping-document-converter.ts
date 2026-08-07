@@ -14,7 +14,6 @@ import {
   rationalToNumber,
   scaleQuantityV1,
 } from "./recipe-quantity"
-import type { RecipeShoppingContribution } from "./shopping-contributions"
 import {
   createEmptyShoppingDocument,
   projectShoppingDocument,
@@ -47,8 +46,23 @@ export type CurrentShoppingPreferencesV1 = {
   excludeBlackPepperVariants?: boolean | null
 }
 
+export type RecipeShoppingContribution = {
+  recipeId: string
+  recipeName: string
+  servings: number
+  scale: number
+  scaleV1?: RationalV1
+  normalizationVersion: number
+  items: Array<ShoppingItem & { bucket: ShoppingBucket }>
+}
+
+export type LegacyShoppingListV1 = ShoppingList & {
+  contribution_revision?: number
+  legacy_items_preserved?: boolean
+}
+
 export type ConvertShoppingPersistenceV1Input = {
-  currentList: ShoppingList
+  currentList: LegacyShoppingListV1
   contributions: RecipeShoppingContribution[]
   preferences?: CurrentShoppingPreferencesV1
   contentRevision?: number
@@ -137,6 +151,21 @@ function ingredientKeyOf(item: ShoppingItem): string {
   )
 }
 
+function citrusPrepOf(
+  item: ShoppingItem,
+  ingredientKey: string
+): "juiced" | "zested" | undefined {
+  if ((ingredientKey !== "lemon" && ingredientKey !== "lime") ||
+      normalizeUnit(item.unit) !== "count") return undefined
+  const intents = (item.sources || [])
+    .map((source) => source.prepIntent)
+    .filter((intent): intent is "juiced" | "zested" =>
+      intent === "juiced" || intent === "zested")
+  return intents.length > 0 && intents.every((intent) => intent === intents[0])
+    ? intents[0]
+    : undefined
+}
+
 function exclusionFamilyOf(item: ShoppingItem) {
   if (/\s+\(or\s+.+\)$/i.test(item.item)) return null
   const sourceFamilies = (item.sources || []).flatMap((source) =>
@@ -210,6 +239,7 @@ function ingredientFromContributionItem(
     defaultCategoryKey: item.categoryKey,
     pantryMatchKeys: pantryMatchKeys(item, ingredientKey),
     exclusionFamily: exclusionFamily || undefined,
+    citrusPrep: citrusPrepOf(item, ingredientKey),
   }
   return [
     ingredient,

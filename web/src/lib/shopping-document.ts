@@ -580,15 +580,21 @@ export function projectShoppingDocument(
 
 export type ShoppingDocumentMutation =
   | { type: "upsertRecipe"; entry: ShoppingRecipeEntryV1 }
+  | { type: "upsertRecipes"; entries: ShoppingRecipeEntryV1[] }
   | { type: "rescaleRecipe"; entry: ShoppingRecipeEntryV1 }
   | { type: "removeRecipe"; recipeId: string }
   | { type: "setChecked"; rowRef: RowRef; checked: boolean }
+  | { type: "setCheckedMany"; rowRefs: RowRef[]; checked: boolean }
   | { type: "setQuantityOverride"; aggregateKey: AggregateKey; quantity: ShoppingQuantity | null | undefined }
   | { type: "setDisplayNameOverride"; aggregateKey: AggregateKey; displayName?: string }
   | { type: "setCategoryOverride"; aggregateKey: AggregateKey; categoryKey?: string }
   | { type: "setBucketOverride"; aggregateKey: AggregateKey; bucket?: ShoppingBucket }
   | { type: "setSuppressed"; aggregateKey: AggregateKey; suppressed: boolean }
   | { type: "setIngredientCategory"; ingredientKey: IngredientKey; categoryKey?: string }
+  | {
+      type: "updatePreferences"
+      preferences: Partial<ShoppingDocumentV1["preferences"]>
+    }
   | { type: "setOrder"; order: RowRef[] }
   | { type: "addManualItem"; item: ShoppingManualItemV1 }
   | {
@@ -597,6 +603,13 @@ export type ShoppingDocumentMutation =
       changes: Partial<Omit<ShoppingManualItemV1, "id">>
     }
   | { type: "deleteManualItem"; id: string }
+  | {
+      type: "restoreContent"
+      content: Pick<
+        ShoppingDocumentV1,
+        "recipeEntries" | "manualItems" | "itemOverrides" | "order"
+      >
+    }
   | { type: "complete" }
 
 function activeKeys(document: ShoppingDocumentV1): Set<string> {
@@ -650,6 +663,14 @@ function reduceDocument(
           [mutation.entry.recipeId]: mutation.entry,
         },
       })
+    case "upsertRecipes":
+      return pruneDocument({
+        ...document,
+        recipeEntries: {
+          ...document.recipeEntries,
+          ...Object.fromEntries(mutation.entries.map((entry) => [entry.recipeId, entry])),
+        },
+      })
     case "removeRecipe": {
       const recipeEntries = { ...document.recipeEntries }
       delete recipeEntries[mutation.recipeId]
@@ -671,6 +692,18 @@ function reduceDocument(
             ? { ...item, checked: mutation.checked }
             : item),
       }
+    }
+    case "setCheckedMany": {
+      const requested = new Set(mutation.rowRefs)
+      let next = document
+      for (const rowRef of requested) {
+        next = reduceDocument(next, {
+          type: "setChecked",
+          rowRef,
+          checked: mutation.checked,
+        })
+      }
+      return next
     }
     case "setQuantityOverride":
       return updateOverride(document, mutation.aggregateKey, (current) => {
@@ -727,6 +760,14 @@ function reduceDocument(
       else delete categoryByIngredient[mutation.ingredientKey]
       return { ...document, preferences: { ...document.preferences, categoryByIngredient } }
     }
+    case "updatePreferences":
+      return {
+        ...document,
+        preferences: {
+          ...document.preferences,
+          ...mutation.preferences,
+        },
+      }
     case "setOrder": {
       const refs = validRefs(document)
       return { ...document, order: mutation.order.filter((ref, index) =>
@@ -760,6 +801,14 @@ function reduceDocument(
     case "deleteManualItem":
       return pruneDocument({ ...document, manualItems: document.manualItems.filter((item) =>
         item.id !== mutation.id) })
+    case "restoreContent":
+      return pruneDocument({
+        ...document,
+        recipeEntries: mutation.content.recipeEntries,
+        manualItems: mutation.content.manualItems,
+        itemOverrides: mutation.content.itemOverrides,
+        order: mutation.content.order,
+      })
     case "complete":
       return {
         ...document,

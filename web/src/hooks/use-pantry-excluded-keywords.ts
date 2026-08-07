@@ -4,8 +4,8 @@ import { useCallback, useMemo } from "react"
 import { parsePantryCandidates, normalizePantryItemName, getPantryFailureInput } from "@/lib/pantry"
 import {
   useUpdateExcludedKeywords,
-  useUserConfig,
-} from "@/hooks/shared/user-config"
+  useShoppingConfig,
+} from "@/hooks/use-shopping"
 
 export type PantryKeywordOutcomeStatus = "success" | "duplicate" | "failure"
 
@@ -22,7 +22,7 @@ export interface PantryKeywordMutationResult {
 }
 
 export function usePantryExcludedKeywords() {
-  const configQuery = useUserConfig()
+  const configQuery = useShoppingConfig()
   const updateExcludedKeywords = useUpdateExcludedKeywords()
 
   const excludedKeywords = useMemo(

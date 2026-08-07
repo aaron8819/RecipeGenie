@@ -66,8 +66,7 @@ describe("principal query keys", () => {
       "hooks/use-plan-templates.ts",
       "hooks/use-recipe-shares.ts",
       "hooks/shared/user-config.ts",
-      "hooks/shopping/use-shopping-list.ts",
-      "hooks/shopping/use-shopping-config.ts",
+      "hooks/shopping/use-shopping-document.ts",
       "app/(authenticated)/authenticated-shell.tsx",
     ]
     const legacyPrivateKey = /queryKey:\s*\[\s*["'](?:recipes|shopping_list|pantry|weekly_plans|recipe_history|user_config|plan-templates|recipe_shares)["']/

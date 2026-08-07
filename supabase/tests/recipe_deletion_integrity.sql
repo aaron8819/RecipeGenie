@@ -1,7 +1,7 @@
 begin;
 
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(13);
+select extensions.plan(14);
 
 create function private.test_active_recipe_reference_counts()
 returns jsonb
@@ -89,6 +89,12 @@ insert into public.plan_templates(
   '{"71111111-1111-4111-8111-111111111111":1,"71222222-2222-4222-8222-222222222222":6}'
 );
 
+update public.shopping_list
+set document = jsonb_set(document, '{recipeEntries,71111111-1111-4111-8111-111111111111}',
+  '{"recipeId":"71111111-1111-4111-8111-111111111111","recipeName":"Delete target","selectedServings":4,"scaleV1":{"numerator":"1","denominator":"1"},"ingredients":[]}'::jsonb),
+    content_revision = 1
+where user_id = '71000000-0000-4000-8000-000000000001';
+
 -- Accidental duplicates are not accepted by normal writes, but deletion must
 -- still clean them if legacy data predates that validation.
 alter table public.weekly_plans disable trigger sync_weekly_plan_recipe_uuids;
@@ -130,6 +136,12 @@ select extensions.is(
   public.delete_recipe('71111111-1111-4111-8111-111111111111'),
   '71111111-1111-4111-8111-111111111111'::uuid,
   'atomic deletion succeeds for the same owner'
+);
+select extensions.ok(
+  (select not (document->'recipeEntries' ? '71111111-1111-4111-8111-111111111111')
+      and content_revision = 2
+   from public.shopping_list where user_id = auth.uid()),
+  'atomic deletion prunes the Shopping recipe entry and advances its revision'
 );
 select extensions.is(
   (select recipe_uuids from public.weekly_plans

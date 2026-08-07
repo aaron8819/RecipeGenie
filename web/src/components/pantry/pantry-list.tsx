@@ -20,9 +20,9 @@ import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   useUpdateIngredientExclusionSetting,
-  useUserConfig,
+  useShoppingConfig,
   type IngredientExclusionSetting,
-} from "@/hooks/shared/user-config"
+} from "@/hooks/use-shopping"
 
 type InlineFeedback = {
   message: string
@@ -91,7 +91,7 @@ export function PantryList() {
   const removePantryItem = useRemovePantryItem()
   const restorePantryItem = useRestorePantryItem()
   const undoToast = useUndoToast()
-  const userConfig = useUserConfig()
+  const userConfig = useShoppingConfig()
   const updateIngredientExclusion = useUpdateIngredientExclusionSetting()
 
   const handleIngredientExclusionChange = useCallback((

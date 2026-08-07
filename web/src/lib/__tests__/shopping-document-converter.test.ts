@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { PantryItem, ShoppingItem, ShoppingList } from "@/types/database"
 import {
-  SHOPPING_NORMALIZATION_VERSION,
+  convertShoppingPersistenceV1,
+  type LegacyShoppingListV1,
   type RecipeShoppingContribution,
-} from "../shopping-contributions"
-import { convertShoppingPersistenceV1 } from "../shopping-document-converter"
+} from "../shopping-document-converter"
 import { projectShoppingDocument } from "../shopping-document"
 
 function row(
@@ -29,7 +29,7 @@ function contribution(recipeId: string, amount: number): RecipeShoppingContribut
     recipeName: `Recipe ${recipeId}`,
     servings: 4,
     scale: 1,
-    normalizationVersion: SHOPPING_NORMALIZATION_VERSION,
+    normalizationVersion: 2,
     items: [{
       ...row(amount, [{ recipeId, recipeName: `Recipe ${recipeId}` }]),
       bucket: "items",
@@ -37,7 +37,7 @@ function contribution(recipeId: string, amount: number): RecipeShoppingContribut
   }
 }
 
-function list(overrides: Partial<ShoppingList> = {}): ShoppingList {
+function list(overrides: Partial<LegacyShoppingListV1> = {}): LegacyShoppingListV1 {
   return {
     user_id: "user-a",
     items: [],
@@ -177,6 +177,26 @@ describe("convertShoppingPersistenceV1", () => {
       additionalQuantities: [{ amount: 8, unit: "oz" }],
     })
     expect(result.state.document.itemOverrides).toEqual({})
+  })
+
+  it("preserves citrus prep intent from frozen source evidence", () => {
+    const recipe = contribution("a", 2)
+    recipe.items[0] = {
+      ...recipe.items[0],
+      item: "lemon",
+      unit: "count",
+      categoryKey: "produce",
+      sources: [{ recipeId: "a", recipeName: "Recipe a", prepIntent: "juiced" }],
+    }
+    const result = convertShoppingPersistenceV1({
+      currentList: list({ items: [{ ...recipe.items[0] }] }),
+      contributions: [recipe],
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.state.document.recipeEntries.a.ingredients[0].citrusPrep).toBe("juiced")
+    }
   })
 
   it("fails closed for an unrepresentable override with additional quantities", () => {

@@ -21,7 +21,7 @@ select extensions.is(
     where namespace.nspname = 'public'
       and procedure.prosecdef
   ),
-  E'public.accept_recipe_share(p_share_id uuid)\npublic.apply_recipe_shopping_contribution_command(p_expected_revision bigint, p_contributions jsonb, p_remove_recipe_ids text[], p_projection jsonb, p_contribution_overrides jsonb, p_idempotency_key text, p_command_type text)\npublic.apply_recipe_shopping_contribution_uuid_command(p_expected_revision bigint, p_contributions jsonb, p_remove_recipe_uuids uuid[], p_projection jsonb, p_contribution_overrides jsonb, p_idempotency_key text, p_command_type text)\npublic.delete_recipe(p_recipe_uuid uuid)\npublic.get_recipe_identity_compat_usage()\npublic.handle_new_user()\npublic.resolve_recipe_identity(p_recipe_uuid uuid, p_legacy_id text)\npublic.toggle_weekly_recipe_made(p_recipe_uuid uuid, p_week_date date, p_made boolean, p_made_at timestamp with time zone)',
+  E'public.accept_recipe_share(p_share_id uuid)\npublic.delete_recipe(p_recipe_uuid uuid)\npublic.get_recipe_identity_compat_usage()\npublic.handle_new_user()\npublic.is_shopping_document_v1(p_document jsonb)\npublic.resolve_recipe_identity(p_recipe_uuid uuid, p_legacy_id text)\npublic.toggle_weekly_recipe_made(p_recipe_uuid uuid, p_week_date date, p_made boolean, p_made_at timestamp with time zone)',
   'only reviewed SECURITY DEFINER functions exist'
 );
 
@@ -89,7 +89,7 @@ select extensions.is(
     join pg_namespace as namespace on namespace.oid = procedure.pronamespace
     where namespace.nspname = 'public'
       and procedure.prosecdef
-      and procedure.proname <> 'handle_new_user'
+      and procedure.proname not in ('handle_new_user', 'is_shopping_document_v1')
       and (
         position('auth.uid()' in lower(pg_get_functiondef(procedure.oid))) = 0
         or position(' is null' in lower(pg_get_functiondef(procedure.oid))) = 0
@@ -135,13 +135,11 @@ select extensions.is(
         'sync_weekly_plan_recipe_uuids',
         'sync_plan_template_recipe_uuids',
         'sync_recipe_history_uuid',
-        'sync_recipe_share_uuids',
-        'sync_shopping_list_recipe_uuids',
-        'sync_shopping_contribution_recipe_uuid'
+        'sync_recipe_share_uuids'
       )
   ),
-  6,
-  'all six Stage 2A UUID synchronization wrappers exist'
+  4,
+  'all remaining Stage 2A UUID synchronization wrappers exist'
 );
 
 select extensions.is(
@@ -270,9 +268,7 @@ select extensions.is(
         ('sync_weekly_plan_recipe_uuids', 'weekly_plans'),
         ('sync_plan_template_recipe_uuids', 'plan_templates'),
         ('sync_recipe_history_uuid', 'recipe_history'),
-        ('sync_recipe_share_uuids', 'recipe_shares'),
-        ('sync_shopping_list_recipe_uuids', 'shopping_list'),
-        ('sync_shopping_contribution_recipe_uuid', 'shopping_recipe_contributions')
+        ('sync_recipe_share_uuids', 'recipe_shares')
     ) as expected(function_name, table_name)
     left join pg_proc as procedure on procedure.proname = expected.function_name
     left join pg_namespace as namespace
@@ -308,9 +304,7 @@ select extensions.is(
         ('sync_weekly_plan_recipe_uuids', array['user_id','recipe_ids','day_assignments','made_recipe_ids','recipe_uuids','day_assignment_recipe_uuids','made_recipe_uuids']::text[]),
         ('sync_plan_template_recipe_uuids', array['user_id','recipe_ids','day_assignments','recipe_uuids','day_assignment_recipe_uuids']::text[]),
         ('sync_recipe_history_uuid', array['user_id','recipe_id','recipe_uuid']::text[]),
-        ('sync_recipe_share_uuids', array['sender_user_id','recipient_user_id','source_recipe_id','accepted_recipe_id','status','source_recipe_uuid','accepted_recipe_uuid']::text[]),
-        ('sync_shopping_list_recipe_uuids', array['user_id','items','already_have','excluded','source_recipes','source_recipe_uuids']::text[]),
-        ('sync_shopping_contribution_recipe_uuid', array['user_id','recipe_id','recipe_uuid','snapshot']::text[])
+        ('sync_recipe_share_uuids', array['sender_user_id','recipient_user_id','source_recipe_id','accepted_recipe_id','status','source_recipe_uuid','accepted_recipe_uuid']::text[])
     ) as expected(trigger_name, columns)
     join pg_trigger as trigger_row on trigger_row.tgname = expected.trigger_name
     join pg_class as relation on relation.oid = trigger_row.tgrelid

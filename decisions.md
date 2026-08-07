@@ -716,7 +716,7 @@ to explain older changelog entries and must not be used as current guidance.
 
 ## ADR-022: Stable Shopping Row Identity
 
-**Status:** Accepted (2026-03-07, v2.15.1)
+**Status:** Superseded by ADR-024 and migration 018 (2026-08-07)
 
 **Context:** Shopping list items are stored as JSON arrays inside `shopping_list.items`, `shopping_list.already_have`, and `shopping_list.excluded`. Name-based targeting had become unsafe because duplicate item names are valid and common. That caused ambiguity across UI keys, drag-and-drop ids, optimistic mutations, and server-side RPC boundaries.
 
@@ -750,6 +750,29 @@ to explain older changelog entries and must not be used as current guidance.
 
 **Future Considerations:**
 - If shopping data ever moves from JSON arrays to first-class relational rows, preserve `rowId` semantics or perform an explicit migration plan
+
+---
+
+## ADR-024: ShoppingDocumentV1 as the Single Shopping Authority
+
+**Status:** Accepted (2026-08-07)
+
+**Decision:** Persist one validated `ShoppingDocumentV1` per owner with one
+`content_revision`. Store recipe inputs, manual items, explicit overrides,
+order, and Shopping preferences in that document. Compute rendered buckets
+from the document plus live Pantry state. All mutations use one pure reducer
+and one compare-and-swap write; a conflict is refetched and replayed once.
+
+Migration 018 converts the legacy projection and contribution state in one
+transaction, fails closed on ambiguous rows, and then removes the contribution
+tables, command ledger, projection columns, Shopping-specific `user_config`
+columns, and legacy RPCs. Stable UI references are `manual:<id>` and
+`derived:<aggregateKey>`. Undo is an immediate inverse document write.
+
+The Pantry bridge remains atomic through
+`move_shopping_document_item_to_pantry(...)`, which couples the document CAS
+with Pantry insertion. Recipe deletion removes and prunes its document entry
+inside the existing atomic deletion function.
 
 ---
 

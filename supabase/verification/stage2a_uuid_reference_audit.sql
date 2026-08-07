@@ -1,5 +1,5 @@
 -- Count-only Stage 2A verification. This query emits no recipe, user, planner,
--- shopping, or share content and is safe for linked production verification.
+-- or share content and is safe for linked production verification.
 
 select jsonb_build_object(
   'weekly_membership_mismatches', (
@@ -54,20 +54,6 @@ select jsonb_build_object(
       on recipe.id = share.accepted_recipe_id
      and recipe.user_id = share.recipient_user_id
     where share.accepted_recipe_uuid is distinct from recipe.recipe_uuid
-  ),
-  'shopping_source_mismatches', (
-    select count(*)
-    from public.shopping_list as shopping
-    where shopping.source_recipe_uuids <>
-      private.resolve_owned_recipe_uuid_array(shopping.user_id, shopping.source_recipes)
-  ),
-  'contribution_identity_mismatches', (
-    select count(*)
-    from public.shopping_recipe_contributions as contribution
-    join public.recipes as recipe
-      on recipe.id = contribution.recipe_id
-     and recipe.user_id = contribution.user_id
-    where contribution.recipe_uuid is distinct from recipe.recipe_uuid
   ),
   'pending_share_unresolved', (
     select count(*)

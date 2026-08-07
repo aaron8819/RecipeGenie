@@ -12,7 +12,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 | `web/src/components/pantry/what-can-i-make.tsx` | Pantry-driven recipe-match view. |
 | `web/src/hooks/use-pantry.ts` | Pantry item and excluded-keyword data access. |
 | `web/src/hooks/use-pantry-match.ts` | Pantry match orchestration against recipe data. |
-| `web/src/hooks/shopping/use-shopping-pantry.ts` | Pantry-to-shopping bridge flows. |
+| `web/src/hooks/shopping/use-shopping-document.ts` | Document-aware Pantry-to-Shopping bridge flows. |
 | `web/src/lib/pantry-matcher.ts` | Pantry matching logic. |
 | `web/src/lib/shopping-list.ts` | Downstream consumer of pantry data when generating shopping lists. |
 | `web/src/lib/shopping-categories.ts` | Exact-match excluded-keyword helper logic. |
@@ -32,7 +32,7 @@ the shared authenticated shell.
 ### Pantry items
 
 - Pantry items are normalized case-insensitively.
-- Pantry presence affects shopping generation by moving matching ingredients into `already_have`.
+- Pantry presence is joined live during Shopping projection and classifies matching ingredients as `already_have`.
 
 ### Excluded keywords
 
@@ -44,10 +44,9 @@ the shared authenticated shell.
 
 - The Pantry excluded-items card exposes only the opt-in Salt variants and
   Black pepper variants settings. Their fixed alias lists are explained beside
-  accessible checkboxes and are persisted independently in `user_config`.
-- Settings affect newly generated recipe contributions only. Clear/reset plus
-  regeneration is the reliable boundary for rebuilding a shopping list under
-  current settings.
+  accessible checkboxes and are persisted in `ShoppingDocumentV1.preferences`.
+- Settings immediately affect the deterministic Shopping projection; no
+  contribution regeneration is required.
 - Exact exclusions remain a separate section and count; changing a family
   setting does not change `excluded_keywords`.
 
@@ -61,4 +60,4 @@ the shared authenticated shell.
 - See [`shopping-component.md`](./shopping-component.md) for the downstream shopping behavior that consumes pantry data.
 - See [`./project_overview.md`](./project_overview.md) for the broader architecture map.
 
-Last updated: 2026-08-03
+Last updated: 2026-08-07

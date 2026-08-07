@@ -13,7 +13,7 @@ function item(
   checked = false
 ): ShoppingItem {
   return {
-    rowId,
+    rowId: `manual:${rowId}`,
     item: rowId,
     amount: 1,
     unit: "",

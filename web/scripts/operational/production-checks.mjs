@@ -1,6 +1,6 @@
 const EXPECTED_TABLES = [
   "pantry_items", "plan_templates", "recipe_history", "recipe_shares", "recipes",
-  "shopping_contribution_commands", "shopping_list", "shopping_recipe_contributions",
+  "shopping_list",
   "user_config", "weekly_plans",
 ]
 
@@ -10,35 +10,30 @@ const EXPECTED_COLUMNS = [
   "weekly_plans.recipe_uuids", "weekly_plans.day_assignment_recipe_uuids", "weekly_plans.made_recipe_uuids",
   "plan_templates.recipe_uuids", "plan_templates.day_assignment_recipe_uuids",
   "recipe_history.recipe_uuid", "recipe_shares.source_recipe_uuid", "recipe_shares.accepted_recipe_uuid",
-  "shopping_list.source_recipe_uuids", "shopping_list.contribution_revision", "shopping_list.contribution_overrides",
-  "shopping_recipe_contributions.recipe_uuid", "shopping_recipe_contributions.snapshot",
-  "user_config.excluded_keywords", "pantry_items.item",
+  "shopping_list.document", "shopping_list.content_revision", "shopping_list.updated_at",
+  "pantry_items.item",
 ]
 
 const EXPECTED_CONSTRAINTS = [
   "recipes_pkey", "recipes_recipe_uuid_key", "shopping_list_pkey",
-  "pantry_items_user_id_item_key", "shopping_recipe_contributions_pkey",
-  "shopping_recipe_contributions_user_recipe_uuid_key",
-  "shopping_recipe_contributions_recipe_uuid_fkey",
+  "pantry_items_user_id_item_key", "shopping_list_document_v1_check",
 ]
 
 const EXPECTED_INDEXES = [
   "idx_recipes_user_id", "recipe_history_recipe_uuid_idx",
-  "recipe_shares_source_recipe_uuid_idx", "shopping_recipe_contributions_user_id_idx",
+  "recipe_shares_source_recipe_uuid_idx",
 ]
 
 const EXPECTED_FUNCTIONS = [
-  "accept_recipe_share", "apply_recipe_shopping_contribution_uuid_command", "delete_recipe",
-  "get_recipe_history_stats", "get_recipe_shopping_contribution_state",
-  "move_shopping_item_to_pantry", "resolve_recipe_identity",
-  "toggle_shopping_item_checked", "toggle_weekly_recipe_made",
+  "accept_recipe_share", "delete_recipe", "get_recipe_history_stats",
+  "move_shopping_document_item_to_pantry", "resolve_recipe_identity",
+  "toggle_weekly_recipe_made",
 ]
 
 const EXPECTED_TRIGGERS = [
-  "bump_shopping_contribution_revision_on_update", "enforce_recipe_uuid_insert",
+  "enforce_shopping_document_revision_on_update", "enforce_recipe_uuid_insert",
   "prevent_recipe_identity_change", "prevent_recipe_uuid_update",
   "sync_plan_template_recipe_uuids", "sync_recipe_history_uuid", "sync_recipe_share_uuids",
-  "sync_shopping_contribution_recipe_uuid", "sync_shopping_list_recipe_uuids",
   "sync_weekly_plan_recipe_uuids",
 ]
 
@@ -221,8 +216,8 @@ export function createDatabaseChecks(expectedMigration) {
       run: async ({ query }) => {
         await query("select recipe_uuid, ingredient_sections, instruction_sections from public.recipes order by recipe_uuid limit 1")
         await query("select item from public.pantry_items order by id limit 1")
-        await query("select recipe_uuid, snapshot from public.shopping_recipe_contributions order by recipe_uuid limit 1")
-        return "recipe, pantry, and shopping contribution reads succeeded"
+        await query("select document, content_revision from public.shopping_list order by user_id limit 1")
+        return "recipe, pantry, and Shopping document reads succeeded"
       },
     },
   ]

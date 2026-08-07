@@ -4,7 +4,6 @@ import type {
   Recipe,
   RecipeHistory,
   ShoppingItem,
-  ShoppingList,
   WeeklyPlan,
 } from "@/types/database"
 import {
@@ -108,7 +107,6 @@ export function recipeUuidWrite(recipeUuid: string) {
 type WeeklyPlanRow = Database["public"]["Tables"]["weekly_plans"]["Row"]
 type PlanTemplateRow = Database["public"]["Tables"]["plan_templates"]["Row"]
 type RecipeHistoryRow = Database["public"]["Tables"]["recipe_history"]["Row"]
-type ShoppingListRow = Database["public"]["Tables"]["shopping_list"]["Row"]
 
 export function mapWeeklyPlanRow(row: WeeklyPlanRow): WeeklyPlan {
   return {
@@ -133,16 +131,6 @@ export function mapRecipeHistoryRow(row: RecipeHistoryRow): RecipeHistory {
     recipe_id: row.recipe_uuid,
     legacyRecipeId: row.recipe_id,
   } as RecipeHistory
-}
-
-export function mapShoppingListRow(row: ShoppingListRow): ShoppingList {
-  return {
-    ...row,
-    items: mapShoppingItems(row.items),
-    already_have: mapShoppingItems(row.already_have),
-    excluded: mapShoppingItems(row.excluded),
-    source_recipes: row.source_recipe_uuids,
-  } as ShoppingList
 }
 
 export function mapShoppingItems<T extends ShoppingItem>(items: unknown): T[] {

@@ -85,7 +85,7 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 - Pantry UI lives in `web/src/components/pantry/`.
 - Pantry data access lives in `web/src/hooks/use-pantry.ts`.
 - Pantry-to-recipe matching lives in `web/src/hooks/use-pantry-match.ts` and `web/src/lib/pantry-matcher.ts`.
-- Pantry also feeds the shopping flow through `web/src/hooks/shopping/use-shopping-pantry.ts`.
+- Pantry also feeds the live Shopping projection through `web/src/hooks/shopping/use-shopping-document.ts`.
 
 ## Navigation And Route State
 
@@ -104,12 +104,15 @@ Primary persistent tables:
 - `recipe_history`
 - `weekly_plans`
 - `shopping_list`
-- `shopping_recipe_contributions`
 - `recipe_shares`
 - `plan_templates`
 
 All user data is isolated with Supabase Auth and RLS. Schema details and RPCs
 are documented in [`supabase/SCHEMA.md`](../supabase/SCHEMA.md).
+
+Shopping uses one canonical `ShoppingDocumentV1` in `shopping_list`, one CAS
+revision, and live Pantry projection. Recipe contribution and command tables
+were removed by migration 018.
 
 ## Current Refactor Status
 

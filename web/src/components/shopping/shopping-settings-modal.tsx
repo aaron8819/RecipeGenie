@@ -29,7 +29,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { CustomShoppingCategory, UserConfig } from "@/types/database"
+import type { CustomShoppingCategory, ShoppingConfig } from "@/types/database"
 import {
   getAllShoppingCategories,
   generateCategoryId,
@@ -43,8 +43,8 @@ const EMPTY_OVERRIDES: Record<string, string> = {}
 interface ShoppingSettingsModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  config: UserConfig | null
-  onUpdateConfig: (updates: Partial<UserConfig>) => Promise<void>
+  config: ShoppingConfig | null
+  onUpdateConfig: (updates: Partial<ShoppingConfig>) => Promise<void>
   isUpdating: boolean
 }
 
