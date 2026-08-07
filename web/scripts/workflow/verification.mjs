@@ -2,7 +2,11 @@ import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs"
 import { delimiter, dirname, join, posix, resolve, win32 } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { assertSafeOutput, assertSecretSafe } from "./state.mjs"
+import {
+  assertSafeOutput,
+  assertSecretSafe,
+  redactSecretShapedValues,
+} from "./state.mjs"
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
 const webDirectory = resolve(scriptDirectory, "..", "..")
@@ -548,6 +552,7 @@ function runCheck(definition, commandRunner, cwd = webDirectory, childEnvironmen
     )
   }
   const output = [result.stdout, result.stderr]
+    .map(redactSecretShapedValues)
     .filter(Boolean)
     .join("\n")
     .slice(-12_000)

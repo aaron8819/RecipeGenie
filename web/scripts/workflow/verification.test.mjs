@@ -563,6 +563,32 @@ describe("trusted npm execution", () => {
     expect(calls.every((call) => typeof call.env === "object")).toBe(true)
   })
 
+  it("redacts secret-shaped captured output while preserving failure diagnostics", () => {
+    const rawToken = `gho_${"a".repeat(20)}`
+    let callCount = 0
+    const report = runPrVerification({
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
+      commandRunner() {
+        callCount += 1
+        if (callCount === 2) {
+          return {
+            exitCode: 1,
+            stdout: `Assertion failed for fixture ${rawToken}`,
+            stderr: "Expected shopping document count to equal 2",
+          }
+        }
+        return passingRunner()
+      },
+    })
+    const rendered = JSON.stringify(report)
+
+    expect(report.status).toBe("FAIL")
+    expect(rendered).not.toContain(rawToken)
+    expect(rendered).toContain("[REDACTED]")
+    expect(rendered).toContain("Assertion failed for fixture")
+    expect(rendered).toContain("Expected shopping document count to equal 2")
+  })
+
   it("passes only the minimum ordinary environment to tests, builds, lifecycles, and migration tooling", () => {
     const sentinels = {
       RG_DATABASE_URL: "sentinel-rg-database",

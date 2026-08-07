@@ -13,6 +13,20 @@ const SECRET_VALUE_PATTERNS = [
   /\bvercel_[A-Za-z0-9_-]{12,}\b/i,
 ]
 
+function replaceAllMatches(value, pattern) {
+  const flags = pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`
+  return value.replace(new RegExp(pattern.source, flags), "[REDACTED]")
+}
+
+export function redactSecretShapedValues(value) {
+  let redacted = String(value ?? "")
+  redacted = replaceAllMatches(redacted, CREDENTIAL_URL_PATTERN)
+  for (const pattern of SECRET_VALUE_PATTERNS) {
+    redacted = replaceAllMatches(redacted, pattern)
+  }
+  return redacted
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (!value || typeof value !== "object") return value
