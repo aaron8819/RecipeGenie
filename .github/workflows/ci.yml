@@ -148,8 +148,6 @@ jobs:
           echo "authenticated template legacy write=passed"
           echo "authenticated history legacy write=passed"
           echo "authenticated share legacy write and acceptance=passed"
-          echo "authenticated shopping provenance legacy write=passed"
-          echo "authenticated contribution add/replace/remove=passed"
           echo "cross-owner and unresolved active writes=rejected"
           echo "anonymous writes=rejected"
           echo "direct private helper access=denied"
