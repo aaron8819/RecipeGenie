@@ -19,47 +19,230 @@ alter table public.shopping_list
 
 create function private.shopping_legacy_ingredient_key(p_item text)
 returns text
-language sql
+language plpgsql
 immutable
 set search_path = ''
 as $$
-  select case regexp_replace(
-    regexp_replace(lower(trim(coalesce(p_item, ''))), '\s+\(or\s+.+\)$', '', 'i'),
-    '^[,[:space:]]+|[,[:space:];:]+$', '', 'g'
-  )
-    when 'onions' then 'onion'
-    when 'lemons' then 'lemon'
-    when 'limes' then 'lime'
-    when 'eggs' then 'egg'
-    when 'tomatoes' then 'tomato'
-    when 'potatoes' then 'potato'
-    else regexp_replace(
-      regexp_replace(lower(trim(coalesce(p_item, ''))), '\s+\(or\s+.+\)$', '', 'i'),
-      '\s+', ' ', 'g'
-    )
+declare
+  v_value text;
+begin
+  v_value := regexp_replace(lower(trim(coalesce(p_item, ''))), '\s+\(or\s+.+\)$', '', 'i');
+  v_value := translate(v_value, '–—', '--');
+  v_value := regexp_replace(v_value, '([a-z])-([a-z])', '\1 \2', 'g');
+  v_value := regexp_replace(v_value, '[;,]+', ' ', 'g');
+  v_value := regexp_replace(v_value, '^[[:space:].:]+|[[:space:].:]+$', '', 'g');
+  v_value := regexp_replace(v_value, '\s+', ' ', 'g');
+
+  v_value := case v_value
+    when 'chicken breasts' then 'chicken breast'
+    when 'chicken thighs' then 'chicken thigh'
+    when 'egg whites' then 'egg white'
+    when 'evoo' then 'extra virgin olive oil'
+    when 'garlic cloves' then 'garlic'
+    else v_value
   end;
+  v_value := regexp_replace(v_value, '\mapples$', 'apple');
+  v_value := regexp_replace(v_value, '\mbananas$', 'banana');
+  v_value := regexp_replace(v_value, '\mcarrots$', 'carrot');
+  v_value := regexp_replace(v_value, '\meggs$', 'egg');
+  v_value := regexp_replace(v_value, '\mlemons$', 'lemon');
+  v_value := regexp_replace(v_value, '\mlimes$', 'lime');
+  v_value := regexp_replace(v_value, '\mmushrooms$', 'mushroom');
+  v_value := regexp_replace(v_value, '\monions$', 'onion');
+  v_value := regexp_replace(v_value, '\mpeppers$', 'pepper');
+  v_value := regexp_replace(v_value, '\mpotatoes$', 'potato');
+  v_value := regexp_replace(v_value, '\mtomatoes$', 'tomato');
+  return v_value;
+end;
 $$;
 
 create function private.shopping_legacy_aggregate_key(
   p_ingredient_key text,
   p_recipe_uuid uuid,
-  p_item jsonb
+  p_item jsonb,
+  p_scale jsonb
 )
 returns text
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+  v_exact jsonb := p_item->'exactQuantityV1';
+  v_package jsonb := p_item->'exactPackageV1';
+  v_start_numerator numeric;
+  v_start_denominator numeric;
+  v_end_numerator numeric;
+  v_end_denominator numeric;
+  v_gcd numeric;
+  v_remainder numeric;
+  v_discriminator text;
+begin
+  if nullif(p_item->>'structuredSourceKey', '') is null then
+    return format('["shopping-aggregate",1,%s]', to_jsonb(p_ingredient_key)::text);
+  end if;
+
+  if jsonb_typeof(v_package) = 'object' then
+    if nullif(v_package->>'type', '') is null
+       or jsonb_typeof(v_package->'size') <> 'object'
+       or jsonb_typeof(v_package->'size'->'value') <> 'object'
+       or nullif(v_package->'size'->'value'->>'numerator', '') is null
+       or nullif(v_package->'size'->'value'->>'denominator', '') is null
+       or jsonb_typeof(v_package->'size'->'unit') <> 'string' then
+      raise exception 'Shopping conversion failed: malformed structured package';
+    end if;
+    v_discriminator := format(
+      '["package",%s,%s,%s,%s,%s]',
+      to_jsonb(p_recipe_uuid::text)::text,
+      to_jsonb(v_package->>'type')::text,
+      to_jsonb(v_package->'size'->'value'->>'numerator')::text,
+      to_jsonb(v_package->'size'->'value'->>'denominator')::text,
+      to_jsonb(regexp_replace(lower(trim(v_package->'size'->>'unit')), '\s+', ' ', 'g'))::text
+    );
+  elsif jsonb_typeof(v_exact) = 'object' and v_exact->>'kind' = 'range' then
+    if coalesce(v_exact->'start'->>'numerator', '') !~ '^[0-9]+$'
+       or coalesce(v_exact->'start'->>'denominator', '') !~ '^[0-9]+$'
+       or coalesce(v_exact->'end'->>'numerator', '') !~ '^[0-9]+$'
+       or coalesce(v_exact->'end'->>'denominator', '') !~ '^[0-9]+$'
+       or coalesce(p_scale->>'numerator', '') !~ '^[0-9]+$'
+       or coalesce(p_scale->>'denominator', '') !~ '^[0-9]+$'
+       or p_scale->>'numerator' !~ '[1-9]'
+       or p_scale->>'denominator' !~ '[1-9]' then
+      raise exception 'Shopping conversion failed: malformed structured range';
+    end if;
+
+    v_start_numerator := (v_exact->'start'->>'numerator')::numeric * (p_scale->>'denominator')::numeric;
+    v_start_denominator := (v_exact->'start'->>'denominator')::numeric * (p_scale->>'numerator')::numeric;
+    v_end_numerator := (v_exact->'end'->>'numerator')::numeric * (p_scale->>'denominator')::numeric;
+    v_end_denominator := (v_exact->'end'->>'denominator')::numeric * (p_scale->>'numerator')::numeric;
+
+    v_gcd := v_start_numerator;
+    v_remainder := v_start_denominator;
+    while v_remainder <> 0 loop
+      v_start_denominator := v_remainder;
+      v_remainder := mod(v_gcd, v_remainder);
+      v_gcd := v_start_denominator;
+    end loop;
+    v_start_numerator := v_start_numerator / v_gcd;
+    v_start_denominator := ((v_exact->'start'->>'denominator')::numeric * (p_scale->>'numerator')::numeric) / v_gcd;
+
+    v_gcd := v_end_numerator;
+    v_remainder := v_end_denominator;
+    while v_remainder <> 0 loop
+      v_end_denominator := v_remainder;
+      v_remainder := mod(v_gcd, v_remainder);
+      v_gcd := v_end_denominator;
+    end loop;
+    v_end_numerator := v_end_numerator / v_gcd;
+    v_end_denominator := ((v_exact->'end'->>'denominator')::numeric * (p_scale->>'numerator')::numeric) / v_gcd;
+
+    v_discriminator := format(
+      '["range",%s,%s,%s,%s,%s,%s]',
+      to_jsonb(p_recipe_uuid::text)::text,
+      to_jsonb(regexp_replace(lower(trim(coalesce(p_item->>'unit', ''))), '\s+', ' ', 'g'))::text,
+      to_jsonb(v_start_numerator::text)::text,
+      to_jsonb(v_start_denominator::text)::text,
+      to_jsonb(v_end_numerator::text)::text,
+      to_jsonb(v_end_denominator::text)::text
+    );
+  else
+    raise exception 'Shopping conversion failed: unresolved structured ingredient';
+  end if;
+
+  return format(
+    '["shopping-aggregate",1,%s,%s]',
+    to_jsonb(p_ingredient_key)::text,
+    v_discriminator
+  );
+end;
+$$;
+
+create function private.shopping_legacy_pantry_match_keys(p_item text)
+returns jsonb
 language sql
 immutable
 set search_path = ''
 as $$
-  select case
-    when nullif(p_item->>'structuredSourceKey', '') is not null then
-      format(
-        '["shopping-aggregate",1,%s,["legacy-structured",%s,%s]]',
-        to_jsonb(p_ingredient_key)::text,
-        to_jsonb(p_recipe_uuid::text)::text,
-        to_jsonb(p_item->>'structuredSourceKey')::text
-      )
-    else format('["shopping-aggregate",1,%s]', to_jsonb(p_ingredient_key)::text)
+  with alternatives as (
+    select private.shopping_legacy_ingredient_key(p_item) as match_key, 0::bigint as position
+    union all
+    select private.shopping_legacy_ingredient_key(alternative), position
+    from regexp_split_to_table(
+      coalesce((regexp_match(p_item, '\s+\(or\s+(.+)\)$', 'i'))[1], ''),
+      ','
+    ) with ordinality as matches(alternative, position)
+    where (regexp_match(p_item, '\s+\(or\s+(.+)\)$', 'i')) is not null
+  ), deduplicated as (
+    select match_key, min(position) as position
+    from alternatives
+    where match_key <> ''
+    group by match_key
+  )
+  select coalesce(jsonb_agg(match_key order by position), '[]'::jsonb)
+  from deduplicated;
+$$;
+
+create function private.shopping_legacy_exclusion_family(p_item jsonb)
+returns text
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+  v_source jsonb;
+  v_candidate text;
+  v_family text;
+  v_resolved text;
+  v_has_source boolean := false;
+begin
+  if coalesce(p_item->>'item', '') ~* '\s+\(or\s+.+\)$' then
+    return null;
+  end if;
+
+  for v_source in
+    select value from jsonb_array_elements(case
+      when jsonb_typeof(p_item->'sources') = 'array' then p_item->'sources'
+      else '[]'::jsonb
+    end)
+    where nullif(value->>'originalItem', '') is not null
+  loop
+    v_has_source := true;
+    if nullif(trim(v_source->>'prepIntent'), '') is not null
+       and lower(trim(v_source->>'prepIntent')) <> 'to taste' then
+      return null;
+    end if;
+    v_candidate := regexp_replace(lower(trim(v_source->>'originalItem')), '\s+', ' ', 'g');
+    if v_candidate like '% to taste' then
+      v_candidate := left(v_candidate, length(v_candidate) - length(' to taste'));
+    end if;
+    v_family := case
+      when v_candidate in ('salt','kosher salt','sea salt','table salt') then 'salt'
+      when v_candidate in (
+        'black pepper','ground black pepper','freshly ground black pepper','cracked black pepper'
+      ) then 'black-pepper'
+      else null
+    end;
+    if v_family is null or (v_resolved is not null and v_family <> v_resolved) then
+      return null;
+    end if;
+    v_resolved := v_family;
+  end loop;
+
+  if v_has_source then
+    return v_resolved;
+  end if;
+  v_candidate := regexp_replace(lower(trim(coalesce(p_item->>'item', ''))), '\s+', ' ', 'g');
+  if v_candidate like '% to taste' then
+    v_candidate := left(v_candidate, length(v_candidate) - length(' to taste'));
+  end if;
+  return case
+    when v_candidate in ('salt','kosher salt','sea salt','table salt') then 'salt'
+    when v_candidate in (
+      'black pepper','ground black pepper','freshly ground black pepper','cracked black pepper'
+    ) then 'black-pepper'
+    else null
   end;
+end;
 $$;
 
 create function private.shopping_scale_v1(p_scale numeric, p_exact jsonb)
@@ -142,6 +325,7 @@ declare
   v_has_manual boolean;
   v_has_unknown boolean;
   v_has_config boolean;
+  v_exclusion_family text;
 begin
   select * into strict v_list
   from public.shopping_list
@@ -238,7 +422,11 @@ begin
       v_aggregate_key := private.shopping_legacy_aggregate_key(
         v_ingredient_key,
         v_contribution.recipe_uuid,
-        v_item.item
+        v_item.item,
+        private.shopping_scale_v1(
+          v_contribution.scale,
+          v_contribution.snapshot->'exactScaleV1'
+        )
       );
       v_quantity := case
         when (v_item.item->'amount') is null
@@ -265,7 +453,7 @@ begin
         'quantity', v_quantity,
         'purchaseUnit', coalesce(v_item.item->>'unit', ''),
         'defaultCategoryKey', v_item.item->>'categoryKey',
-        'pantryMatchKeys', jsonb_build_array(v_ingredient_key)
+        'pantryMatchKeys', private.shopping_legacy_pantry_match_keys(v_item.item->>'item')
       );
       if v_ingredient_key in ('lemon', 'lime')
          and coalesce(v_item.item->>'unit', '') = 'count' then
@@ -284,10 +472,9 @@ begin
           );
         end if;
       end if;
-      if coalesce(v_item.item->>'excludedBy', '') = 'Salt variants' then
-        v_ingredient := v_ingredient || jsonb_build_object('exclusionFamily', 'salt');
-      elsif coalesce(v_item.item->>'excludedBy', '') = 'Black pepper variants' then
-        v_ingredient := v_ingredient || jsonb_build_object('exclusionFamily', 'black-pepper');
+      v_exclusion_family := private.shopping_legacy_exclusion_family(v_item.item);
+      if v_exclusion_family is not null then
+        v_ingredient := v_ingredient || jsonb_build_object('exclusionFamily', v_exclusion_family);
       end if;
       v_ingredients := v_ingredients || jsonb_build_array(v_ingredient);
 
@@ -498,7 +685,9 @@ begin
       when bool_and(exists (
         select 1 from public.pantry_items as pantry
         where pantry.user_id = p_user_id
-          and private.shopping_legacy_ingredient_key(pantry.item) = ingredient->>'ingredientKey'
+          and private.shopping_legacy_ingredient_key(pantry.item) in (
+            select jsonb_array_elements_text(ingredient->'pantryMatchKeys')
+          )
       )) then 'already_have'
       when bool_and(v_preferences->'excludedIngredientKeys' ? (ingredient->>'ingredientKey'))
         then 'excluded'
@@ -604,7 +793,9 @@ set document = private.convert_shopping_document_v1(shopping.user_id),
 -- physical legacy schema is dropped later in this transaction.
 drop function private.convert_shopping_document_v1(uuid);
 drop function private.shopping_scale_v1(numeric, jsonb);
-drop function private.shopping_legacy_aggregate_key(text, uuid, jsonb);
+drop function private.shopping_legacy_exclusion_family(jsonb);
+drop function private.shopping_legacy_pantry_match_keys(text);
+drop function private.shopping_legacy_aggregate_key(text, uuid, jsonb, jsonb);
 
 alter table public.shopping_list
   alter column document set not null,
@@ -615,26 +806,348 @@ alter table public.shopping_list
   alter column updated_at set not null,
   alter column updated_at set default now();
 
-create function public.is_shopping_document_v1(p_document jsonb)
+create function private.is_shopping_rational_v1(p_value jsonb, p_positive boolean)
 returns boolean
 language sql
 immutable
 set search_path = ''
 as $$
-  select jsonb_typeof(p_document) = 'object'
-    and p_document->>'schemaVersion' = '1'
-    and jsonb_typeof(p_document->'recipeEntries') = 'object'
-    and jsonb_typeof(p_document->'manualItems') = 'array'
-    and jsonb_typeof(p_document->'itemOverrides') = 'object'
-    and jsonb_typeof(p_document->'order') = 'array'
-    and jsonb_typeof(p_document->'preferences') = 'object'
-    and (p_document - array[
-      'schemaVersion', 'recipeEntries', 'manualItems', 'itemOverrides',
-      'order', 'preferences'
-    ]) = '{}'::jsonb;
+  select coalesce(
+    jsonb_typeof(p_value) = 'object'
+      and (p_value - array['numerator', 'denominator']) = '{}'::jsonb
+      and jsonb_typeof(p_value->'numerator') = 'string'
+      and jsonb_typeof(p_value->'denominator') = 'string'
+      and p_value->>'numerator' ~ case when p_positive then '^[0-9]*[1-9][0-9]*$' else '^-?[0-9]+$' end
+      and p_value->>'denominator' ~ '^[0-9]*[1-9][0-9]*$',
+    false
+  );
+$$;
+
+create function private.is_shopping_quantity_source_v1(p_value jsonb)
+returns boolean
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+  v_kind text;
+  v_allowed_keys text[];
+begin
+  if jsonb_typeof(p_value) <> 'object'
+     or p_value->'version' <> '1'::jsonb
+     or jsonb_typeof(p_value->'kind') <> 'string'
+     or jsonb_typeof(p_value->'authored') <> 'string'
+     or trim(p_value->>'authored') = ''
+     or jsonb_typeof(p_value->'source') <> 'string'
+     or p_value->>'source' not in ('authored', 'original-text', 'legacy-synthesized')
+     or (p_value ? 'qualifier' and (
+       jsonb_typeof(p_value->'qualifier') <> 'string'
+       or p_value->>'qualifier' not in ('about', 'approximately', 'around')
+     )) then
+    return false;
+  end if;
+
+  v_kind := p_value->>'kind';
+  if v_kind = 'exact' then
+    v_allowed_keys := array['version','kind','authored','source','qualifier','value','lexeme'];
+    if not private.is_shopping_rational_v1(p_value->'value', true)
+       or jsonb_typeof(p_value->'lexeme') <> 'string'
+       or trim(p_value->>'lexeme') = '' then
+      return false;
+    end if;
+  elsif v_kind = 'range' then
+    v_allowed_keys := array[
+      'version','kind','authored','source','qualifier','start','end',
+      'startLexeme','endLexeme','separator'
+    ];
+    if not private.is_shopping_rational_v1(p_value->'start', true)
+       or not private.is_shopping_rational_v1(p_value->'end', true)
+       or jsonb_typeof(p_value->'startLexeme') <> 'string'
+       or trim(p_value->>'startLexeme') = ''
+       or jsonb_typeof(p_value->'endLexeme') <> 'string'
+       or trim(p_value->>'endLexeme') = ''
+       or p_value->>'separator' not in ('-', '–', '—') then
+      return false;
+    end if;
+  elsif v_kind = 'qualitative' then
+    v_allowed_keys := array['version','kind','authored','source'];
+  elsif v_kind = 'unparsed' then
+    v_allowed_keys := array['version','kind','authored','source','reason'];
+    if p_value ? 'reason' and (
+      jsonb_typeof(p_value->'reason') <> 'string' or trim(p_value->>'reason') = ''
+    ) then
+      return false;
+    end if;
+  else
+    return false;
+  end if;
+
+  return (p_value - v_allowed_keys) = '{}'::jsonb;
+end;
+$$;
+
+create function private.is_shopping_package_v1(p_value jsonb)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select coalesce(
+    jsonb_typeof(p_value) = 'object'
+      and (p_value - array['version','count','size','type','authoredType']) = '{}'::jsonb
+      and p_value->'version' = '1'::jsonb
+      and private.is_shopping_quantity_source_v1(p_value->'count')
+      and jsonb_typeof(p_value->'size') = 'object'
+      and (p_value->'size' - array['value','lexeme','unit','authoredUnit']) = '{}'::jsonb
+      and private.is_shopping_rational_v1(p_value->'size'->'value', true)
+      and jsonb_typeof(p_value->'size'->'lexeme') = 'string'
+      and trim(p_value->'size'->>'lexeme') <> ''
+      and jsonb_typeof(p_value->'size'->'unit') = 'string'
+      and trim(p_value->'size'->>'unit') <> ''
+      and jsonb_typeof(p_value->'size'->'authoredUnit') = 'string'
+      and trim(p_value->'size'->>'authoredUnit') <> ''
+      and jsonb_typeof(p_value->'type') = 'string'
+      and trim(p_value->>'type') <> ''
+      and jsonb_typeof(p_value->'authoredType') = 'string'
+      and trim(p_value->>'authoredType') <> '',
+    false
+  );
+$$;
+
+create function private.is_shopping_persisted_quantity_v1(p_value jsonb)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select coalesce(
+    p_value = 'null'::jsonb or (
+      jsonb_typeof(p_value) = 'object'
+      and (p_value - array[
+        'amount','unit','exactQuantityV1','exactPackageV1','exactAuthoredUnit'
+      ]) = '{}'::jsonb
+      and p_value ?& array['amount','unit']
+      and (p_value->'amount' = 'null'::jsonb or (
+        jsonb_typeof(p_value->'amount') = 'number'
+        and (p_value->>'amount')::numeric >= 0
+      ))
+      and jsonb_typeof(p_value->'unit') = 'string'
+      and (not (p_value ? 'exactQuantityV1')
+        or private.is_shopping_quantity_source_v1(p_value->'exactQuantityV1'))
+      and (not (p_value ? 'exactPackageV1')
+        or private.is_shopping_package_v1(p_value->'exactPackageV1'))
+      and (not (p_value ? 'exactAuthoredUnit')
+        or jsonb_typeof(p_value->'exactAuthoredUnit') = 'string')
+    ),
+    false
+  );
+$$;
+
+create function public.is_shopping_document_v1(p_document jsonb)
+returns boolean
+language plpgsql
+immutable
+security definer
+set search_path = ''
+as $$
+declare
+  v_entry record;
+  v_ingredient jsonb;
+  v_manual jsonb;
+  v_override record;
+  v_category record;
+  v_custom jsonb;
+  v_ref text;
+  v_aggregate_keys text[] := '{}'::text[];
+  v_manual_ids text[] := '{}'::text[];
+  v_seen text[] := '{}'::text[];
+begin
+  if jsonb_typeof(p_document) <> 'object'
+     or (p_document - array[
+       'schemaVersion','recipeEntries','manualItems','itemOverrides','order','preferences'
+     ]) <> '{}'::jsonb
+     or not (p_document ?& array[
+       'schemaVersion','recipeEntries','manualItems','itemOverrides','order','preferences'
+     ])
+     or p_document->'schemaVersion' <> '1'::jsonb
+     or jsonb_typeof(p_document->'recipeEntries') <> 'object'
+     or jsonb_typeof(p_document->'manualItems') <> 'array'
+     or jsonb_typeof(p_document->'itemOverrides') <> 'object'
+     or jsonb_typeof(p_document->'order') <> 'array'
+     or jsonb_typeof(p_document->'preferences') <> 'object' then
+    return false;
+  end if;
+
+  for v_entry in select key, value from jsonb_each(p_document->'recipeEntries') loop
+    if trim(v_entry.key) = ''
+       or jsonb_typeof(v_entry.value) <> 'object'
+       or (v_entry.value - array['recipeId','recipeName','selectedServings','scaleV1','ingredients']) <> '{}'::jsonb
+       or not (v_entry.value ?& array['recipeId','recipeName','selectedServings','scaleV1','ingredients'])
+       or v_entry.value->>'recipeId' <> v_entry.key
+       or jsonb_typeof(v_entry.value->'recipeName') <> 'string'
+       or trim(v_entry.value->>'recipeName') = ''
+       or jsonb_typeof(v_entry.value->'selectedServings') <> 'number'
+       or (v_entry.value->>'selectedServings')::numeric <= 0
+       or not private.is_shopping_rational_v1(v_entry.value->'scaleV1', true)
+       or jsonb_typeof(v_entry.value->'ingredients') <> 'array' then
+      return false;
+    end if;
+
+    for v_ingredient in select value from jsonb_array_elements(v_entry.value->'ingredients') loop
+      if jsonb_typeof(v_ingredient) <> 'object'
+         or (v_ingredient - array[
+           'ingredientKey','aggregateKey','displayName','quantity','purchaseUnit',
+           'defaultCategoryKey','pantryMatchKeys','exclusionFamily','citrusPrep'
+         ]) <> '{}'::jsonb
+         or not (v_ingredient ?& array[
+           'ingredientKey','aggregateKey','displayName','quantity','purchaseUnit',
+           'defaultCategoryKey','pantryMatchKeys'
+         ])
+         or jsonb_typeof(v_ingredient->'ingredientKey') <> 'string'
+         or trim(v_ingredient->>'ingredientKey') = ''
+         or jsonb_typeof(v_ingredient->'aggregateKey') <> 'string'
+         or trim(v_ingredient->>'aggregateKey') = ''
+         or jsonb_typeof(v_ingredient->'displayName') <> 'string'
+         or trim(v_ingredient->>'displayName') = ''
+         or not private.is_shopping_persisted_quantity_v1(v_ingredient->'quantity')
+         or jsonb_typeof(v_ingredient->'purchaseUnit') <> 'string'
+         or jsonb_typeof(v_ingredient->'defaultCategoryKey') <> 'string'
+         or trim(v_ingredient->>'defaultCategoryKey') = ''
+         or jsonb_typeof(v_ingredient->'pantryMatchKeys') <> 'array'
+         or jsonb_array_length(v_ingredient->'pantryMatchKeys') = 0
+         or exists (
+           select 1 from jsonb_array_elements(v_ingredient->'pantryMatchKeys') as match(value)
+           where jsonb_typeof(value) <> 'string' or trim(value #>> '{}') = ''
+         )
+         or (select count(*) from jsonb_array_elements_text(v_ingredient->'pantryMatchKeys')) <>
+            (select count(distinct value) from jsonb_array_elements_text(v_ingredient->'pantryMatchKeys') as matches(value))
+         or (v_ingredient ? 'exclusionFamily' and v_ingredient->>'exclusionFamily' not in ('salt','black-pepper'))
+         or (v_ingredient ? 'citrusPrep' and (
+           v_ingredient->>'citrusPrep' not in ('juiced','zested')
+           or v_ingredient->>'ingredientKey' not in ('lemon','lime')
+           or v_ingredient->>'purchaseUnit' <> 'count'
+         )) then
+        return false;
+      end if;
+      v_aggregate_keys := array_append(v_aggregate_keys, v_ingredient->>'aggregateKey');
+    end loop;
+  end loop;
+
+  for v_manual in select value from jsonb_array_elements(p_document->'manualItems') loop
+    if jsonb_typeof(v_manual) <> 'object'
+       or (v_manual - array['id','displayName','quantity','categoryKey','bucket','checked']) <> '{}'::jsonb
+       or not (v_manual ?& array['id','displayName','quantity','categoryKey','bucket','checked'])
+       or jsonb_typeof(v_manual->'id') <> 'string'
+       or trim(v_manual->>'id') = ''
+       or v_manual->>'id' = any(v_manual_ids)
+       or jsonb_typeof(v_manual->'displayName') <> 'string'
+       or trim(v_manual->>'displayName') = ''
+       or not private.is_shopping_persisted_quantity_v1(v_manual->'quantity')
+       or jsonb_typeof(v_manual->'categoryKey') <> 'string'
+       or trim(v_manual->>'categoryKey') = ''
+       or v_manual->>'bucket' not in ('items','already_have','excluded')
+       or jsonb_typeof(v_manual->'checked') <> 'boolean' then
+      return false;
+    end if;
+    v_manual_ids := array_append(v_manual_ids, v_manual->>'id');
+  end loop;
+
+  for v_override in select key, value from jsonb_each(p_document->'itemOverrides') loop
+    if not (v_override.key = any(v_aggregate_keys))
+       or jsonb_typeof(v_override.value) <> 'object'
+       or v_override.value = '{}'::jsonb
+       or (v_override.value - array['displayName','quantity','categoryKey','bucket','checked','suppressed']) <> '{}'::jsonb
+       or (v_override.value ? 'displayName' and (
+         jsonb_typeof(v_override.value->'displayName') <> 'string'
+         or trim(v_override.value->>'displayName') = ''
+       ))
+       or (v_override.value ? 'quantity'
+         and not private.is_shopping_persisted_quantity_v1(v_override.value->'quantity'))
+       or (v_override.value ? 'categoryKey' and (
+         jsonb_typeof(v_override.value->'categoryKey') <> 'string'
+         or trim(v_override.value->>'categoryKey') = ''
+       ))
+       or (v_override.value ? 'bucket' and v_override.value->>'bucket' not in ('items','already_have','excluded'))
+       or (v_override.value ? 'checked' and jsonb_typeof(v_override.value->'checked') <> 'boolean')
+       or (v_override.value ? 'suppressed' and v_override.value->'suppressed' <> 'true'::jsonb) then
+      return false;
+    end if;
+  end loop;
+
+  for v_ref in select value from jsonb_array_elements_text(p_document->'order') loop
+    if trim(v_ref) = '' or v_ref = any(v_seen)
+       or not (
+         (v_ref like 'derived:%' and substring(v_ref from 9) = any(v_aggregate_keys))
+         or (v_ref like 'manual:%' and substring(v_ref from 8) = any(v_manual_ids))
+       ) then
+      return false;
+    end if;
+    v_seen := array_append(v_seen, v_ref);
+  end loop;
+
+  if (p_document->'preferences' - array[
+       'categoryByIngredient','customCategories','categoryOrder',
+       'excludedIngredientKeys','excludeSaltVariants','excludeBlackPepperVariants'
+     ]) <> '{}'::jsonb
+     or not (p_document->'preferences' ?& array[
+       'categoryByIngredient','customCategories','categoryOrder',
+       'excludedIngredientKeys','excludeSaltVariants','excludeBlackPepperVariants'
+     ])
+     or jsonb_typeof(p_document->'preferences'->'categoryByIngredient') <> 'object'
+     or jsonb_typeof(p_document->'preferences'->'customCategories') <> 'array'
+     or jsonb_typeof(p_document->'preferences'->'categoryOrder') <> 'array'
+     or jsonb_typeof(p_document->'preferences'->'excludedIngredientKeys') <> 'array'
+     or jsonb_typeof(p_document->'preferences'->'excludeSaltVariants') <> 'boolean'
+     or jsonb_typeof(p_document->'preferences'->'excludeBlackPepperVariants') <> 'boolean'
+     or exists (
+       select 1 from jsonb_each(p_document->'preferences'->'categoryByIngredient') as category(key, value)
+       where trim(key) = '' or jsonb_typeof(value) <> 'string' or trim(value #>> '{}') = ''
+     ) then
+    return false;
+  end if;
+
+  v_seen := '{}'::text[];
+  for v_custom in select value from jsonb_array_elements(p_document->'preferences'->'customCategories') loop
+    if jsonb_typeof(v_custom) <> 'object'
+       or (v_custom - array['id','name','order']) <> '{}'::jsonb
+       or not (v_custom ?& array['id','name','order'])
+       or jsonb_typeof(v_custom->'id') <> 'string'
+       or trim(v_custom->>'id') = ''
+       or v_custom->>'id' = any(v_seen)
+       or jsonb_typeof(v_custom->'name') <> 'string'
+       or trim(v_custom->>'name') = ''
+       or jsonb_typeof(v_custom->'order') <> 'number' then
+      return false;
+    end if;
+    v_seen := array_append(v_seen, v_custom->>'id');
+  end loop;
+
+  foreach v_ref in array array['categoryOrder','excludedIngredientKeys'] loop
+    if exists (
+      select 1 from jsonb_array_elements(p_document->'preferences'->v_ref) as item(value)
+      where jsonb_typeof(value) <> 'string' or trim(value #>> '{}') = ''
+    ) or (select count(*) from jsonb_array_elements_text(p_document->'preferences'->v_ref)) <>
+         (select count(distinct value) from jsonb_array_elements_text(p_document->'preferences'->v_ref) as items(value)) then
+      return false;
+    end if;
+  end loop;
+
+  return true;
+exception when others then
+  return false;
+end;
 $$;
 
 alter function public.is_shopping_document_v1(jsonb) owner to postgres;
+
+revoke all privileges on function private.is_shopping_rational_v1(jsonb, boolean)
+  from public, anon, authenticated, service_role;
+revoke all privileges on function private.is_shopping_quantity_source_v1(jsonb)
+  from public, anon, authenticated, service_role;
+revoke all privileges on function private.is_shopping_package_v1(jsonb)
+  from public, anon, authenticated, service_role;
+revoke all privileges on function private.is_shopping_persisted_quantity_v1(jsonb)
+  from public, anon, authenticated, service_role;
 
 alter table public.shopping_list
   add constraint shopping_list_document_v1_check

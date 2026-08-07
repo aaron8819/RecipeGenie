@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(17);
+select extensions.plan(19);
 
 insert into auth.users(id, email) values
   ('31000000-0000-4000-8000-000000000001', 'shopping-a@example.test'),
@@ -28,6 +28,16 @@ select extensions.throws_ok($$ update public.shopping_list set content_revision 
   '40001', 'Shopping content revision must advance exactly once', 'skipped revisions reject');
 select extensions.throws_ok($$ update public.shopping_list set document = '{"schemaVersion":2}'::jsonb, content_revision = 2 where user_id = auth.uid() $$,
   '23514', null, 'malformed documents reject');
+select extensions.throws_ok($$
+  update public.shopping_list
+  set document = jsonb_set(
+        document,
+        '{preferences,customCategories}',
+        '[{"key":"household","label":"Household"}]'::jsonb
+      ),
+      content_revision = 2
+  where user_id = auth.uid()
+$$, '23514', null, 'nested application-invalid documents reject');
 select extensions.lives_ok($$
   update public.shopping_list set content_revision = 1
   where user_id = '32000000-0000-4000-8000-000000000002'
@@ -50,6 +60,8 @@ set local role anon;
 select set_config('request.jwt.claim.sub', '', true);
 select extensions.throws_ok($$ select count(*) from public.shopping_list $$,
   '42501', 'permission denied for table shopping_list', 'anonymous reads are not granted');
+select extensions.throws_ok($$ select public.is_shopping_document_v1('{}'::jsonb) $$,
+  '42501', 'permission denied for function is_shopping_document_v1', 'anonymous validator execution is not granted');
 select extensions.throws_ok($$ select * from public.move_shopping_document_item_to_pantry(0, '{}'::jsonb, 'onion', 1, 'count') $$,
   '42501', 'permission denied for function move_shopping_document_item_to_pantry', 'anonymous Pantry moves are not executable');
 
