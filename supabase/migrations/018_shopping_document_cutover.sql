@@ -898,7 +898,7 @@ as $$
       and p_value->'version' = '1'::jsonb
       and private.is_shopping_quantity_source_v1(p_value->'count')
       and jsonb_typeof(p_value->'size') = 'object'
-      and (p_value->'size' - array['value','lexeme','unit','authoredUnit']) = '{}'::jsonb
+      and ((p_value->'size') - array['value','lexeme','unit','authoredUnit']) = '{}'::jsonb
       and private.is_shopping_rational_v1(p_value->'size'->'value', true)
       and jsonb_typeof(p_value->'size'->'lexeme') = 'string'
       and trim(p_value->'size'->>'lexeme') <> ''
@@ -1085,7 +1085,7 @@ begin
     v_seen := array_append(v_seen, v_ref);
   end loop;
 
-  if (p_document->'preferences' - array[
+  if ((p_document->'preferences') - array[
        'categoryByIngredient','customCategories','categoryOrder',
        'excludedIngredientKeys','excludeSaltVariants','excludeBlackPepperVariants'
      ]) <> '{}'::jsonb

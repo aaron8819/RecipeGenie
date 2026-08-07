@@ -16,5 +16,5 @@
   "015_add_shopping_exclusion_settings.sql": "e5fb67487e73cf7534645a7a1735f704f85b4da3561d60f34b839c02a574054a",
   "016_canonical_recipe_structure_cutover.sql": "ba9d69bedff0f977df6dfaecb7ada1c55c181062129499eab7c2d5b4265c5b13",
   "017_remove_legacy_recipe_structure.sql": "2a2e9a28fd88f3b41674576ebd292a129899235616fbe888e6feb396169a98d2",
-  "018_shopping_document_cutover.sql": "95f13c5920c195b7430970d40bedfac97d8275f52704fe709a14d0075f6be5e8"
+  "018_shopping_document_cutover.sql": "3af7c3988856a168404088c6f135389dc7e751d3835bc3587bcd01c1220d4877"
 }
