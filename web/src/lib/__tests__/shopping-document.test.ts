@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 import type { PantryItem } from "@/types/database"
+import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 import {
   applyShoppingDocumentMutation,
   createEmptyShoppingDocument,
+  createShoppingRecipeEntry,
   projectShoppingDocument,
   validateShoppingDocumentStateV1,
   validateShoppingDocumentV1,
@@ -88,6 +90,72 @@ describe("ShoppingDocumentV1 validation", () => {
       document: createEmptyShoppingDocument(),
       contentRevision: -1,
     }).ok).toBe(false)
+  })
+
+  it("persists generated recipe entries without projection metadata", () => {
+    const recipe = canonicalizeRecipeFixture({
+      id: "00000000-0000-4000-8000-000000000001",
+      name: "Scaled Pepper",
+      servings: 4,
+      fixtureIngredients: [
+        { item: "black pepper", amount: 1, unit: "teaspoon" },
+        {
+          item: "yogurt",
+          amount: 1,
+          unit: "cup",
+          alternatives: ["sour cream"],
+        },
+      ],
+    })
+    const document = createEmptyShoppingDocument()
+    document.recipeEntries[recipe.id] = entry(recipe.id, "milk", 1, {
+      unit: "cup",
+    })
+    document.recipeEntries.other = entry("other", "garlic")
+    const replacedKey = document.recipeEntries[recipe.id].ingredients[0]
+      .aggregateKey
+    document.itemOverrides[replacedKey] = { checked: true }
+    expect(validateShoppingDocumentV1(document).ok).toBe(true)
+
+    const runtimeIngredient = resolveShoppingIngredient({
+      ingredient: recipe.ingredientSections[0].ingredients[0],
+      recipeId: recipe.id,
+    })
+    const persistedEntry = createShoppingRecipeEntry(
+      recipe,
+      8,
+      { numerator: "2", denominator: "1" }
+    )
+    const next = applyShoppingDocumentMutation(
+      { document, contentRevision: 3 },
+      { type: "upsertRecipe", entry: persistedEntry }
+    )
+    const persistedIngredient = next.document.recipeEntries[recipe.id]
+      .ingredients[0]
+    const pantryIngredient = next.document.recipeEntries[recipe.id]
+      .ingredients[1]
+
+    expect(runtimeIngredient.defaultCategoryOrder).toBeTypeOf("number")
+    expect(persistedEntry.ingredients.every((ingredient) =>
+      !("defaultCategoryOrder" in ingredient))).toBe(true)
+    expect(validateShoppingDocumentV1(next.document).ok).toBe(true)
+    expect(next.contentRevision).toBe(4)
+    expect(next.document.recipeEntries.other).toBe(document.recipeEntries.other)
+    expect(next.document.itemOverrides).toEqual({})
+    expect(next.document.recipeEntries[recipe.id]).toMatchObject({
+      recipeName: "Scaled Pepper",
+      selectedServings: 8,
+      scaleV1: { numerator: "2", denominator: "1" },
+    })
+    expect(persistedIngredient).toMatchObject({
+      quantity: { amount: 2, unit: "tsp" },
+      pantryMatchKeys: ["black pepper"],
+      exclusionFamily: "black-pepper",
+    })
+    expect(pantryIngredient).toMatchObject({
+      quantity: { amount: 2, unit: "cup" },
+      pantryMatchKeys: ["yogurt", "sour cream"],
+    })
   })
 })
 
