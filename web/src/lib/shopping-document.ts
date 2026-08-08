@@ -358,7 +358,12 @@ export function createShoppingRecipeEntry(
       scale,
       exactScaleV1: scaleV1,
       recipeId: recipe.id,
-    }).map(({ runtime: _runtime, sourceOrdinal: _ordinal, ...ingredient }) => ingredient),
+    }).map(({
+      runtime: _runtime,
+      sourceOrdinal: _ordinal,
+      defaultCategoryOrder: _categoryOrder,
+      ...ingredient
+    }) => ingredient),
   }
 }
 
