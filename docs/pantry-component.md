@@ -9,7 +9,9 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 | File | Responsibility |
 |------|----------------|
-| `web/src/components/pantry/pantry-list.tsx` | Main pantry UI for pantry items, built-in family exclusions, and exact exclusions. |
+| `web/src/components/pantry/pantry-list.tsx` | Pantry state/data orchestrator, desktop panels, and mobile section control. |
+| `web/src/components/pantry/pantry-item-lists.tsx` | Categorized Pantry accordions and exact-exclusion row lists. |
+| `web/src/lib/pantry.ts` | Pure Pantry display grouping and exact-exclusion sorting. |
 | `web/src/hooks/use-pantry.ts` | Pantry item and excluded-keyword data access. |
 | `web/src/hooks/shopping/use-shopping-document.ts` | Document-aware Pantry-to-Shopping bridge flows. |
 | `web/src/lib/shopping-ingredient-resolution.ts` | Resolver-produced purchase identity, Pantry candidates, and supported semantic-family evidence. |
@@ -31,6 +33,16 @@ the shared authenticated shell.
 ### Pantry items
 
 - Pantry items are normalized case-insensitively.
+- The UI groups items using Shopping's existing matched categories and order,
+  labels the Shopping `Pantry` category as `Pantry Staples`, and places items
+  without a keyword match in `Other`. Categories and their items are display
+  concerns only; no Pantry category is persisted.
+- Non-empty categories start expanded and keep collapse state only for the
+  mounted `/pantry` route session. Search hides categories without matches and
+  temporarily expands matching categories without replacing saved collapse
+  choices.
+- Ingredient and exact-exclusion removal lives in a keyboard-accessible row
+  action menu while preserving the existing optimistic mutation and Undo flow.
 - Pantry presence is joined live during Shopping projection and classifies
   matching ingredients as `already_have`.
 - Satisfaction uses resolver-produced exact/alternative candidates, bounded

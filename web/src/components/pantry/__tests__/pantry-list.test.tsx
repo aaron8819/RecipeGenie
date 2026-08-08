@@ -3,6 +3,34 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { act, render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { PantryList } from "@/components/pantry/pantry-list"
 
+globalThis.React = React
+
+if (typeof window !== "undefined") {
+  const testWindow = globalThis as typeof globalThis & {
+    PointerEvent?: typeof MouseEvent
+    ResizeObserver?: new () => {
+      observe: () => void
+      unobserve: () => void
+      disconnect: () => void
+    }
+  }
+
+  testWindow.PointerEvent ??= MouseEvent as unknown as typeof PointerEvent
+  testWindow.ResizeObserver ??= class ResizeObserverMock {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  HTMLElement.prototype.scrollIntoView ??= () => {}
+}
+
+function openActions(ingredient: string) {
+  fireEvent.pointerDown(
+    screen.getByRole("button", { name: `Actions for ${ingredient}` }),
+    { button: 0, ctrlKey: false }
+  )
+}
+
 const addPantryItemsMutateAsync = vi.fn()
 const removePantryMutate = vi.fn()
 const restorePantryMutate = vi.fn()
@@ -162,6 +190,69 @@ describe("PantryList", () => {
     expect(screen.getByText(/does not perform substring matching/i)).toBeInTheDocument()
   })
 
+  it("groups Pantry items, restores collapse state after search, and keeps unmatched items in Other", () => {
+    pantryItemsState.data = [
+      { id: "1", item: "tomato" },
+      { id: "2", item: "apple" },
+      { id: "3", item: "flour" },
+      { id: "4", item: "sugar" },
+      { id: "5", item: "mystery ingredient" },
+      { id: "6", item: "milk" },
+      { id: "7", item: "butter" },
+      { id: "8", item: "bread" },
+      { id: "9", item: "bagels" },
+      { id: "10", item: "chicken" },
+      { id: "11", item: "salmon" },
+    ]
+
+    render(<PantryList />)
+
+    const produce = screen.getByRole("button", { name: /Fresh Produce 2/i })
+    expect(produce).toHaveAttribute("aria-expanded", "true")
+    expect(screen.getByRole("button", { name: /Pantry Staples 2/i })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Other 1/i })).toBeInTheDocument()
+
+    fireEvent.click(produce)
+    expect(produce).toHaveAttribute("aria-expanded", "false")
+    expect(screen.queryByText("tomato")).not.toBeVisible()
+
+    const search = screen.getByRole("searchbox", { name: "Search pantry items" })
+    fireEvent.change(search, {
+      target: { value: "tomato" },
+    })
+    expect(produce).toHaveAttribute("aria-expanded", "true")
+    expect(screen.getByText("tomato")).toBeVisible()
+    expect(screen.queryByRole("button", { name: /Pantry Staples/i })).not.toBeInTheDocument()
+
+    fireEvent.change(search, {
+      target: { value: "not in this pantry" },
+    })
+    expect(screen.getByText(/No pantry items match/)).toBeInTheDocument()
+    expect(screen.queryByText("No pantry items yet")).not.toBeInTheDocument()
+
+    fireEvent.change(search, {
+      target: { value: "" },
+    })
+    expect(
+      screen.getByRole("button", { name: /Fresh Produce 2/i })
+    ).toHaveAttribute("aria-expanded", "false")
+    expect(screen.queryByText("tomato")).not.toBeVisible()
+    expect(screen.getByRole("button", { name: /Pantry Staples 2/i })).toBeInTheDocument()
+  })
+
+  it("uses pressed-state semantics for the mobile Pantry workspace", () => {
+    render(<PantryList />)
+
+    const pantry = screen.getByRole("button", { name: "Pantry 0" })
+    const excluded = screen.getByRole("button", { name: "Excluded 0" })
+    expect(pantry).toHaveAttribute("aria-pressed", "true")
+    expect(excluded).toHaveAttribute("aria-pressed", "false")
+
+    fireEvent.click(excluded)
+    expect(pantry).toHaveAttribute("aria-pressed", "false")
+    expect(excluded).toHaveAttribute("aria-pressed", "true")
+  })
+
   it("saves one family setting and shows a failure toast", () => {
     render(<PantryList />)
 
@@ -217,8 +308,10 @@ describe("PantryList", () => {
 
     render(<PantryList />)
 
-    fireEvent.click(screen.getByRole("button", { name: /remove garlic/i }))
-    fireEvent.click(screen.getByRole("button", { name: /remove excluded keyword pepper/i }))
+    openActions("garlic")
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }))
+    openActions("pepper")
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }))
 
     expect(undoToastShow).not.toHaveBeenCalled()
 
@@ -251,7 +344,8 @@ describe("PantryList", () => {
 
     render(<PantryList />)
 
-    fireEvent.click(screen.getByRole("button", { name: /remove garlic/i }))
+    openActions("garlic")
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove" }))
 
     const pantryMutationOptions = removePantryMutate.mock.calls[0]?.[1]
     act(() => {
@@ -262,5 +356,20 @@ describe("PantryList", () => {
       expect(screen.getByRole("alert")).toHaveTextContent('Could not remove "garlic" from pantry. Try again.')
       expect(undoToastShow).not.toHaveBeenCalled()
     })
+  })
+
+  it("keeps only the selected row pending while removal is in flight", () => {
+    pantryItemsState.data = [
+      { id: "pantry-1", item: "garlic" },
+      { id: "pantry-2", item: "tomato" },
+    ]
+
+    render(<PantryList />)
+
+    openActions("garlic")
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove" }))
+
+    expect(screen.getByRole("button", { name: "Actions for garlic" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Actions for tomato" })).toBeEnabled()
   })
 })

@@ -148,12 +148,17 @@ test.describe('Responsive contracts @extended', () => {
     await dismissNextDevTools(page)
 
     const pantrySections = page.getByRole('navigation', { name: 'Pantry sections' })
+    const pantrySection = pantrySections.getByRole('button', { name: /Pantry \d+/ })
+    const excludedSection = pantrySections.getByRole('button', { name: /Excluded \d+/ })
     const controls = [
       page.getByRole('button', { name: 'Help' }),
       page.getByRole('button', { name: 'Open account menu' }),
-      pantrySections.getByRole('button', { name: /Pantry \d+/ }),
-      pantrySections.getByRole('button', { name: /Excluded \d+/ }),
+      pantrySection,
+      excludedSection,
     ]
+
+    await expect(pantrySection).toHaveAttribute('aria-pressed', 'true')
+    await expect(excludedSection).toHaveAttribute('aria-pressed', 'false')
 
     for (const control of controls) {
       await expect(control).toBeVisible()
@@ -162,9 +167,28 @@ test.describe('Responsive contracts @extended', () => {
       expect(size.height).toBeGreaterThanOrEqual(44)
     }
 
-    await pantrySections.getByRole('button', { name: /Excluded \d+/ }).click()
-    await expect(page.getByRole('heading', { name: /Excluded Keywords/i })).toBeVisible()
+    await excludedSection.click()
+    await expect(excludedSection).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByRole('heading', { name: /Excluded Items/i })).toBeVisible()
     await expect(page.getByRole('heading', { name: /Pantry Items/i })).toBeHidden()
+  })
+
+  test('keeps Pantry and Excluded panels adjacent on desktop', async ({ page, setupAuth, navigateToRoute }) => {
+    await page.setViewportSize(VIEWPORTS.desktop)
+    await setupAuth()
+    await navigateToRoute('pantry')
+
+    const pantryPanel = page.getByRole('heading', { name: /Pantry Items/i })
+    const excludedPanel = page.getByRole('heading', { name: /Excluded Items/i })
+    await expect(pantryPanel).toBeVisible()
+    await expect(excludedPanel).toBeVisible()
+
+    const pantryBox = await page.getByTestId('pantry-panel').boundingBox()
+    const excludedBox = await page.getByTestId('excluded-ingredients-panel').boundingBox()
+    expect(pantryBox).not.toBeNull()
+    expect(excludedBox).not.toBeNull()
+    expect(Math.abs(pantryBox!.y - excludedBox!.y)).toBeLessThan(4)
+    expect(pantryBox!.x).toBeLessThan(excludedBox!.x)
   })
 
   test('uses a compact mobile shopping summary without horizontal overflow', async ({ page, setupAuth, navigateToRoute }) => {

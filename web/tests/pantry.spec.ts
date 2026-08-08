@@ -22,6 +22,11 @@ function undoAlert(page: import('@playwright/test').Page) {
   return page.getByRole('alert').filter({ has: page.getByRole('button', { name: /^undo$/i }) }).first()
 }
 
+async function removeIngredient(page: import('@playwright/test').Page, ingredient: string) {
+  await page.getByRole('button', { name: `Actions for ${ingredient}`, exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Remove', exact: true }).click()
+}
+
 test.describe('Pantry Management', () => {
   test.beforeEach(async ({ setupAuth, navigateToRoute }) => {
     await setupAuth()
@@ -76,10 +81,10 @@ test.describe('Pantry Management', () => {
     await expect(page.getByText(secondItem, { exact: true })).toBeVisible()
 
     const alert = undoAlert(page)
-    await page.getByRole('button', { name: new RegExp(`remove ${firstItem}`, 'i') }).click()
+    await removeIngredient(page, firstItem)
     await expect(alert).toContainText(new RegExp(`${firstItem}.*removed from pantry`, 'i'))
 
-    await page.getByRole('button', { name: new RegExp(`remove ${secondItem}`, 'i') }).click()
+    await removeIngredient(page, secondItem)
     await page.getByRole('button', { name: /^dismiss$/i }).click()
     await expect(alert).toContainText(new RegExp(`${secondItem}.*removed from pantry`, 'i'))
   })
@@ -91,11 +96,42 @@ test.describe('Pantry Management', () => {
     await addExcludedKeyword(page, keyword)
     await expect(page.getByText(keyword, { exact: true })).toBeVisible()
 
-    await page.getByRole('button', { name: new RegExp(`remove excluded keyword ${keyword}`, 'i') }).click()
+    await removeIngredient(page, keyword)
 
     const alert = undoAlert(page)
     await expect(alert).toContainText(new RegExp(`${keyword}.*removed from excluded keywords`, 'i'))
     await expect(page.getByRole('button', { name: /^undo$/i })).toBeVisible()
+  })
+
+  test('groups items and restores a collapsed category after search @extended', async ({ page }) => {
+    const seed = uniqueSeed()
+    const items = Array.from({ length: 11 }, (_, index) =>
+      `categorized ${seed} ${String(index + 1).padStart(2, '0')}`
+    )
+
+    await addPantryEntry(page, items.join(', '))
+    const otherCategory = page.getByRole('button', { name: /Other \d+/i })
+    await expect(otherCategory).toHaveAttribute('aria-expanded', 'true')
+
+    await otherCategory.click()
+    await expect(otherCategory).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByText(items[0], { exact: true })).toBeHidden()
+
+    const search = page.getByRole('searchbox', { name: 'Search pantry items' })
+    await search.fill(items[0])
+    await expect(otherCategory).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByText(items[0], { exact: true })).toBeVisible()
+
+    await search.fill('')
+    await expect(otherCategory).toHaveAttribute('aria-expanded', 'false')
+    await otherCategory.click()
+
+    const actions = page.getByRole('button', { name: `Actions for ${items[1]}`, exact: true })
+    await actions.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('menuitem', { name: 'Remove', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menuitem', { name: 'Remove', exact: true })).toBeHidden()
   })
 
   test('persists Salt and Black pepper family exclusions independently @core', async ({ page, navigateToRoute }) => {
@@ -147,11 +183,11 @@ test.describe('Pantry Management', () => {
     const item = `mobile touch ${seed}`
     await addPantryEntry(page, item)
 
-    const removeButton = page.getByRole('button', { name: new RegExp(`remove ${item}`, 'i') })
-    await expect(removeButton).toBeVisible()
+    const actionsButton = page.getByRole('button', { name: `Actions for ${item}`, exact: true })
+    await expect(actionsButton).toBeVisible()
 
-    const size = await measureTouchTarget(removeButton)
-    expect(size.width).toBeGreaterThanOrEqual(32)
-    expect(size.height).toBeGreaterThanOrEqual(32)
+    const size = await measureTouchTarget(actionsButton)
+    expect(size.width).toBeGreaterThanOrEqual(44)
+    expect(size.height).toBeGreaterThanOrEqual(44)
   })
 })
