@@ -632,9 +632,11 @@ Ingredients:
 
     await navigateToRoute('pantry')
     const removePantryButton = page.getByRole('button', {
-      name: new RegExp(`remove ${escapeRegex(pantryRecipe.ingredients[0].item)}`, 'i'),
+      name: `Actions for ${pantryRecipe.ingredients[0].item}`,
+      exact: true,
     })
     await removePantryButton.click()
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click()
     await expect(removePantryButton).toHaveCount(0)
 
     const excludedInput = page.getByPlaceholder(/add excluded keyword \(comma-separated\)/i)
@@ -668,8 +670,10 @@ Ingredients:
 
     await navigateToRoute('pantry')
     await page.getByRole('button', {
-      name: new RegExp(`remove excluded keyword ${escapeRegex(exclusionRecipe.ingredients[0].item)}`, 'i'),
+      name: `Actions for ${exclusionRecipe.ingredients[0].item}`,
+      exact: true,
     }).click()
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click()
     await navigateToRoute('recipes')
 
     for (const recipe of [pantryRecipe, exclusionRecipe]) {

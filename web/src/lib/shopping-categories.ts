@@ -245,6 +245,25 @@ export function categorizeIngredient(
     return [overrideCategory, cat.order]
   }
 
+  const matchedCategory = getMatchedShoppingCategory(itemName)
+  if (matchedCategory) {
+    return matchedCategory
+  }
+
+  // Default to pantry for unknown food items
+  // (misc is reserved for non-food items which have explicit keywords)
+  return ["pantry", SHOPPING_CATEGORIES.pantry.order]
+}
+
+/**
+ * Find the built-in shopping category whose keywords match an ingredient.
+ * Unlike categorizeIngredient, this does not apply Shopping's pantry fallback.
+ */
+export function getMatchedShoppingCategory(
+  itemName: string
+): [string, number] | null {
+  const itemLower = normalizeItemName(itemName)
+
   // Build a list of all keyword matches with their category info
   // Sort by keyword length (longest first) to prioritize specific matches
   const allKeywords: Array<{ keyword: string; catKey: string; order: number }> = []
@@ -269,9 +288,7 @@ export function categorizeIngredient(
     }
   }
 
-  // Default to pantry for unknown food items
-  // (misc is reserved for non-food items which have explicit keywords)
-  return ["pantry", SHOPPING_CATEGORIES.pantry.order]
+  return null
 }
 
 /**

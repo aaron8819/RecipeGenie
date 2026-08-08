@@ -72,4 +72,23 @@ test.describe('Accessibility @extended', () => {
     await expect(dialog).toBeHidden()
     await expect(page.getByTestId('recipes-add-fab')).toBeVisible()
   })
+
+  test('keeps the categorized Pantry workspace free of serious axe violations', async ({ page, setupAuth, navigateToRoute }) => {
+    await page.setViewportSize(VIEWPORTS.desktop)
+    await setupAuth()
+    await navigateToRoute('pantry')
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Pantry' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Always exclude' })).toBeVisible()
+
+    const results = await checkAccessibility(page, { exclude: ['[data-next-badge-root]'] })
+    const blocking = results.violations.filter((violation) =>
+      ['critical', 'serious'].includes(violation.impact ?? '')
+    )
+
+    expect(
+      summarizeViolations(blocking),
+      'Found blocking violations on the categorized Pantry workspace'
+    ).toEqual([])
+  })
 })

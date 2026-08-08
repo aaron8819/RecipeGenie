@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   categorizeIngredient,
+  getMatchedShoppingCategory,
   isExcludedIngredient,
   getExcludedKeyword,
   getShoppingCategories,
@@ -247,6 +248,18 @@ describe('categorizeIngredient', () => {
       expect(result[0]).toBe('protein')
       expect(result[1]).toBe(SHOPPING_CATEGORIES.protein.order)
     })
+  })
+})
+
+describe('getMatchedShoppingCategory', () => {
+  it('returns the matching built-in category without applying a fallback', () => {
+    expect(getMatchedShoppingCategory('fresh tomato')).toEqual(['produce', 1])
+    expect(getMatchedShoppingCategory('olive oil')).toEqual(['pantry', 6])
+  })
+
+  it('returns null for an unmatched ingredient without changing Shopping fallback', () => {
+    expect(getMatchedShoppingCategory('dragon fruit powder')).toBeNull()
+    expect(categorizeIngredient('dragon fruit powder')).toEqual(['pantry', 6])
   })
 })
 
