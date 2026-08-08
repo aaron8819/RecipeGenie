@@ -1,8 +1,8 @@
 # Shopping Domain Reference
 
-Shopping persistence is a single `ShoppingDocumentV1` JSON document per user,
+Shopping persistence is a single `ShoppingDocumentV2` JSON document per user,
 guarded by one `content_revision`. The document stores recipe inputs, manual
-items, explicit row overrides, order, and Shopping preferences. Rendered
+items, explicit row overrides, and reusable Shopping preferences. Rendered
 `items`, `already_have`, and `excluded` rows are projections and are never
 persisted.
 
@@ -11,10 +11,12 @@ persisted.
 | File | Responsibility |
 |------|----------------|
 | `web/src/lib/shopping-document.ts` | Strict validator, deterministic projector, and pure mutation reducers. |
+| `web/src/lib/shopping-ordering.ts` | The single category and within-category ordering authority. |
 | `web/src/lib/shopping-ingredient-resolution.ts` | Resolves canonical Shopping ingredients from recipe structure. |
 | `web/src/hooks/shopping/use-shopping-document.ts` | The only runtime Shopping read/write seam; CAS, replay, Pantry bridge, and UI adapters. |
 | `web/src/components/shopping/shopping-list.tsx` | Shopping UI orchestration and immediate inverse-write Undo UX. |
 | `supabase/migrations/018_shopping_document_cutover.sql` | Atomic legacy conversion and physical schema cutover. |
+| `supabase/migrations/019_personalized_shopping_order.sql` | V1-to-V2 conversion and strict personalized-order persistence. |
 
 ## Persistence contract
 
@@ -28,6 +30,17 @@ persisted.
   active entry per recipe.
 - Manual IDs and derived aggregate keys produce stable `manual:*` and
   `derived:*` row references. Row-targeted actions fail closed without one.
+- `preferences.categoryOrder` owns reusable category order and
+  `preferences.ingredientOrderByCategory` owns reusable ingredient-key order.
+  Row references never become learned ordering identity.
+- Unlearned rows order by reusable ingredient identity first. Each identity's
+  fallback key is its minimum `normalizeItemName(displayName)` in Unicode
+  scalar-value order; rows inside that identity then use normalized display and
+  `rowRef`. Migration 019 uses the same definition when seeding V1 order.
+- A Manage-mode drop is one replayable mutation. Within-category drops update
+  the ingredient sequence; cross-category drops atomically update
+  `categoryByIngredient` and both affected sequences. Manual rows use the same
+  conservative purchase key as recipe ingredients.
 - Delete, clear, and recipe removal happen immediately. Undo is a new inverse
   document mutation; there is no delayed commit queue.
 
@@ -53,4 +66,4 @@ npm run test -- --run src/lib/__tests__/shopping-document.test.ts src/lib/__test
 supabase test db --local --workdir ..
 ```
 
-Last updated: 2026-08-07
+Last updated: 2026-08-08

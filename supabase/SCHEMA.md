@@ -63,9 +63,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/016_canonical_recipe_structure_cutover.sql`
 - `supabase/migrations/017_remove_legacy_recipe_structure.sql`
 - `supabase/migrations/018_shopping_document_cutover.sql`
+- `supabase/migrations/019_personalized_shopping_order.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 18 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 19 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -85,7 +86,7 @@ Archived files are not replacement migrations and are not part of that chain.
   package, rational, unit, and yield validators while preserving the numeric
   servings projection.
 - Migration 015 historically added Shopping exclusions to `user_config`;
-  migration 018 moves them into `ShoppingDocumentV1.preferences`.
+  migration 018 moves them into Shopping document preferences.
 - Migration `016` atomically backfills canonical ordered ingredient
   and instruction sections, converts share snapshots, and switches privileged
   recipe creation/acceptance to canonical fields.
@@ -94,6 +95,9 @@ Archived files are not replacement migrations and are not part of that chain.
   persisted recipe structure.
 - Migration `018` atomically converts legacy Shopping state into one canonical
   document with one CAS revision, then removes contribution-era persistence.
+- Migration `019` upgrades Shopping documents to V2, converts current row order
+  into reusable ingredient-key sequences, and removes row references as a
+  durable ordering authority.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -271,22 +275,22 @@ are not persisted.
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `user_id` | UUID | PRIMARY KEY, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the shopping list |
-| `document` | JSONB | NOT NULL, validated as `ShoppingDocumentV1` | Recipe entries, manual items, explicit overrides, order, and Shopping preferences |
+| `document` | JSONB | NOT NULL, validated as `ShoppingDocumentV2` | Recipe entries, manual items, explicit overrides, and reusable Shopping preferences |
 | `content_revision` | BIGINT | NOT NULL, DEFAULT 0 | Compare-and-swap revision; every write advances exactly once |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last successful document write |
 
 **Document outline:**
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "recipeEntries": {},
   "manualItems": [],
   "itemOverrides": {},
-  "order": [],
   "preferences": {
     "categoryByIngredient": {},
     "customCategories": [],
     "categoryOrder": [],
+    "ingredientOrderByCategory": {},
     "excludedIngredientKeys": [],
     "excludeSaltVariants": false,
     "excludeBlackPepperVariants": false
@@ -295,7 +299,9 @@ are not persisted.
 ```
 
 Stable rendered row references are `manual:<id>` or
-`derived:<aggregateKey>` and are never a second persisted authority.
+`derived:<aggregateKey>` and are never persisted ordering identity. Reusable
+category order lives in `categoryOrder`; reusable within-category order lives
+in `ingredientOrderByCategory` as globally unique ingredient-key sequences.
 
 ### recipe_shares
 
@@ -623,11 +629,12 @@ The repository now uses a baseline-first bootstrap strategy:
 16. **016_canonical_recipe_structure_cutover.sql** - Atomically converted recipes and share snapshots to ordered canonical sections, added strict CHECK constraints, replaced canonical share acceptance and new-user seed writes, and froze the old structure columns as unsynchronized evidence for the removal slice.
 17. **017_remove_legacy_recipe_structure.sql** - Removed the frozen recipe structure columns and migration-only converters after the section-only cutover, preserving canonical content and validators.
 18. **018_shopping_document_cutover.sql** - Atomically converted Shopping state to `ShoppingDocumentV1`, installed the single-revision CAS contract and Pantry bridge, and removed contribution-era tables, columns, RPCs, and Shopping fields from `user_config`.
+19. **019_personalized_shopping_order.sql** - Upgraded Shopping state to `ShoppingDocumentV2`, seeded reusable ingredient order from V1 row order plus deterministic fallback, absorbed derived category overrides, and installed strict V2 validation.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `018`. The archived pre-baseline sequence is not replayed.
+  migration through `019`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -881,7 +888,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 018, and the
+instructions. The current authoritative chain ends at migration 019, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

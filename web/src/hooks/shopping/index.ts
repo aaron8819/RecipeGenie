@@ -10,7 +10,6 @@ export {
   useCheckOffItem,
   useBulkCheckOff,
   useReorderShoppingList,
-  useSaveCategoryOverride,
   useMoveToShoppingList,
   useMoveExcludedToShoppingList,
   useAddToPantryAndRemove,

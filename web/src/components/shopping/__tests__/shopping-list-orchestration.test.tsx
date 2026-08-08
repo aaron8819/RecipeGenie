@@ -30,6 +30,11 @@ const updateShoppingItemMutateAsync = vi.fn<
 const addToPantryAndRemoveMutate = vi.fn<
   (item: ShoppingItem, options?: { onSuccess?: (data: { wasAdded: boolean }) => void; onSettled?: () => void }) => void
 >()
+const reorderShoppingMutateAsync = vi.fn()
+let dndOnDragEnd: ((event: {
+  active: { id: string }
+  over: { id: string } | null
+}) => Promise<void>) | null = null
 const bulkMutationEvents: string[] = []
 const bulkMutationResolvers: ResolveFn[] = []
 const moveExcludedResolvers: ResolveFn[] = []
@@ -212,7 +217,13 @@ vi.mock("next/image", () => ({
 }))
 
 vi.mock("@dnd-kit/core", () => ({
-  DndContext: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  DndContext: ({ children, onDragEnd }: {
+    children: React.ReactNode
+    onDragEnd: typeof dndOnDragEnd
+  }) => {
+    dndOnDragEnd = onDragEnd
+    return <>{children}</>
+  },
   DragOverlay: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   KeyboardSensor: function KeyboardSensor() {
     return null
@@ -350,11 +361,7 @@ vi.mock("@/hooks/use-shopping", () => ({
     }
   },
   useReorderShoppingList: () => ({
-    mutateAsync: vi.fn(),
-    isPending: false,
-  }),
-  useSaveCategoryOverride: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: reorderShoppingMutateAsync,
     isPending: false,
   }),
   useUpdateItemCategory: () => ({
@@ -533,6 +540,7 @@ vi.mock("@/hooks/use-shopping", () => ({
   bulkMutationEvents.length = 0
   bulkMutationResolvers.length = 0
   moveExcludedResolvers.length = 0
+  dndOnDragEnd = null
   currentConfig = makeConfig()
   currentShoppingList = makeList()
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((message, ...args) => {
@@ -883,6 +891,40 @@ describe("ShoppingListView orchestration", () => {
 
     expect(screen.queryByText("Manage Mode")).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+  })
+
+  it("routes mouse, touch, and keyboard drops through one reusable reorder intent", async () => {
+    const apple = makeItem("apples", {
+      rowId: "manual:apple",
+      orderingKey: "apple",
+      categoryKey: "produce",
+    })
+    const milk = makeItem("milk", {
+      rowId: "manual:milk",
+      orderingKey: "milk",
+      categoryKey: "dairy",
+      categoryOrder: 5,
+    })
+    currentShoppingList = makeList({ items: [apple, milk] })
+    renderShoppingList()
+
+    fireEvent.pointerDown(screen.getAllByRole("button", { name: "Organize" })[1])
+    fireEvent.click(screen.getByRole("menuitem", { name: "Enter Manage Mode" }))
+    expect(dndOnDragEnd).not.toBeNull()
+
+    await act(async () => {
+      await dndOnDragEnd?.({
+        active: { id: "manual:apple" },
+        over: { id: "manual:milk" },
+      })
+    })
+
+    expect(reorderShoppingMutateAsync).toHaveBeenCalledWith({
+      items: [apple, milk],
+      draggedItem: apple,
+      targetItem: milk,
+      placement: "after",
+    })
   })
 
   it("collapses recipe context by default so the shopping rows stay near the top", () => {

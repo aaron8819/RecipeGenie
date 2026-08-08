@@ -105,7 +105,7 @@ jobs:
               ('rename_tag'),
               ('merge_tags'),
               ('delete_tag'),
-              ('is_shopping_document_v1'),
+              ('is_shopping_document_v2'),
               ('move_shopping_document_item_to_pantry')
             ) AS f(function_name)
             WHERE NOT EXISTS (

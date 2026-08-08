@@ -10,8 +10,6 @@ import {
   normalizeShoppingPurchase,
   normalizeUnit,
 } from "./shopping-list-normalization"
-import type { ShoppingItemOrderPreferences } from "./shopping-item-order"
-import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { ensureCategoryInfo } from "./shopping-list"
 import { categorizeIngredient } from "./shopping-categories"
@@ -20,7 +18,6 @@ export interface MergeOptions {
   preserveUserOverrides?: boolean
   preserveCustomOrder?: boolean
   userCategoryOverrides?: Record<string, string> | null
-  shoppingItemOrder?: ShoppingItemOrderPreferences | null
 }
 
 type ShoppingItemSource = NonNullable<ShoppingItem["sources"]>[number]
@@ -94,7 +91,6 @@ export function mergeShoppingItems(
     preserveUserOverrides = false,
     preserveCustomOrder = false,
     userCategoryOverrides = null,
-    shoppingItemOrder = null,
   } = options
 
   // Create a map of existing items by normalized item name
@@ -150,14 +146,12 @@ export function mergeShoppingItems(
 
   // Sort if not preserving custom order
   if (!preserveCustomOrder) {
-    const sortedItems = shoppingItemOrder
-      ? sortShoppingItemsByPreferences(mergedItems, shoppingItemOrder)
-      : [...mergedItems].sort((a, b) => {
-          if (a.categoryOrder !== b.categoryOrder) {
-            return a.categoryOrder - b.categoryOrder
-          }
-          return a.item.localeCompare(b.item)
-        })
+    const sortedItems = [...mergedItems].sort((a, b) => {
+      if (a.categoryOrder !== b.categoryOrder) {
+        return a.categoryOrder - b.categoryOrder
+      }
+      return a.item.localeCompare(b.item)
+    })
     mergedItems.splice(0, mergedItems.length, ...sortedItems)
   }
 

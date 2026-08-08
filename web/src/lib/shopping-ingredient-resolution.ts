@@ -130,7 +130,7 @@ export function createShoppingAggregateKey(
  *
  * The nested `runtime` fields are temporary compatibility output consumed by
  * the current generator. They keep PR 1 behavior-neutral and are not part of
- * ShoppingDocumentV1.
+ * ShoppingDocumentV2.
  */
 export function resolveShoppingIngredient({
   ingredient,

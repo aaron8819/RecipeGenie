@@ -21,7 +21,7 @@ select extensions.is(
     where namespace.nspname = 'public'
       and procedure.prosecdef
   ),
-  E'public.accept_recipe_share(p_share_id uuid)\npublic.delete_recipe(p_recipe_uuid uuid)\npublic.get_recipe_identity_compat_usage()\npublic.handle_new_user()\npublic.is_shopping_document_v1(p_document jsonb)\npublic.resolve_recipe_identity(p_recipe_uuid uuid, p_legacy_id text)\npublic.toggle_weekly_recipe_made(p_recipe_uuid uuid, p_week_date date, p_made boolean, p_made_at timestamp with time zone)',
+  E'public.accept_recipe_share(p_share_id uuid)\npublic.delete_recipe(p_recipe_uuid uuid)\npublic.get_recipe_identity_compat_usage()\npublic.handle_new_user()\npublic.is_shopping_document_v2(p_document jsonb)\npublic.resolve_recipe_identity(p_recipe_uuid uuid, p_legacy_id text)\npublic.toggle_weekly_recipe_made(p_recipe_uuid uuid, p_week_date date, p_made boolean, p_made_at timestamp with time zone)',
   'only reviewed SECURITY DEFINER functions exist'
 );
 
@@ -89,7 +89,7 @@ select extensions.is(
     join pg_namespace as namespace on namespace.oid = procedure.pronamespace
     where namespace.nspname = 'public'
       and procedure.prosecdef
-      and procedure.proname not in ('handle_new_user', 'is_shopping_document_v1')
+      and procedure.proname not in ('handle_new_user', 'is_shopping_document_v2')
       and (
         position('auth.uid()' in lower(pg_get_functiondef(procedure.oid))) = 0
         or position(' is null' in lower(pg_get_functiondef(procedure.oid))) = 0
