@@ -9,6 +9,8 @@ import type {
 import { SHOPPING_CATEGORIES } from "./shopping-categories"
 import {
   INGREDIENT_EXCLUSION_REASONS,
+  matchIngredientExclusionFamily,
+  type IngredientExclusionFamily,
   type IngredientExclusionSettings,
 } from "./ingredient-exclusion-families"
 import {
@@ -386,6 +388,30 @@ export type ShoppingDocumentProjection = {
 
 type Occurrence = ShoppingRecipeIngredientV1 & ProjectedShoppingSource
 
+type PantrySemanticEvidence = {
+  ingredientKeys: Set<IngredientKey>
+  families: Set<IngredientExclusionFamily>
+}
+
+function resolvePantrySemanticEvidence(
+  pantryItems: PantryItem[]
+): PantrySemanticEvidence {
+  const ingredientKeys = new Set<IngredientKey>()
+  const families = new Set<IngredientExclusionFamily>()
+
+  for (const pantryItem of pantryItems) {
+    ingredientKeys.add(createShoppingPurchaseKey(pantryItem.item))
+    const family = matchIngredientExclusionFamily({
+      item: pantryItem.item,
+      amount: null,
+      unit: "",
+    })
+    if (family) families.add(family)
+  }
+
+  return { ingredientKeys, families }
+}
+
 function categoryOrder(document: ShoppingDocumentV1, key: string): number {
   const explicit = document.preferences.categoryOrder.indexOf(key)
   if (explicit >= 0) return explicit
@@ -448,12 +474,16 @@ function citrusAmountToMerge(
 
 function derivedClassification(
   occurrences: Occurrence[],
-  pantry: Set<string>,
+  pantry: PantrySemanticEvidence,
   excludedKeys: Set<string>,
   settings: IngredientExclusionSettings
 ): { bucket: ShoppingBucket; excludedBy?: string } {
   const classifications = occurrences.map((occurrence) => {
-    if (occurrence.pantryMatchKeys.some((key) => pantry.has(key)))
+    if (
+      occurrence.pantryMatchKeys.some((key) => pantry.ingredientKeys.has(key)) ||
+      (occurrence.exclusionFamily !== undefined &&
+        pantry.families.has(occurrence.exclusionFamily))
+    )
       return { bucket: "already_have" as const }
     if (excludedKeys.has(occurrence.ingredientKey))
       return { bucket: "excluded" as const, excludedBy: occurrence.ingredientKey }
@@ -477,7 +507,7 @@ export function projectShoppingDocument(
   document: ShoppingDocumentV1,
   pantryItems: PantryItem[] = []
 ): ShoppingDocumentProjection {
-  const pantry = new Set(pantryItems.map((item) => createShoppingPurchaseKey(item.item)))
+  const pantry = resolvePantrySemanticEvidence(pantryItems)
   const settings: IngredientExclusionSettings = {
     exclude_salt_variants: document.preferences.excludeSaltVariants,
     exclude_black_pepper_variants: document.preferences.excludeBlackPepperVariants,

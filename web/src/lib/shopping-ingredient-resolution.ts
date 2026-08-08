@@ -74,6 +74,16 @@ export type ResolveShoppingIngredientInput = {
   sourceOrdinal?: number
 }
 
+function explicitWholeCitrusPantryKey(item: string): IngredientKey | null {
+  const match = item
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .match(/^(?:fresh )?(lemon|lime) (?:juice|zest)$/)
+
+  return match ? createShoppingPurchaseKey(match[1]) : null
+}
+
 export function createShoppingAggregateDiscriminator(
   recipeId: string | undefined,
   quantity: QuantityV1 | null,
@@ -175,8 +185,10 @@ export function resolveShoppingIngredient({
     ? `${purchase.purchaseName} (or ${alternatives.join(", ")})`
     : purchase.purchaseName
   const ingredientKey = purchase.canonical.mergeKey
+  const wholeCitrusPantryKey = explicitWholeCitrusPantryKey(ingredient.item)
   const pantryMatchKeys = [
     ingredientKey,
+    ...(wholeCitrusPantryKey ? [wholeCitrusPantryKey] : []),
     ...(alternatives || []).map((alternative) =>
       createShoppingPurchaseKey(alternative)
     ),

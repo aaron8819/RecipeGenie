@@ -84,8 +84,11 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 
 - Pantry UI lives in `web/src/components/pantry/`.
 - Pantry data access lives in `web/src/hooks/use-pantry.ts`.
-- Pantry-to-recipe matching lives in `web/src/hooks/use-pantry-match.ts` and `web/src/lib/pantry-matcher.ts`.
-- Pantry also feeds the live Shopping projection through `web/src/hooks/shopping/use-shopping-document.ts`.
+- Pantry feeds the live Shopping projection through
+  `web/src/hooks/shopping/use-shopping-document.ts`; Pantry satisfaction is
+  evaluated in `web/src/lib/shopping-document.ts` from resolver-produced
+  candidates and supported semantic-family evidence.
+- There is no active "What Can I Make?" recipe-matching feature.
 
 ## Navigation And Route State
 
