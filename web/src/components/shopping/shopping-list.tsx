@@ -47,19 +47,17 @@ import {
   useMoveToShoppingList,
   useMoveExcludedToShoppingList,
   useReorderShoppingList,
-  useSaveCategoryOverride,
   useShoppingConfig,
   useUpdateShoppingConfig,
   useAddToPantryAndRemove,
 } from "@/hooks/use-shopping"
-import { getCategoryByKey } from "@/lib/shopping-categories"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { ShoppingItem } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
-import { reorderByFilteredIndices } from "@/lib/shopping-reorder"
+import { resolveShoppingDropIntent } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
 import { createShoppingManualItemId } from "@/lib/shopping-row-reference"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
@@ -687,7 +685,6 @@ export function ShoppingListView() {
   const moveToList = useMoveToShoppingList()
   const moveExcludedToList = useMoveExcludedToShoppingList()
   const reorderList = useReorderShoppingList()
-  const saveCategoryOverride = useSaveCategoryOverride()
   const addToPantryAndRemove = useAddToPantryAndRemove()
   const undoToast = useUndoToast()
 
@@ -1273,40 +1270,15 @@ export function ShoppingListView() {
     if (!over || active.id === over.id || !shoppingList?.items) return
 
     const items = shoppingList.items
-    const reorderResult = reorderByFilteredIndices(items, String(active.id), String(over.id))
-    if (!reorderResult) return
-    const { newItems, draggedItem, overItem, actualOverIndex } = reorderResult
+    const intent = resolveShoppingDropIntent(
+      items,
+      String(active.id),
+      String(over.id)
+    )
+    if (!intent) return
 
-    // Check if the item is being moved to a different category
-    const oldCategory = draggedItem.categoryKey
-    const newCategory = overItem.categoryKey
-
-    if (oldCategory !== newCategory) {
-      // Get category info (supports custom categories)
-      const categoryInfo = getCategoryByKey(newCategory, config?.custom_categories || null)
-
-      // Update the dragged item's category to match the drop target's category
-      const updatedItem = {
-        ...draggedItem,
-        categoryKey: newCategory,
-        categoryOrder: categoryInfo?.order || 8,
-      }
-      newItems[actualOverIndex] = updatedItem
-
-      // Save category override for future shopping lists
-      try {
-        await saveCategoryOverride.mutateAsync({
-          item: draggedItem,
-          categoryKey: newCategory,
-        })
-      } catch (error) {
-        console.error("Failed to save category override:", error)
-      }
-    }
-
-    // Save the new order
     try {
-      await reorderList.mutateAsync(newItems)
+      await reorderList.mutateAsync({ items, ...intent })
     } catch (error) {
       console.error("Failed to reorder:", error)
     }

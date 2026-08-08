@@ -125,6 +125,7 @@ export type RecipeInstructionGroup = {
 
 export type ShoppingItem = {
   rowId?: string
+  orderingKey?: string
   item: string
   amount: number | null
   unit: string

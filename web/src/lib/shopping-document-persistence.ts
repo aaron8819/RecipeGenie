@@ -1,7 +1,7 @@
 import {
   applyShoppingDocumentMutation,
   type ShoppingDocumentMutation,
-  type ShoppingDocumentStateV1,
+  type ShoppingDocumentStateV2,
 } from './shopping-document'
 
 export class ShoppingDocumentConflictError extends Error {
@@ -12,9 +12,9 @@ export class ShoppingDocumentConflictError extends Error {
 }
 
 export type ShoppingDocumentCasWrite = (
-  current: ShoppingDocumentStateV1,
-  next: ShoppingDocumentStateV1
-) => Promise<ShoppingDocumentStateV1 | null>
+  current: ShoppingDocumentStateV2,
+  next: ShoppingDocumentStateV2
+) => Promise<ShoppingDocumentStateV2 | null>
 
 export async function persistShoppingMutationWithReplay({
   initial,
@@ -24,13 +24,13 @@ export async function persistShoppingMutationWithReplay({
   onRefetched,
   forceWrite = false,
 }: {
-  initial: ShoppingDocumentStateV1
+  initial: ShoppingDocumentStateV2
   mutation: ShoppingDocumentMutation
   write: ShoppingDocumentCasWrite
-  refetch: () => Promise<ShoppingDocumentStateV1>
-  onRefetched?: (state: ShoppingDocumentStateV1) => void
+  refetch: () => Promise<ShoppingDocumentStateV2>
+  onRefetched?: (state: ShoppingDocumentStateV2) => void
   forceWrite?: boolean
-}): Promise<ShoppingDocumentStateV1> {
+}): Promise<ShoppingDocumentStateV2> {
   const firstNext = applyShoppingDocumentMutation(initial, mutation)
   if (firstNext === initial && !forceWrite) return initial
 

@@ -16,8 +16,6 @@ import {
   normalizeItemName,
   normalizeUnit,
 } from "./shopping-list-normalization"
-import type { ShoppingItemOrderPreferences } from "./shopping-item-order"
-import { sortShoppingItemsByPreferences } from "./shopping-item-order"
 import { mergeAmounts, roundForDisplay } from "./unit-conversion"
 import { flattenRecipeIngredients } from "./recipe-structure"
 import {
@@ -154,7 +152,6 @@ export function generateShoppingList(
   excludedKeywords: string[],
   scale: number = 1.0,
   userCategoryOverrides?: Record<string, string> | null,
-  shoppingItemOrder?: ShoppingItemOrderPreferences | null,
   exactScaleV1?: RationalV1,
   ingredientExclusionSettings: IngredientExclusionSettings = {
     exclude_salt_variants: false,
@@ -403,9 +400,7 @@ export function generateShoppingList(
     return a.item.localeCompare(b.item)
   }
 
-  const sortedShoppingList = shoppingItemOrder
-    ? sortShoppingItemsByPreferences(shoppingList, shoppingItemOrder)
-    : [...shoppingList].sort(sortFn)
+  const sortedShoppingList = [...shoppingList].sort(sortFn)
   shoppingList.splice(0, shoppingList.length, ...sortedShoppingList)
   alreadyHave.sort(sortFn)
   excluded.sort(sortFn)
@@ -423,13 +418,8 @@ export function generateShoppingList(
  * Re-sort a shopping list by category (used when customOrder is false)
  */
 export function sortShoppingList(
-  items: ShoppingItem[],
-  shoppingItemOrder?: ShoppingItemOrderPreferences | null
+  items: ShoppingItem[]
 ): ShoppingItem[] {
-  if (shoppingItemOrder) {
-    return sortShoppingItemsByPreferences(items, shoppingItemOrder)
-  }
-
   return [...items].sort((a, b) => {
     if (a.categoryOrder !== b.categoryOrder) {
       return a.categoryOrder - b.categoryOrder

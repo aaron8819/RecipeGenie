@@ -113,9 +113,10 @@ Primary persistent tables:
 All user data is isolated with Supabase Auth and RLS. Schema details and RPCs
 are documented in [`supabase/SCHEMA.md`](../supabase/SCHEMA.md).
 
-Shopping uses one canonical `ShoppingDocumentV1` in `shopping_list`, one CAS
-revision, and live Pantry projection. Recipe contribution and command tables
-were removed by migration 018.
+Shopping uses one canonical `ShoppingDocumentV2` in `shopping_list`, one CAS
+revision, live Pantry projection, and reusable category/ingredient ordering
+preferences. Recipe contribution and command tables were removed by migration
+018; migration 019 retired list-specific row ordering.
 
 ## Current Refactor Status
 

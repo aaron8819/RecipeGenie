@@ -60,8 +60,8 @@ set local role anon;
 select set_config('request.jwt.claim.sub', '', true);
 select extensions.throws_ok($$ select count(*) from public.shopping_list $$,
   '42501', 'permission denied for table shopping_list', 'anonymous reads are not granted');
-select extensions.throws_ok($$ select public.is_shopping_document_v1('{}'::jsonb) $$,
-  '42501', 'permission denied for function is_shopping_document_v1', 'anonymous validator execution is not granted');
+select extensions.throws_ok($$ select public.is_shopping_document_v2('{}'::jsonb) $$,
+  '42501', 'permission denied for function is_shopping_document_v2', 'anonymous validator execution is not granted');
 select extensions.throws_ok($$ select * from public.move_shopping_document_item_to_pantry(0, '{}'::jsonb, 'onion', 1, 'count') $$,
   '42501', 'permission denied for function move_shopping_document_item_to_pantry', 'anonymous Pantry moves are not executable');
 

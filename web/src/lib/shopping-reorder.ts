@@ -1,18 +1,16 @@
 import type { ShoppingItem } from "@/types/database"
 
-export interface ReorderByFilteredResult {
-  newItems: ShoppingItem[]
+export interface ShoppingDropIntent {
   draggedItem: ShoppingItem
-  overItem: ShoppingItem
-  actualActiveIndex: number
-  actualOverIndex: number
+  targetItem: ShoppingItem
+  placement: "before" | "after"
 }
 
-export function reorderByFilteredIndices(
+export function resolveShoppingDropIntent(
   items: ShoppingItem[],
   activeRowId: string,
   overRowId: string
-): ReorderByFilteredResult | null {
+): ShoppingDropIntent | null {
   if (!activeRowId || !overRowId) {
     return null
   }
@@ -26,15 +24,9 @@ export function reorderByFilteredIndices(
 
   const draggedItem = items[actualActiveIndex]
   const overItem = items[actualOverIndex]
-  const newItems = [...items]
-  newItems.splice(actualActiveIndex, 1)
-  newItems.splice(actualOverIndex, 0, draggedItem)
-
   return {
-    newItems,
     draggedItem,
-    overItem,
-    actualActiveIndex,
-    actualOverIndex,
+    targetItem: overItem,
+    placement: actualActiveIndex < actualOverIndex ? "after" : "before",
   }
 }

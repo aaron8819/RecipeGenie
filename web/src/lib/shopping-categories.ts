@@ -7,6 +7,7 @@
 import type { CustomShoppingCategory } from "@/types/database"
 import { normalizeItemName } from "./shopping-list-normalization"
 import { shoppingIdentityCompatibilityKeys } from "./shopping-ingredient-canonicalization"
+import { resolveShoppingCategoryOrder } from "./shopping-ordering"
 
 export interface ShoppingCategory {
   order: number
@@ -379,25 +380,13 @@ export function getAllShoppingCategories(
     isCustom: true,
   }))
 
-  const allCategories = [...defaultCategories, ...customCats]
-
-  // Apply custom ordering if provided
-  if (categoryOrder && categoryOrder.length > 0) {
-    // Create a map for quick lookup of order by key
-    const orderMap = new Map(categoryOrder.map((key, index) => [key, index]))
-
-    // Sort by custom order, categories not in the order list go to the end
-    allCategories.sort((a, b) => {
-      const orderA = orderMap.has(a.key) ? orderMap.get(a.key)! : 999 + a.order
-      const orderB = orderMap.has(b.key) ? orderMap.get(b.key)! : 999 + b.order
-      return orderA - orderB
-    })
-  } else {
-    // Default sorting by order property
-    allCategories.sort((a, b) => a.order - b.order)
-  }
-
-  return allCategories
+  return resolveShoppingCategoryOrder(
+    [...defaultCategories, ...customCats].map((category) => ({
+      ...category,
+      defaultOrder: category.order,
+    })),
+    categoryOrder || []
+  ).map(({ defaultOrder: _defaultOrder, ...category }) => category)
 }
 
 /**

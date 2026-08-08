@@ -11,11 +11,11 @@ import {
   createEmptyShoppingDocument,
   createShoppingRecipeEntry,
   projectShoppingDocument,
-  validateShoppingDocumentStateV1,
+  validateShoppingDocumentStateV2,
   type RowRef,
   type ShoppingDocumentMutation,
-  type ShoppingDocumentStateV1,
-  type ShoppingDocumentV1,
+  type ShoppingDocumentStateV2,
+  type ShoppingDocumentV2,
   type ShoppingManualItemV1,
   type ShoppingRecipeEntryV1,
 } from '@/lib/shopping-document'
@@ -57,8 +57,8 @@ type MutationPlan<TResult> = {
   value: TResult
 }
 
-function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV1 {
-  const validation = validateShoppingDocumentStateV1({
+function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV2 {
+  const validation = validateShoppingDocumentStateV2({
     document: row.document,
     contentRevision: Number(row.content_revision),
   })
@@ -71,7 +71,7 @@ function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentSta
   }
 }
 
-async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV1> {
+async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV2> {
   const supabase = getSupabase()
   const request = supabase.from('shopping_list') as unknown as {
     select: (columns: string) => {
@@ -91,9 +91,9 @@ async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV1> {
 
 async function writeShoppingDocumentCas(
   userId: string,
-  current: ShoppingDocumentStateV1,
-  next: ShoppingDocumentStateV1
-): Promise<ShoppingDocumentStateV1 | null> {
+  current: ShoppingDocumentStateV2,
+  next: ShoppingDocumentStateV2
+): Promise<ShoppingDocumentStateV2 | null> {
   const supabase = getSupabase()
   const request = supabase.from('shopping_list') as unknown as {
     update: (values: { document: unknown; content_revision: number }) => {
@@ -124,12 +124,13 @@ async function writeShoppingDocumentCas(
 
 export function shoppingDocumentToList(
   userId: string,
-  state: ShoppingDocumentStateV1,
+  state: ShoppingDocumentStateV2,
   pantryItems: PantryItem[] = []
 ): ShoppingList {
   const projection = projectShoppingDocument(state.document, pantryItems)
   const mapRow = (row: (typeof projection.rows)[number]): ShoppingItem => ({
     rowId: row.rowRef,
+    orderingKey: row.orderingKey,
     item: row.displayName,
     amount: row.quantity?.amount ?? null,
     unit: row.quantity?.unit || '',
@@ -164,12 +165,14 @@ export function shoppingDocumentToList(
       ? Number(entries[0].scaleV1.numerator) / Number(entries[0].scaleV1.denominator)
       : 1,
     total_servings: entries.reduce((total, entry) => total + entry.selectedServings, 0),
-    custom_order: state.document.order.length > 0,
+    custom_order: Object.keys(
+      state.document.preferences.ingredientOrderByCategory
+    ).length > 0,
   }
 }
 
 export function shoppingDocumentToConfig(
-  state: ShoppingDocumentStateV1
+  state: ShoppingDocumentStateV2
 ): ShoppingConfig {
   const preferences = state.document.preferences
   return {
@@ -215,7 +218,7 @@ export function useShoppingList() {
 
 function useShoppingMutation<TVariables, TResult>(
   createPlan: (
-    state: ShoppingDocumentStateV1,
+    state: ShoppingDocumentStateV2,
     variables: TVariables
   ) => Promise<MutationPlan<TResult>> | MutationPlan<TResult>
 ) {
@@ -228,7 +231,7 @@ function useShoppingMutation<TVariables, TResult>(
   return useMutation({
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (variables: TVariables) => {
-      const initial = queryClient.getQueryData<ShoppingDocumentStateV1>(shoppingKey) ||
+      const initial = queryClient.getQueryData<ShoppingDocumentStateV2>(shoppingKey) ||
         await fetchShoppingDocumentState()
       const plan = await createPlan(initial, variables)
       const state = await persistShoppingMutationWithReplay({
@@ -390,35 +393,29 @@ export function useBulkCheckOff() {
 }
 
 export function useReorderShoppingList() {
-  return useShoppingMutation((_state, items: ShoppingItem[]) => ({
-    mutation: {
-      type: 'setOrder',
-      order: items.map((item) => requireShoppingRowRef(item)),
-    },
-    value: items,
-  }))
-}
-
-export function useSaveCategoryOverride() {
   return useShoppingMutation((_state, input: {
-    item: ShoppingItem
-    categoryKey: string
-  }) => ({
-    mutation: mutationForRow(
-      input.item,
-      (aggregateKey) => ({
-        type: 'setCategoryOverride',
-        aggregateKey,
-        categoryKey: input.categoryKey,
-      }),
-      (id) => ({
-        type: 'editManualItem',
-        id,
-        changes: { categoryKey: input.categoryKey },
-      })
-    ),
-    value: input,
-  }))
+    items: ShoppingItem[]
+    draggedItem: ShoppingItem
+    targetItem: ShoppingItem
+    placement: 'before' | 'after'
+  }) => {
+    if (!input.draggedItem.orderingKey || !input.targetItem.orderingKey) {
+      throw new Error('Shopping ordering identity is missing')
+    }
+    return {
+      mutation: {
+        type: 'learnOrder',
+        draggedRowRef: requireShoppingRowRef(input.draggedItem),
+        draggedOrderingKey: input.draggedItem.orderingKey,
+        sourceCategoryKey: input.draggedItem.categoryKey,
+        targetRowRef: requireShoppingRowRef(input.targetItem),
+        targetOrderingKey: input.targetItem.orderingKey,
+        targetCategoryKey: input.targetItem.categoryKey,
+        placement: input.placement,
+      },
+      value: input,
+    }
+  })
 }
 
 export function useMoveToShoppingList() {
@@ -510,15 +507,14 @@ export function useClearShoppingList() {
       recipeEntries: state.document.recipeEntries,
       manualItems: state.document.manualItems,
       itemOverrides: state.document.itemOverrides,
-      order: state.document.order,
     },
   }))
 }
 
 export function useRestoreShoppingContent() {
   return useShoppingMutation((_state, content: Pick<
-    ShoppingDocumentV1,
-    'recipeEntries' | 'manualItems' | 'itemOverrides' | 'order'
+    ShoppingDocumentV2,
+    'recipeEntries' | 'manualItems' | 'itemOverrides'
   >) => ({
     mutation: { type: 'restoreContent', content },
     value: content,
@@ -535,8 +531,10 @@ export function useShoppingConfig() {
 
 export function useUpdateShoppingConfig() {
   return useShoppingMutation((_state, updates: Partial<ShoppingConfig>) => {
-    const preferences: Partial<ShoppingDocumentStateV1['document']['preferences']> = {}
+    const preferences: Partial<ShoppingDocumentStateV2['document']['preferences']> = {}
+    let updatesCategoryPreferences = false
     if ('category_overrides' in updates && updates.category_overrides !== undefined) {
+      updatesCategoryPreferences = true
       preferences.categoryByIngredient = Object.fromEntries(
         Object.entries(updates.category_overrides || {}).map(([key, value]) => [
           createShoppingPurchaseKey(key),
@@ -545,9 +543,11 @@ export function useUpdateShoppingConfig() {
       )
     }
     if ('custom_categories' in updates && updates.custom_categories !== undefined) {
+      updatesCategoryPreferences = true
       preferences.customCategories = updates.custom_categories || []
     }
     if ('category_order' in updates && updates.category_order !== undefined) {
+      updatesCategoryPreferences = true
       const categoryOrder = updates.category_order as unknown
       preferences.categoryOrder = Array.isArray(categoryOrder)
         ? categoryOrder.filter((value): value is string => typeof value === 'string')
@@ -566,7 +566,9 @@ export function useUpdateShoppingConfig() {
       preferences.excludeBlackPepperVariants = updates.exclude_black_pepper_variants
     }
     return {
-      mutation: { type: 'updatePreferences', preferences },
+      mutation: updatesCategoryPreferences
+        ? { type: 'updateCategoryPreferences', preferences }
+        : { type: 'updatePreferences', preferences },
       value: updates,
     }
   })
@@ -604,10 +606,10 @@ type PantryMoveRow = ShoppingDocumentRow & {
 }
 
 async function moveToPantryCas(
-  current: ShoppingDocumentStateV1,
-  next: ShoppingDocumentStateV1,
+  current: ShoppingDocumentStateV2,
+  next: ShoppingDocumentStateV2,
   item: ShoppingItem
-): Promise<{ state: ShoppingDocumentStateV1; pantryItem: PantryItem | null; wasAdded: boolean } | null> {
+): Promise<{ state: ShoppingDocumentStateV2; pantryItem: PantryItem | null; wasAdded: boolean } | null> {
   const supabase = getSupabase()
   const rpc = supabase as unknown as {
     rpc: (name: 'move_shopping_document_item_to_pantry', args: {
@@ -647,7 +649,7 @@ export function useAddToPantryAndRemove() {
   return useMutation({
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (item: ShoppingItem) => {
-      const initial = queryClient.getQueryData<ShoppingDocumentStateV1>(shoppingKey) ||
+      const initial = queryClient.getQueryData<ShoppingDocumentStateV2>(shoppingKey) ||
         await fetchShoppingDocumentState()
       const rowRef = requireShoppingRowRef(item)
       const mutation: ShoppingDocumentMutation = rowRef.startsWith('derived:')

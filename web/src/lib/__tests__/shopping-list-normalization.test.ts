@@ -328,4 +328,17 @@ describe('normalizeShoppingPurchase', () => {
     expect(createShoppingPurchaseKey('red onion')).toBe('red onion')
     expect(createShoppingPurchaseKey('tomato paste')).toBe('tomato paste')
   })
+
+  it.each([
+    ['2 onions', 1, 'piece'],
+    ['2 onions', 2, 'pieces'],
+    ['2 onions', 2, 'pc'],
+    ['  2 ONIONS  ', 2, 'pcs'],
+  ] as const)('preserves piece-family purchase identity for %s / %s %s', (
+    item,
+    amount,
+    unit
+  ) => {
+    expect(createShoppingPurchaseKey(item, amount, unit)).toBe('2 onion')
+  })
 })

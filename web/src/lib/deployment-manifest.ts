@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "018_shopping_document_cutover"
+export const EXPECTED_LATEST_MIGRATION = "019_personalized_shopping_order"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

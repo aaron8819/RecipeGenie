@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest"
-import { createEmptyShoppingDocument, type ShoppingDocumentStateV1 } from "../shopping-document"
+import { createEmptyShoppingDocument, type ShoppingDocumentStateV2 } from "../shopping-document"
 import {
   persistShoppingMutationWithReplay,
   ShoppingDocumentConflictError,
 } from "../shopping-document-persistence"
 
-function state(revision: number): ShoppingDocumentStateV1 {
+function state(revision: number): ShoppingDocumentStateV2 {
   return { document: createEmptyShoppingDocument(), contentRevision: revision }
 }
 

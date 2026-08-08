@@ -61,7 +61,7 @@ the shared authenticated shell.
 
 - The Pantry excluded-items card exposes only the opt-in Salt variants and
   Black pepper variants settings. Their fixed alias lists are explained beside
-  accessible checkboxes and are persisted in `ShoppingDocumentV1.preferences`.
+  accessible checkboxes and are persisted in `ShoppingDocumentV2.preferences`.
 - Settings immediately affect the deterministic Shopping projection; no
   contribution regeneration is required.
 - Exact exclusions remain a separate section and count; changing a family

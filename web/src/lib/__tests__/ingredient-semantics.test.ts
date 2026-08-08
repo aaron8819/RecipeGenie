@@ -3,7 +3,7 @@ import type { PantryItem } from "@/types/database"
 import {
   createEmptyShoppingDocument,
   projectShoppingDocument,
-  type ShoppingDocumentV1,
+  type ShoppingDocumentV2,
   type ShoppingRecipeIngredientV1,
 } from "../shopping-document"
 import {
@@ -37,7 +37,7 @@ function persistedIngredient(
   }
 }
 
-function documentFor(resolved: ResolvedShoppingIngredient): ShoppingDocumentV1 {
+function documentFor(resolved: ResolvedShoppingIngredient): ShoppingDocumentV2 {
   const document = createEmptyShoppingDocument()
   document.recipeEntries["fixture-recipe"] = {
     recipeId: "fixture-recipe",

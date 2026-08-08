@@ -193,22 +193,6 @@ describe("shopping canonicalization behavior matrix", () => {
     expect(result.excluded).toEqual([])
   })
 
-  it("keeps learned ordering compatible with legacy plural keys", () => {
-    const result = generateShoppingList(
-      [recipe("produce", [
-        parseIngredientLine("1 apple"),
-        parseIngredientLine("1 onion"),
-      ])],
-      [],
-      [],
-      1,
-      null,
-      { produce: ["onions", "apples"] }
-    )
-
-    expect(result.items.map((item) => item.item)).toEqual(["onion", "apple"])
-  })
-
   it("preserves ranges separately from arithmetic quantities", () => {
     const sugar = generatedItems("1–2 tbsp sugar", "1 tbsp sugar")
 
