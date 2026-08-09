@@ -51,20 +51,21 @@ the shared authenticated shell.
 - Pantry satisfaction is directional and does not change Shopping aggregation
   identity.
 
-### Excluded keywords
+### Excluded ingredients
 
-- Exact-exclusion matching uses the whole normalized ingredient name, is
-  case-insensitive, and does not perform substring matching.
-- This is intentionally stricter than fuzzy pantry matching.
+- Unknown exclusions use exact purchase identity. The central Shopping
+  semantic registry also permits only explicitly safe common forms, such as
+  cumin to ground cumin and oregano to dried oregano.
+- Matching never uses substrings or family equality by itself.
 
 ### Always-excluded families
 
 - The Pantry excluded-items card exposes only the opt-in Salt variants and
   Black pepper variants settings. Their fixed alias lists are explained beside
-  accessible checkboxes and are persisted in `ShoppingDocumentV2.preferences`.
+  accessible checkboxes and are persisted in `ShoppingDocumentV3.preferences`.
 - Settings immediately affect the deterministic Shopping projection; no
   contribution regeneration is required.
-- Exact exclusions remain a separate section and count; changing a family
+- Ingredient exclusions remain a separate section and count; changing a family
   setting does not change `excluded_keywords`.
 
 ### What Can I Make

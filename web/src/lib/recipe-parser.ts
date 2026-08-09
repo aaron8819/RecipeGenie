@@ -1477,8 +1477,11 @@ function extractModifier(item: string): { item: string; modifier: string | null 
   if (lastCommaIndex !== -1) {
     const potentialModifier = baseItem.substring(lastCommaIndex + 1).trim()
     const beforeComma = baseItem.substring(0, lastCommaIndex).trim()
+    const isCommaDelimitedChoice = /^or\s+/i.test(potentialModifier) &&
+      beforeComma.includes(',')
 
     const isLikelyModifier =
+      !isCommaDelimitedChoice &&
       potentialModifier.length > 0 &&
       potentialModifier.length < 60 &&
       !/^\d+/.test(potentialModifier) &&
@@ -1513,16 +1516,36 @@ function extractAlternatives(item: string): { item: string; alternatives?: strin
     }
   }
 
+  const commaChoices = item.split(/\s*,\s*/).map((choice) =>
+    choice.replace(/^or\s+/i, '').trim()).filter(Boolean)
+  if (commaChoices.length >= 3 && /,\s*or\s+/i.test(item)) {
+    return {
+      item: commaChoices[0],
+      alternatives: commaChoices.slice(1),
+    }
+  }
+
   const alternativeMatch = item.match(/^(.+?)\s+\bor\b\s+(.+)$/i)
   if (!alternativeMatch) {
     return { item }
   }
 
-  const primary = alternativeMatch[1].trim()
+  let primary = alternativeMatch[1].trim()
   const alternative = alternativeMatch[2].trim()
 
   if (primary.length <= 1 || alternative.length <= 1) {
     return { item }
+  }
+
+  const primaryWords = primary.split(/\s+/)
+  const alternativeWords = alternative.split(/\s+/)
+  const primaryLast = primaryWords.at(-1)?.toLowerCase() || ''
+  const sharedNoun = alternativeWords.at(-1) || ''
+  const sharedNounQualifier = primaryLast === 'red' ||
+    primaryLast === 'white' || primaryLast.endsWith('-blend')
+  if (sharedNounQualifier && sharedNoun &&
+      primaryLast !== sharedNoun.toLowerCase()) {
+    primary = `${primary} ${sharedNoun}`
   }
 
   return {

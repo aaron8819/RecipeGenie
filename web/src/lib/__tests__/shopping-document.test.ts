@@ -7,12 +7,13 @@ import {
   createShoppingRecipeEntry,
   projectShoppingDocument,
   upgradeShoppingDocumentV1,
-  validateShoppingDocumentStateV2,
-  validateShoppingDocumentV2,
-  type ShoppingDocumentStateV2,
+  validateShoppingDocumentStateV3,
+  validateShoppingDocumentV3,
+  type ShoppingDocumentStateV3,
   type ShoppingDocumentV1,
-  type ShoppingDocumentV2,
+  type ShoppingDocumentV3,
   type ShoppingRecipeEntryV1,
+  type ShoppingRecipeEntryV2,
 } from "../shopping-document"
 import { resolveShoppingIngredient } from "../shopping-ingredient-resolution"
 
@@ -21,7 +22,7 @@ function entry(
   item: string,
   amount = 1,
   overrides: { modifier?: string; unit?: string } = {}
-): ShoppingRecipeEntryV1 {
+): ShoppingRecipeEntryV2 {
   const resolved = resolveShoppingIngredient({
     ingredient: {
       item,
@@ -38,20 +39,41 @@ function entry(
     selectedServings: 4,
     scaleV1: { numerator: "1", denominator: "1" },
     ingredients: [{
-      ingredientKey: resolved.ingredientKey,
+      purchaseKey: resolved.purchaseKey,
       aggregateKey: resolved.aggregateKey,
       displayName: resolved.displayName,
       quantity: resolved.quantity,
+      familyKey: resolved.familyKey,
+      preparation: resolved.preparation,
       purchaseUnit: resolved.purchaseUnit,
+      quantityKind: resolved.quantityKind,
       defaultCategoryKey: resolved.defaultCategoryKey,
       pantryMatchKeys: resolved.pantryMatchKeys,
+      familyMatchPolicy: resolved.familyMatchPolicy,
       exclusionFamily: resolved.exclusionFamily,
       citrusPrep: resolved.citrusPrep,
     }],
   }
 }
 
-function populated(): ShoppingDocumentV2 {
+function legacyEntry(value: ShoppingRecipeEntryV2): ShoppingRecipeEntryV1 {
+  return {
+    ...value,
+    ingredients: value.ingredients.map((ingredient) => ({
+      ingredientKey: ingredient.purchaseKey,
+      aggregateKey: ingredient.aggregateKey,
+      displayName: ingredient.displayName,
+      quantity: ingredient.quantity,
+      purchaseUnit: ingredient.purchaseUnit,
+      defaultCategoryKey: ingredient.defaultCategoryKey,
+      pantryMatchKeys: ingredient.pantryMatchKeys,
+      exclusionFamily: ingredient.exclusionFamily,
+      citrusPrep: ingredient.citrusPrep,
+    })),
+  }
+}
+
+function populated(): ShoppingDocumentV3 {
   const document = createEmptyShoppingDocument()
   document.recipeEntries.a = entry("a", "apple", 1)
   document.manualItems.push({
@@ -65,16 +87,16 @@ function populated(): ShoppingDocumentV2 {
   const key = document.recipeEntries.a.ingredients[0].aggregateKey
   document.itemOverrides[key] = { checked: true }
   document.preferences.ingredientOrderByCategory = {
-    produce: [document.recipeEntries.a.ingredients[0].ingredientKey],
+    produce: [document.recipeEntries.a.ingredients[0].purchaseKey],
     misc: ["paper towels"],
   }
   return document
 }
 
-describe("ShoppingDocumentV2 validation", () => {
+describe('ShoppingDocumentV3 validation', () => {
   it("accepts exact empty and populated documents", () => {
-    expect(validateShoppingDocumentV2(createEmptyShoppingDocument()).ok).toBe(true)
-    expect(validateShoppingDocumentV2(populated()).ok).toBe(true)
+    expect(validateShoppingDocumentV3(createEmptyShoppingDocument()).ok).toBe(true)
+    expect(validateShoppingDocumentV3(populated()).ok).toBe(true)
   })
 
   it.each([
@@ -90,11 +112,11 @@ describe("ShoppingDocumentV2 validation", () => {
   ])("rejects %s", (_label, mutate) => {
     const value = populated() as any
     mutate(value)
-    expect(validateShoppingDocumentV2(value).ok).toBe(false)
+    expect(validateShoppingDocumentV3(value).ok).toBe(false)
   })
 
   it("validates the external CAS revision", () => {
-    expect(validateShoppingDocumentStateV2({
+    expect(validateShoppingDocumentStateV3({
       document: createEmptyShoppingDocument(),
       contentRevision: -1,
     }).ok).toBe(false)
@@ -123,7 +145,7 @@ describe("ShoppingDocumentV2 validation", () => {
     const replacedKey = document.recipeEntries[recipe.id].ingredients[0]
       .aggregateKey
     document.itemOverrides[replacedKey] = { checked: true }
-    expect(validateShoppingDocumentV2(document).ok).toBe(true)
+    expect(validateShoppingDocumentV3(document).ok).toBe(true)
 
     const runtimeIngredient = resolveShoppingIngredient({
       ingredient: recipe.ingredientSections[0].ingredients[0],
@@ -146,7 +168,7 @@ describe("ShoppingDocumentV2 validation", () => {
     expect(runtimeIngredient.defaultCategoryOrder).toBeTypeOf("number")
     expect(persistedEntry.ingredients.every((ingredient) =>
       !("defaultCategoryOrder" in ingredient))).toBe(true)
-    expect(validateShoppingDocumentV2(next.document).ok).toBe(true)
+    expect(validateShoppingDocumentV3(next.document).ok).toBe(true)
     expect(next.contentRevision).toBe(4)
     expect(next.document.recipeEntries.other).toBe(document.recipeEntries.other)
     expect(next.document.itemOverrides).toEqual({})
@@ -191,7 +213,7 @@ describe("Shopping document projection", () => {
     expect(projectShoppingDocument(document).rows).toHaveLength(2)
   })
 
-  it("uses the same conservative ordering identity for manual and recipe rows", () => {
+  it('shadows an unquantified manual row with the same purchase identity', () => {
     const document = createEmptyShoppingDocument()
     document.recipeEntries.a = entry("a", "apples", 2)
     document.manualItems.push({
@@ -205,11 +227,9 @@ describe("Shopping document projection", () => {
     document.preferences.ingredientOrderByCategory = { produce: ["apple"] }
 
     const rows = projectShoppingDocument(document).rows
-    expect(rows.map((row) => row.orderingKey)).toEqual(["apple", "apple"])
-    expect(rows.map((row) => row.rowRef)).toEqual([
-      expect.stringMatching(/^derived:/),
-      "manual:manual-apple",
-    ])
+    expect(rows.map((row) => row.orderingKey)).toEqual(['apple'])
+    expect(rows[0].rowRef).toEqual(expect.stringMatching(/^derived:/))
+    expect(document.manualItems[0].id).toBe('manual-apple')
   })
 
   it("does not double-count one recipe's overlapping citrus prep", () => {
@@ -220,13 +240,18 @@ describe("Shopping document projection", () => {
         recipeId: "a",
       })
       return {
-        ingredientKey: resolved.ingredientKey,
+        purchaseKey: resolved.purchaseKey,
         aggregateKey: resolved.aggregateKey,
         displayName: resolved.displayName,
         quantity: resolved.quantity,
+        familyKey: resolved.familyKey,
+        preparation: resolved.preparation,
         purchaseUnit: resolved.purchaseUnit,
+        quantityKind: resolved.quantityKind,
         defaultCategoryKey: resolved.defaultCategoryKey,
         pantryMatchKeys: resolved.pantryMatchKeys,
+        familyMatchPolicy: resolved.familyMatchPolicy,
+        exclusionFamily: resolved.exclusionFamily,
         citrusPrep: resolved.citrusPrep,
       }
     }
@@ -297,7 +322,7 @@ describe("Shopping document projection", () => {
 
 describe("Shopping document reducers", () => {
   it("supports recipe replacement/removal and prunes orphan intent", () => {
-    let state: ShoppingDocumentStateV2 = { document: createEmptyShoppingDocument(), contentRevision: 0 }
+    let state: ShoppingDocumentStateV3 = { document: createEmptyShoppingDocument(), contentRevision: 0 }
     state = applyShoppingDocumentMutation(state, { type: "upsertRecipe", entry: entry("a", "apple") })
     const key = state.document.recipeEntries.a.ingredients[0].aggregateKey
     state = applyShoppingDocumentMutation(state, { type: "setChecked", rowRef: `derived:${key}`, checked: true })
@@ -309,13 +334,13 @@ describe("Shopping document reducers", () => {
   })
 
   it("supports explicit overrides, ingredient preference, and the manual lifecycle", () => {
-    let state: ShoppingDocumentStateV2 = { document: createEmptyShoppingDocument(), contentRevision: 4 }
+    let state: ShoppingDocumentStateV3 = { document: createEmptyShoppingDocument(), contentRevision: 4 }
     state = applyShoppingDocumentMutation(state, { type: "upsertRecipe", entry: entry("a", "apple") })
     const key = state.document.recipeEntries.a.ingredients[0].aggregateKey
     const mutations = [
       { type: "setQuantityOverride", aggregateKey: key, quantity: null },
       { type: "setDisplayNameOverride", aggregateKey: key, displayName: "apples" },
-      { type: "setIngredientCategory", ingredientKey: "apple", categoryKey: "produce" },
+      { type: 'setIngredientCategory', purchaseKey: 'apple', categoryKey: 'produce' },
       { type: "addManualItem", item: { id: "m", displayName: "foil", quantity: null, categoryKey: "misc", bucket: "items", checked: false } },
     ] as const
     for (const mutation of mutations) state = applyShoppingDocumentMutation(state, mutation)
@@ -336,7 +361,7 @@ describe("Shopping document reducers", () => {
   })
 
   it("learns a cross-category position and reusable category in one mutation", () => {
-    let state: ShoppingDocumentStateV2 = {
+    let state: ShoppingDocumentStateV3 = {
       document: createEmptyShoppingDocument(),
       contentRevision: 2,
     }
@@ -744,7 +769,7 @@ describe("Shopping document reducers", () => {
     document.manualItems.push({
       id: "manual-apple",
       displayName: "apples",
-      quantity: null,
+      quantity: { amount: 1, unit: 'count' },
       categoryKey: "produce",
       bucket: "items",
       checked: false,
@@ -767,7 +792,7 @@ describe("Shopping document reducers", () => {
   })
 
   it("keeps learned order through regeneration, visibility changes, clear, and rebuild", () => {
-    let state: ShoppingDocumentStateV2 = {
+    let state: ShoppingDocumentStateV3 = {
       document: createEmptyShoppingDocument(),
       contentRevision: 0,
     }
@@ -831,7 +856,7 @@ describe("Shopping document reducers", () => {
       bucket: "items",
       checked: false,
     })
-    let state: ShoppingDocumentStateV2 = { document, contentRevision: 0 }
+    let state: ShoppingDocumentStateV3 = { document, contentRevision: 0 }
     const rows = projectShoppingDocument(document).rows
     const manual = rows.find((row) => row.manualId === "manual-paper")!
     const milk = rows.find((row) => row.orderingKey === "milk")!
@@ -914,8 +939,8 @@ describe("Shopping document reducers", () => {
 
 describe("ShoppingDocumentV1 migration", () => {
   it("seeds reusable order, absorbs derived category overrides, and drops row order", () => {
-    const appleEntry = entry("a", "apple")
-    const milkEntry = entry("b", "milk", 1, { unit: "cup" })
+    const appleEntry = legacyEntry(entry('a', 'apple'))
+    const milkEntry = legacyEntry(entry('b', 'milk', 1, { unit: 'cup' }))
     const appleKey = appleEntry.ingredients[0].aggregateKey
     const milkKey = milkEntry.ingredients[0].aggregateKey
     const v1: ShoppingDocumentV1 = {
@@ -960,9 +985,9 @@ describe("ShoppingDocumentV1 migration", () => {
   })
 
   it("ignores stale row refs, deduplicates identities, and appends partially represented rows", () => {
-    const appleEntry = entry("a", "apple")
-    const secondApple = entry("b", "apples")
-    const carrotEntry = entry("c", "carrot")
+    const appleEntry = legacyEntry(entry('a', 'apple'))
+    const secondApple = legacyEntry(entry('b', 'apples'))
+    const carrotEntry = legacyEntry(entry('c', 'carrot'))
     const v1: ShoppingDocumentV1 = {
       schemaVersion: 1,
       recipeEntries: { a: appleEntry, b: secondApple, c: carrotEntry },

@@ -918,6 +918,42 @@ describe('alternative ingredient detection (P2)', () => {
     expect(result.unit).toBe('cup');
   });
 
+  it('preserves the shared noun for color alternatives', () => {
+    const result = parseIngredientLine('¼ cup diced red or white onion');
+
+    expect(result.item).toBe('diced red onion');
+    expect(result.alternatives).toEqual(['white onion']);
+    expect(result.originalText).toBe('¼ cup diced red or white onion');
+  });
+
+  it('parses comma-delimited ingredient choices as alternatives', () => {
+    const result = parseIngredientLine(
+      '6 cups chopped romaine, shredded iceberg, arugula, or other greens'
+    );
+
+    expect(result.item).toBe('chopped romaine');
+    expect(result.alternatives).toEqual([
+      'shredded iceberg',
+      'arugula',
+      'other greens',
+    ]);
+    expect(result.originalText).toBe(
+      '6 cups chopped romaine, shredded iceberg, arugula, or other greens'
+    );
+  });
+
+  it('preserves the shared suffix for cheese alternatives', () => {
+    const result = parseIngredientLine(
+      '½ cup shredded Mexican-blend or sharp cheddar cheese'
+    );
+
+    expect(result.item).toBe('shredded Mexican-blend cheese');
+    expect(result.alternatives).toEqual(['sharp cheddar cheese']);
+    expect(result.originalText).toBe(
+      '½ cup shredded Mexican-blend or sharp cheddar cheese'
+    );
+  });
+
   it('should not extract single-letter alternatives', () => {
     // Edge case: avoid matching things like "X or Y coordinates"
     const result = parseIngredientLine('X or Y');

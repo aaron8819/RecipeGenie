@@ -171,7 +171,7 @@ describe("PantryList", () => {
     expect(screen.getByRole("button", { name: /add excluded keywords/i })).toBeInTheDocument()
   })
 
-  it("renders accessible family settings above separate exact exclusions", () => {
+  it('renders accessible family settings above excluded ingredients', () => {
     render(<PantryList />)
 
     const salt = screen.getByRole("checkbox", { name: "Salt variants" })
@@ -179,15 +179,16 @@ describe("PantryList", () => {
     expect(salt).not.toBeChecked()
     expect(pepper).toBeChecked()
     expect(salt).toHaveAccessibleDescription(
-      "Salt variants include salt, kosher salt, sea salt, and table salt."
+      'Salt variants include salt, kosher salt, sea salt, Maldon salt, and table salt.'
     )
     expect(pepper).toHaveAccessibleDescription(
       "Black pepper variants include black pepper, ground black pepper, freshly ground black pepper, and cracked black pepper."
     )
     expect(screen.getByRole("heading", { name: "Always exclude" })).toBeInTheDocument()
-    expect(screen.getByRole("heading", { name: "Exact exclusions" })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Excluded ingredients' }))
+      .toBeInTheDocument()
     expect(screen.getByText(/clear\/reset the shopping list, then regenerate/i)).toBeInTheDocument()
-    expect(screen.getByText(/does not perform substring matching/i)).toBeInTheDocument()
+    expect(screen.getByText(/never uses substring matching/i)).toBeInTheDocument()
   })
 
   it("groups Pantry items, restores collapse state after search, and keeps unmatched items in Other", () => {

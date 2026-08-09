@@ -23,7 +23,7 @@ describe("resolveShoppingIngredient", () => {
     })
 
     expect(result).toMatchObject({
-      ingredientKey: "kosher salt",
+      purchaseKey: 'kosher salt',
       displayName: "kosher salt (or sea salt)",
       quantity: { amount: 4, unit: "tsp" },
       purchaseUnit: "tsp",
@@ -98,7 +98,7 @@ describe("resolveShoppingIngredient", () => {
       ingredient: { item: "granny smith apple", amount: 1, unit: "count" },
     })
 
-    expect(first.ingredientKey).toBe(equivalent.ingredientKey)
+    expect(first.purchaseKey).toBe(equivalent.purchaseKey)
     expect(first.aggregateKey).toBe(equivalent.aggregateKey)
     expect(first.aggregateKey).not.toBe(distinct.aggregateKey)
   })
@@ -109,7 +109,7 @@ describe("resolveShoppingIngredient", () => {
       recipeId: "recipe-a",
     })
     expect(resolved).toMatchObject({
-      ingredientKey: "lemon",
+      purchaseKey: 'lemon',
       purchaseUnit: "count",
       citrusPrep: "zested",
     })

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(19);
+select extensions.plan(22);
 
 insert into auth.users(id, email) values
   ('31000000-0000-4000-8000-000000000001', 'shopping-a@example.test'),
@@ -17,6 +17,13 @@ set local role authenticated;
 select set_config('request.jwt.claim.sub', '31000000-0000-4000-8000-000000000001', true);
 select extensions.is((select count(*)::integer from public.shopping_list), 1, 'RLS exposes only the owned document');
 select extensions.is((select content_revision from public.shopping_list), 0::bigint, 'new documents start at revision zero');
+select extensions.ok(
+  (select public.is_shopping_document_v3(document) from public.shopping_list),
+  'new documents use the strict V3 shape'
+);
+select extensions.ok(public.is_shopping_document_v2(
+  '{"schemaVersion":2,"recipeEntries":{},"manualItems":[],"itemOverrides":{},"preferences":{"categoryByIngredient":{},"customCategories":[],"categoryOrder":[],"ingredientOrderByCategory":{},"excludedIngredientKeys":[],"excludeSaltVariants":false,"excludeBlackPepperVariants":false}}'::jsonb
+), 'V2 remains valid during lazy application upgrade');
 select extensions.lives_ok($$
   update public.shopping_list set
     document = jsonb_set(document, '{manualItems}', '[{"id":"manual-a","displayName":"apples","quantity":null,"categoryKey":"produce","bucket":"items","checked":false}]'::jsonb),
@@ -62,6 +69,8 @@ select extensions.throws_ok($$ select count(*) from public.shopping_list $$,
   '42501', 'permission denied for table shopping_list', 'anonymous reads are not granted');
 select extensions.throws_ok($$ select public.is_shopping_document_v2('{}'::jsonb) $$,
   '42501', 'permission denied for function is_shopping_document_v2', 'anonymous validator execution is not granted');
+select extensions.throws_ok($$ select public.is_shopping_document_v3('{}'::jsonb) $$,
+  '42501', 'permission denied for function is_shopping_document_v3', 'anonymous V3 validator execution is not granted');
 select extensions.throws_ok($$ select * from public.move_shopping_document_item_to_pantry(0, '{}'::jsonb, 'onion', 1, 'count') $$,
   '42501', 'permission denied for function move_shopping_document_item_to_pantry', 'anonymous Pantry moves are not executable');
 

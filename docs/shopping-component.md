@@ -1,6 +1,6 @@
 # Shopping Domain Reference
 
-Shopping persistence is a single `ShoppingDocumentV2` JSON document per user,
+Shopping persistence is a single `ShoppingDocumentV3` JSON document per user,
 guarded by one `content_revision`. The document stores recipe inputs, manual
 items, explicit row overrides, and reusable Shopping preferences. Rendered
 `items`, `already_have`, and `excluded` rows are projections and are never
@@ -12,11 +12,13 @@ persisted.
 |------|----------------|
 | `web/src/lib/shopping-document.ts` | Strict validator, deterministic projector, and pure mutation reducers. |
 | `web/src/lib/shopping-ordering.ts` | The single category and within-category ordering authority. |
-| `web/src/lib/shopping-ingredient-resolution.ts` | Resolves canonical Shopping ingredients from recipe structure. |
+| `web/src/lib/shopping-ingredient-semantics.ts` | Central purchase, family, preparation, quantity, category, Pantry, and exclusion semantics. |
+| `web/src/lib/shopping-ingredient-resolution.ts` | Resolves recipe structure through the central semantic authority. |
 | `web/src/hooks/shopping/use-shopping-document.ts` | The only runtime Shopping read/write seam; CAS, replay, Pantry bridge, and UI adapters. |
 | `web/src/components/shopping/shopping-list.tsx` | Shopping UI orchestration and immediate inverse-write Undo UX. |
 | `supabase/migrations/018_shopping_document_cutover.sql` | Atomic legacy conversion and physical schema cutover. |
 | `supabase/migrations/019_personalized_shopping_order.sql` | V1-to-V2 conversion and strict personalized-order persistence. |
+| `supabase/migrations/020_shopping_document_v3.sql` | V2/V3 compatibility validation and V3 defaults for lazy application upgrades. |
 
 ## Persistence contract
 
@@ -31,7 +33,7 @@ persisted.
 - Manual IDs and derived aggregate keys produce stable `manual:*` and
   `derived:*` row references. Row-targeted actions fail closed without one.
 - `preferences.categoryOrder` owns reusable category order and
-  `preferences.ingredientOrderByCategory` owns reusable ingredient-key order.
+  `preferences.ingredientOrderByCategory` owns reusable purchase-key order.
   Row references never become learned ordering identity.
 - Unlearned rows order by reusable ingredient identity first. Each identity's
   fallback key is its minimum `normalizeItemName(displayName)` in Unicode
@@ -47,14 +49,25 @@ persisted.
 ## Projection and Pantry
 
 Projection combines the document with live Pantry rows. Classification order
-is Pantry, exact exclusion, enabled unanimous built-in family, then visible.
+is Pantry, excluded ingredient, enabled unanimous built-in family, then visible.
 Explicit persisted bucket overrides win. Moving a row to Pantry uses
 `move_shopping_document_item_to_pantry(...)`, which performs the Shopping CAS
 and Pantry insertion in one transaction.
 
-Shopping preferences—including exact exclusions, family toggles, category
+Shopping preferences—including safe ingredient exclusions, family toggles, category
 overrides, custom categories, and category order—live inside the document.
 `user_config` contains planner/onboarding preferences only.
+
+V3 persists purchase and family semantics separately. Purchase identity drives
+aggregation and ordering; explicitly directional family policy drives Pantry
+and exclusion compatibility. V2 documents upgrade in memory on read and are
+written back as V3 on the next normal mutation. The database accepts both
+versions during that lazy transition and defaults new rows to V3.
+
+Exact scalar discrete quantities are rounded up only after compatible recipe
+contributions aggregate. Structured ranges, packages, and source quantities
+remain exact. An unchecked, unquantified manual row may be hidden while a safe
+same-purchase derived row is visible; the persisted manual row is unchanged.
 
 ## Verification
 
@@ -66,4 +79,4 @@ npm run test -- --run src/lib/__tests__/shopping-document.test.ts src/lib/__test
 supabase test db --local --workdir ..
 ```
 
-Last updated: 2026-08-08
+Last updated: 2026-08-09
