@@ -29,7 +29,6 @@ function ingredientToString(ing: CanonicalIngredient): string {
  */
 export function recipesToSchemaOrg(
   recipes: Recipe[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Record<string, any>[] {
   return recipes.map((recipe) => ({
     '@context': 'https://schema.org',

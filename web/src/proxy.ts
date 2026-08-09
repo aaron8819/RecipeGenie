@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-export function middleware(request: NextRequest) {
-  // Generate nonce once and attach to request so layout headers() receives it
+export function proxy(request: NextRequest) {
+  // Generate nonce once and attach to the request so layout headers() receives it
   // (Next.js applies nonce to inline scripts from the request, not the response)
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const requestHeaders = new Headers(request.headers);
@@ -37,7 +37,7 @@ export function middleware(request: NextRequest) {
   ].join('; ');
 
   headers.set('Content-Security-Policy', csp);
-  headers.set('x-nonce', nonce); // Next.js 15+ reads this to apply nonce to inline scripts
+  headers.set('x-nonce', nonce); // Next.js reads this to apply nonce to inline scripts
   headers.set('X-Frame-Options', 'DENY');
   headers.set('X-Content-Type-Options', 'nosniff');
   headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');

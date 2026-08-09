@@ -84,7 +84,7 @@ interface PantryPanelProps {
   feedback: InlineFeedback | null
   isAdding: boolean
   removingIds: Set<string>
-  inputRef: React.RefObject<HTMLInputElement>
+  inputRef: React.RefObject<HTMLInputElement | null>
   onNewItemChange: (value: string) => void
   onQueryChange: (value: string) => void
   onSubmit: (event: React.FormEvent) => void
@@ -234,7 +234,7 @@ interface ExcludedIngredientsPanelProps {
   feedback: InlineFeedback | null
   isAdding: boolean
   removingKeywords: Set<string>
-  inputRef: React.RefObject<HTMLInputElement>
+  inputRef: React.RefObject<HTMLInputElement | null>
   familySettingsLoading: boolean
   familySettingsError: boolean
   excludeSaltVariants: boolean

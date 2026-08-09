@@ -24,6 +24,8 @@ const nextConfig = {
   },
 
   images: {
+    // Preserve Next 15's revalidation floor for replace-in-place recipe images.
+    minimumCacheTTL: 60,
     remotePatterns: [
       {
         protocol: 'https',

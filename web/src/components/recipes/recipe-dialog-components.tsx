@@ -83,7 +83,7 @@ type RecipeImageFieldProps = {
   imageUrl?: string | null
   onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
   onRemoveImage?: () => void
-  fileInputRef?: React.RefObject<HTMLInputElement>
+  fileInputRef?: React.RefObject<HTMLInputElement | null>
   mobileCollapsible?: boolean
 }
 
