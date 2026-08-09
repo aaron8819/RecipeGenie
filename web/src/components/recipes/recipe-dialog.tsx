@@ -1386,7 +1386,7 @@ interface RecipeFormContentPropsWithImage extends RecipeFormContentProps {
   imageUrl?: string | null
   onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
   onRemoveImage?: () => void
-  fileInputRef?: React.RefObject<HTMLInputElement>
+  fileInputRef?: React.RefObject<HTMLInputElement | null>
 }
 
 function RecipeFormContent({

@@ -28,7 +28,7 @@ export const viewport: Viewport = {
 
 // PERF TRADEOFF: force-dynamic prevents edge/CDN caching of the page shell.
 // It is required because layout calls headers() to read the per-request x-nonce
-// set by middleware. Next.js 15 uses that value to stamp inline scripts with a
+// set by the proxy. Next.js uses that value to stamp inline scripts with a
 // matching nonce, which is the mechanism that makes our nonce-based CSP effective.
 // Without it, headers() would not receive a per-request nonce and every page would
 // share the same nonce — defeating its entire security purpose.
@@ -40,8 +40,8 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  // Call headers() to trigger Next.js 15+ automatic nonce detection.
-  // Next.js reads the 'x-nonce' header from middleware and applies it to inline scripts.
+  // Call headers() to trigger automatic nonce detection.
+  // Next.js reads the 'x-nonce' header from the proxy and applies it to inline scripts.
   await headers()
 
   return (

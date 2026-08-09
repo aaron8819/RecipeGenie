@@ -143,7 +143,6 @@ export function extractRecipeFromHtml(
  */
 function findJsonLdRecipe(
   $: cheerio.CheerioAPI
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Record<string, any> | null {
   const scripts = $('script[type="application/ld+json"]');
   for (let i = 0; i < scripts.length; i++) {
@@ -164,7 +163,6 @@ function findJsonLdRecipe(
 /**
  * Recursively search for @type: "Recipe" in JSON-LD.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function findRecipeInData(data: any): Record<string, any> | null {
   if (!data) return null;
 
