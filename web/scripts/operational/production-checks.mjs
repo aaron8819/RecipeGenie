@@ -16,7 +16,7 @@ const EXPECTED_COLUMNS = [
 
 const EXPECTED_CONSTRAINTS = [
   "recipes_pkey", "recipes_recipe_uuid_key", "shopping_list_pkey",
-  "pantry_items_user_id_item_key", "shopping_list_document_v1_check",
+  "pantry_items_user_id_item_key", "shopping_list_document_v2_check",
 ]
 
 const EXPECTED_INDEXES = [
