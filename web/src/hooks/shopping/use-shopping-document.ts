@@ -540,46 +540,49 @@ export function useShoppingConfig() {
   }
 }
 
+export function createShoppingConfigUpdateMutation(
+  updates: Partial<ShoppingConfig>
+): ShoppingDocumentMutation {
+  const preferences: Partial<ShoppingDocumentStateV3['document']['preferences']> = {}
+  let updatesCategoryPreferences = false
+  if ('category_overrides' in updates && updates.category_overrides !== undefined) {
+    updatesCategoryPreferences = true
+    // Config keys came from persisted V3 preferences and are already stable
+    // purchase identities. Raw ingredient text is resolved before this boundary.
+    preferences.categoryByIngredient = { ...(updates.category_overrides || {}) }
+  }
+  if ('custom_categories' in updates && updates.custom_categories !== undefined) {
+    updatesCategoryPreferences = true
+    preferences.customCategories = updates.custom_categories || []
+  }
+  if ('category_order' in updates && updates.category_order !== undefined) {
+    updatesCategoryPreferences = true
+    const categoryOrder = updates.category_order as unknown
+    preferences.categoryOrder = Array.isArray(categoryOrder)
+      ? categoryOrder.filter((value): value is string => typeof value === 'string')
+      : []
+  }
+  if ('excluded_keywords' in updates && updates.excluded_keywords !== undefined) {
+    preferences.excludedIngredientKeys = [...new Set((updates.excluded_keywords || [])
+      .map((keyword) => createShoppingPurchaseKey(keyword))
+      .filter(Boolean))]
+  }
+  if ('exclude_salt_variants' in updates && updates.exclude_salt_variants !== undefined) {
+    preferences.excludeSaltVariants = updates.exclude_salt_variants
+  }
+  if ('exclude_black_pepper_variants' in updates &&
+      updates.exclude_black_pepper_variants !== undefined) {
+    preferences.excludeBlackPepperVariants = updates.exclude_black_pepper_variants
+  }
+  return updatesCategoryPreferences
+    ? { type: 'updateCategoryPreferences', preferences }
+    : { type: 'updatePreferences', preferences }
+}
+
 export function useUpdateShoppingConfig() {
   return useShoppingMutation((_state, updates: Partial<ShoppingConfig>) => {
-    const preferences: Partial<ShoppingDocumentStateV3['document']['preferences']> = {}
-    let updatesCategoryPreferences = false
-    if ('category_overrides' in updates && updates.category_overrides !== undefined) {
-      updatesCategoryPreferences = true
-      preferences.categoryByIngredient = Object.fromEntries(
-        Object.entries(updates.category_overrides || {}).map(([key, value]) => [
-          createShoppingPurchaseKey(key),
-          value,
-        ])
-      )
-    }
-    if ('custom_categories' in updates && updates.custom_categories !== undefined) {
-      updatesCategoryPreferences = true
-      preferences.customCategories = updates.custom_categories || []
-    }
-    if ('category_order' in updates && updates.category_order !== undefined) {
-      updatesCategoryPreferences = true
-      const categoryOrder = updates.category_order as unknown
-      preferences.categoryOrder = Array.isArray(categoryOrder)
-        ? categoryOrder.filter((value): value is string => typeof value === 'string')
-        : []
-    }
-    if ('excluded_keywords' in updates && updates.excluded_keywords !== undefined) {
-      preferences.excludedIngredientKeys = [...new Set((updates.excluded_keywords || [])
-        .map((keyword) => createShoppingPurchaseKey(keyword))
-        .filter(Boolean))]
-    }
-    if ('exclude_salt_variants' in updates && updates.exclude_salt_variants !== undefined) {
-      preferences.excludeSaltVariants = updates.exclude_salt_variants
-    }
-    if ('exclude_black_pepper_variants' in updates &&
-        updates.exclude_black_pepper_variants !== undefined) {
-      preferences.excludeBlackPepperVariants = updates.exclude_black_pepper_variants
-    }
     return {
-      mutation: updatesCategoryPreferences
-        ? { type: 'updateCategoryPreferences', preferences }
-        : { type: 'updatePreferences', preferences },
+      mutation: createShoppingConfigUpdateMutation(updates),
       value: updates,
     }
   })
