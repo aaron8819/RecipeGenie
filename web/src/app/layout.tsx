@@ -19,11 +19,34 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "Recipe Genie",
   description: "Meal planning and recipe management made easy",
-  manifest: '/manifest.json',
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      {
+        url: "/favicon-32x32.png",
+        sizes: "32x32",
+        type: "image/png",
+      },
+      { url: "/favicon.ico", sizes: "any", type: "image/x-icon" },
+    ],
+    apple: [
+      {
+        url: "/apple-touch-icon.png",
+        sizes: "180x180",
+        type: "image/png",
+      },
+    ],
+    shortcut: "/favicon.ico",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Recipe Genie",
+    statusBarStyle: "default",
+  },
 }
 
 export const viewport: Viewport = {
-  themeColor: '#3d5a2e',
+  themeColor: "#2F4B34",
 }
 
 // PERF TRADEOFF: force-dynamic prevents edge/CDN caching of the page shell.

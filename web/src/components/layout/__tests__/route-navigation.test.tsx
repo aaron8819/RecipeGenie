@@ -25,8 +25,14 @@ describe("route navigation", () => {
     pathname = "/recipes"
   })
 
-  it("renders desktop destinations as normal active links", () => {
-    render(<Header userEmail="user@example.com" onSignOut={vi.fn()} />)
+  it("renders the branded header and desktop destinations", () => {
+    const { container } = render(
+      <Header userEmail="user@example.com" onSignOut={vi.fn()} />
+    )
+
+    expect(
+      container.querySelector('[data-slot="recipe-genie-mark"]')
+    ).toBeInTheDocument()
 
     const recipes = screen.getByRole("link", { name: "Recipes" })
     expect(recipes).toHaveAttribute("href", "/recipes")
