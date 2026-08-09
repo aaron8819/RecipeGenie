@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
-import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles } from "lucide-react"
+import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles, UtensilsCrossed, ChevronDown } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -52,7 +53,7 @@ import {
   useAddToPantryAndRemove,
 } from "@/hooks/use-shopping"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
-import type { ShoppingItem } from "@/types/database"
+import type { Recipe, ShoppingItem } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -62,6 +63,7 @@ import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
 import { createShoppingManualItemId } from "@/lib/shopping-row-reference"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import { useRecipes } from "@/hooks/use-recipes"
+import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import {
   buildCategoryViewModel,
   createDisplayShoppingList,
@@ -78,7 +80,6 @@ import {
 import {
   formatEncodedRangeAmount,
   formatShoppingItemAmount,
-  getRecipeColor,
   getRecipeColorIndex,
   ManualShoppingItemEditor,
   ShoppingCategorySection,
@@ -147,44 +148,70 @@ function parseEditableAmount(value: string): number | null | "invalid" {
 
 function RecipeTag({ 
   recipeName, 
+  recipe,
   onRemove, 
   onViewRecipe,
   isRemoving,
-  colorIndex
 }: { 
   recipeName: string
+  recipe?: Recipe
   onRemove: () => void
   onViewRecipe?: () => void
   isRemoving: boolean
-  colorIndex?: number
 }) {
-  const index = colorIndex !== undefined ? colorIndex : getRecipeColorIndex(recipeName)
-  const colors = getRecipeColor(index)
-  
-  // Truncate long recipe names
-  const displayName = recipeName.length > 25 ? recipeName.slice(0, 23) + "…" : recipeName
+  const recipeImageUrl = getRecipeImageUrl(recipe?.image_url || null)
+  const metadata = [
+    recipe?.category,
+    recipe?.servings ? `${recipe.servings} servings` : null,
+  ].filter(Boolean).join(" · ")
   
   return (
-    <span 
-      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs md:text-sm font-medium border ${colors.bg} ${colors.text} ${colors.border}`}
+    <div
+      className="flex min-w-0 items-center gap-2 rounded-xl border border-stone-200 bg-stone-50/60 p-2.5 transition-colors hover:bg-stone-50 md:w-full"
       title={recipeName}
     >
-      <span
+      <button
+        type="button"
         onClick={onViewRecipe}
-        className={onViewRecipe ? "cursor-pointer hover:opacity-90 active:opacity-80" : ""}
+        disabled={!onViewRecipe}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default",
+          onViewRecipe && "cursor-pointer hover:opacity-90 active:opacity-80"
+        )}
       >
-        {displayName}
-      </span>
+        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sage-100 text-primary shadow-inner">
+          {recipeImageUrl ? (
+            <Image
+              src={recipeImageUrl}
+              alt=""
+              width={48}
+              height={48}
+              className="h-full w-full object-cover"
+              unoptimized={!recipeImageUrl.includes("supabase.co")}
+            />
+          ) : (
+            <UtensilsCrossed className="h-5 w-5" />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block line-clamp-2 text-sm font-semibold leading-5 text-foreground">
+            {recipeName}
+          </span>
+          <span className="mt-0.5 block truncate text-xs capitalize text-stone-500">
+            {metadata || "Recipe"}
+          </span>
+        </span>
+      </button>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); onRemove(); }}
         disabled={isRemoving}
-        className={`p-1 md:p-0.5 rounded-full transition-colors hover:bg-black/10 active:bg-black/20 disabled:opacity-50 min-w-[28px] min-h-[28px] md:min-w-0 md:min-h-0 flex items-center justify-center`}
+        className="flex min-h-9 min-w-9 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-200 hover:text-foreground active:bg-stone-300 disabled:opacity-50"
         title={`Remove all items from ${recipeName}`}
       >
-        <X className="h-3.5 w-3.5 md:h-3 md:w-3" />
+        <X className="h-4 w-4" />
       </button>
-    </span>
+    </div>
   )
 }
 
@@ -1019,6 +1046,10 @@ export function ShoppingListView() {
     return ids
   }, [allRecipes, projectedShoppingList.items])
 
+  const recipesByName = useMemo(() => {
+    return new Map((allRecipes || []).map((recipe) => [recipe.name, recipe]))
+  }, [allRecipes])
+
   // Create a color mapping that assigns a unique color per recipe when possible.
   // Prefer hash-based index for stability; on collision use next available index.
   // If there are more recipes than colors, later recipes may reuse colors.
@@ -1284,7 +1315,7 @@ export function ShoppingListView() {
     }
   }
 
-  const renderOrganizeMenu = (triggerClassName?: string) => (
+  const renderOrganizeMenu = (triggerClassName?: string, labelClassName?: string) => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -1294,7 +1325,7 @@ export function ShoppingListView() {
           aria-pressed={isManageMode}
         >
           <Sparkles className="h-5 w-5" />
-          <span className={cn(triggerClassName?.includes("gap-2") ? "" : "sr-only")}>
+          <span className={cn(triggerClassName?.includes("gap-2") ? "" : "sr-only", labelClassName)}>
             Organize
           </span>
         </button>
@@ -1349,7 +1380,10 @@ export function ShoppingListView() {
               categorySectionRefs.current[categoryData.key] = node
             }}
             data-testid={`shopping-category-${categoryData.key}`}
-            className="scroll-mt-24 md:scroll-mt-0"
+            className={cn(
+              "scroll-mt-24 md:scroll-mt-0",
+              !isManageMode && "md:border-b md:border-stone-100/80 md:last:border-b-0"
+            )}
           >
             <ShoppingCategorySection
               categoryData={categoryData}
@@ -1430,9 +1464,9 @@ export function ShoppingListView() {
 
   return (
     <>
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col">
       {/* Mobile sticky add item - always accessible at top */}
-      <div className={cn("sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-stone-100 pb-3 mb-4", isDesktop && "hidden")}>
+      <div className={cn("sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-2 backdrop-blur-md", isDesktop && "hidden")}>
         <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
@@ -1442,28 +1476,31 @@ export function ShoppingListView() {
               setNewItem(e.target.value)
               if (addFeedback) setAddFeedback(null)
             }}
-            className="w-full h-11 pl-4 pr-14 py-2.5 text-base bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
+            className="h-12 w-full rounded-2xl border border-stone-200 bg-white py-2.5 pl-4 pr-14 text-base shadow-[0_8px_24px_rgba(63,52,43,0.07)] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0"
           />
           <Button
             type="submit"
             disabled={addItem.isPending}
             aria-label="Add item"
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 min-w-[44px] min-h-[44px] bg-primary text-primary-foreground rounded-full font-medium hover:opacity-90 flex items-center justify-center"
+            className="absolute right-1.5 top-1/2 flex h-9 min-h-[44px] w-9 min-w-[44px] -translate-y-1/2 items-center justify-center rounded-full bg-primary font-medium text-primary-foreground shadow-sm hover:opacity-90"
           >
             <span className="text-lg leading-none font-semibold">+</span>
           </Button>
         </form>
       </div>
 
-      {/* Mobile header - compact title and icon buttons only */}
-      <div className={cn("flex items-center justify-between mb-4", isDesktop && "hidden")}>
-        <h1 className="font-display text-2xl font-bold text-foreground">Shopping List</h1>
+      {/* Mobile header - compact title and actions */}
+      <div className={cn("mb-3 flex items-center justify-between", isDesktop && "hidden")}>
+        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">Shopping List</h1>
         <div className="flex gap-1">
-          {renderOrganizeMenu("p-3 text-slate-500 hover:text-primary transition-colors rounded-lg")}
+          {renderOrganizeMenu(
+            "flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-medium text-stone-600 shadow-sm transition-colors hover:border-sage-300 hover:text-primary",
+            "hidden min-[375px]:inline"
+          )}
           <button
             type="button"
             onClick={handleClearListWithUndo}
-            className="p-3 text-red-600 hover:text-red-700 transition-colors rounded-lg"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
             aria-label="Clear list"
           >
             <Trash2 className="h-5 w-5" />
@@ -1472,19 +1509,19 @@ export function ShoppingListView() {
       </div>
 
       {/* Desktop header - full layout with add item */}
-      <header className={cn("mb-6 md:mb-2", !isDesktop && "hidden")}>
+      <header className={cn("mb-5", !isDesktop && "hidden")}>
         {/* Desktop: title, subtitle, Organize + Copy + Clear */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>
-            <h1 className="font-display text-3xl sm:text-4xl font-bold text-foreground mb-2">Shopping List</h1>
-            <p className="text-muted-foreground">Track what is left to buy, keep recipe sources visible, and share the list quickly.</p>
+            <h1 className="mb-1 font-display text-4xl font-bold tracking-tight text-foreground">Shopping List</h1>
+            <p className="text-sm text-muted-foreground">Everything you need, organized for a faster trip.</p>
           </div>
           <div className="flex gap-2 flex-shrink-0">
-            {renderOrganizeMenu("flex items-center gap-2 border border-stone-200 bg-white hover:bg-stone-50 hover:text-foreground rounded-lg px-4 py-2 text-sm font-medium")}
+            {renderOrganizeMenu("flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 hover:text-foreground")}
             <Button
               variant="outline"
               onClick={handleCopyList}
-              className="flex items-center gap-2 border-stone-200 bg-white hover:bg-stone-50 hover:text-foreground rounded-lg px-4 py-2 text-sm font-medium"
+              className="flex h-10 items-center gap-2 rounded-xl border-stone-200 bg-white px-4 text-sm font-medium hover:bg-stone-50 hover:text-foreground"
             >
               <Copy className="h-4 w-4" />
               Copy
@@ -1492,7 +1529,7 @@ export function ShoppingListView() {
             <Button
               variant="outline"
               onClick={handleClearListWithUndo}
-              className="flex items-center gap-2 border-red-100 text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 rounded-lg px-4 py-2 text-sm font-medium"
+              className="flex h-10 items-center gap-2 rounded-xl border-red-100 bg-red-50 px-4 text-sm font-medium text-red-600 hover:bg-red-100 hover:text-red-700"
             >
               <Trash2 className="h-4 w-4" />
               Clear
@@ -1501,7 +1538,7 @@ export function ShoppingListView() {
         </div>
 
         {/* Desktop add item form - stays in header */}
-        <form onSubmit={handleAddItem} className="relative mb-6">
+        <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
             placeholder="Add tomatoes, milk..."
@@ -1510,13 +1547,13 @@ export function ShoppingListView() {
               setNewItem(e.target.value)
               if (addFeedback) setAddFeedback(null)
             }}
-            className="w-full h-12 pl-6 pr-32 py-3 text-lg bg-white border-2 border-stone-100 rounded-xl shadow-sm focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0 focus-visible:border-primary"
+            className="h-[52px] w-full rounded-2xl border border-stone-200 bg-white py-3 pl-5 pr-36 text-base shadow-[0_8px_24px_rgba(63,52,43,0.07)] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0"
           />
           <Button
             type="submit"
             disabled={addItem.isPending}
             aria-label="Add item"
-            className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-auto px-6 bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 flex items-center justify-center gap-2"
+            className="absolute right-1.5 top-1/2 flex h-10 w-auto -translate-y-1/2 items-center justify-center gap-2 rounded-xl bg-primary px-5 font-medium text-primary-foreground shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             <span>Add Item</span>
@@ -1524,7 +1561,7 @@ export function ShoppingListView() {
         </form>
       </header>
 
-      {/* Shopping List — full width (sidebar removed) */}
+      {/* Shopping List */}
       <div className="flex-1 min-h-0 flex flex-col">
       {/* Shopping List */}
       {showLoading ? (
@@ -1576,78 +1613,34 @@ export function ShoppingListView() {
             </div>
           )}
           <div
-            className="space-y-3 pb-[calc(72px+env(safe-area-inset-bottom))] md:pb-0"
+            className={cn(
+              "grid grid-cols-1 gap-3 pb-[calc(72px+env(safe-area-inset-bottom))] md:items-start md:gap-4 md:pb-0",
+              isManageMode ? "md:grid-cols-1" : "md:grid-cols-[minmax(0,1fr)_17rem]"
+            )}
             style={{
               WebkitOverflowScrolling: 'touch',
               overscrollBehavior: 'contain',
             }}
           >
-            {/* Recipes in list — collapsed by default to keep active shopping rows near the top */}
             {!isManageMode && filteredItems.length > 0 ? (
-              <ShoppingProgressSummary
-                isDesktop={isDesktop}
-                remainingCount={shoppingProgress.uncheckedCount}
-                completedCount={shoppingProgress.checkedCount}
-                totalCount={shoppingProgress.totalCount}
-                activeCategoryCount={activeCategoryJumpTargets.length}
-                hideCompletedItems={hideCompletedItems}
-                onToggleCompleted={() => setHideCompletedItems((prev) => !prev)}
-                activeCategories={activeCategoryJumpTargets}
-                onJumpToCategory={handleJumpToCategory}
-              />
+              <div className="min-w-0 md:col-span-2 md:row-start-1">
+                <ShoppingProgressSummary
+                  isDesktop={isDesktop}
+                  remainingCount={shoppingProgress.uncheckedCount}
+                  completedCount={shoppingProgress.checkedCount}
+                  totalCount={shoppingProgress.totalCount}
+                  activeCategoryCount={activeCategoryJumpTargets.length}
+                  hideCompletedItems={hideCompletedItems}
+                  onToggleCompleted={() => setHideCompletedItems((prev) => !prev)}
+                  activeCategories={activeCategoryJumpTargets}
+                  onJumpToCategory={handleJumpToCategory}
+                />
+              </div>
             ) : null}
-
-            {uniqueRecipes.length > 0 && (
-              <Card className="overflow-hidden rounded-lg border border-stone-100 bg-stone-50/70 shadow-sm">
-                <CardContent className="px-3 py-2 md:px-4 md:py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-600 md:text-xs">
-                          Recipes in list
-                        </p>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-stone-500">
-                          {uniqueRecipes.length}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 hidden truncate text-[11px] text-muted-foreground md:block">
-                        {recipeSectionCollapsed
-                          ? "Recipe context is tucked away while you shop, but each row still keeps its recipe source."
-                          : "Recipe provenance stays secondary to the active list, and each row keeps its recipe source."}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={toggleRecipeSection}
-                      className="h-11 shrink-0 px-3 text-xs text-stone-600 hover:bg-white hover:text-foreground md:h-8 md:px-2"
-                      aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
-                    >
-                      {recipeSectionCollapsed ? "Show" : "Hide"}
-                    </Button>
-                  </div>
-                  {!recipeSectionCollapsed ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {uniqueRecipes.map((recipeName) => {
-                        const recipeId = recipeIdsByName.get(recipeName)
-                        return (
-                          <RecipeTag
-                            key={recipeName}
-                            recipeName={recipeName}
-                            onRemove={() => handleRemoveRecipeItems(recipeId, recipeName)}
-                            onViewRecipe={() => handleRecipeTagClick(recipeId, recipeName)}
-                            isRemoving={false}
-                            colorIndex={recipeColorMap.get(recipeName)}
-                          />
-                        )
-                      })}
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            )}
-
+            <div className={cn(
+              "min-w-0 md:col-start-1",
+              isManageMode ? "md:row-start-1" : "md:row-start-2"
+            )}>
             {isManageMode ? (
               <DndContext
                 sensors={sensors}
@@ -1668,8 +1661,66 @@ export function ShoppingListView() {
                 </DragOverlay>
               </DndContext>
             ) : (
-              shoppingListContent
+              <div className="space-y-3 md:space-y-0 md:overflow-hidden md:rounded-2xl md:border md:border-stone-200/80 md:bg-white md:shadow-[0_12px_32px_rgba(63,52,43,0.06)]">
+                {shoppingListContent}
+              </div>
             )}
+            </div>
+
+            {!isManageMode && uniqueRecipes.length > 0 && (
+              <Card
+                className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_10px_28px_rgba(63,52,43,0.055)] md:sticky md:top-24 md:col-start-2 md:row-start-2 md:row-end-[span_6]"
+                data-testid="shopping-recipe-context"
+              >
+                <CardContent className="p-0">
+                  <div className="flex items-center justify-between gap-3 px-4 py-4 md:px-5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                        Recipes in list
+                      </p>
+                      <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-500">
+                        {uniqueRecipes.length}
+                      </span>
+                    </div>
+                    {!isDesktop ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleRecipeSection}
+                        className="h-9 shrink-0 gap-1 rounded-full px-3 text-xs font-medium text-primary hover:bg-sage-50 hover:text-primary"
+                        aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
+                      >
+                        {recipeSectionCollapsed ? "Show" : "Hide"}
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", !recipeSectionCollapsed && "rotate-180")} />
+                      </Button>
+                    ) : null}
+                  </div>
+                  {(isDesktop || !recipeSectionCollapsed) ? (
+                    <div className="flex flex-col gap-2 border-t border-stone-100 px-3 pb-3 pt-3 md:px-3.5 md:pb-3.5">
+                      {uniqueRecipes.map((recipeName) => {
+                        const recipeId = recipeIdsByName.get(recipeName)
+                        return (
+                          <RecipeTag
+                            key={recipeName}
+                            recipeName={recipeName}
+                            recipe={recipesByName.get(recipeName)}
+                            onRemove={() => handleRemoveRecipeItems(recipeId, recipeName)}
+                            onViewRecipe={() => handleRecipeTagClick(recipeId, recipeName)}
+                            isRemoving={false}
+                          />
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            )}
+
+          <div className={cn(
+            "space-y-3 md:col-start-1",
+            isManageMode ? "md:row-start-2" : "md:row-start-3"
+          )}>
 
           {/* Complete Shopping Button - appears when all items are checked */}
           {allItemsChecked && filteredItems.length > 0 && (
@@ -1799,6 +1850,8 @@ export function ShoppingListView() {
               }
             />
           )}
+
+          </div>
 
           </div>
         </div>

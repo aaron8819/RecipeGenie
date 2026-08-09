@@ -358,7 +358,7 @@ export function ShoppingItemRow({
     <div
       data-testid="shopping-item-row"
       className={cn(
-        "group swipeable-content flex min-h-[68px] items-center justify-between px-4 py-3 transition-transform duration-200 ease-out hover:bg-stone-50 md:min-h-[60px] md:px-5",
+        "group swipeable-content flex min-h-[84px] items-center justify-between px-3 py-3.5 transition-transform duration-200 ease-out hover:bg-stone-50/70 sm:px-4 md:min-h-[72px] md:px-5 md:py-3",
         showSwipeHint && "animate-swipe-hint"
       )}
       style={{
@@ -377,7 +377,7 @@ export function ShoppingItemRow({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         {showDragHandle ? (
           <button
             type="button"
@@ -396,27 +396,27 @@ export function ShoppingItemRow({
           data-checkbox="true"
           onClick={onCheckOff}
           disabled={isCheckingOff}
-          className="my-0 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center md:min-h-0 md:min-w-0"
+          className="my-0 flex min-h-[52px] min-w-[52px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:min-h-[48px] md:min-w-[48px]"
           aria-label={isChecked ? "Uncheck item" : "Check off item"}
         >
           <span
             className={cn(
-              "flex h-6 w-6 items-center justify-center rounded border-2 transition-all active:scale-95 md:h-5 md:w-5",
+              "flex h-8 w-8 items-center justify-center rounded-[7px] border-2 bg-white shadow-[0_1px_2px_rgba(63,52,43,0.05)] transition-all active:scale-95 md:h-7 md:w-7",
               isChecked
                 ? "border-sage-500 bg-sage-500 text-white"
                 : "border-sage-300 hover:border-sage-500 hover:bg-sage-100 active:bg-sage-200"
             )}
           >
-            {isChecked ? <Check className="h-4 w-4 md:h-3 md:w-3" /> : null}
+            {isChecked ? <Check className="h-4 w-4" /> : null}
           </span>
         </button>
 
-        <div className={cn("flex min-h-[44px] min-w-0 flex-1 flex-col justify-center", isChecked && "opacity-60")}>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5 md:gap-2">
+        <div className={cn("flex min-h-[48px] min-w-0 flex-1 flex-col justify-center", isChecked && "opacity-60")}>
+          <div className="flex min-w-0 items-baseline gap-2">
             {amountLabel ? (
               <span
                 className={cn(
-                  "shrink-0 font-bold text-foreground",
+                  "shrink-0 text-[17px] font-bold leading-6 text-foreground md:text-lg",
                   isChecked && "text-gray-500 line-through"
                 )}
               >
@@ -425,30 +425,32 @@ export function ShoppingItemRow({
             ) : null}
             <span
               className={cn(
-                "min-w-0 truncate font-medium text-slate-700 md:text-slate-600",
+                "min-w-0 truncate text-[17px] font-medium leading-6 text-slate-700 md:text-lg md:text-slate-700",
                 isChecked && "text-gray-500 line-through"
               )}
             >
               {displayItemName}
             </span>
-            {sourceDisplay === "tags"
-              ? uniqueSources.map((source, index) => (
-                  <SourceTag
-                    key={`${source.recipeName}-${index}`}
-                    recipeName={source.recipeName}
-                    colorIndex={recipeColorMap.get(source.recipeName)}
-                    onClick={
-                      source.recipeName !== "Manual" && onViewRecipe
-                        ? () => onViewRecipe(source.recipeId, source.recipeName)
-                        : undefined
-                    }
-                    className="shrink-0 px-1.5 py-0.5 text-[9px] md:px-2 md:py-0.5 md:text-[10px]"
-                  />
-                ))
-              : null}
           </div>
+          {sourceDisplay === "tags" ? (
+            <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
+              {uniqueSources.map((source, index) => (
+                <SourceTag
+                  key={`${source.recipeName}-${index}`}
+                  recipeName={source.recipeName}
+                  colorIndex={recipeColorMap.get(source.recipeName)}
+                  onClick={
+                    source.recipeName !== "Manual" && onViewRecipe
+                      ? () => onViewRecipe(source.recipeId, source.recipeName)
+                      : undefined
+                  }
+                  className="shrink-0 px-1.5 py-0.5 text-[9px] md:px-2 md:text-[10px]"
+                />
+              ))}
+            </div>
+          ) : null}
           {sourceDisplay === "summary" && sourceSummary ? (
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-5 text-stone-500">
               {secondaryMetaLabel ? (
                 <span className="max-w-full truncate font-medium text-slate-500">
                   {secondaryMetaLabel}
@@ -478,10 +480,7 @@ export function ShoppingItemRow({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className={cn(
-              "flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-slate-400 transition-colors hover:bg-stone-100 hover:text-foreground",
-              isDesktop && "hidden"
-            )}
+            className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Item actions"
           >
             <MoreVertical className="h-5 w-5" />
@@ -509,47 +508,6 @@ export function ShoppingItemRow({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <div
-        className={cn(
-          "self-center items-center gap-1 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100",
-          isDesktop ? "flex" : "hidden"
-        )}
-      >
-        {onEdit ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={onEdit}
-            title="Edit item"
-            aria-label="Edit item"
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-sage-600"
-          onClick={onAddToPantry}
-          disabled={isAddingToPantry}
-          title="Add to pantry"
-          aria-label="Add to pantry"
-        >
-          <Package className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-          onClick={onRemove}
-          disabled={isRemoving}
-          title="Remove from list"
-          aria-label="Remove from list"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
     </div>
   )
 }
@@ -752,168 +710,101 @@ export function ShoppingProgressSummary({
   const completionPercent =
     totalCount > 0 ? Math.min(100, Math.round((completedCount / totalCount) * 100)) : 0
   const showCompletedToggle = completedCount > 0
-  const showJumpChips = activeCategories.length > 1
+  const showJumpChips = activeCategories.length > 0
 
   return (
-    <Card
-      className="overflow-hidden rounded-xl border border-stone-100 bg-white shadow-sm"
-      data-testid="shopping-progress-summary"
-    >
-      <CardContent className="px-4 py-4 md:px-5">
-        {!isDesktop ? <div data-testid="shopping-progress-mobile">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
-                  Progress
-                </p>
-                <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                  {completionPercent}% done
-                </span>
-              </div>
-              <p className="mt-1 text-sm font-semibold text-foreground">
-                {remainingCount} left <span className="font-normal text-muted-foreground">· {completedCount} done · {activeCategoryCount} sections</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-stone-100">
-            <div
-              className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
-              style={{ width: `${completionPercent}%` }}
-            />
-          </div>
-
-          {(showCompletedToggle || showJumpChips) ? (
-            <div className="mt-3 flex items-center gap-2">
-              {showCompletedToggle ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={onToggleCompleted}
-                  className="h-11 flex-1 rounded-xl border-stone-200 bg-white px-3 text-xs font-medium"
-                >
-                  {hideCompletedItems ? `Show ${completedCount} done` : `Hide ${completedCount} done`}
-                </Button>
-              ) : null}
-              {showJumpChips ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-11 flex-1 rounded-xl border-stone-200 bg-white px-3 text-xs font-medium"
-                      aria-label="Jump to shopping section"
-                    >
-                      Jump to section
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {activeCategories.map((category) => (
-                      <DropdownMenuItem
-                        key={category.key}
-                        onClick={() => onJumpToCategory(category.key)}
-                        className="min-h-11"
-                      >
-                        <span className="flex-1">{category.name}</span>
-                        <span className="ml-4 text-xs text-muted-foreground">{category.remainingCount}</span>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : null}
-            </div>
-          ) : null}
-        </div> : null}
-
-        {isDesktop ? <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between" data-testid="shopping-progress-desktop">
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
-                Progress
-              </p>
-              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                {completionPercent}% done
-              </span>
-              {hideCompletedItems && completedCount > 0 ? (
-                <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                  Completed hidden
-                </span>
-              ) : null}
-            </div>
-
-            <div className="mt-3 grid grid-cols-3 gap-2 text-left">
-              <div className="rounded-xl bg-emerald-50 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-                  Left
-                </p>
-                <p className="mt-1 text-lg font-semibold text-emerald-950">{remainingCount}</p>
-              </div>
-              <div className="rounded-xl bg-stone-100 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-stone-500">
-                  Done
-                </p>
-                <p className="mt-1 text-lg font-semibold text-stone-700">{completedCount}</p>
-              </div>
-              <div className="rounded-xl bg-amber-50 px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
-                  Sections
-                </p>
-                <p className="mt-1 text-lg font-semibold text-amber-900">{activeCategoryCount}</p>
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <div className="h-2 overflow-hidden rounded-full bg-stone-100">
-                <div
-                  className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
-                  style={{ width: `${completionPercent}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {showCompletedToggle ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onToggleCompleted}
-              className="h-9 shrink-0 rounded-lg border-stone-200 bg-white px-3 text-xs font-medium"
-            >
-              {hideCompletedItems ? `Show ${completedCount} done` : `Hide ${completedCount} done`}
-            </Button>
-          ) : null}
-        </div> : null}
-
-        {isDesktop && showJumpChips ? (
-          <div className="mt-4 border-t border-stone-100 pt-3" data-testid="shopping-progress-desktop-jumps">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">
-              Jump to active section
+    <div className="space-y-3 md:space-y-4" data-testid="shopping-progress-summary">
+      <Card className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_12px_32px_rgba(63,52,43,0.065)]">
+        <CardContent className="px-4 py-4 sm:px-5 md:px-8 md:py-6">
+          <div
+            data-testid={isDesktop ? "shopping-progress-desktop" : "shopping-progress-mobile"}
+          >
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.17em] text-stone-500 md:mb-4 md:text-xs">
+              Your progress
             </p>
-            <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1">
-              {activeCategories.map((category) => (
-                <Button
-                  key={category.key}
+            <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_5rem] items-center gap-2 md:grid-cols-[repeat(3,minmax(0,1fr))_7rem] md:gap-6">
+              <div className="border-r border-stone-200 pr-2 text-center md:pr-6 md:text-left" aria-label={`${remainingCount} left`}>
+                <p className="text-2xl font-bold leading-none text-primary md:text-3xl">{remainingCount}</p>
+                <p className="mt-1.5 text-xs text-primary md:text-sm">left</p>
+              </div>
+              {showCompletedToggle ? (
+                <button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onJumpToCategory(category.key)}
-                  aria-label={`Jump to ${category.name}`}
-                  className="h-9 shrink-0 rounded-full border-stone-200 bg-stone-50 px-3 text-xs font-medium text-stone-700 hover:bg-white hover:text-foreground"
+                  onClick={onToggleCompleted}
+                  aria-label={hideCompletedItems ? `Show ${completedCount} done` : `Hide ${completedCount} done`}
+                  className="border-r border-stone-200 px-1 text-center transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:px-6 md:text-left"
                 >
-                  {category.name}
-                  <span className="ml-2 rounded-full bg-white px-1.5 py-0.5 text-[10px] text-stone-500">
-                    {category.remainingCount}
-                  </span>
-                </Button>
-              ))}
+                  <span className="block text-2xl font-bold leading-none text-stone-700 md:text-3xl">{completedCount}</span>
+                  <span className="mt-1.5 block text-xs text-stone-500 md:text-sm">done</span>
+                </button>
+              ) : (
+                <div className="border-r border-stone-200 px-1 text-center md:px-6 md:text-left" aria-label={`${completedCount} done`}>
+                  <p className="text-2xl font-bold leading-none text-stone-700 md:text-3xl">{completedCount}</p>
+                  <p className="mt-1.5 text-xs text-stone-500 md:text-sm">done</p>
+                </div>
+              )}
+              <div className="px-1 text-center md:px-4 md:text-left" aria-label={`${activeCategoryCount} sections`}>
+                <p className="text-2xl font-bold leading-none text-amber-700 md:text-3xl">{activeCategoryCount}</p>
+                <p className="mt-1.5 text-xs text-stone-500 md:text-sm">sections</p>
+              </div>
+              <div
+                className="flex h-20 w-20 items-center justify-center rounded-full p-[7px] md:h-28 md:w-28 md:p-[9px]"
+                style={{
+                  background: `conic-gradient(hsl(var(--primary)) ${completionPercent}%, #e6ede2 0)`,
+                }}
+                aria-label={`${completionPercent}% complete`}
+              >
+                <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white shadow-inner">
+                  <span className="text-xl font-bold leading-none text-foreground md:text-2xl">{completionPercent}%</span>
+                  <span className="mt-1 text-[9px] text-stone-500 md:text-xs">complete</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-stone-100 md:mt-5 md:h-2.5">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${completionPercent}%` }}
+              />
             </div>
           </div>
-        ) : null}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      {showJumpChips ? (
+        <Card
+          className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_8px_24px_rgba(63,52,43,0.05)]"
+          data-testid={isDesktop ? "shopping-progress-desktop-jumps" : "shopping-progress-mobile-jumps"}
+        >
+          <CardContent className="px-4 py-3.5 sm:px-5 md:px-6 md:py-4">
+            <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-500 md:text-xs">
+              Browse by section
+            </p>
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {activeCategories.map((category) => {
+                const CategoryIcon = category.key === "produce" ? Leaf : Package
+                return (
+                  <Button
+                    key={category.key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onJumpToCategory(category.key)}
+                    aria-label={`Jump to ${category.name}`}
+                    className="h-9 shrink-0 rounded-full border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 shadow-none hover:border-sage-300 hover:bg-sage-50 hover:text-primary md:h-10 md:px-4 md:text-sm"
+                  >
+                    <CategoryIcon className="mr-2 h-3.5 w-3.5 text-primary md:h-4 md:w-4" />
+                    {category.name}
+                    <span className="ml-2 rounded-full bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-500">
+                      {category.remainingCount}
+                    </span>
+                  </Button>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
   )
 }
 
@@ -961,8 +852,8 @@ export function ShoppingCategorySection({
   return (
     <Card
       className={cn(
-        "animate-fade-in overflow-hidden rounded-xl border border-stone-100 bg-white shadow-sm transition-all duration-200",
-        compact && "rounded-lg shadow-xs",
+        "animate-fade-in overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_10px_28px_rgba(63,52,43,0.06)] transition-all duration-200",
+        compact && "shadow-[0_9px_24px_rgba(63,52,43,0.055)] md:rounded-none md:border-0 md:shadow-none",
         isDragTarget && "border-2 border-dashed border-primary bg-primary/5"
       )}
     >
@@ -971,17 +862,20 @@ export function ShoppingCategorySection({
         tabIndex={0}
         aria-expanded={!isCollapsed}
         className={cn(
-          "flex cursor-pointer flex-row items-center justify-between border-b border-stone-100 bg-stone-50/50 transition-colors hover:bg-stone-100/50",
-          compact ? "px-3 py-2.5 md:px-4 md:py-3" : "px-4 py-3 md:px-6 md:py-4"
+          "flex cursor-pointer flex-row items-center justify-between bg-[#fcfbf8] transition-colors hover:bg-stone-100/70",
+          !isCollapsed && "border-b border-stone-100/80",
+          compact ? "px-4 py-3.5 md:px-6 md:py-4" : "px-4 py-3.5 md:px-6 md:py-4"
         )}
         onClick={onToggleCategory}
         onKeyDown={handleHeaderKeyDown}
       >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 pr-2">
-          <CategoryIcon className={cn("shrink-0 text-primary", compact ? "h-4 w-4" : "h-5 w-5")} />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sage-100 text-primary md:h-9 md:w-9">
+            <CategoryIcon className={cn(compact ? "h-4 w-4" : "h-5 w-5")} />
+          </span>
           <CardTitle className={cn(
-            "min-w-0 truncate font-display font-semibold uppercase tracking-wide text-foreground",
-            compact ? "text-xs md:text-sm" : "text-sm md:text-lg"
+            "min-w-0 truncate font-display font-semibold text-foreground",
+            compact ? "text-lg md:text-xl" : "text-lg md:text-xl"
           )}>
             {categoryData.name}
           </CardTitle>
@@ -990,11 +884,11 @@ export function ShoppingCategorySection({
               Custom
             </span>
           ) : null}
-          <span className="rounded-full bg-accent-green/20 px-2 py-0.5 text-[10px] font-medium uppercase tracking-tight text-primary">
+          <span className="rounded-full bg-accent-green/20 px-2.5 py-1 text-[11px] font-semibold text-primary">
             {remainingCount} left
           </span>
           {completedCount > 0 ? (
-            <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-tight text-stone-500">
+            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[10px] font-medium text-stone-500">
               {completedCount} done
             </span>
           ) : null}
@@ -1007,14 +901,14 @@ export function ShoppingCategorySection({
               onClick={handleBulkClick}
               disabled={isBulkCheckOffPending}
               className={cn(
-                "flex min-h-[36px] min-w-[36px] touch-manipulation items-center justify-center px-2 text-[10px] text-primary hover:bg-primary/10 md:min-h-0 md:min-w-0",
-                compact ? "h-9 min-w-[44px] md:h-7 md:min-w-[36px]" : "h-9 min-w-[44px] md:h-8"
+                "flex min-h-[40px] min-w-[44px] touch-manipulation items-center justify-center rounded-full px-2 text-xs text-primary hover:bg-primary/10",
+                compact ? "h-10 md:h-8" : "h-10 md:h-9"
               )}
               title={`Check all items in ${categoryData.name}`}
               aria-label={`Check all items in ${categoryData.name}`}
             >
-              <CheckCheck className="mr-1 h-4 w-4 shrink-0 md:h-3 md:w-3" />
-              <span>All</span>
+              <CheckCheck className="mr-1 h-4 w-4 shrink-0" />
+              <span>Check all</span>
             </Button>
           ) : null}
           <button

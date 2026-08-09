@@ -271,7 +271,8 @@ test.describe('Shopping List Mobile @extended', () => {
     await openShoppingFromBottomNav(page)
 
     await expect(page.getByTestId('shopping-progress-summary')).toBeVisible()
-    await expect(page.getByText(/^Progress$/i)).toBeVisible()
+    await expect(page.getByText(/left$/i).first()).toBeVisible()
+    await expect(page.getByText(/^Browse by section$/i)).toBeVisible()
     await expect(page.getByRole('button', { name: /^jump to pantry$/i })).toBeVisible()
 
     await page.getByRole('button', { name: /^hide \d+ done$/i }).click()
