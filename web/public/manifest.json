@@ -3,14 +3,22 @@
   "short_name": "Recipe Genie",
   "description": "Meal planning and recipe management made easy",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#faf8f4",
-  "theme_color": "#3d5a2e",
+  "background_color": "#F7F3EA",
+  "theme_color": "#2F4B34",
   "icons": [
     {
-      "src": "/favicon.ico",
-      "sizes": "any",
-      "type": "image/x-icon"
+      "src": "/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

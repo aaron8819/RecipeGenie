@@ -1,6 +1,7 @@
 "use client"
 
-import { LogOut, UtensilsCrossed, HelpCircle } from "lucide-react"
+import { LogOut, HelpCircle } from "lucide-react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { OnboardingDialog } from "./onboarding-dialog"
@@ -55,8 +56,18 @@ export function Header({
               className="flex items-center gap-2 flex-shrink-0 rounded-lg -m-1 p-1 text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               aria-label="Go to Planner"
             >
-              <div className="bg-primary p-2 rounded-lg flex-shrink-0">
-                <UtensilsCrossed className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
+                <Image
+                  src="/recipe-genie-mark-approved.png"
+                  alt=""
+                  width={27}
+                  height={32}
+                  className="h-8 w-auto"
+                  loading="eager"
+                  unoptimized
+                  aria-hidden="true"
+                  data-slot="recipe-genie-mark"
+                />
               </div>
               <h1 className="font-display text-xl sm:text-2xl text-primary flex-shrink-0">
                 Recipe Genie
