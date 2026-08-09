@@ -18,6 +18,7 @@ import {
 } from "./recipe-quantity"
 import {
   exclusionSemanticsMatch,
+  normalizeShoppingLiteralIdentity,
   pantrySemanticsSatisfy,
   resolveShoppingIngredientSemantics,
   shoppingExclusionFamily,
@@ -730,14 +731,65 @@ function primaryLegacyDisplayName(displayName: string): string {
   return displayName.split(/\s+\(or\s+/i, 1)[0].trim()
 }
 
-function uniqueRemappedKeys(keys: readonly string[]): string[] {
+function uniqueRemappedKeys(
+  keys: readonly string[],
+  remap: (key: string) => PurchaseKey = (key) =>
+    resolveShoppingIngredientSemantics({ item: key }).purchaseKey
+): string[] {
   const remapped: string[] = []
   for (const key of keys) {
-    const purchaseKey = resolveShoppingIngredientSemantics({ item: key })
-      .purchaseKey
+    const purchaseKey = remap(key)
     if (purchaseKey && !remapped.includes(purchaseKey)) remapped.push(purchaseKey)
   }
   return remapped
+}
+
+function legacyPreferencePurchaseKeys(
+  preferences: ShoppingDocumentV2['preferences']
+): Map<string, PurchaseKey> {
+  const categoriesByLiteralKey = new Map<string, Set<string>>()
+  const orderedLiteralKeys: string[] = []
+  const remember = (legacyKey: string, categoryKey: string) => {
+    const literalKey = normalizeShoppingLiteralIdentity(legacyKey)
+    if (!literalKey) return
+    if (!categoriesByLiteralKey.has(literalKey)) orderedLiteralKeys.push(literalKey)
+    const categories = categoriesByLiteralKey.get(literalKey) || new Set<string>()
+    categories.add(categoryKey)
+    categoriesByLiteralKey.set(literalKey, categories)
+  }
+
+  for (const [legacyKey, categoryKey] of Object.entries(
+    preferences.categoryByIngredient
+  )) remember(legacyKey, categoryKey)
+  for (const [categoryKey, order] of Object.entries(
+    preferences.ingredientOrderByCategory
+  )) {
+    for (const legacyKey of order) remember(legacyKey, categoryKey)
+  }
+
+  const literalsByCanonical = new Map<PurchaseKey, string[]>()
+  for (const literalKey of orderedLiteralKeys) {
+    const canonicalKey = resolveShoppingIngredientSemantics({ item: literalKey })
+      .purchaseKey
+    literalsByCanonical.set(canonicalKey, [
+      ...(literalsByCanonical.get(canonicalKey) || []),
+      literalKey,
+    ])
+  }
+
+  const purchaseKeyByLiteral = new Map<string, PurchaseKey>()
+  for (const [canonicalKey, literalKeys] of literalsByCanonical) {
+    const categories = new Set(literalKeys.flatMap((literalKey) =>
+      [...(categoriesByLiteralKey.get(literalKey) || [])]))
+    const hasConflict = literalKeys.length > 1 && categories.size > 1
+    for (const literalKey of literalKeys) {
+      purchaseKeyByLiteral.set(
+        literalKey,
+        hasConflict ? literalKey : canonicalKey
+      )
+    }
+  }
+  return purchaseKeyByLiteral
 }
 
 function stableJsonSignature(value: unknown): string {
@@ -758,8 +810,17 @@ export function upgradeShoppingDocumentV2(
   const validation = validateShoppingDocumentV2(value)
   if (!validation.ok) return validation
   const legacy = validation.document
+  const preferencePurchaseKeys = legacyPreferencePurchaseKeys(
+    legacy.preferences
+  )
+  const remapPreferenceKey = (legacyKey: string): PurchaseKey => {
+    const literalKey = normalizeShoppingLiteralIdentity(legacyKey)
+    return preferencePurchaseKeys.get(literalKey) ||
+      resolveShoppingIngredientSemantics({ item: legacyKey }).purchaseKey
+  }
 
   const semanticsByAggregate = new Map<string, ShoppingIngredientSemantics>()
+  const purchaseKeyByAggregate = new Map<string, PurchaseKey>()
   const candidateAggregateByLegacy = new Map<string, string>()
   for (const entry of Object.values(legacy.recipeEntries)) {
     for (const ingredient of entry.ingredients) {
@@ -770,11 +831,15 @@ export function upgradeShoppingDocumentV2(
         quantityKind: legacyQuantityKind(ingredient),
         fallbackCategoryKey: ingredient.defaultCategoryKey,
       })
+      const purchaseKey = preferencePurchaseKeys.get(
+        normalizeShoppingLiteralIdentity(ingredient.ingredientKey)
+      ) || semantics.purchaseKey
       semanticsByAggregate.set(ingredient.aggregateKey, semantics)
+      purchaseKeyByAggregate.set(ingredient.aggregateKey, purchaseKey)
       candidateAggregateByLegacy.set(
         ingredient.aggregateKey,
         createShoppingAggregateKey(
-          semantics.purchaseKey,
+          purchaseKey,
           legacyAggregateDiscriminator(ingredient.aggregateKey)
         )
       )
@@ -794,11 +859,10 @@ export function upgradeShoppingDocumentV2(
       stableJsonSignature(legacy.itemOverrides[legacyKey] || {})))
     if (overrideSignatures.size <= 1) continue
     for (const legacyKey of legacyKeys) {
-      const semantics = semanticsByAggregate.get(legacyKey)!
       aggregateByLegacy.set(
         legacyKey,
         createShoppingAggregateKey(
-          semantics.purchaseKey,
+          purchaseKeyByAggregate.get(legacyKey)!,
           ['legacy-conflict', legacyKey]
         )
       )
@@ -810,6 +874,7 @@ export function upgradeShoppingDocumentV2(
       ...entry,
       ingredients: entry.ingredients.map((ingredient): ShoppingRecipeIngredientV2 => {
         const semantics = semanticsByAggregate.get(ingredient.aggregateKey)!
+        const purchaseKey = purchaseKeyByAggregate.get(ingredient.aggregateKey)!
         const alternateKeys = ingredient.pantryMatchKeys.flatMap((key) => {
           const legacyKey = resolveShoppingIngredientSemantics({ item: key })
             .purchaseKey
@@ -817,9 +882,11 @@ export function upgradeShoppingDocumentV2(
         })
         const displayAlternatives = [...new Set(alternateKeys)]
         return {
-          purchaseKey: semantics.purchaseKey,
+          purchaseKey,
           aggregateKey: aggregateByLegacy.get(ingredient.aggregateKey)!,
-          displayName: displayAlternatives.length > 0
+          displayName: purchaseKey !== semantics.purchaseKey
+            ? primaryLegacyDisplayName(ingredient.displayName)
+            : displayAlternatives.length > 0
             ? `${semantics.purchaseName} (or ${displayAlternatives.join(', ')})`
             : semantics.purchaseName,
           quantity: ingredient.quantity,
@@ -829,6 +896,7 @@ export function upgradeShoppingDocumentV2(
           quantityKind: semantics.quantityKind,
           defaultCategoryKey: semantics.defaultCategoryKey,
           pantryMatchKeys: [...new Set([
+            purchaseKey,
             ...semantics.pantryMatchKeys,
             ...alternateKeys,
           ])],
@@ -850,8 +918,7 @@ export function upgradeShoppingDocumentV2(
   for (const [legacyKey, categoryKey] of Object.entries(
     legacy.preferences.categoryByIngredient
   )) {
-    const purchaseKey = resolveShoppingIngredientSemantics({ item: legacyKey })
-      .purchaseKey
+    const purchaseKey = remapPreferenceKey(legacyKey)
     if (purchaseKey && categoryByIngredient[purchaseKey] === undefined) {
       categoryByIngredient[purchaseKey] = categoryKey
     }
@@ -862,7 +929,7 @@ export function upgradeShoppingDocumentV2(
   for (const [categoryKey, order] of Object.entries(
     legacy.preferences.ingredientOrderByCategory
   )) {
-    for (const purchaseKey of uniqueRemappedKeys(order)) {
+    for (const purchaseKey of uniqueRemappedKeys(order, remapPreferenceKey)) {
       if (seenOrderingKeys.has(purchaseKey)) continue
       seenOrderingKeys.add(purchaseKey)
       ingredientOrderByCategory[categoryKey] = [
@@ -882,7 +949,8 @@ export function upgradeShoppingDocumentV2(
       categoryByIngredient,
       ingredientOrderByCategory,
       excludedIngredientKeys: uniqueRemappedKeys(
-        legacy.preferences.excludedIngredientKeys
+        legacy.preferences.excludedIngredientKeys,
+        remapPreferenceKey
       ),
     },
   })

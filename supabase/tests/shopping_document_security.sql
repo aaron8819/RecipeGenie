@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(22);
+select extensions.plan(24);
 
 insert into auth.users(id, email) values
   ('31000000-0000-4000-8000-000000000001', 'shopping-a@example.test'),
@@ -18,18 +18,26 @@ select set_config('request.jwt.claim.sub', '31000000-0000-4000-8000-000000000001
 select extensions.is((select count(*)::integer from public.shopping_list), 1, 'RLS exposes only the owned document');
 select extensions.is((select content_revision from public.shopping_list), 0::bigint, 'new documents start at revision zero');
 select extensions.ok(
-  (select public.is_shopping_document_v3(document) from public.shopping_list),
-  'new documents use the strict V3 shape'
+  (select public.is_shopping_document_v2(document) from public.shopping_list),
+  'compatibility-phase defaults remain V2 for the old application'
+);
+select extensions.ok(
+  (select not public.is_shopping_document_v3(document) from public.shopping_list),
+  'compatibility-phase defaults do not expose V3 to the old application'
 );
 select extensions.ok(public.is_shopping_document_v2(
   '{"schemaVersion":2,"recipeEntries":{},"manualItems":[],"itemOverrides":{},"preferences":{"categoryByIngredient":{},"customCategories":[],"categoryOrder":[],"ingredientOrderByCategory":{},"excludedIngredientKeys":[],"excludeSaltVariants":false,"excludeBlackPepperVariants":false}}'::jsonb
 ), 'V2 remains valid during lazy application upgrade');
 select extensions.lives_ok($$
   update public.shopping_list set
-    document = jsonb_set(document, '{manualItems}', '[{"id":"manual-a","displayName":"apples","quantity":null,"categoryKey":"produce","bucket":"items","checked":false}]'::jsonb),
+    document = '{"schemaVersion":3,"recipeEntries":{},"manualItems":[{"id":"manual-a","displayName":"apples","quantity":null,"categoryKey":"produce","bucket":"items","checked":false}],"itemOverrides":{},"preferences":{"categoryByIngredient":{},"customCategories":[],"categoryOrder":[],"ingredientOrderByCategory":{},"excludedIngredientKeys":[],"excludeSaltVariants":false,"excludeBlackPepperVariants":false}}'::jsonb,
     content_revision = 1
   where user_id = auth.uid() and content_revision = 0
-$$, 'an owned exact-revision write succeeds');
+$$, 'the new application can lazily replace V2 with V3');
+select extensions.ok(
+  (select public.is_shopping_document_v3(document) from public.shopping_list),
+  'the compatibility schema accepts V3 application writes'
+);
 select extensions.is((select content_revision from public.shopping_list), 1::bigint, 'a write advances the revision once');
 select extensions.throws_ok($$ update public.shopping_list set content_revision = 3 where user_id = auth.uid() $$,
   '40001', 'Shopping content revision must advance exactly once', 'skipped revisions reject');

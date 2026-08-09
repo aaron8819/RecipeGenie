@@ -96,6 +96,28 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
   })
 
   it.each([
+    ['paprika', 'smoked', 'smoked paprika'],
+    ['oregano', 'dried', 'dried oregano'],
+    ['yogurt', 'Greek', 'greek yogurt'],
+    ['chicken breast', 'boneless', 'boneless chicken breast'],
+    ['mystery leaves', 'ceremonial', 'ceremonial mystery leaves'],
+  ])('preserves purchase-significant modifier %s + %s', (
+    item,
+    modifier,
+    expected
+  ) => {
+    expect(semantics(item, '', modifier).purchaseKey).toBe(expected)
+    expect(semantics(item).purchaseKey).not.toBe(expected)
+  })
+
+  it('still extracts explicitly approved structured preparation', () => {
+    expect(semantics('cilantro', '', 'chopped')).toMatchObject({
+      purchaseKey: 'cilantro',
+      preparation: ['chopped'],
+    })
+  })
+
+  it.each([
     ['oregano', 'dried oregano', true],
     ['cumin', 'ground cumin', true],
     ['oregano', 'Mexican oregano', false],
@@ -121,6 +143,9 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     ['olive oil', 'extra-virgin olive oil', false],
     ['garlic', 'garlic powder', false],
     ['pepper', 'black pepper', false],
+    ['rice', 'cauliflower rice', false],
+    ['rice', 'broccoli rice', false],
+    ['rice', 'fried rice', false],
   ])('matches Pantry %s to %s = %s', (owned, needed, expected) => {
     expect(pantrySemanticsSatisfy(semantics(owned), semantics(needed))).toBe(
       expected
@@ -366,6 +391,20 @@ describe('ShoppingDocumentV2 to V3 upgrade', () => {
     } as unknown as ShoppingDocumentV2
   }
 
+  function legacyPreferenceDocument(
+    categoryByIngredient: Record<string, string>,
+    ingredientOrderByCategory: Record<string, string[]>
+  ): ShoppingDocumentV2 {
+    const document = legacyCollisionDocument(
+      { checked: false },
+      { checked: false }
+    )
+    document.itemOverrides = {}
+    document.preferences.categoryByIngredient = categoryByIngredient
+    document.preferences.ingredientOrderByCategory = ingredientOrderByCategory
+    return document
+  }
+
   it('recomputes semantic keys and remaps reusable preferences', () => {
     const legacy = {
       ...createEmptyShoppingDocument(),
@@ -451,5 +490,81 @@ describe('ShoppingDocumentV2 to V3 upgrade', () => {
     expect(Object.values(upgraded.document.itemOverrides)).toEqual(
       expect.arrayContaining([{ checked: true }, { checked: false }])
     )
+  })
+
+  it('deduplicates identical remapped category preferences safely', () => {
+    const upgraded = upgradeShoppingDocumentV2(legacyPreferenceDocument(
+      { cilantro: 'produce', 'fresh cilantro': 'produce' },
+      {}
+    ))
+    expect(upgraded.ok).toBe(true)
+    if (!upgraded.ok) return
+
+    expect(upgraded.document.preferences.categoryByIngredient).toEqual({
+      cilantro: 'produce',
+    })
+  })
+
+  it('preserves conflicting remapped category preferences', () => {
+    const upgraded = upgradeShoppingDocumentV2(legacyPreferenceDocument(
+      { cilantro: 'pantry', 'fresh cilantro': 'produce' },
+      {}
+    ))
+    expect(upgraded.ok).toBe(true)
+    if (!upgraded.ok) return
+
+    expect(upgraded.document.preferences.categoryByIngredient).toEqual({
+      cilantro: 'pantry',
+      'fresh cilantro': 'produce',
+    })
+  })
+
+  it('deduplicates same-category ordering entries in first-seen order', () => {
+    const upgraded = upgradeShoppingDocumentV2(legacyPreferenceDocument(
+      {},
+      { produce: ['fresh cilantro', 'cilantro'] }
+    ))
+    expect(upgraded.ok).toBe(true)
+    if (!upgraded.ok) return
+
+    expect(upgraded.document.preferences.ingredientOrderByCategory).toEqual({
+      produce: ['cilantro'],
+    })
+  })
+
+  it('preserves cross-category ordering conflicts', () => {
+    const upgraded = upgradeShoppingDocumentV2(legacyPreferenceDocument(
+      {},
+      {
+        produce: ['fresh cilantro'],
+        pantry: ['cilantro'],
+      }
+    ))
+    expect(upgraded.ok).toBe(true)
+    if (!upgraded.ok) return
+
+    expect(upgraded.document.preferences.ingredientOrderByCategory).toEqual({
+      produce: ['fresh cilantro'],
+      pantry: ['cilantro'],
+    })
+  })
+
+  it('keeps conflicting collapsed recipe identities distinguishable', () => {
+    const upgraded = upgradeShoppingDocumentV2(legacyPreferenceDocument(
+      { cilantro: 'pantry', 'fresh cilantro': 'produce' },
+      {
+        pantry: ['cilantro'],
+        produce: ['fresh cilantro'],
+      }
+    ))
+    expect(upgraded.ok).toBe(true)
+    if (!upgraded.ok) return
+
+    const ingredients = Object.values(upgraded.document.recipeEntries)
+      .map((entry) => entry.ingredients[0])
+    expect(new Set(ingredients.map((ingredient) => ingredient.purchaseKey)))
+      .toEqual(new Set(['cilantro', 'fresh cilantro']))
+    expect(new Set(ingredients.map((ingredient) => ingredient.aggregateKey)).size)
+      .toBe(2)
   })
 })

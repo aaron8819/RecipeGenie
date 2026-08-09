@@ -144,6 +144,18 @@ const PREPARATION_WORDS = new Set([
   'zested',
 ])
 
+const STRUCTURED_PREPARATION_MODIFIERS = new Set([
+  ...PREPARATION_WORDS,
+  'divided',
+  'drained',
+  'for garnish',
+  'for serving',
+  'for topping',
+  'rinsed',
+  'softened',
+  'thinly sliced',
+])
+
 const DISPLAY_PLURALS: Record<string, string> = {
   apple: 'apples',
   banana: 'bananas',
@@ -217,6 +229,16 @@ const BLACK_PEPPER_PURCHASE_KEYS = new Set([
   'cracked black pepper',
 ])
 
+const RICE_PURCHASE_KEYS = new Set([
+  'rice',
+  'arborio rice',
+  'basmati rice',
+  'brown rice',
+  'jasmine rice',
+  'long grain rice',
+  'white rice',
+])
+
 function normalizeText(value: string): string {
   return value
     .normalize('NFKC')
@@ -268,17 +290,25 @@ function canonicalizeControlledNoun(value: string): string {
   return words.join(' ')
 }
 
+export function normalizeShoppingLiteralIdentity(value: string): string {
+  return canonicalizeControlledNoun(normalizeText(value))
+}
+
 function collectModifierPreparation(
   modifier: string | null | undefined,
   preparation: Set<string>
-): void {
-  if (!modifier) return
+): string[] {
+  if (!modifier) return []
+  const identityModifiers: string[] = []
   for (const part of modifier.split(',').map(normalizeText).filter(Boolean)) {
     if (part === 'optional') continue
-    if (PREPARATION_WORDS.has(part) || part === 'to taste') {
+    if (STRUCTURED_PREPARATION_MODIFIERS.has(part)) {
       preparation.add(part)
+    } else {
+      identityModifiers.push(part)
     }
   }
+  return identityModifiers
 }
 
 function stripGenericPreparation(
@@ -320,13 +350,43 @@ export function resolveShoppingIngredientSemantics(
   input: ShoppingIngredientSemanticsInput
 ): ShoppingIngredientSemantics {
   const preparation = new Set<string>()
-  collectModifierPreparation(input.modifier, preparation)
+  const identityModifiers = collectModifierPreparation(
+    input.modifier,
+    preparation
+  )
 
   let purchaseUnit = normalizeShoppingUnit(input.unit || '')
   let purchaseName = stripGenericPreparation(
-    canonicalizeControlledNoun(normalizeText(input.item)),
+    normalizeShoppingLiteralIdentity(input.item),
     preparation
   )
+
+  const remainingIdentityModifiers = identityModifiers.filter((modifier) => {
+    if (modifier === 'fresh' && purchaseName === 'cilantro') {
+      preparation.add('fresh')
+      return false
+    }
+    if (modifier === 'ground' &&
+        (purchaseName === 'cumin' || purchaseName === 'coriander')) {
+      preparation.add('ground')
+      return false
+    }
+    if ((modifier === 'cooked' || modifier === 'day old') &&
+        RICE_PURCHASE_KEYS.has(purchaseName)) {
+      preparation.add(modifier === 'day old' ? 'day-old' : modifier)
+      return false
+    }
+    if (modifier === 'to taste' &&
+        (SALT_PURCHASE_KEYS.has(purchaseName) ||
+          BLACK_PEPPER_PURCHASE_KEYS.has(purchaseName))) {
+      preparation.add('to taste')
+      return false
+    }
+    return true
+  })
+  if (remainingIdentityModifiers.length > 0) {
+    purchaseName = `${remainingIdentityModifiers.join(' ')} ${purchaseName}`
+  }
 
   const legacyEggSize = /^(?:extra )?large$|^medium$|^small$/.test(purchaseUnit)
     ? purchaseUnit
@@ -352,19 +412,13 @@ export function resolveShoppingIngredientSemantics(
     purchaseName = 'cilantro'
   }
 
-  if (purchaseName.endsWith(' rice')) {
-    let previous = ''
-    while (purchaseName !== previous) {
-      previous = purchaseName
-      purchaseName = purchaseName
-        .replace(/^cooked /, '')
-        .replace(/^day old /, '')
-    }
-    if (previous !== normalizeText(input.item)) {
-      const original = normalizeText(input.item)
-      if (/\bcooked\b/.test(original)) preparation.add('cooked')
-      if (/\bday[ -]old\b/.test(original)) preparation.add('day-old')
-    }
+  const originalRiceName = purchaseName
+  const riceCandidate = purchaseName
+    .replace(/^(?:cooked |day old )+/, '')
+  if (RICE_PURCHASE_KEYS.has(riceCandidate)) {
+    purchaseName = riceCandidate
+    if (/\bcooked\b/.test(originalRiceName)) preparation.add('cooked')
+    if (/\bday[ -]old\b/.test(originalRiceName)) preparation.add('day-old')
   }
 
   if (/^ground (?:cumin|coriander)$/.test(purchaseName)) {
@@ -403,7 +457,7 @@ export function resolveShoppingIngredientSemantics(
   } else if (purchaseKey === 'cumin') {
     familyKey = 'cumin'
     familyMatchPolicy.exclusionEquivalent = true
-  } else if (purchaseKey === 'rice' || purchaseKey.endsWith(' rice')) {
+  } else if (RICE_PURCHASE_KEYS.has(purchaseKey)) {
     familyKey = 'rice'
     if (purchaseKey === 'rice') familyMatchPolicy.pantryFromGeneric = true
   }

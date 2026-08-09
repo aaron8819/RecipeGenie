@@ -1214,7 +1214,9 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
             "originalAmount": null,
             "originalItem": "fresh herbs",
             "originalUnit": "",
-            "preparationModifiers": undefined,
+            "preparationModifiers": [
+              "for garnish",
+            ],
             "recipeId": "missing-quantities-salad",
           },
         ],
@@ -2148,7 +2150,9 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
             "originalAmount": 2,
             "originalItem": "basil",
             "originalUnit": "tbsp",
-            "preparationModifiers": undefined,
+            "preparationModifiers": [
+              "for garnish",
+            ],
             "recipeId": "optional-garnishes-soup",
           },
         ],
@@ -2506,7 +2510,9 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
             "originalAmount": 2,
             "originalItem": "black beans",
             "originalUnit": "can",
-            "preparationModifiers": undefined,
+            "preparationModifiers": [
+              "drained",
+            ],
             "recipeId": "parenthetical-preparation",
           },
         ],

@@ -1,10 +1,10 @@
 # Shopping Domain Reference
 
-Shopping persistence is a single `ShoppingDocumentV3` JSON document per user,
-guarded by one `content_revision`. The document stores recipe inputs, manual
-items, explicit row overrides, and reusable Shopping preferences. Rendered
-`items`, `already_have`, and `excluded` rows are projections and are never
-persisted.
+Shopping persistence is a single versioned JSON document per user, guarded by
+one `content_revision`. The V3-capable application reads V2 or V3 and writes
+V3. The document stores recipe inputs, manual items, explicit row overrides,
+and reusable Shopping preferences. Rendered `items`, `already_have`, and
+`excluded` rows are projections and are never persisted.
 
 ## Key files
 
@@ -18,7 +18,7 @@ persisted.
 | `web/src/components/shopping/shopping-list.tsx` | Shopping UI orchestration and immediate inverse-write Undo UX. |
 | `supabase/migrations/018_shopping_document_cutover.sql` | Atomic legacy conversion and physical schema cutover. |
 | `supabase/migrations/019_personalized_shopping_order.sql` | V1-to-V2 conversion and strict personalized-order persistence. |
-| `supabase/migrations/020_shopping_document_v3.sql` | V2/V3 compatibility validation and V3 defaults for lazy application upgrades. |
+| `supabase/migrations/020_shopping_document_v3.sql` | V2/V3 compatibility validation and Pantry bridge support while retaining the V2 database default. |
 
 ## Persistence contract
 
@@ -62,7 +62,22 @@ V3 persists purchase and family semantics separately. Purchase identity drives
 aggregation and ordering; explicitly directional family policy drives Pantry
 and exclusion compatibility. V2 documents upgrade in memory on read and are
 written back as V3 on the next normal mutation. The database accepts both
-versions during that lazy transition and defaults new rows to V3.
+versions during that lazy transition and continues defaulting new rows to V2.
+
+## V3 rollout sequence
+
+Shopping V3 uses a phased rollout rather than an atomic app/schema assumption:
+
+1. Apply migration 020 while the prior application is live. It accepts V2 and
+   V3, updates the Pantry bridge, performs no document rewrite, and keeps the
+   V2 column default.
+2. Deploy the V2/V3-capable application. Reads of V2 upgrade in memory and the
+   next normal Shopping mutation writes V3.
+3. After the V3-capable application is confirmed live, a separate follow-up
+   migration/PR may change the database default to V3.
+
+Do not include the V3-default switch in the same migration batch as migration
+020. Before any V3 write, rollback to the prior application remains safe.
 
 Exact scalar discrete quantities are rounded up only after compatible recipe
 contributions aggregate. Structured ranges, packages, and source quantities

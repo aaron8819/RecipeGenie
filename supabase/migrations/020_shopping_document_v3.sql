@@ -1,5 +1,6 @@
 -- Add application-level ShoppingDocumentV3 while retaining V2 rows for
--- lossless, lazy upgrade by the application.
+-- lossless, lazy upgrade by the application. This compatibility phase keeps
+-- the V2 column default so the prior application remains safe during rollout.
 begin;
 
 create function public.is_shopping_document_v3(p_document jsonb)
@@ -129,8 +130,6 @@ alter table public.shopping_list
   drop constraint shopping_list_document_v2_check;
 
 alter table public.shopping_list
-  alter column document set default
-    '{"schemaVersion":3,"recipeEntries":{},"manualItems":[],"itemOverrides":{},"preferences":{"categoryByIngredient":{},"customCategories":[],"categoryOrder":[],"ingredientOrderByCategory":{},"excludedIngredientKeys":[],"excludeSaltVariants":false,"excludeBlackPepperVariants":false}}'::jsonb,
   add constraint shopping_list_document_v3_compatibility_check
     check (
       public.is_shopping_document_v2(document)

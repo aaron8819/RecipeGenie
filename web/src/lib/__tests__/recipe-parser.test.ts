@@ -942,6 +942,30 @@ describe('alternative ingredient detection (P2)', () => {
     );
   });
 
+  it('does not treat comma-delimited preparation as ingredient choices', () => {
+    const result = parseIngredientLine(
+      '1 can tomatoes, drained, chopped, or diced'
+    );
+
+    expect(result.item).toBe('tomatoes, drained, chopped, or diced');
+    expect(result.alternatives).toBeUndefined();
+  });
+
+  it('leaves ambiguous shared-noun comma choices conservatively unexpanded', () => {
+    const result = parseIngredientLine('1 cup red, white, or black beans');
+
+    expect(result.item).toBe('red, white, or black beans');
+    expect(result.alternatives).toBeUndefined();
+  });
+
+  it('preserves ordinary multi-word comma descriptions', () => {
+    const result = parseIngredientLine('1 cup tomato and basil sauce, divided');
+
+    expect(result.item).toBe('tomato and basil sauce');
+    expect(result.modifier).toBe('divided');
+    expect(result.alternatives).toBeUndefined();
+  });
+
   it('preserves the shared suffix for cheese alternatives', () => {
     const result = parseIngredientLine(
       '½ cup shredded Mexican-blend or sharp cheddar cheese'

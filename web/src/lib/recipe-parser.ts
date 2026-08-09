@@ -1518,12 +1518,15 @@ function extractAlternatives(item: string): { item: string; alternatives?: strin
 
   const commaChoices = item.split(/\s*,\s*/).map((choice) =>
     choice.replace(/^or\s+/i, '').trim()).filter(Boolean)
-  if (commaChoices.length >= 3 && /,\s*or\s+/i.test(item)) {
+  const hasCommaChoiceSyntax = /,\s*or\s+/i.test(item)
+  if (commaChoices.length >= 3 && hasCommaChoiceSyntax &&
+      /^other\s+\S+/i.test(commaChoices.at(-1) || '')) {
     return {
       item: commaChoices[0],
       alternatives: commaChoices.slice(1),
     }
   }
+  if (hasCommaChoiceSyntax) return { item }
 
   const alternativeMatch = item.match(/^(.+?)\s+\bor\b\s+(.+)$/i)
   if (!alternativeMatch) {

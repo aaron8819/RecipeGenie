@@ -2,7 +2,7 @@
 
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
-*Last updated: 2026-08-07*
+*Last updated: 2026-08-09*
 
 This document describes the complete database schema for the Recipe Genie application.
 
@@ -100,8 +100,9 @@ Archived files are not replacement migrations and are not part of that chain.
   into reusable ingredient-key sequences, and removes row references as a
   durable ordering authority.
 - Migration `020` adds strict V3 ingredient-semantics validation while retaining
-  V2 rows for lossless, lazy application upgrades and defaulting new documents
-  to V3.
+  V2 rows and the V2 database default for a safe, phased application upgrade.
+  A later, separate migration may switch the default after the V3-capable
+  application is confirmed live.
 
 Stage 3 physical-key promotion and compatibility removal are not complete.
 
@@ -279,14 +280,14 @@ are not persisted.
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `user_id` | UUID | PRIMARY KEY, FOREIGN KEY → `auth.users(id)` ON DELETE CASCADE | Owner of the shopping list |
-| `document` | JSONB | NOT NULL, validated as `ShoppingDocumentV2` or `ShoppingDocumentV3` during lazy upgrade; defaults to V3 | Recipe entries, manual items, explicit overrides, semantic keys, and reusable Shopping preferences |
+| `document` | JSONB | NOT NULL, validated as `ShoppingDocumentV2` or `ShoppingDocumentV3` during lazy upgrade; compatibility-phase default is V2 | Recipe entries, manual items, explicit overrides, semantic keys, and reusable Shopping preferences |
 | `content_revision` | BIGINT | NOT NULL, DEFAULT 0 | Compare-and-swap revision; every write advances exactly once |
 | `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last successful document write |
 
 **Document outline:**
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 2,
   "recipeEntries": {},
   "manualItems": [],
   "itemOverrides": {},
@@ -309,6 +310,9 @@ in `ingredientOrderByCategory` as globally unique purchase-key sequences.
 Recipe ingredients persist separate purchase and family keys plus explicit
 Pantry/exclusion policy. Existing V2 rows remain valid until the application
 upgrades them on a normal write; no migration rewrites stored user documents.
+The application creates and writes V3 documents, while migration 020 retains
+the V2 database default so the prior application remains compatible during the
+schema-first rollout.
 
 ### recipe_shares
 
@@ -637,7 +641,7 @@ The repository now uses a baseline-first bootstrap strategy:
 17. **017_remove_legacy_recipe_structure.sql** - Removed the frozen recipe structure columns and migration-only converters after the section-only cutover, preserving canonical content and validators.
 18. **018_shopping_document_cutover.sql** - Atomically converted Shopping state to `ShoppingDocumentV1`, installed the single-revision CAS contract and Pantry bridge, and removed contribution-era tables, columns, RPCs, and Shopping fields from `user_config`.
 19. **019_personalized_shopping_order.sql** - Upgraded Shopping state to `ShoppingDocumentV2`, seeded reusable ingredient order from V1 row order plus deterministic fallback, absorbed derived category overrides, and installed strict V2 validation.
-20. **020_shopping_document_v3.sql** - Added strict V3 semantic validation, preserved V2 compatibility for lazy upgrades, defaulted new Shopping rows to V3, and updated the Pantry bridge to accept either version.
+20. **020_shopping_document_v3.sql** - Added strict V3 semantic validation, preserved V2 compatibility and the V2 database default for a schema-first rollout, and updated the Pantry bridge to accept either version.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
