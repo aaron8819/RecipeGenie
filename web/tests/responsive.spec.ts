@@ -197,14 +197,14 @@ test.describe('Responsive contracts @extended', () => {
     await navigateToRoute('shopping')
     await dismissNextDevTools(page)
 
-    const summary = page.getByTestId('shopping-progress-mobile')
+    const summary = page.getByTestId('shopping-progress-summary')
     if (await summary.isVisible().catch(() => false)) {
       const box = await summary.boundingBox()
       expect(box).not.toBeNull()
-      expect(box!.height).toBeLessThanOrEqual(140)
+      expect(box!.height).toBeLessThanOrEqual(280)
       expect(box!.x).toBeGreaterThanOrEqual(0)
       expect(box!.x + box!.width).toBeLessThanOrEqual(VIEWPORTS.mobile.width)
-      await expect(summary.getByRole('button', { name: 'Jump to shopping section' })).toBeVisible()
+      await expect(summary.getByRole('button', { name: /^Jump to / }).first()).toBeVisible()
     }
   })
 })

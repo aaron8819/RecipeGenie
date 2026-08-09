@@ -160,6 +160,13 @@ function toggleCategory(categoryKey: string) {
   fireEvent.click(within(section).getByRole("button", { name: label }))
 }
 
+function chooseRowAction(name: string, rowIndex = 0) {
+  fireEvent.pointerDown(
+    screen.getAllByRole("button", { name: "Item actions" })[rowIndex]
+  )
+  fireEvent.click(screen.getByRole("menuitem", { name }))
+}
+
 function setMobileViewport() {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -927,7 +934,8 @@ describe("ShoppingListView orchestration", () => {
     })
   })
 
-  it("collapses recipe context by default so the shopping rows stay near the top", () => {
+  it("keeps collapsed recipe context after the ingredient categories on mobile", () => {
+    setMobileViewport()
     currentShoppingList = makeList({
       items: [
         makeItem("apples", { sources: [{ recipeName: "Stew" }] }),
@@ -937,7 +945,13 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    expect(screen.getByText("Recipes in list")).toBeInTheDocument()
+    const recipeContext = screen.getByTestId("shopping-recipe-context")
+    const pantryCategory = screen.getByTestId("shopping-category-pantry")
+    expect(recipeContext).toBeInTheDocument()
+    expect(
+      pantryCategory.compareDocumentPosition(recipeContext) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).not.toBe(0)
     expect(screen.queryByRole("button", { name: "Remove all items from Stew" })).not.toBeInTheDocument()
 
     act(() => {
@@ -946,6 +960,18 @@ describe("ShoppingListView orchestration", () => {
 
     expect(screen.getByRole("button", { name: "Remove all items from Stew" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Hide recipes in list" })).toBeInTheDocument()
+  })
+
+  it("keeps desktop recipe context expanded in the secondary sidebar", () => {
+    currentShoppingList = makeList({
+      items: [makeItem("apples", { sources: [{ recipeName: "Stew" }] })],
+    })
+
+    renderShoppingList()
+
+    expect(screen.getByTestId("shopping-recipe-context")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Remove all items from Stew" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Show recipes in list" })).not.toBeInTheDocument()
   })
 
   it("keeps completed categories below active ones in shopping mode", () => {
@@ -958,9 +984,11 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    const categoryTitles = screen
-      .getAllByText(/Fresh Produce|Dairy/i)
-      .map((node) => node.textContent)
+    const categoryTitles = ["produce", "dairy"].map((categoryKey) =>
+      within(screen.getByTestId(`shopping-category-${categoryKey}`))
+        .getByRole("heading")
+        .textContent
+    )
 
     expect(categoryTitles[0]).toMatch(/Fresh Produce/i)
     expect(categoryTitles[1]).toMatch(/Dairy/i)
@@ -996,7 +1024,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    expect(screen.getByText("67% done")).toBeInTheDocument()
+    expect(screen.getByLabelText("67% complete")).toBeInTheDocument()
     expect(screen.getByText("bananas")).toBeInTheDocument()
     expect(screen.getByText(/Dairy/i)).toBeInTheDocument()
 
@@ -1034,8 +1062,7 @@ describe("ShoppingListView orchestration", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Collapse category" })[1])
     expect(screen.queryByText("rice")).not.toBeInTheDocument()
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Jump to shopping section" }))
-    fireEvent.click(screen.getByRole("menuitem", { name: /Pantry/i }))
+    fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
 
     expect(screen.getByText("rice")).toBeInTheDocument()
     expect(scrollIntoView).toHaveBeenCalledWith({
@@ -1058,16 +1085,16 @@ describe("ShoppingListView orchestration", () => {
     expect(bulkMutationEvents).toEqual(["mutate", "optimistic"])
     expect(screen.getByText("All items checked!")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Complete Shopping" })).toBeInTheDocument()
-    expect(screen.getByText("0 left")).toBeInTheDocument()
-    expect(screen.getByText("2 done")).toBeInTheDocument()
+    expect(within(screen.getByTestId("shopping-progress-summary")).getByLabelText("0 left")).toBeInTheDocument()
+    expect(within(screen.getByTestId("shopping-progress-summary")).getByRole("button", { name: "Hide 2 done" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
 
     resolveNextBulkMutation()
 
     expect(bulkMutationEvents).toEqual(["mutate", "optimistic", "resolve"])
     expect(screen.getByText("All items checked!")).toBeInTheDocument()
-    expect(screen.getByText("0 left")).toBeInTheDocument()
-    expect(screen.getByText("2 done")).toBeInTheDocument()
+    expect(within(screen.getByTestId("shopping-progress-summary")).getByLabelText("0 left")).toBeInTheDocument()
+    expect(within(screen.getByTestId("shopping-progress-summary")).getByRole("button", { name: "Hide 2 done" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
   })
 
@@ -1078,9 +1105,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Remove from list" }))
-    })
+    chooseRowAction("Remove from list")
 
     expect(screen.queryByText("garlic")).not.toBeInTheDocument()
     expect(screen.queryByText("Fresh Produce")).not.toBeInTheDocument()
@@ -1090,7 +1115,7 @@ describe("ShoppingListView orchestration", () => {
       fireEvent.click(screen.getByRole("button", { name: "Undo" }))
     })
 
-    expect(screen.getByText("Fresh Produce")).toBeInTheDocument()
+    expect(within(screen.getByTestId("shopping-category-produce")).getByRole("heading", { name: "Fresh Produce" })).toBeInTheDocument()
     expect(screen.getByText("garlic")).toBeInTheDocument()
     expect(removeItemMutate).toHaveBeenCalledWith(
       expect.objectContaining({ rowId: "manual:garlic" }),
@@ -1105,9 +1130,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Remove from list" }))
-    })
+    chooseRowAction("Remove from list")
 
     expect(screen.queryByText("garlic")).not.toBeInTheDocument()
 
@@ -1131,9 +1154,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Remove from list" }))
-    })
+    chooseRowAction("Remove from list")
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Dismiss" }))
@@ -1154,16 +1175,12 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    act(() => {
-      fireEvent.click(screen.getAllByRole("button", { name: "Remove from list" })[0])
-    })
+    chooseRowAction("Remove from list")
 
     expect(screen.getByRole("alert")).toHaveTextContent('"garlic" removed from list')
     expect(screen.queryByText("garlic")).not.toBeInTheDocument()
 
-    act(() => {
-      fireEvent.click(screen.getAllByRole("button", { name: "Remove from list" })[0])
-    })
+    chooseRowAction("Remove from list")
 
     expect(removeItemMutate).toHaveBeenCalledTimes(2)
     expect(screen.getByRole("alert")).toHaveTextContent('"garlic" removed from list')
@@ -1197,10 +1214,6 @@ describe("ShoppingListView orchestration", () => {
     })
 
     renderShoppingList()
-
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Show recipes in list" }))
-    })
 
     act(() => {
       fireEvent.click(screen.getAllByRole("button", { name: 'Remove all items from Stew' })[0])
@@ -1272,14 +1285,14 @@ describe("ShoppingListView orchestration", () => {
 
     expect(moveExcludedMutate).toHaveBeenCalledTimes(1)
     expect(screen.queryByText("Excluded")).not.toBeInTheDocument()
-    expect(screen.getByText("Fresh Produce")).toBeInTheDocument()
+    expect(within(screen.getByTestId("shopping-category-produce")).getByRole("heading", { name: "Fresh Produce" })).toBeInTheDocument()
     expectCategoryExpanded("produce", true)
     expect(screen.getAllByText("cilantro")).toHaveLength(1)
     expect(screen.getByRole("alert")).toHaveTextContent('Restored "cilantro" to shopping list')
 
     resolveNextExcludedMove()
 
-    expect(screen.getByText("Fresh Produce")).toBeInTheDocument()
+    expect(within(screen.getByTestId("shopping-category-produce")).getByRole("heading", { name: "Fresh Produce" })).toBeInTheDocument()
     expect(screen.getAllByText("cilantro")).toHaveLength(1)
   })
 
@@ -1396,7 +1409,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit item" }))
+    chooseRowAction("Edit item")
     expect(screen.getByText("Edit manual item")).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText("Manual item name"), {
@@ -1442,7 +1455,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Edit item" })[0])
+    chooseRowAction("Edit item")
     fireEvent.change(screen.getByLabelText("Manual item name"), {
       target: { value: "milk" },
     })
