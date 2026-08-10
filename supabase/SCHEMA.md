@@ -65,9 +65,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/018_shopping_document_cutover.sql`
 - `supabase/migrations/019_personalized_shopping_order.sql`
 - `supabase/migrations/020_shopping_document_v3.sql`
+- `supabase/migrations/021_fix_shopping_v3_family_policy_validation.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 20 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 21 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -312,7 +313,9 @@ Pantry/exclusion policy. Existing V2 rows remain valid until the application
 upgrades them on a normal write; no migration rewrites stored user documents.
 The application creates and writes V3 documents, while migration 020 retains
 the V2 database default so the prior application remains compatible during the
-schema-first rollout.
+schema-first rollout. Migration 021 corrects the V3 family-policy key check so
+non-empty V3 recipe entries validate without changing that default or rewriting
+stored documents.
 
 ### recipe_shares
 
@@ -642,11 +645,12 @@ The repository now uses a baseline-first bootstrap strategy:
 18. **018_shopping_document_cutover.sql** - Atomically converted Shopping state to `ShoppingDocumentV1`, installed the single-revision CAS contract and Pantry bridge, and removed contribution-era tables, columns, RPCs, and Shopping fields from `user_config`.
 19. **019_personalized_shopping_order.sql** - Upgraded Shopping state to `ShoppingDocumentV2`, seeded reusable ingredient order from V1 row order plus deterministic fallback, absorbed derived category overrides, and installed strict V2 validation.
 20. **020_shopping_document_v3.sql** - Added strict V3 semantic validation, preserved V2 compatibility and the V2 database default for a schema-first rollout, and updated the Pantry bridge to accept either version.
+21. **021_fix_shopping_v3_family_policy_validation.sql** - Corrected operator grouping in the V3 family-policy key validator so non-empty V3 documents persist while retaining the approved V2/V3 contract and V2 default.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `020`. The archived pre-baseline sequence is not replayed.
+  migration through `021`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -900,7 +904,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 020, and the
+instructions. The current authoritative chain ends at migration 021, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

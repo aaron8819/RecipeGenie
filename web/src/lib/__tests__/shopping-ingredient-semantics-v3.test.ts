@@ -4,6 +4,7 @@ import {
   createEmptyShoppingDocument,
   projectShoppingDocument,
   upgradeShoppingDocumentV2,
+  validateShoppingDocumentV3,
   type ShoppingDocumentV2,
   type ShoppingDocumentV3,
   type ShoppingRecipeIngredientV2,
@@ -404,6 +405,67 @@ describe('ShoppingDocumentV2 to V3 upgrade', () => {
     document.preferences.ingredientOrderByCategory = ingredientOrderByCategory
     return document
   }
+
+  function productionPersistenceRegressionDocument(): ShoppingDocumentV2 {
+    const empty = createEmptyShoppingDocument()
+    const ingredientOrderByCategory: Record<string, string[]> = {}
+    const recipeEntries = Object.fromEntries(Array.from({ length: 4 }, (_, recipeIndex) => {
+      const recipeId = `recipe-${recipeIndex + 1}`
+      const ingredients = Array.from({ length: 24 }, (_, ingredientIndex) => {
+        const absoluteIndex = (recipeIndex * 24) + ingredientIndex + 1
+        const key = `anonymized-item-${absoluteIndex}`
+        const categoryKey = `category-${((absoluteIndex - 1) % 5) + 1}`
+        ingredientOrderByCategory[categoryKey] = [
+          ...(ingredientOrderByCategory[categoryKey] || []),
+          key,
+        ]
+        return legacyIngredient(key)
+      })
+      return [recipeId, {
+        recipeId,
+        recipeName: `Anonymized production recipe ${recipeIndex + 1}`,
+        selectedServings: recipeIndex + 1,
+        scaleV1: { numerator: String(recipeIndex + 1), denominator: '1' },
+        ingredients,
+      }]
+    }))
+
+    return {
+      ...empty,
+      schemaVersion: 2,
+      recipeEntries,
+      manualItems: [{
+        id: 'manual-production-shape',
+        displayName: 'Anonymized manual item',
+        quantity: null,
+        categoryKey: 'category-1',
+        bucket: 'items',
+        checked: false,
+      }],
+      preferences: {
+        ...empty.preferences,
+        ingredientOrderByCategory,
+      },
+    } as ShoppingDocumentV2
+  }
+
+  it('upgrades and serializes the exact production persistence shape', () => {
+    const upgraded = upgradeShoppingDocumentV2(
+      productionPersistenceRegressionDocument()
+    )
+    expect(upgraded.ok).toBe(true)
+    if (!upgraded.ok) return
+
+    const serialized = JSON.parse(JSON.stringify(upgraded.document))
+    expect(validateShoppingDocumentV3(serialized).ok).toBe(true)
+    expect(Object.keys(serialized.recipeEntries)).toHaveLength(4)
+    expect(Object.values(serialized.recipeEntries).flatMap(
+      (entry) => (entry as ShoppingDocumentV3['recipeEntries'][string]).ingredients
+    )).toHaveLength(96)
+    expect(serialized.manualItems).toHaveLength(1)
+    expect(Object.keys(serialized.preferences.ingredientOrderByCategory))
+      .toHaveLength(5)
+  })
 
   it('recomputes semantic keys and remaps reusable preferences', () => {
     const legacy = {
