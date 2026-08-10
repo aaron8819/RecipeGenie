@@ -341,8 +341,8 @@ function ExcludedIngredientsPanel({
                     id="exclude-salt-variants-description"
                     className="text-xs text-muted-foreground"
                   >
-                    Salt variants include salt, kosher salt, sea salt, and table
-                    salt.
+                    Salt variants include salt, kosher salt, sea salt, Maldon
+                    salt, and table salt.
                   </p>
                 </div>
               </div>
@@ -382,13 +382,13 @@ function ExcludedIngredientsPanel({
 
         <div className="my-5 border-t border-border-muted" />
 
-        <section aria-labelledby="exact-exclusions-heading">
-          <h3 id="exact-exclusions-heading" className="mb-1 text-sm font-semibold">
-            Exact exclusions
+        <section aria-labelledby="excluded-ingredients-heading">
+          <h3 id="excluded-ingredients-heading" className="mb-1 text-sm font-semibold">
+            Excluded ingredients
           </h3>
           <p className="mb-4 text-xs text-muted-foreground">
-            Matches a whole normalized ingredient name and does not perform
-            substring matching.
+            Matches the same grocery item and a few safe common forms. It never
+            uses substring matching.
           </p>
           <form onSubmit={onSubmit} className="mb-4 flex gap-2">
             <Input

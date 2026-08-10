@@ -1,4 +1,8 @@
 import type { Ingredient } from "@/types/database"
+import {
+  resolveShoppingIngredientSemantics,
+  shoppingExclusionFamily,
+} from './shopping-ingredient-semantics'
 
 export type IngredientExclusionFamily = "salt" | "black-pepper"
 
@@ -12,20 +16,6 @@ export const INGREDIENT_EXCLUSION_REASONS = {
   "black-pepper": "Black pepper variants",
 } as const satisfies Record<IngredientExclusionFamily, string>
 
-const FAMILY_ALIASES: Record<IngredientExclusionFamily, ReadonlySet<string>> = {
-  salt: new Set(["salt", "kosher salt", "sea salt", "table salt"]),
-  "black-pepper": new Set([
-    "black pepper",
-    "ground black pepper",
-    "freshly ground black pepper",
-    "cracked black pepper",
-  ]),
-}
-
-function normalizeStructuredText(value: string): string {
-  return value.trim().replace(/\s+/g, " ").toLowerCase()
-}
-
 export function matchIngredientExclusionFamily(
   ingredient: Ingredient
 ): IngredientExclusionFamily | null {
@@ -33,18 +23,23 @@ export function matchIngredientExclusionFamily(
     return null
   }
 
-  const item = normalizeStructuredText(ingredient.item)
-  const modifier = normalizeStructuredText(ingredient.modifier || "")
-  if (modifier && modifier !== "to taste") return null
+  const itemEvidence = ingredient.item.toLowerCase().trim().replace(/\s+/g, ' ')
+  const modifierEvidence = ingredient.modifier
+    ?.toLowerCase().trim().replace(/\s+/g, ' ')
+  if (modifierEvidence && modifierEvidence !== 'to taste') return null
 
-  const candidate = modifier === "to taste" ? `${item} to taste` : item
-  const alias = candidate.endsWith(" to taste")
-    ? candidate.slice(0, -" to taste".length)
-    : candidate
+  const semantics = resolveShoppingIngredientSemantics({
+    item: ingredient.item,
+    unit: ingredient.unit,
+    modifier: ingredient.modifier,
+  })
+  const family = shoppingExclusionFamily(semantics)
+  if (!family) return null
 
-  if (FAMILY_ALIASES.salt.has(alias)) return "salt"
-  if (FAMILY_ALIASES["black-pepper"].has(alias)) return "black-pepper"
-  return null
+  const structurallySupported = itemEvidence === semantics.purchaseKey ||
+    itemEvidence === `${semantics.purchaseKey} to taste` ||
+    (family === 'salt' && itemEvidence === `pinch of ${semantics.purchaseKey}`)
+  return structurallySupported ? family : null
 }
 
 export function isIngredientExclusionEnabled(

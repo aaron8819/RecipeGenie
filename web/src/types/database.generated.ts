@@ -353,6 +353,7 @@ export type Database = {
       }
       get_recipe_identity_compat_usage: { Args: never; Returns: number }
       is_shopping_document_v2: { Args: { p_document: Json }; Returns: boolean }
+      is_shopping_document_v3: { Args: { p_document: Json }; Returns: boolean }
       merge_tags: {
         Args: { p_source_tag: string; p_target_tag: string }
         Returns: undefined

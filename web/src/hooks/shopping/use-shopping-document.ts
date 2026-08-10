@@ -11,24 +11,24 @@ import {
   createEmptyShoppingDocument,
   createShoppingRecipeEntry,
   projectShoppingDocument,
-  validateShoppingDocumentStateV2,
+  validateShoppingDocumentStateV3,
   type RowRef,
   type ShoppingDocumentMutation,
-  type ShoppingDocumentStateV2,
-  type ShoppingDocumentV2,
+  type ShoppingDocumentStateV3,
+  type ShoppingDocumentV3,
   type ShoppingManualItemV1,
-  type ShoppingRecipeEntryV1,
+  type ShoppingRecipeEntryV2,
 } from '@/lib/shopping-document'
 import {
   persistShoppingMutationWithReplay,
   ShoppingDocumentConflictError,
 } from '@/lib/shopping-document-persistence'
-import { categorizeIngredient } from '@/lib/shopping-categories'
 import {
   createShoppingPurchaseKey,
-  normalizeItemName,
   normalizeUnit,
 } from '@/lib/shopping-list-normalization'
+import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics'
+import { categorizeIngredient } from '@/lib/shopping-categories'
 import {
   normalizeScaleRatioV1,
   parseRationalLexeme,
@@ -57,8 +57,8 @@ type MutationPlan<TResult> = {
   value: TResult
 }
 
-function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV2 {
-  const validation = validateShoppingDocumentStateV2({
+function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV3 {
+  const validation = validateShoppingDocumentStateV3({
     document: row.document,
     contentRevision: Number(row.content_revision),
   })
@@ -71,7 +71,7 @@ function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentSta
   }
 }
 
-async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV2> {
+async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV3> {
   const supabase = getSupabase()
   const request = supabase.from('shopping_list') as unknown as {
     select: (columns: string) => {
@@ -91,9 +91,9 @@ async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV2> {
 
 async function writeShoppingDocumentCas(
   userId: string,
-  current: ShoppingDocumentStateV2,
-  next: ShoppingDocumentStateV2
-): Promise<ShoppingDocumentStateV2 | null> {
+  current: ShoppingDocumentStateV3,
+  next: ShoppingDocumentStateV3
+): Promise<ShoppingDocumentStateV3 | null> {
   const supabase = getSupabase()
   const request = supabase.from('shopping_list') as unknown as {
     update: (values: { document: unknown; content_revision: number }) => {
@@ -124,7 +124,7 @@ async function writeShoppingDocumentCas(
 
 export function shoppingDocumentToList(
   userId: string,
-  state: ShoppingDocumentStateV2,
+  state: ShoppingDocumentStateV3,
   pantryItems: PantryItem[] = []
 ): ShoppingList {
   const projection = projectShoppingDocument(state.document, pantryItems)
@@ -142,8 +142,7 @@ export function shoppingDocumentToList(
     sources: row.manualId
       ? [{ recipeName: 'Manual' }]
       : row.sources.map((source) => ({
-          recipeId: source.recipeId,
-          recipeName: source.recipeName,
+          ...source,
         })),
     additionalAmounts: row.additionalQuantities
       ?.filter((quantity) => quantity.amount !== null)
@@ -172,7 +171,7 @@ export function shoppingDocumentToList(
 }
 
 export function shoppingDocumentToConfig(
-  state: ShoppingDocumentStateV2
+  state: ShoppingDocumentStateV3
 ): ShoppingConfig {
   const preferences = state.document.preferences
   return {
@@ -218,7 +217,7 @@ export function useShoppingList() {
 
 function useShoppingMutation<TVariables, TResult>(
   createPlan: (
-    state: ShoppingDocumentStateV2,
+    state: ShoppingDocumentStateV3,
     variables: TVariables
   ) => Promise<MutationPlan<TResult>> | MutationPlan<TResult>
 ) {
@@ -231,7 +230,7 @@ function useShoppingMutation<TVariables, TResult>(
   return useMutation({
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (variables: TVariables) => {
-      const initial = queryClient.getQueryData<ShoppingDocumentStateV2>(shoppingKey) ||
+      const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
         await fetchShoppingDocumentState()
       const plan = await createPlan(initial, variables)
       const state = await persistShoppingMutationWithReplay({
@@ -286,20 +285,27 @@ export function useAddShoppingItem() {
     unit?: string
     rowId: string
   }) => {
-    const name = normalizeItemName(input.itemName)
+    const [fallbackCategoryKey] = categorizeIngredient(input.itemName)
+    const itemSemantics = resolveShoppingIngredientSemantics({
+      item: input.itemName,
+      unit: input.unit,
+      fallbackCategoryKey,
+    })
+    const name = itemSemantics.purchaseName
     const projection = projectShoppingDocument(state.document)
-    if (projection.rows.some((row) => normalizeItemName(row.displayName) === name)) {
+    if (projection.rows.some((row) =>
+      row.orderingKey === itemSemantics.purchaseKey)) {
       throw new Error('Item already in shopping list')
     }
-    const ingredientKey = createShoppingPurchaseKey(name, input.amount, input.unit)
-    const [defaultCategory] = categorizeIngredient(name)
+    const purchaseKey = itemSemantics.purchaseKey
+    const defaultCategory = itemSemantics.defaultCategoryKey
     const item: ShoppingManualItemV1 = {
       id: input.rowId,
       displayName: name,
       quantity: input.amount == null && !input.unit
         ? null
         : { amount: input.amount ?? null, unit: normalizeUnit(input.unit || '') },
-      categoryKey: state.document.preferences.categoryByIngredient[ingredientKey] ||
+      categoryKey: state.document.preferences.categoryByIngredient[purchaseKey] ||
         defaultCategory,
       bucket: 'items',
       checked: false,
@@ -315,10 +321,15 @@ export function useUpdateShoppingItem() {
   }) => {
     const rowRef = requireShoppingRowRef(input.item)
     if (!rowRef.startsWith('manual:')) throw new Error('Only manual items can be edited')
-    const name = normalizeItemName(input.updates.itemName)
+    const itemSemantics = resolveShoppingIngredientSemantics({
+      item: input.updates.itemName,
+      unit: input.updates.unit,
+    })
+    const name = itemSemantics.purchaseName
     const projection = projectShoppingDocument(state.document)
     if (projection.rows.some((row) =>
-      row.rowRef !== rowRef && normalizeItemName(row.displayName) === name)) {
+      row.rowRef !== rowRef &&
+      row.orderingKey === itemSemantics.purchaseKey)) {
       throw new Error('Item already in shopping list')
     }
     const quantity = input.updates.amount == null && !input.updates.unit
@@ -447,7 +458,7 @@ export function useRemoveRecipeItems() {
 }
 
 export function useRestoreRecipeItems() {
-  return useShoppingMutation((_state, entry: ShoppingRecipeEntryV1) => ({
+  return useShoppingMutation((_state, entry: ShoppingRecipeEntryV2) => ({
     mutation: { type: 'upsertRecipe', entry },
     value: entry,
   }))
@@ -513,7 +524,7 @@ export function useClearShoppingList() {
 
 export function useRestoreShoppingContent() {
   return useShoppingMutation((_state, content: Pick<
-    ShoppingDocumentV2,
+    ShoppingDocumentV3,
     'recipeEntries' | 'manualItems' | 'itemOverrides'
   >) => ({
     mutation: { type: 'restoreContent', content },
@@ -529,46 +540,49 @@ export function useShoppingConfig() {
   }
 }
 
+export function createShoppingConfigUpdateMutation(
+  updates: Partial<ShoppingConfig>
+): ShoppingDocumentMutation {
+  const preferences: Partial<ShoppingDocumentStateV3['document']['preferences']> = {}
+  let updatesCategoryPreferences = false
+  if ('category_overrides' in updates && updates.category_overrides !== undefined) {
+    updatesCategoryPreferences = true
+    // Config keys came from persisted V3 preferences and are already stable
+    // purchase identities. Raw ingredient text is resolved before this boundary.
+    preferences.categoryByIngredient = { ...(updates.category_overrides || {}) }
+  }
+  if ('custom_categories' in updates && updates.custom_categories !== undefined) {
+    updatesCategoryPreferences = true
+    preferences.customCategories = updates.custom_categories || []
+  }
+  if ('category_order' in updates && updates.category_order !== undefined) {
+    updatesCategoryPreferences = true
+    const categoryOrder = updates.category_order as unknown
+    preferences.categoryOrder = Array.isArray(categoryOrder)
+      ? categoryOrder.filter((value): value is string => typeof value === 'string')
+      : []
+  }
+  if ('excluded_keywords' in updates && updates.excluded_keywords !== undefined) {
+    preferences.excludedIngredientKeys = [...new Set((updates.excluded_keywords || [])
+      .map((keyword) => createShoppingPurchaseKey(keyword))
+      .filter(Boolean))]
+  }
+  if ('exclude_salt_variants' in updates && updates.exclude_salt_variants !== undefined) {
+    preferences.excludeSaltVariants = updates.exclude_salt_variants
+  }
+  if ('exclude_black_pepper_variants' in updates &&
+      updates.exclude_black_pepper_variants !== undefined) {
+    preferences.excludeBlackPepperVariants = updates.exclude_black_pepper_variants
+  }
+  return updatesCategoryPreferences
+    ? { type: 'updateCategoryPreferences', preferences }
+    : { type: 'updatePreferences', preferences }
+}
+
 export function useUpdateShoppingConfig() {
   return useShoppingMutation((_state, updates: Partial<ShoppingConfig>) => {
-    const preferences: Partial<ShoppingDocumentStateV2['document']['preferences']> = {}
-    let updatesCategoryPreferences = false
-    if ('category_overrides' in updates && updates.category_overrides !== undefined) {
-      updatesCategoryPreferences = true
-      preferences.categoryByIngredient = Object.fromEntries(
-        Object.entries(updates.category_overrides || {}).map(([key, value]) => [
-          createShoppingPurchaseKey(key),
-          value,
-        ])
-      )
-    }
-    if ('custom_categories' in updates && updates.custom_categories !== undefined) {
-      updatesCategoryPreferences = true
-      preferences.customCategories = updates.custom_categories || []
-    }
-    if ('category_order' in updates && updates.category_order !== undefined) {
-      updatesCategoryPreferences = true
-      const categoryOrder = updates.category_order as unknown
-      preferences.categoryOrder = Array.isArray(categoryOrder)
-        ? categoryOrder.filter((value): value is string => typeof value === 'string')
-        : []
-    }
-    if ('excluded_keywords' in updates && updates.excluded_keywords !== undefined) {
-      preferences.excludedIngredientKeys = [...new Set((updates.excluded_keywords || [])
-        .map((keyword) => createShoppingPurchaseKey(keyword))
-        .filter(Boolean))]
-    }
-    if ('exclude_salt_variants' in updates && updates.exclude_salt_variants !== undefined) {
-      preferences.excludeSaltVariants = updates.exclude_salt_variants
-    }
-    if ('exclude_black_pepper_variants' in updates &&
-        updates.exclude_black_pepper_variants !== undefined) {
-      preferences.excludeBlackPepperVariants = updates.exclude_black_pepper_variants
-    }
     return {
-      mutation: updatesCategoryPreferences
-        ? { type: 'updateCategoryPreferences', preferences }
-        : { type: 'updatePreferences', preferences },
+      mutation: createShoppingConfigUpdateMutation(updates),
       value: updates,
     }
   })
@@ -606,10 +620,10 @@ type PantryMoveRow = ShoppingDocumentRow & {
 }
 
 async function moveToPantryCas(
-  current: ShoppingDocumentStateV2,
-  next: ShoppingDocumentStateV2,
+  current: ShoppingDocumentStateV3,
+  next: ShoppingDocumentStateV3,
   item: ShoppingItem
-): Promise<{ state: ShoppingDocumentStateV2; pantryItem: PantryItem | null; wasAdded: boolean } | null> {
+): Promise<{ state: ShoppingDocumentStateV3; pantryItem: PantryItem | null; wasAdded: boolean } | null> {
   const supabase = getSupabase()
   const rpc = supabase as unknown as {
     rpc: (name: 'move_shopping_document_item_to_pantry', args: {
@@ -649,7 +663,7 @@ export function useAddToPantryAndRemove() {
   return useMutation({
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (item: ShoppingItem) => {
-      const initial = queryClient.getQueryData<ShoppingDocumentStateV2>(shoppingKey) ||
+      const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
         await fetchShoppingDocumentState()
       const rowRef = requireShoppingRowRef(item)
       const mutation: ShoppingDocumentMutation = rowRef.startsWith('derived:')

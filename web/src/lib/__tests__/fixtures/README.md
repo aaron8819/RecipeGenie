@@ -10,7 +10,8 @@ contract for every fixture:
 - normalized shopping-list buckets and quantities
 
 The snapshot intentionally exercises only local deterministic code:
-`parseRecipeText()` followed by `generateShoppingList()`. Recipe Genie's current
+`parseRecipeText()` followed by the Shopping semantic resolver and document
+projector. Recipe Genie's current
 paste-import path does not call an external model. URL importing is also
 rule-based, but live page content and remote availability are outside this
 corpus; those concerns remain covered by isolated URL-parser/API tests.

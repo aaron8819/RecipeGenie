@@ -1,4 +1,6 @@
-import type { IngredientKey } from './shopping-ingredient-resolution'
+import type { PurchaseKey } from './shopping-ingredient-resolution'
+
+type IngredientKey = PurchaseKey
 import { normalizeItemName } from './shopping-list-normalization'
 
 export type CategoryKey = string

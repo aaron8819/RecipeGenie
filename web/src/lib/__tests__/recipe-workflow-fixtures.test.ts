@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest"
-import type { CanonicalIngredient, ShoppingItem } from "@/types/database"
+import type { CanonicalIngredient } from "@/types/database"
 import { parseRecipeText } from "../recipe-parser"
-import { generateShoppingList } from "../shopping-list"
+import {
+  createEmptyShoppingDocument,
+  createShoppingRecipeEntry,
+  projectShoppingDocument,
+  type ProjectedShoppingRow,
+} from '../shopping-document'
 import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 import {
   RECIPE_WORKFLOW_FIXTURE_INPUTS,
@@ -19,19 +24,38 @@ function ingredientContract(ingredient: CanonicalIngredient) {
   }
 }
 
-function shoppingItemContract(item: ShoppingItem) {
+function shoppingItemContract(item: ProjectedShoppingRow) {
+  const exactQuantity = item.quantity?.exactQuantityV1
   return {
-    item: item.item,
-    amount: item.amount,
-    unit: item.unit,
-    additionalAmounts: item.additionalAmounts,
+    item: item.displayName,
+    amount: item.quantity?.amount ?? null,
+    unit: item.quantity?.unit || '',
+    ...(exactQuantity ? {
+      exactQuantity: exactQuantity.kind === 'exact'
+        ? {
+            kind: exactQuantity.kind,
+            lexeme: exactQuantity.lexeme,
+            value: exactQuantity.value,
+          }
+        : {
+            kind: exactQuantity.kind,
+            authored: exactQuantity.authored,
+          },
+    } : {}),
+    ...(item.quantity?.exactPackageV1
+      ? { exactPackage: item.quantity.exactPackageV1 }
+      : {}),
+    additionalAmounts: item.additionalQuantities?.map((quantity) => ({
+      amount: quantity.amount,
+      unit: quantity.unit,
+    })),
     excludedBy: item.excludedBy,
     sources: item.sources?.map((source) => ({
       recipeId: source.recipeId,
-      originalItem: source.originalItem,
       originalAmount: source.originalAmount,
+      originalItem: source.originalItem,
       originalUnit: source.originalUnit,
-      prepIntent: source.prepIntent,
+      preparationModifiers: source.preparationModifiers,
     })),
   }
 }
@@ -51,7 +75,13 @@ describe(`recipe workflow fixture corpus v${RECIPE_WORKFLOW_FIXTURE_VERSION}`, (
       ingredientSections: parsed.ingredientSections,
       instructionSections: parsed.instructionSections,
     })
-    const shopping = generateShoppingList([recipe], [], [])
+    const document = createEmptyShoppingDocument()
+    document.recipeEntries[recipe.id] = createShoppingRecipeEntry(
+      recipe,
+      recipe.servings,
+      { numerator: '1', denominator: '1' }
+    )
+    const shopping = projectShoppingDocument(document)
 
     expect({
       fixtureVersion: RECIPE_WORKFLOW_FIXTURE_VERSION,
@@ -72,8 +102,8 @@ describe(`recipe workflow fixture corpus v${RECIPE_WORKFLOW_FIXTURE_VERSION}`, (
         items: shopping.items.map(shoppingItemContract),
         alreadyHave: shopping.alreadyHave.map(shoppingItemContract),
         excluded: shopping.excluded.map(shoppingItemContract),
-        scale: shopping.scale,
-        totalServings: shopping.totalServings,
+        scale: 1,
+        totalServings: recipe.servings,
       },
     }).toMatchSnapshot()
   })

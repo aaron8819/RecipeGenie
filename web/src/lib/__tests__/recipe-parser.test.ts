@@ -918,6 +918,66 @@ describe('alternative ingredient detection (P2)', () => {
     expect(result.unit).toBe('cup');
   });
 
+  it('preserves the shared noun for color alternatives', () => {
+    const result = parseIngredientLine('¼ cup diced red or white onion');
+
+    expect(result.item).toBe('diced red onion');
+    expect(result.alternatives).toEqual(['white onion']);
+    expect(result.originalText).toBe('¼ cup diced red or white onion');
+  });
+
+  it('parses comma-delimited ingredient choices as alternatives', () => {
+    const result = parseIngredientLine(
+      '6 cups chopped romaine, shredded iceberg, arugula, or other greens'
+    );
+
+    expect(result.item).toBe('chopped romaine');
+    expect(result.alternatives).toEqual([
+      'shredded iceberg',
+      'arugula',
+      'other greens',
+    ]);
+    expect(result.originalText).toBe(
+      '6 cups chopped romaine, shredded iceberg, arugula, or other greens'
+    );
+  });
+
+  it('does not treat comma-delimited preparation as ingredient choices', () => {
+    const result = parseIngredientLine(
+      '1 can tomatoes, drained, chopped, or diced'
+    );
+
+    expect(result.item).toBe('tomatoes, drained, chopped, or diced');
+    expect(result.alternatives).toBeUndefined();
+  });
+
+  it('leaves ambiguous shared-noun comma choices conservatively unexpanded', () => {
+    const result = parseIngredientLine('1 cup red, white, or black beans');
+
+    expect(result.item).toBe('red, white, or black beans');
+    expect(result.alternatives).toBeUndefined();
+  });
+
+  it('preserves ordinary multi-word comma descriptions', () => {
+    const result = parseIngredientLine('1 cup tomato and basil sauce, divided');
+
+    expect(result.item).toBe('tomato and basil sauce');
+    expect(result.modifier).toBe('divided');
+    expect(result.alternatives).toBeUndefined();
+  });
+
+  it('preserves the shared suffix for cheese alternatives', () => {
+    const result = parseIngredientLine(
+      '½ cup shredded Mexican-blend or sharp cheddar cheese'
+    );
+
+    expect(result.item).toBe('shredded Mexican-blend cheese');
+    expect(result.alternatives).toEqual(['sharp cheddar cheese']);
+    expect(result.originalText).toBe(
+      '½ cup shredded Mexican-blend or sharp cheddar cheese'
+    );
+  });
+
   it('should not extract single-letter alternatives', () => {
     // Edge case: avoid matching things like "X or Y coordinates"
     const result = parseIngredientLine('X or Y');

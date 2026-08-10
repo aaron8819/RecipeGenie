@@ -17,5 +17,6 @@
   "016_canonical_recipe_structure_cutover.sql": "ba9d69bedff0f977df6dfaecb7ada1c55c181062129499eab7c2d5b4265c5b13",
   "017_remove_legacy_recipe_structure.sql": "2a2e9a28fd88f3b41674576ebd292a129899235616fbe888e6feb396169a98d2",
   "018_shopping_document_cutover.sql": "3af7c3988856a168404088c6f135389dc7e751d3835bc3587bcd01c1220d4877",
-  "019_personalized_shopping_order.sql": "f6f0b4b8b392e2e4e8265303c3be23c982ed6f3d7b991ea6a4e86632df55ef5d"
+  "019_personalized_shopping_order.sql": "f6f0b4b8b392e2e4e8265303c3be23c982ed6f3d7b991ea6a4e86632df55ef5d",
+  "020_shopping_document_v3.sql": "9b8eb4cb255ece33395fe28480aef6e196c51c28427f8bb29db95b6f52c29e34"
 }

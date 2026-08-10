@@ -22,13 +22,17 @@ import {
 } from "./recipe-quantity"
 import { flattenRecipeIngredients } from "./recipe-structure"
 import {
+  resolveShoppingIngredientSemantics,
+  type ShoppingIngredientSemantics,
+  type ShoppingQuantityKind,
+} from './shopping-ingredient-semantics'
+import {
   createShoppingPurchaseKey,
-  normalizeItemName,
   normalizeShoppingPurchase,
   normalizeUnit,
 } from "./shopping-list-normalization"
 
-export type IngredientKey = string
+export type PurchaseKey = string
 export type AggregateKey = string
 
 export type ShoppingQuantity = {
@@ -40,14 +44,18 @@ export type ShoppingQuantity = {
 }
 
 export type ResolvedShoppingIngredient = {
-  ingredientKey: IngredientKey
+  purchaseKey: PurchaseKey
   aggregateKey: AggregateKey
   displayName: string
   quantity: ShoppingQuantity | null
+  familyKey: string
+  preparation: string[]
   purchaseUnit: string
+  quantityKind: ShoppingQuantityKind
   defaultCategoryKey: string
   defaultCategoryOrder: number
-  pantryMatchKeys: IngredientKey[]
+  pantryMatchKeys: PurchaseKey[]
+  familyMatchPolicy: ShoppingIngredientSemantics['familyMatchPolicy']
   exclusionFamily?: IngredientExclusionFamily
   citrusPrep?: "juiced" | "zested"
   sourceOrdinal: number
@@ -74,7 +82,7 @@ export type ResolveShoppingIngredientInput = {
   sourceOrdinal?: number
 }
 
-function explicitWholeCitrusPantryKey(item: string): IngredientKey | null {
+function explicitWholeCitrusPantryKey(item: string): PurchaseKey | null {
   const match = item
     .trim()
     .toLowerCase()
@@ -115,13 +123,13 @@ export function createShoppingAggregateDiscriminator(
 }
 
 export function createShoppingAggregateKey(
-  ingredientKey: IngredientKey,
+  purchaseKey: PurchaseKey,
   discriminator: readonly unknown[] | null
 ): AggregateKey {
   return JSON.stringify(
     discriminator
-      ? ["shopping-aggregate", 1, ingredientKey, discriminator]
-      : ["shopping-aggregate", 1, ingredientKey]
+      ? ['shopping-aggregate', 2, purchaseKey, discriminator]
+      : ['shopping-aggregate', 2, purchaseKey]
   )
 }
 
@@ -130,7 +138,7 @@ export function createShoppingAggregateKey(
  *
  * The nested `runtime` fields are temporary compatibility output consumed by
  * the current generator. They keep PR 1 behavior-neutral and are not part of
- * ShoppingDocumentV2.
+ * the persisted Shopping document.
  */
 export function resolveShoppingIngredient({
   ingredient,
@@ -166,6 +174,18 @@ export function resolveShoppingIngredient({
   const compatibilityUnit = exactPackage
     ? `${exactPackage.type} (${exactPackage.size.lexeme} ${exactPackage.size.authoredUnit})`
     : ingredient.unit || ""
+  const requestedQuantityKind: ShoppingQuantityKind | undefined = exactPackage
+    ? 'package'
+    : structuredQuantity?.kind === 'range'
+      ? 'range'
+      : structuredQuantity?.kind === 'qualitative' ||
+          structuredQuantity?.kind === 'unparsed'
+        ? 'qualitative'
+        : undefined
+  const [fallbackCategoryKey] = categorizeIngredient(
+    ingredient.item,
+    ingredient.shoppingCategory
+  )
   const purchase = normalizeShoppingPurchase({
     item: ingredient.item,
     amount: exactQuantity
@@ -175,27 +195,35 @@ export function resolveShoppingIngredient({
         : quantityRange?.start ?? null,
     unit: exactQuantity ? compatibilityUnit : ingredient.unit || "",
     modifier: ingredient.modifier,
+    quantityKind: requestedQuantityKind,
+    fallbackCategoryKey,
   })
   const amount = exactQuantity
-    ? purchase.purchaseQuantity || 0
-    : (purchase.purchaseQuantity || 0) * scale
+    ? purchase.purchaseQuantity ?? 0
+    : (purchase.purchaseQuantity ?? 0) * scale
   const purchaseUnit = normalizeUnit(purchase.purchaseUnit || "")
-  const alternatives = ingredient.alternatives?.map(normalizeItemName)
+  const alternatives = ingredient.alternatives?.map((alternative) =>
+    resolveShoppingIngredientSemantics({ item: alternative }).purchaseName
+  )
   const displayName = alternatives?.length
     ? `${purchase.purchaseName} (or ${alternatives.join(", ")})`
     : purchase.purchaseName
-  const ingredientKey = purchase.canonical.mergeKey
+  const semantics = purchase.semantics
+  const purchaseKey = semantics.purchaseKey
   const wholeCitrusPantryKey = explicitWholeCitrusPantryKey(ingredient.item)
   const pantryMatchKeys = [
-    ingredientKey,
+    purchaseKey,
     ...(wholeCitrusPantryKey ? [wholeCitrusPantryKey] : []),
     ...(alternatives || []).map((alternative) =>
       createShoppingPurchaseKey(alternative)
     ),
   ].filter((value, index, values) => values.indexOf(value) === index)
-  const [defaultCategoryKey, defaultCategoryOrder] = categorizeIngredient(
+  const defaultCategoryKey = ingredient.shoppingCategory
+    ? fallbackCategoryKey
+    : semantics.defaultCategoryKey
+  const [, defaultCategoryOrder] = categorizeIngredient(
     displayName,
-    ingredient.shoppingCategory
+    defaultCategoryKey
   )
   const sourceAwareStructured =
     exactQuantity?.kind === "range" || Boolean(exactPackage)
@@ -214,23 +242,29 @@ export function resolveShoppingIngredient({
       : undefined
 
   return {
-    ingredientKey,
-    aggregateKey: createShoppingAggregateKey(ingredientKey, discriminator),
+    purchaseKey,
+    aggregateKey: createShoppingAggregateKey(purchaseKey, discriminator),
     displayName,
     quantity:
       purchase.purchaseQuantity == null && !exactQuantity && !exactPackage
         ? null
         : {
-            amount,
+            amount: exactQuantity && exactQuantity.kind !== 'exact'
+              ? null
+              : amount,
             unit: purchaseUnit,
             exactQuantityV1: exactQuantity,
             exactPackageV1: exactPackage,
             exactAuthoredUnit: resolved.authoredUnit || undefined,
           },
     purchaseUnit,
+    familyKey: semantics.familyKey,
+    preparation: semantics.preparation,
+    quantityKind: semantics.quantityKind,
     defaultCategoryKey,
     defaultCategoryOrder,
     pantryMatchKeys,
+    familyMatchPolicy: semantics.familyMatchPolicy,
     exclusionFamily: exclusionFamily || undefined,
     citrusPrep,
     sourceOrdinal,

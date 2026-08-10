@@ -6,7 +6,7 @@
 
 import type { CustomShoppingCategory } from "@/types/database"
 import { normalizeItemName } from "./shopping-list-normalization"
-import { shoppingIdentityCompatibilityKeys } from "./shopping-ingredient-canonicalization"
+import { shoppingIdentityCompatibilityKeys } from './shopping-ingredient-semantics'
 import { resolveShoppingCategoryOrder } from "./shopping-ordering"
 
 export interface ShoppingCategory {

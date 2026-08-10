@@ -68,14 +68,22 @@ exports[`recipe workflow fixture corpus v1 > 'ascii-mixed-fractions-bread' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 1.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1 1/2",
+          "value": {
+            "denominator": "2",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "cornmeal",
         "sources": [
           {
             "originalAmount": 1.5,
             "originalItem": "cornmeal",
-            "originalUnit": "cups",
-            "prepIntent": undefined,
+            "originalUnit": "cup",
+            "preparationModifiers": undefined,
             "recipeId": "ascii-mixed-fractions-bread",
           },
         ],
@@ -84,6 +92,14 @@ exports[`recipe workflow fixture corpus v1 > 'ascii-mixed-fractions-bread' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 0.75,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "3/4",
+          "value": {
+            "denominator": "4",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "flour",
         "sources": [
@@ -91,7 +107,7 @@ exports[`recipe workflow fixture corpus v1 > 'ascii-mixed-fractions-bread' 1`] =
             "originalAmount": 0.75,
             "originalItem": "flour",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "ascii-mixed-fractions-bread",
           },
         ],
@@ -100,6 +116,14 @@ exports[`recipe workflow fixture corpus v1 > 'ascii-mixed-fractions-bread' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 0.3333333333333333,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1/3",
+          "value": {
+            "denominator": "3",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "sugar",
         "sources": [
@@ -107,7 +131,7 @@ exports[`recipe workflow fixture corpus v1 > 'ascii-mixed-fractions-bread' 1`] =
             "originalAmount": 0.3333333333333333,
             "originalItem": "sugar",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "ascii-mixed-fractions-bread",
           },
         ],
@@ -183,6 +207,14 @@ exports[`recipe workflow fixture corpus v1 > 'bom-crlf-bullets' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "parsley",
         "sources": [
@@ -190,7 +222,7 @@ exports[`recipe workflow fixture corpus v1 > 'bom-crlf-bullets' 1`] = `
             "originalAmount": 2,
             "originalItem": "parsley",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "bom-crlf-bullets",
           },
         ],
@@ -199,14 +231,22 @@ exports[`recipe workflow fixture corpus v1 > 'bom-crlf-bullets' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1½",
+          "value": {
+            "denominator": "2",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "broth",
         "sources": [
           {
             "originalAmount": 1.5,
             "originalItem": "broth",
-            "originalUnit": "cups",
-            "prepIntent": undefined,
+            "originalUnit": "cup",
+            "preparationModifiers": undefined,
             "recipeId": "bom-crlf-bullets",
           },
         ],
@@ -215,6 +255,14 @@ exports[`recipe workflow fixture corpus v1 > 'bom-crlf-bullets' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "couscous",
         "sources": [
@@ -222,7 +270,7 @@ exports[`recipe workflow fixture corpus v1 > 'bom-crlf-bullets' 1`] = `
             "originalAmount": 1,
             "originalItem": "couscous",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "bom-crlf-bullets",
           },
         ],
@@ -295,6 +343,14 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 0.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "0.5",
+          "value": {
+            "denominator": "2",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "milk",
         "sources": [
@@ -302,7 +358,7 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
             "originalAmount": 0.5,
             "originalItem": "milk",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "decimal-and-dash-range",
           },
         ],
@@ -311,6 +367,10 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "2—4",
+          "kind": "range",
+        },
         "excludedBy": undefined,
         "item": "pods cardamom",
         "sources": [
@@ -318,7 +378,7 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
             "originalAmount": null,
             "originalItem": "pods cardamom",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "decimal-and-dash-range",
           },
         ],
@@ -327,14 +387,22 @@ exports[`recipe workflow fixture corpus v1 > 'decimal-and-dash-range' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1.5",
+          "value": {
+            "denominator": "2",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "water",
         "sources": [
           {
             "originalAmount": 1.5,
             "originalItem": "water",
-            "originalUnit": "cups",
-            "prepIntent": undefined,
+            "originalUnit": "cup",
+            "preparationModifiers": undefined,
             "recipeId": "decimal-and-dash-range",
           },
         ],
@@ -410,14 +478,22 @@ exports[`recipe workflow fixture corpus v1 > 'ingredient-alternatives-curry' 1`]
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "cilantro (or parsley)",
         "sources": [
           {
             "originalAmount": 2,
-            "originalItem": "cilantro",
+            "originalItem": "cilantro (or parsley)",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "ingredient-alternatives-curry",
           },
         ],
@@ -426,14 +502,22 @@ exports[`recipe workflow fixture corpus v1 > 'ingredient-alternatives-curry' 1`]
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "chicken thigh",
         "sources": [
           {
             "originalAmount": 1,
-            "originalItem": "chicken thighs",
+            "originalItem": "chicken thigh",
             "originalUnit": "lb",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "ingredient-alternatives-curry",
           },
         ],
@@ -442,14 +526,22 @@ exports[`recipe workflow fixture corpus v1 > 'ingredient-alternatives-curry' 1`]
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "coconut milk (or cashew cream)",
         "sources": [
           {
             "originalAmount": 1,
-            "originalItem": "coconut milk",
+            "originalItem": "coconut milk (or cashew cream)",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "ingredient-alternatives-curry",
           },
         ],
@@ -513,6 +605,14 @@ exports[`recipe workflow fixture corpus v1 > 'instruction-only-ingredients' 1`] 
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "butter",
         "sources": [
@@ -520,7 +620,7 @@ exports[`recipe workflow fixture corpus v1 > 'instruction-only-ingredients' 1`] 
             "originalAmount": 1,
             "originalItem": "butter",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "instruction-only-ingredients",
           },
         ],
@@ -529,14 +629,22 @@ exports[`recipe workflow fixture corpus v1 > 'instruction-only-ingredients' 1`] 
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "egg",
         "sources": [
           {
             "originalAmount": 2,
-            "originalItem": "eggs",
+            "originalItem": "egg",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "instruction-only-ingredients",
           },
         ],
@@ -621,6 +729,14 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "banana",
         "sources": [
@@ -628,7 +744,7 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
             "originalAmount": 1,
             "originalItem": "banana",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "legacy-unheaded-format",
           },
         ],
@@ -637,14 +753,22 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "bread",
         "sources": [
           {
             "originalAmount": 2,
             "originalItem": "bread",
-            "originalUnit": "slices",
-            "prepIntent": undefined,
+            "originalUnit": "slice",
+            "preparationModifiers": undefined,
             "recipeId": "legacy-unheaded-format",
           },
         ],
@@ -658,9 +782,9 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
         "sources": [
           {
             "originalAmount": null,
-            "originalItem": "Toast the bread.",
+            "originalItem": "toast the bread",
             "originalUnit": "",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "legacy-unheaded-format",
           },
         ],
@@ -669,6 +793,14 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "peanut butter",
         "sources": [
@@ -676,7 +808,7 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
             "originalAmount": 2,
             "originalItem": "peanut butter",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "legacy-unheaded-format",
           },
         ],
@@ -690,9 +822,9 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
         "sources": [
           {
             "originalAmount": null,
-            "originalItem": "Spread peanut butter and top with banana.",
+            "originalItem": "spread peanut butter and top with banana",
             "originalUnit": "",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "legacy-unheaded-format",
           },
         ],
@@ -769,6 +901,14 @@ exports[`recipe workflow fixture corpus v1 > 'metadata-times-and-notes' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 4,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "4",
+          "value": {
+            "denominator": "1",
+            "numerator": "4",
+          },
+        },
         "excludedBy": undefined,
         "item": "fillets salmon",
         "sources": [
@@ -776,7 +916,7 @@ exports[`recipe workflow fixture corpus v1 > 'metadata-times-and-notes' 1`] = `
             "originalAmount": 4,
             "originalItem": "fillets salmon",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "metadata-times-and-notes",
           },
         ],
@@ -785,6 +925,14 @@ exports[`recipe workflow fixture corpus v1 > 'metadata-times-and-notes' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "olive oil",
         "sources": [
@@ -792,7 +940,7 @@ exports[`recipe workflow fixture corpus v1 > 'metadata-times-and-notes' 1`] = `
             "originalAmount": 2,
             "originalItem": "olive oil",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "metadata-times-and-notes",
           },
         ],
@@ -873,6 +1021,14 @@ exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 500,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "500",
+          "value": {
+            "denominator": "1",
+            "numerator": "500",
+          },
+        },
         "excludedBy": undefined,
         "item": "lentils",
         "sources": [
@@ -880,7 +1036,7 @@ exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
             "originalAmount": 500,
             "originalItem": "lentils",
             "originalUnit": "g",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "metric-lentil-stew",
           },
         ],
@@ -889,6 +1045,14 @@ exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "tomato paste",
         "sources": [
@@ -896,7 +1060,7 @@ exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
             "originalAmount": 2,
             "originalItem": "tomato paste",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "metric-lentil-stew",
           },
         ],
@@ -905,14 +1069,22 @@ exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "vegetable broth",
         "sources": [
           {
             "originalAmount": 1,
             "originalItem": "vegetable broth",
-            "originalUnit": "liter",
-            "prepIntent": undefined,
+            "originalUnit": "l",
+            "preparationModifiers": undefined,
             "recipeId": "metric-lentil-stew",
           },
         ],
@@ -921,6 +1093,14 @@ exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 250,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "250",
+          "value": {
+            "denominator": "1",
+            "numerator": "250",
+          },
+        },
         "excludedBy": undefined,
         "item": "water",
         "sources": [
@@ -928,7 +1108,7 @@ exports[`recipe workflow fixture corpus v1 > 'metric-lentil-stew' 1`] = `
             "originalAmount": 250,
             "originalItem": "water",
             "originalUnit": "ml",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "metric-lentil-stew",
           },
         ],
@@ -1018,7 +1198,7 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
             "originalAmount": null,
             "originalItem": "black pepper",
             "originalUnit": "",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "missing-quantities-salad",
           },
         ],
@@ -1034,7 +1214,9 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
             "originalAmount": null,
             "originalItem": "fresh herbs",
             "originalUnit": "",
-            "prepIntent": undefined,
+            "preparationModifiers": [
+              "for garnish",
+            ],
             "recipeId": "missing-quantities-salad",
           },
         ],
@@ -1050,7 +1232,7 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
             "originalAmount": null,
             "originalItem": "mixed greens",
             "originalUnit": "",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "missing-quantities-salad",
           },
         ],
@@ -1066,7 +1248,9 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
             "originalAmount": null,
             "originalItem": "salt",
             "originalUnit": "",
-            "prepIntent": undefined,
+            "preparationModifiers": [
+              "to taste",
+            ],
             "recipeId": "missing-quantities-salad",
           },
         ],
@@ -1146,7 +1330,7 @@ exports[`recipe workflow fixture corpus v1 > 'mixed-units-cocoa' 1`] = `
     "items": [
       {
         "additionalAmounts": undefined,
-        "amount": 2,
+        "amount": 2.0000169070282516,
         "excludedBy": undefined,
         "item": "milk",
         "sources": [
@@ -1154,14 +1338,14 @@ exports[`recipe workflow fixture corpus v1 > 'mixed-units-cocoa' 1`] = `
             "originalAmount": 1,
             "originalItem": "milk",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "mixed-units-cocoa",
           },
           {
             "originalAmount": 8,
             "originalItem": "milk",
             "originalUnit": "fl oz",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "mixed-units-cocoa",
           },
         ],
@@ -1170,6 +1354,14 @@ exports[`recipe workflow fixture corpus v1 > 'mixed-units-cocoa' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "cocoa powder",
         "sources": [
@@ -1177,7 +1369,7 @@ exports[`recipe workflow fixture corpus v1 > 'mixed-units-cocoa' 1`] = `
             "originalAmount": 2,
             "originalItem": "cocoa powder",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "mixed-units-cocoa",
           },
         ],
@@ -1186,6 +1378,14 @@ exports[`recipe workflow fixture corpus v1 > 'mixed-units-cocoa' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 4,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "4",
+          "value": {
+            "denominator": "1",
+            "numerator": "4",
+          },
+        },
         "excludedBy": undefined,
         "item": "dark chocolate",
         "sources": [
@@ -1193,7 +1393,7 @@ exports[`recipe workflow fixture corpus v1 > 'mixed-units-cocoa' 1`] = `
             "originalAmount": 4,
             "originalItem": "dark chocolate",
             "originalUnit": "oz",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "mixed-units-cocoa",
           },
         ],
@@ -1313,14 +1513,22 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "arugula",
         "sources": [
           {
             "originalAmount": 2,
             "originalItem": "arugula",
-            "originalUnit": "cups",
-            "prepIntent": undefined,
+            "originalUnit": "cup",
+            "preparationModifiers": undefined,
             "recipeId": "multiple-components-chicken",
           },
         ],
@@ -1328,22 +1536,24 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
       },
       {
         "additionalAmounts": undefined,
-        "amount": 1.25,
+        "amount": 2,
         "excludedBy": undefined,
         "item": "lemon",
         "sources": [
           {
-            "originalAmount": 1,
-            "originalItem": "lemon juice",
-            "originalUnit": "tbsp",
-            "prepIntent": "juiced",
+            "originalAmount": 0.3333333333333333,
+            "originalItem": "lemon",
+            "originalUnit": "count",
+            "preparationModifiers": [
+              "juiced",
+            ],
             "recipeId": "multiple-components-chicken",
           },
           {
             "originalAmount": 1,
             "originalItem": "lemon",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "multiple-components-chicken",
           },
         ],
@@ -1352,6 +1562,14 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "chicken breast",
         "sources": [
@@ -1359,7 +1577,7 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
             "originalAmount": 1,
             "originalItem": "chicken breast",
             "originalUnit": "lb",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "multiple-components-chicken",
           },
         ],
@@ -1368,6 +1586,14 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 0.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1/2",
+          "value": {
+            "denominator": "2",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "chicken broth",
         "sources": [
@@ -1375,7 +1601,7 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
             "originalAmount": 0.5,
             "originalItem": "chicken broth",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "multiple-components-chicken",
           },
         ],
@@ -1384,6 +1610,14 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "olive oil",
         "sources": [
@@ -1391,7 +1625,7 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
             "originalAmount": 1,
             "originalItem": "olive oil",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "multiple-components-chicken",
           },
         ],
@@ -1480,14 +1714,14 @@ exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
             "originalAmount": 1,
             "originalItem": "onion",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "near-duplicate-onions",
           },
           {
             "originalAmount": 2,
-            "originalItem": "onions",
+            "originalItem": "onion",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "near-duplicate-onions",
           },
         ],
@@ -1496,6 +1730,14 @@ exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "red onion",
         "sources": [
@@ -1503,7 +1745,9 @@ exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
             "originalAmount": 1,
             "originalItem": "red onion",
             "originalUnit": "cup",
-            "prepIntent": "sliced",
+            "preparationModifiers": [
+              "sliced",
+            ],
             "recipeId": "near-duplicate-onions",
           },
         ],
@@ -1512,6 +1756,14 @@ exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "butter",
         "sources": [
@@ -1519,7 +1771,7 @@ exports[`recipe workflow fixture corpus v1 > 'near-duplicate-onions' 1`] = `
             "originalAmount": 1,
             "originalItem": "butter",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "near-duplicate-onions",
           },
         ],
@@ -1591,14 +1843,22 @@ exports[`recipe workflow fixture corpus v1 > 'no-serving-count' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "garlic",
         "sources": [
           {
             "originalAmount": 2,
             "originalItem": "garlic",
-            "originalUnit": "cloves",
-            "prepIntent": undefined,
+            "originalUnit": "clove",
+            "preparationModifiers": undefined,
             "recipeId": "no-serving-count",
           },
         ],
@@ -1607,6 +1867,14 @@ exports[`recipe workflow fixture corpus v1 > 'no-serving-count' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "rice",
         "sources": [
@@ -1614,7 +1882,7 @@ exports[`recipe workflow fixture corpus v1 > 'no-serving-count' 1`] = `
             "originalAmount": 1,
             "originalItem": "rice",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "no-serving-count",
           },
         ],
@@ -1623,14 +1891,22 @@ exports[`recipe workflow fixture corpus v1 > 'no-serving-count' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "water",
         "sources": [
           {
             "originalAmount": 2,
             "originalItem": "water",
-            "originalUnit": "cups",
-            "prepIntent": undefined,
+            "originalUnit": "cup",
+            "preparationModifiers": undefined,
             "recipeId": "no-serving-count",
           },
         ],
@@ -1712,6 +1988,14 @@ exports[`recipe workflow fixture corpus v1 > 'noisy-copied-heading' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 3,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "3",
+          "value": {
+            "denominator": "1",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "avocados",
         "sources": [
@@ -1719,7 +2003,7 @@ exports[`recipe workflow fixture corpus v1 > 'noisy-copied-heading' 1`] = `
             "originalAmount": 3,
             "originalItem": "avocados",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "noisy-copied-heading",
           },
         ],
@@ -1727,15 +2011,25 @@ exports[`recipe workflow fixture corpus v1 > 'noisy-copied-heading' 1`] = `
       },
       {
         "additionalAmounts": undefined,
-        "amount": 0.5,
+        "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "lime",
         "sources": [
           {
-            "originalAmount": 1,
-            "originalItem": "lime juice",
-            "originalUnit": "tbsp",
-            "prepIntent": "juiced",
+            "originalAmount": 0.5,
+            "originalItem": "lime",
+            "originalUnit": "count",
+            "preparationModifiers": [
+              "juiced",
+            ],
             "recipeId": "noisy-copied-heading",
           },
         ],
@@ -1744,6 +2038,14 @@ exports[`recipe workflow fixture corpus v1 > 'noisy-copied-heading' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 0.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1/2",
+          "value": {
+            "denominator": "2",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "kosher salt",
         "sources": [
@@ -1751,7 +2053,7 @@ exports[`recipe workflow fixture corpus v1 > 'noisy-copied-heading' 1`] = `
             "originalAmount": 0.5,
             "originalItem": "kosher salt",
             "originalUnit": "tsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "noisy-copied-heading",
           },
         ],
@@ -1833,6 +2135,14 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "basil",
         "sources": [
@@ -1840,7 +2150,9 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
             "originalAmount": 2,
             "originalItem": "basil",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": [
+              "for garnish",
+            ],
             "recipeId": "optional-garnishes-soup",
           },
         ],
@@ -1849,14 +2161,22 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "tomato",
         "sources": [
           {
             "originalAmount": 2,
-            "originalItem": "tomatoes",
-            "originalUnit": "cans",
-            "prepIntent": undefined,
+            "originalItem": "tomato",
+            "originalUnit": "can",
+            "preparationModifiers": undefined,
             "recipeId": "optional-garnishes-soup",
           },
         ],
@@ -1865,6 +2185,14 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 0.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1/2",
+          "value": {
+            "denominator": "2",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "cream",
         "sources": [
@@ -1872,7 +2200,7 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
             "originalAmount": 0.5,
             "originalItem": "cream",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "optional-garnishes-soup",
           },
         ],
@@ -1881,6 +2209,14 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "vegetable stock",
         "sources": [
@@ -1888,7 +2224,7 @@ exports[`recipe workflow fixture corpus v1 > 'optional-garnishes-soup' 1`] = `
             "originalAmount": 1,
             "originalItem": "vegetable stock",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "optional-garnishes-soup",
           },
         ],
@@ -1963,6 +2299,14 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-optional-alternative
       {
         "additionalAmounts": undefined,
         "amount": 0.25,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1/4",
+          "value": {
+            "denominator": "4",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "parsley",
         "sources": [
@@ -1970,7 +2314,7 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-optional-alternative
             "originalAmount": 0.25,
             "originalItem": "parsley",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "parenthetical-optional-alternative",
           },
         ],
@@ -1979,14 +2323,22 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-optional-alternative
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "parmesan (or pecorino)",
         "sources": [
           {
             "originalAmount": 1,
-            "originalItem": "parmesan",
+            "originalItem": "parmesan (or pecorino)",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "parenthetical-optional-alternative",
           },
         ],
@@ -1995,6 +2347,14 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-optional-alternative
       {
         "additionalAmounts": undefined,
         "amount": 12,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "12",
+          "value": {
+            "denominator": "1",
+            "numerator": "12",
+          },
+        },
         "excludedBy": undefined,
         "item": "pasta",
         "sources": [
@@ -2002,7 +2362,7 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-optional-alternative
             "originalAmount": 12,
             "originalItem": "pasta",
             "originalUnit": "oz",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "parenthetical-optional-alternative",
           },
         ],
@@ -2082,31 +2442,25 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
     "items": [
       {
         "additionalAmounts": undefined,
-        "amount": 1,
-        "excludedBy": undefined,
-        "item": "crushed tomato",
-        "sources": [
-          {
-            "originalAmount": 1,
-            "originalItem": "crushed tomatoes",
-            "originalUnit": "can (28 oz)",
-            "prepIntent": undefined,
-            "recipeId": "parenthetical-preparation",
-          },
-        ],
-        "unit": "can (28 oz)",
-      },
-      {
-        "additionalAmounts": undefined,
         "amount": 3,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "3",
+          "value": {
+            "denominator": "1",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "garlic",
         "sources": [
           {
             "originalAmount": 3,
             "originalItem": "garlic",
-            "originalUnit": "cloves",
-            "prepIntent": "minced",
+            "originalUnit": "clove",
+            "preparationModifiers": [
+              "minced",
+            ],
             "recipeId": "parenthetical-preparation",
           },
         ],
@@ -2115,6 +2469,14 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "large onion",
         "sources": [
@@ -2122,7 +2484,9 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
             "originalAmount": 1,
             "originalItem": "large onion",
             "originalUnit": "count",
-            "prepIntent": "diced",
+            "preparationModifiers": [
+              "diced",
+            ],
             "recipeId": "parenthetical-preparation",
           },
         ],
@@ -2131,18 +2495,79 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "black beans",
         "sources": [
           {
             "originalAmount": 2,
             "originalItem": "black beans",
-            "originalUnit": "cans",
-            "prepIntent": undefined,
+            "originalUnit": "can",
+            "preparationModifiers": [
+              "drained",
+            ],
             "recipeId": "parenthetical-preparation",
           },
         ],
         "unit": "can",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "exactPackage": {
+          "authoredType": "can",
+          "count": {
+            "authored": "1",
+            "kind": "exact",
+            "lexeme": "1",
+            "source": "authored",
+            "value": {
+              "denominator": "1",
+              "numerator": "1",
+            },
+            "version": 1,
+          },
+          "size": {
+            "authoredUnit": "oz",
+            "lexeme": "28",
+            "unit": "oz",
+            "value": {
+              "denominator": "1",
+              "numerator": "28",
+            },
+          },
+          "type": "can",
+          "version": 1,
+        },
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
+        "excludedBy": undefined,
+        "item": "tomato",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "tomato",
+            "originalUnit": "can (28 oz)",
+            "preparationModifiers": [
+              "crushed",
+            ],
+            "recipeId": "parenthetical-preparation",
+          },
+        ],
+        "unit": "can (28 oz)",
       },
     ],
     "scale": 1,
@@ -2211,6 +2636,14 @@ exports[`recipe workflow fixture corpus v1 > 'poorly-formatted-no-blank-lines' 1
       {
         "additionalAmounts": undefined,
         "amount": 8,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "8",
+          "value": {
+            "denominator": "1",
+            "numerator": "8",
+          },
+        },
         "excludedBy": undefined,
         "item": "noodles",
         "sources": [
@@ -2218,7 +2651,7 @@ exports[`recipe workflow fixture corpus v1 > 'poorly-formatted-no-blank-lines' 1
             "originalAmount": 8,
             "originalItem": "noodles",
             "originalUnit": "oz",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "poorly-formatted-no-blank-lines",
           },
         ],
@@ -2227,6 +2660,14 @@ exports[`recipe workflow fixture corpus v1 > 'poorly-formatted-no-blank-lines' 1
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "sesame oil",
         "sources": [
@@ -2234,7 +2675,7 @@ exports[`recipe workflow fixture corpus v1 > 'poorly-formatted-no-blank-lines' 1
             "originalAmount": 1,
             "originalItem": "sesame oil",
             "originalUnit": "tsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "poorly-formatted-no-blank-lines",
           },
         ],
@@ -2243,6 +2684,14 @@ exports[`recipe workflow fixture corpus v1 > 'poorly-formatted-no-blank-lines' 1
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "soy sauce",
         "sources": [
@@ -2250,7 +2699,7 @@ exports[`recipe workflow fixture corpus v1 > 'poorly-formatted-no-blank-lines' 1
             "originalAmount": 2,
             "originalItem": "soy sauce",
             "originalUnit": "tbsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "poorly-formatted-no-blank-lines",
           },
         ],
@@ -2323,14 +2772,22 @@ exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "carrot",
         "sources": [
           {
             "originalAmount": 1,
-            "originalItem": "carrots",
+            "originalItem": "carrot",
             "originalUnit": "lb",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "range-seasoning",
           },
         ],
@@ -2339,6 +2796,10 @@ exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "2-3",
+          "kind": "range",
+        },
         "excludedBy": undefined,
         "item": "cumin",
         "sources": [
@@ -2346,7 +2807,7 @@ exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
             "originalAmount": null,
             "originalItem": "cumin",
             "originalUnit": "tsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "range-seasoning",
           },
         ],
@@ -2355,14 +2816,18 @@ exports[`recipe workflow fixture corpus v1 > 'range-seasoning' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "1–2",
+          "kind": "range",
+        },
         "excludedBy": undefined,
         "item": "olive oil",
         "sources": [
           {
             "originalAmount": null,
             "originalItem": "olive oil",
-            "originalUnit": "tablespoons",
-            "prepIntent": undefined,
+            "originalUnit": "tbsp",
+            "preparationModifiers": undefined,
             "recipeId": "range-seasoning",
           },
         ],
@@ -2448,17 +2913,21 @@ exports[`recipe workflow fixture corpus v1 > 'sauce-duplicate-citrus-prep' 1`] =
         "item": "lemon",
         "sources": [
           {
-            "originalAmount": 2,
-            "originalItem": "lemon juice",
-            "originalUnit": "tbsp",
-            "prepIntent": "juiced",
+            "originalAmount": 0.6666666666666666,
+            "originalItem": "lemon",
+            "originalUnit": "count",
+            "preparationModifiers": [
+              "juiced",
+            ],
             "recipeId": "sauce-duplicate-citrus-prep",
           },
           {
             "originalAmount": 1,
-            "originalItem": "lemon zest",
-            "originalUnit": "tbsp",
-            "prepIntent": "zested",
+            "originalItem": "lemon",
+            "originalUnit": "count",
+            "preparationModifiers": [
+              "zested",
+            ],
             "recipeId": "sauce-duplicate-citrus-prep",
           },
         ],
@@ -2467,6 +2936,14 @@ exports[`recipe workflow fixture corpus v1 > 'sauce-duplicate-citrus-prep' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "mustard",
         "sources": [
@@ -2474,7 +2951,7 @@ exports[`recipe workflow fixture corpus v1 > 'sauce-duplicate-citrus-prep' 1`] =
             "originalAmount": 1,
             "originalItem": "mustard",
             "originalUnit": "tsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "sauce-duplicate-citrus-prep",
           },
         ],
@@ -2483,6 +2960,14 @@ exports[`recipe workflow fixture corpus v1 > 'sauce-duplicate-citrus-prep' 1`] =
       {
         "additionalAmounts": undefined,
         "amount": 0.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1/2",
+          "value": {
+            "denominator": "2",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "olive oil",
         "sources": [
@@ -2490,7 +2975,7 @@ exports[`recipe workflow fixture corpus v1 > 'sauce-duplicate-citrus-prep' 1`] =
             "originalAmount": 0.5,
             "originalItem": "olive oil",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "sauce-duplicate-citrus-prep",
           },
         ],
@@ -2562,6 +3047,14 @@ exports[`recipe workflow fixture corpus v1 > 'servings-in-title' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 12,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "12",
+          "value": {
+            "denominator": "1",
+            "numerator": "12",
+          },
+        },
         "excludedBy": undefined,
         "item": "tortillas",
         "sources": [
@@ -2569,7 +3062,7 @@ exports[`recipe workflow fixture corpus v1 > 'servings-in-title' 1`] = `
             "originalAmount": 12,
             "originalItem": "tortillas",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "servings-in-title",
           },
         ],
@@ -2578,6 +3071,14 @@ exports[`recipe workflow fixture corpus v1 > 'servings-in-title' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "ground beef",
         "sources": [
@@ -2585,7 +3086,7 @@ exports[`recipe workflow fixture corpus v1 > 'servings-in-title' 1`] = `
             "originalAmount": 1,
             "originalItem": "ground beef",
             "originalUnit": "lb",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "servings-in-title",
           },
         ],
@@ -2594,6 +3095,14 @@ exports[`recipe workflow fixture corpus v1 > 'servings-in-title' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "salsa",
         "sources": [
@@ -2601,7 +3110,7 @@ exports[`recipe workflow fixture corpus v1 > 'servings-in-title' 1`] = `
             "originalAmount": 1,
             "originalItem": "salsa",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "servings-in-title",
           },
         ],
@@ -2675,6 +3184,14 @@ exports[`recipe workflow fixture corpus v1 > 'unicode-fractions-pancakes' 1`] = 
       {
         "additionalAmounts": undefined,
         "amount": 0.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "½",
+          "value": {
+            "denominator": "2",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "milk",
         "sources": [
@@ -2682,7 +3199,7 @@ exports[`recipe workflow fixture corpus v1 > 'unicode-fractions-pancakes' 1`] = 
             "originalAmount": 0.5,
             "originalItem": "milk",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "unicode-fractions-pancakes",
           },
         ],
@@ -2691,14 +3208,22 @@ exports[`recipe workflow fixture corpus v1 > 'unicode-fractions-pancakes' 1`] = 
       {
         "additionalAmounts": undefined,
         "amount": 1.5,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1½",
+          "value": {
+            "denominator": "2",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "all purpose flour",
         "sources": [
           {
             "originalAmount": 1.5,
-            "originalItem": "all-purpose flour",
-            "originalUnit": "cups",
-            "prepIntent": undefined,
+            "originalItem": "all purpose flour",
+            "originalUnit": "cup",
+            "preparationModifiers": undefined,
             "recipeId": "unicode-fractions-pancakes",
           },
         ],
@@ -2707,6 +3232,14 @@ exports[`recipe workflow fixture corpus v1 > 'unicode-fractions-pancakes' 1`] = 
       {
         "additionalAmounts": undefined,
         "amount": 0.25,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "¼",
+          "value": {
+            "denominator": "4",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "salt",
         "sources": [
@@ -2714,7 +3247,7 @@ exports[`recipe workflow fixture corpus v1 > 'unicode-fractions-pancakes' 1`] = 
             "originalAmount": 0.25,
             "originalItem": "salt",
             "originalUnit": "tsp",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "unicode-fractions-pancakes",
           },
         ],
@@ -2803,14 +3336,22 @@ exports[`recipe workflow fixture corpus v1 > 'unit-variations-potatoes' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "potato",
         "sources": [
           {
             "originalAmount": 2,
-            "originalItem": "potatoes",
-            "originalUnit": "pounds",
-            "prepIntent": undefined,
+            "originalItem": "potato",
+            "originalUnit": "lb",
+            "preparationModifiers": undefined,
             "recipeId": "unit-variations-potatoes",
           },
         ],
@@ -2819,14 +3360,22 @@ exports[`recipe workflow fixture corpus v1 > 'unit-variations-potatoes' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "butter",
         "sources": [
           {
             "originalAmount": 2,
             "originalItem": "butter",
-            "originalUnit": "tablespoons",
-            "prepIntent": undefined,
+            "originalUnit": "tbsp",
+            "preparationModifiers": undefined,
             "recipeId": "unit-variations-potatoes",
           },
         ],
@@ -2835,6 +3384,14 @@ exports[`recipe workflow fixture corpus v1 > 'unit-variations-potatoes' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "milk",
         "sources": [
@@ -2842,7 +3399,7 @@ exports[`recipe workflow fixture corpus v1 > 'unit-variations-potatoes' 1`] = `
             "originalAmount": 1,
             "originalItem": "milk",
             "originalUnit": "cup",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "unit-variations-potatoes",
           },
         ],
@@ -2851,14 +3408,22 @@ exports[`recipe workflow fixture corpus v1 > 'unit-variations-potatoes' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "salt",
         "sources": [
           {
             "originalAmount": 1,
             "originalItem": "salt",
-            "originalUnit": "teaspoon",
-            "prepIntent": undefined,
+            "originalUnit": "tsp",
+            "preparationModifiers": undefined,
             "recipeId": "unit-variations-potatoes",
           },
         ],
@@ -2939,14 +3504,22 @@ exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
         "item": "lime",
         "sources": [
           {
             "originalAmount": 2,
-            "originalItem": "limes",
+            "originalItem": "lime",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "whole-count-variations",
           },
         ],
@@ -2955,6 +3528,14 @@ exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "orange",
         "sources": [
@@ -2962,7 +3543,7 @@ exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
             "originalAmount": 1,
             "originalItem": "orange",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "whole-count-variations",
           },
         ],
@@ -2971,14 +3552,22 @@ exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 3,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "3",
+          "value": {
+            "denominator": "1",
+            "numerator": "3",
+          },
+        },
         "excludedBy": undefined,
         "item": "tomato",
         "sources": [
           {
             "originalAmount": 3,
-            "originalItem": "tomatoes",
+            "originalItem": "tomato",
             "originalUnit": "count",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "whole-count-variations",
           },
         ],
@@ -2987,6 +3576,14 @@ exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "jalapeño",
         "sources": [
@@ -2994,7 +3591,7 @@ exports[`recipe workflow fixture corpus v1 > 'whole-count-variations' 1`] = `
             "originalAmount": 1,
             "originalItem": "jalapeño",
             "originalUnit": "piece",
-            "prepIntent": undefined,
+            "preparationModifiers": undefined,
             "recipeId": "whole-count-variations",
           },
         ],
