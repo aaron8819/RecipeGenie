@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from "next"
-import { Outfit, Playfair_Display } from "next/font/google"
+import {
+  Cormorant_Garamond,
+  Outfit,
+  Playfair_Display,
+} from "next/font/google"
 import { headers } from "next/headers"
 import "./globals.css"
 import { Providers } from "@/components/providers"
@@ -14,6 +18,12 @@ const playfair = Playfair_Display({
   subsets: ["latin"],
   weight: "700",
   variable: "--font-playfair",
+})
+const cormorantGaramond = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: "600",
+  style: "normal",
+  variable: "--font-cormorant-garamond",
 })
 
 export const metadata: Metadata = {
@@ -68,7 +78,14 @@ export default async function RootLayout({
   await headers()
 
   return (
-    <html lang="en" className={cn(outfit.variable, playfair.variable)}>
+    <html
+      lang="en"
+      className={cn(
+        outfit.variable,
+        playfair.variable,
+        cormorantGaramond.variable
+      )}
+    >
       <body className={cn(outfit.className, "min-h-screen overflow-x-hidden")}>
         <div className="min-h-screen min-w-0">
           <Providers>{children}</Providers>

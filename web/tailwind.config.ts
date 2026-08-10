@@ -108,6 +108,7 @@ const config: Config = {
         xl: "1.25rem",
       },
       fontFamily: {
+        brand: ["var(--font-cormorant-garamond)", "serif"],
         display: ["var(--font-playfair)", "serif"],
         sans: ["var(--font-outfit)", "sans-serif"],
       },
