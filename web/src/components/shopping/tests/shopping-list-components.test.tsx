@@ -349,6 +349,16 @@ describe("ShoppingItemRow", () => {
       "Needs: 1 finely grated garlic clove",
     ],
     [
+      "garlic",
+      { originalItem: "garlic", originalAmount: 2, originalUnit: "clove", preparationModifiers: ["finely grated"] },
+      "Needs: 2 finely grated garlic cloves",
+    ],
+    [
+      "garlic",
+      { originalItem: "garlic", originalAmount: 0.5, originalUnit: "clove", preparationModifiers: ["finely grated"] },
+      "Needs: ½ finely grated garlic cloves",
+    ],
+    [
       "avocado",
       { originalItem: "avocado", originalAmount: 1, originalUnit: "count", preparationModifiers: ["diced", "sliced"] },
       "Needs: 1 sliced or diced avocado",

@@ -987,22 +987,17 @@ function reconcileShoppingDocumentV3(
       resolveShoppingIngredientSemantics({ item: persistedKey }).purchaseKey
   }
 
-  const semanticsByAggregate = new Map<string, ShoppingIngredientSemantics>()
   const purchaseKeyByAggregate = new Map<string, PurchaseKey>()
   const candidateAggregateByPersisted = new Map<string, string>()
   for (const entry of Object.values(document.recipeEntries)) {
     for (const ingredient of entry.ingredients) {
-      if (semanticsByAggregate.has(ingredient.aggregateKey)) continue
-      const semantics = resolveShoppingIngredientSemantics({
+      if (purchaseKeyByAggregate.has(ingredient.aggregateKey)) continue
+      const currentIdentity = resolveShoppingIngredientSemantics({
         item: ingredient.purchaseKey,
-        unit: ingredient.purchaseUnit,
-        quantityKind: ingredient.quantityKind,
-        fallbackCategoryKey: ingredient.defaultCategoryKey,
       })
       const purchaseKey = preferencePurchaseKeys.get(
         normalizeShoppingLiteralIdentity(ingredient.purchaseKey)
-      ) || semantics.purchaseKey
-      semanticsByAggregate.set(ingredient.aggregateKey, semantics)
+      ) || currentIdentity.purchaseKey
       purchaseKeyByAggregate.set(ingredient.aggregateKey, purchaseKey)
       candidateAggregateByPersisted.set(
         ingredient.aggregateKey,
@@ -1041,34 +1036,33 @@ function reconcileShoppingDocumentV3(
     .map(([recipeId, entry]) => [recipeId, {
       ...entry,
       ingredients: entry.ingredients.map((ingredient): ShoppingRecipeIngredientV2 => {
-        const semantics = semanticsByAggregate.get(ingredient.aggregateKey)!
+        const occurrenceIdentity = resolveShoppingIngredientSemantics({
+          item: ingredient.purchaseKey,
+        })
         const purchaseKey = purchaseKeyByAggregate.get(ingredient.aggregateKey)!
         return {
           ...ingredient,
           purchaseKey,
           aggregateKey: aggregateByPersisted.get(ingredient.aggregateKey)!,
-          displayName: purchaseKey === semantics.purchaseKey
-            ? ingredient.purchaseKey === semantics.purchaseKey
+          displayName: purchaseKey === occurrenceIdentity.purchaseKey
+            ? ingredient.purchaseKey === occurrenceIdentity.purchaseKey
               ? ingredient.displayName
-              : semantics.purchaseName
+              : occurrenceIdentity.purchaseName
             : primaryLegacyDisplayName(ingredient.displayName),
-          familyKey: semantics.familyKey,
+          familyKey: occurrenceIdentity.familyKey,
           preparation: [...new Set([
             ...ingredient.preparation,
-            ...semantics.preparation,
+            ...occurrenceIdentity.preparation,
           ])].sort(),
-          purchaseUnit: semantics.purchaseUnit,
-          quantityKind: semantics.quantityKind,
-          defaultCategoryKey: semantics.defaultCategoryKey,
           pantryMatchKeys: uniqueRemappedKeys([
             purchaseKey,
-            ...semantics.pantryMatchKeys,
+            ...occurrenceIdentity.pantryMatchKeys,
             ...ingredient.pantryMatchKeys,
           ], (key) => key === ingredient.purchaseKey
             ? purchaseKey
             : resolveShoppingIngredientSemantics({ item: key }).purchaseKey),
-          familyMatchPolicy: semantics.familyMatchPolicy,
-          exclusionFamily: shoppingExclusionFamily(semantics) || undefined,
+          familyMatchPolicy: occurrenceIdentity.familyMatchPolicy,
+          exclusionFamily: shoppingExclusionFamily(occurrenceIdentity) || undefined,
         }
       }),
     }]))

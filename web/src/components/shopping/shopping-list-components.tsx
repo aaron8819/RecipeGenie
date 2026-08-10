@@ -194,9 +194,10 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
     orderedPreparations.splice(combinedIndex, 0, 'sliced or diced')
   }
   const sourceUnit = getIngredientDisplayUnit(source.originalUnit || '')
-  const itemUnitSuffix = source.originalItem === 'garlic' && sourceUnit === 'clove'
-    ? ' clove'
-    : ''
+  let itemUnitSuffix = ''
+  if (source.originalItem === 'garlic' && sourceUnit === 'clove') {
+    itemUnitSuffix = source.originalAmount === 1 ? ' clove' : ' cloves'
+  }
   const itemPhrase = `${orderedPreparations.join(' ')}${orderedPreparations.length ? ' ' : ''}${source.originalItem}${itemUnitSuffix}`
   const qualifiedItem = `${asNeeded ? 'as needed ' : ''}${itemPhrase}${suffixes.length ? `, ${suffixes.join(', ')}` : ''}`
   const displayUnit = itemUnitSuffix ? '' : sourceUnit
