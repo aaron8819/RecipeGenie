@@ -68,6 +68,16 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     ['cumin', 'ground cumin'],
     ['onion', 'onions'],
     ['diced onion', 'onion'],
+    ['garlic', 'finely grated small garlic clove', 'clove'],
+    ['garlic', 'garlic', 'clove', 'finely grated'],
+    ['avocado', 'sliced avocado'],
+    ['avocado', 'diced avocado'],
+    ['avocado', 'sliced or diced avocado'],
+    ['jasmine rice', 'warm cooked jasmine rice'],
+    ['onion', 'white onion'],
+    ['onion', 'yellow onion'],
+    ['onion', 'onion', '', 'white'],
+    ['onion', 'onion', '', 'yellow'],
   ]
 
   it.each(mustMerge)(
@@ -91,6 +101,10 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     ['yogurt', 'Greek yogurt'],
     ['olive oil', 'extra-virgin olive oil'],
     ['garlic', 'garlic powder'],
+    ['rice', 'fried rice'],
+    ['onion', 'pearl onion'],
+    ['onion', 'pickled red onion'],
+    ['spinach', 'frozen spinach'],
     ['chicken breast', 'chicken thigh'],
   ])('does not merge %s with %s', (left, right) => {
     expect(semantics(left).purchaseKey).not.toBe(semantics(right).purchaseKey)
@@ -116,6 +130,23 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
       purchaseKey: 'cilantro',
       preparation: ['chopped'],
     })
+  })
+
+  it.each([
+    ['finely grated small garlic clove', '', 'garlic'],
+    ['garlic', 'finely grated', 'garlic'],
+    ['sliced avocado', '', 'avocado'],
+    ['avocado', 'diced', 'avocado'],
+    ['as needed water', '', 'water'],
+    ['or to taste kosher salt', '', 'kosher salt'],
+    ['kosher salt', 'to taste', 'kosher salt'],
+    ['warm cooked jasmine rice', '', 'jasmine rice'],
+  ])('normalizes item %s with modifier %s to %s', (
+    item,
+    modifier,
+    expected
+  ) => {
+    expect(semantics(item, '', modifier).purchaseName).toBe(expected)
   })
 
   it.each([
@@ -156,9 +187,11 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
   it.each([
     'pinch of salt',
     'salt to taste',
+    'kosher salt, to taste',
     'kosher salt',
     'sea salt',
     'Maldon salt',
+    'or to taste kosher salt',
   ])('recognizes %s as the salt family', (item) => {
     expect(semantics(item).familyKey).toBe('salt')
   })
@@ -184,6 +217,11 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
       pantryMatchKeys: ['preserved mystery leaves'],
       familyMatchPolicy: {},
     })
+  })
+
+  it('keeps ambiguous preparation alternatives literal', () => {
+    expect(semantics('tomatoes, drained, chopped, or diced').purchaseKey)
+      .toBe('tomatoes drained chopped or diced')
   })
 })
 
@@ -294,6 +332,92 @@ describe('Shopping projection semantic behavior', () => {
     const document = documentWithLines([line])
     document.preferences.excludeSaltVariants = true
     expect(projectShoppingDocument(document).excluded).toHaveLength(1)
+  })
+
+  it('merges prepared purchase forms and keeps source preparation evidence', () => {
+    const row = projectShoppingDocument(documentWithLines([
+      '1 clove garlic',
+      '1 finely grated small garlic clove',
+      '1 clove garlic, finely grated',
+      '1 avocado',
+      '1 sliced avocado',
+      '1 diced avocado',
+      '1 sliced or diced avocado',
+    ])).items
+
+    expect(row).toHaveLength(2)
+    expect(row.find((item) => item.displayName === 'garlic')).toMatchObject({
+      quantity: { amount: 3, unit: 'clove' },
+    })
+    expect(row.find((item) => item.displayName === 'garlic')?.sources[1]
+      .preparationModifiers).toEqual(['finely grated', 'small'])
+    expect(row.find((item) => item.displayName === 'garlic')?.sources[2]
+      .preparationModifiers).toEqual(['finely grated'])
+    expect(row.find((item) => item.displayName === 'avocado')?.sources)
+      .toHaveLength(4)
+  })
+
+  it('merges only the approved onion purchase forms', () => {
+    const rows = projectShoppingDocument(documentWithLines([
+      '1 onion',
+      '1 white onion',
+      '1 yellow onion',
+      '1 red onion',
+    ])).items
+
+    expect(rows).toHaveLength(2)
+    expect(rows.find((row) => row.displayName === 'onion')?.quantity)
+      .toMatchObject({ amount: 3, unit: 'count' })
+    expect(rows.find((row) => row.displayName === 'red onion')).toBeDefined()
+  })
+
+  it.each([
+    ['as needed water', 'water'],
+    ['½ tsp or to taste kosher salt', 'kosher salt'],
+    ['2 cup warm cooked jasmine rice', 'jasmine rice'],
+    ['1 sliced avocado', 'avocado'],
+    ['1 sliced or diced avocado', 'avocado'],
+  ])('uses cleaned primary display for %s', (line, expected) => {
+    expect(projectShoppingDocument(documentWithLines([line])).rows[0]
+      .displayName).toBe(expected)
+  })
+
+  it('applies exclusion and Pantry policy after purchase cleanup', () => {
+    const water = documentWithLines(['as needed water'])
+    water.preferences.excludedIngredientKeys = ['water']
+    expect(projectShoppingDocument(water).excluded).toHaveLength(1)
+
+    const salt = documentWithLines(['½ tsp or to taste kosher salt'])
+    salt.preferences.excludeSaltVariants = true
+    expect(projectShoppingDocument(salt).excluded).toHaveLength(1)
+
+    expect(projectShoppingDocument(
+      documentWithLines(['2 cup warm cooked jasmine rice']),
+      [pantry('rice')]
+    ).alreadyHave).toHaveLength(1)
+    expect(projectShoppingDocument(
+      documentWithLines(['1 finely grated small garlic clove']),
+      [pantry('garlic')]
+    ).alreadyHave).toHaveLength(1)
+    expect(projectShoppingDocument(
+      documentWithLines(['1 sliced avocado']),
+      [pantry('avocado')]
+    ).alreadyHave).toHaveLength(1)
+  })
+
+  it('preserves exact 5/8 cup cilantro without inventing a bunch conversion', () => {
+    const row = projectShoppingDocument(
+      documentWithLines(['5/8 cup cilantro'])
+    ).items[0]
+
+    expect(row.quantity).toMatchObject({
+      amount: 5 / 8,
+      unit: 'cup',
+      exactQuantityV1: {
+        kind: 'exact',
+        value: { numerator: '5', denominator: '8' },
+      },
+    })
   })
 
   it.each([

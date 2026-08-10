@@ -1545,7 +1545,8 @@ function extractAlternatives(item: string): { item: string; alternatives?: strin
   const primaryLast = primaryWords.at(-1)?.toLowerCase() || ''
   const sharedNoun = alternativeWords.at(-1) || ''
   const sharedNounQualifier = primaryLast === 'red' ||
-    primaryLast === 'white' || primaryLast.endsWith('-blend')
+    primaryLast === 'white' || primaryLast === 'sliced' ||
+    primaryLast === 'diced' || primaryLast.endsWith('-blend')
   if (sharedNounQualifier && sharedNoun &&
       primaryLast !== sharedNoun.toLowerCase()) {
     primary = `${primary} ${sharedNoun}`

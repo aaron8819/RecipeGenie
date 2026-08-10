@@ -146,14 +146,50 @@ const PREPARATION_WORDS = new Set([
 
 const STRUCTURED_PREPARATION_MODIFIERS = new Set([
   ...PREPARATION_WORDS,
+  'as needed',
   'divided',
   'drained',
+  'finely grated',
+  'finely minced',
   'for garnish',
   'for serving',
   'for topping',
+  'or to taste',
+  'plus more',
   'rinsed',
   'softened',
   'thinly sliced',
+  'to taste',
+])
+
+const ITEM_PREPARATION_PREFIXES = [
+  'finely grated',
+  'finely minced',
+  'sliced or diced',
+  'thinly sliced',
+]
+
+const ITEM_QUALIFIER_PREFIXES = [
+  'as needed',
+  'or to taste',
+]
+
+const ITEM_QUALIFIER_SUFFIXES = [
+  'as needed',
+  'divided',
+  'for garnish',
+  'for serving',
+  'for topping',
+  'optional',
+  'or to taste',
+  'plus more',
+  'to taste',
+]
+
+const ONION_PURCHASE_ALIASES = new Map<string, string>([
+  ['onion', 'onion'],
+  ['white onion', 'onion'],
+  ['yellow onion', 'onion'],
 ])
 
 const DISPLAY_PLURALS: Record<string, string> = {
@@ -315,7 +351,39 @@ function stripGenericPreparation(
   value: string,
   preparation: Set<string>
 ): string {
-  const words = value.split(' ').filter(Boolean)
+  let remaining = value
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const phrase of [
+      ...ITEM_QUALIFIER_PREFIXES,
+      ...ITEM_PREPARATION_PREFIXES,
+    ]) {
+      if (remaining === phrase || remaining.startsWith(`${phrase} `)) {
+        remaining = remaining.slice(phrase.length).trim()
+        preparation.add(phrase)
+        changed = true
+        break
+      }
+    }
+  }
+
+  changed = true
+  while (changed) {
+    changed = false
+    for (const phrase of ITEM_QUALIFIER_SUFFIXES) {
+      if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
+        remaining = remaining.slice(0, -phrase.length).trim()
+        preparation.add(phrase === 'or to taste' ? 'to taste' : phrase)
+        changed = true
+        break
+      }
+    }
+  }
+
+  if (/\bor\b/.test(remaining)) return remaining
+
+  const words = remaining.split(' ').filter(Boolean)
   while (words.length > 0 &&
     (PREPARATION_WORDS.has(words[0]) || words[0] === 'optional')) {
     const word = words.shift()!
@@ -413,12 +481,17 @@ export function resolveShoppingIngredientSemantics(
   }
 
   const originalRiceName = purchaseName
-  const riceCandidate = purchaseName
-    .replace(/^(?:cooked |day old )+/, '')
+  const ricePreparation = purchaseName.match(
+    /^(?:(?:warm|cooked|day old) )+/
+  )?.[0].trim() || ''
+  const riceCandidate = ricePreparation
+    ? purchaseName.slice(ricePreparation.length).trim()
+    : purchaseName
   if (RICE_PURCHASE_KEYS.has(riceCandidate)) {
     purchaseName = riceCandidate
     if (/\bcooked\b/.test(originalRiceName)) preparation.add('cooked')
     if (/\bday[ -]old\b/.test(originalRiceName)) preparation.add('day-old')
+    if (/\bwarm\b/.test(originalRiceName)) preparation.add('warm')
   }
 
   if (/^ground (?:cumin|coriander)$/.test(purchaseName)) {
@@ -439,6 +512,8 @@ export function resolveShoppingIngredientSemantics(
       preparation.add('to taste')
     }
   }
+
+  purchaseName = ONION_PURCHASE_ALIASES.get(purchaseName) || purchaseName
 
   purchaseName = canonicalizeControlledNoun(purchaseName)
   const purchaseKey = purchaseName

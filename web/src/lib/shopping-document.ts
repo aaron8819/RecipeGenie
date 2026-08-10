@@ -1200,9 +1200,11 @@ function derivedClassification(
         excludedBy: exclusion.purchaseKey,
       }
     }
-    if (occurrence.exclusionFamily === "salt" && settings.exclude_salt_variants)
+    const exclusionFamily = shoppingExclusionFamily(needed) ||
+      occurrence.exclusionFamily || null
+    if (exclusionFamily === "salt" && settings.exclude_salt_variants)
       return { bucket: "excluded" as const, excludedBy: INGREDIENT_EXCLUSION_REASONS.salt }
-    if (occurrence.exclusionFamily === "black-pepper" && settings.exclude_black_pepper_variants)
+    if (exclusionFamily === "black-pepper" && settings.exclude_black_pepper_variants)
       return { bucket: "excluded" as const, excludedBy: INGREDIENT_EXCLUSION_REASONS["black-pepper"] }
     return { bucket: "items" as const }
   })

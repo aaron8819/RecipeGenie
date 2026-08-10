@@ -926,6 +926,14 @@ describe('alternative ingredient detection (P2)', () => {
     expect(result.originalText).toBe('¼ cup diced red or white onion');
   });
 
+  it('preserves the shared noun for sliced-or-diced preparation', () => {
+    const result = parseIngredientLine('1 sliced or diced avocado');
+
+    expect(result.item).toBe('sliced avocado');
+    expect(result.alternatives).toEqual(['diced avocado']);
+    expect(result.originalText).toBe('1 sliced or diced avocado');
+  });
+
   it('parses comma-delimited ingredient choices as alternatives', () => {
     const result = parseIngredientLine(
       '6 cups chopped romaine, shredded iceberg, arugula, or other greens'
