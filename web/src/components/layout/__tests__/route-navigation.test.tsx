@@ -30,9 +30,14 @@ describe("route navigation", () => {
       <Header userEmail="user@example.com" onSignOut={vi.fn()} />
     )
 
+    const brandMark = container.querySelector(
+      '[data-slot="recipe-genie-mark"]'
+    )
+    expect(brandMark).toBeInTheDocument()
+    expect(brandMark).toHaveAttribute("src", "/recipe-genie-mark.png")
     expect(
-      container.querySelector('[data-slot="recipe-genie-mark"]')
-    ).toBeInTheDocument()
+      container.querySelector('[data-slot="recipe-genie-wordmark"]')
+    ).toHaveTextContent("Recipe Genie")
 
     const recipes = screen.getByRole("link", { name: "Recipes" })
     expect(recipes).toHaveAttribute("href", "/recipes")

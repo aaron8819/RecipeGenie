@@ -58,10 +58,10 @@ export function Header({
             >
               <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
                 <Image
-                  src="/recipe-genie-mark-approved.png"
+                  src="/recipe-genie-mark.png"
                   alt=""
-                  width={27}
-                  height={32}
+                  width={28}
+                  height={34}
                   className="h-8 w-auto"
                   loading="eager"
                   unoptimized
@@ -69,7 +69,10 @@ export function Header({
                   data-slot="recipe-genie-mark"
                 />
               </div>
-              <h1 className="font-display text-xl sm:text-2xl text-primary flex-shrink-0">
+              <h1
+                className="font-brand flex-shrink-0 text-[1.375rem] font-semibold leading-none tracking-[-0.015em] text-primary sm:text-[1.75rem]"
+                data-slot="recipe-genie-wordmark"
+              >
                 Recipe Genie
               </h1>
             </Link>
