@@ -19,6 +19,7 @@ and reusable Shopping preferences. Rendered `items`, `already_have`, and
 | `supabase/migrations/018_shopping_document_cutover.sql` | Atomic legacy conversion and physical schema cutover. |
 | `supabase/migrations/019_personalized_shopping_order.sql` | V1-to-V2 conversion and strict personalized-order persistence. |
 | `supabase/migrations/020_shopping_document_v3.sql` | V2/V3 compatibility validation and Pantry bridge support while retaining the V2 database default. |
+| `supabase/migrations/021_fix_shopping_v3_family_policy_validation.sql` | Non-empty V3 family-policy validation correction with no default or data rewrite. |
 
 ## Persistence contract
 
@@ -71,13 +72,16 @@ Shopping V3 uses a phased rollout rather than an atomic app/schema assumption:
 1. Apply migration 020 while the prior application is live. It accepts V2 and
    V3, updates the Pantry bridge, performs no document rewrite, and keeps the
    V2 column default.
-2. Deploy the V2/V3-capable application. Reads of V2 upgrade in memory and the
+2. Apply migration 021 before relying on non-empty V3 persistence. It corrects
+   the migration-020 policy-key expression without changing the accepted
+   contract, rewriting documents, or switching the V2 default.
+3. Deploy the V2/V3-capable application. Reads of V2 upgrade in memory and the
    next normal Shopping mutation writes V3.
-3. After the V3-capable application is confirmed live, a separate follow-up
+4. After the V3-capable application is confirmed live, a separate follow-up
    migration/PR may change the database default to V3.
 
-Do not include the V3-default switch in the same migration batch as migration
-020. Before any V3 write, rollback to the prior application remains safe.
+Do not include the V3-default switch in the same migration batch as migrations
+020 or 021. Before any V3 write, rollback to the prior application remains safe.
 
 Exact scalar discrete quantities are rounded up only after compatible recipe
 contributions aggregate. Structured ranges, packages, and source quantities
