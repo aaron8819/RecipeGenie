@@ -1,7 +1,7 @@
 "use client"
 
 import { UtensilsCrossed, CalendarDays, ShoppingCart, Package } from "lucide-react"
-import Link from "next/link"
+import Link, { useLinkStatus } from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
@@ -11,6 +11,40 @@ const navItems = [
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },
   { href: "/pantry", label: "Pantry", icon: Package },
 ] as const
+
+function BottomNavItem({
+  item,
+  isActive,
+}: {
+  item: (typeof navItems)[number]
+  isActive: boolean
+}) {
+  const { pending } = useLinkStatus()
+  const Icon = item.icon
+  const isHighlighted = isActive || pending
+
+  return (
+    <>
+      <Icon
+        className={cn(
+          "h-5 w-5 transition-transform duration-150",
+          isHighlighted && "scale-110",
+          pending && "animate-pulse"
+        )}
+        aria-hidden
+      />
+      <span
+        className={cn(
+          "text-xs font-medium transition-colors",
+          isHighlighted ? "text-primary" : "text-muted-foreground"
+        )}
+      >
+        {item.label}
+      </span>
+      {pending && <span className="sr-only">Loading {item.label}</span>}
+    </>
+  )
+}
 
 export function BottomNav() {
   const pathname = usePathname()
@@ -23,7 +57,6 @@ export function BottomNav() {
     >
       <div className="flex h-16 items-center justify-around">
         {navItems.map((item) => {
-          const Icon = item.icon
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`)
 
@@ -41,20 +74,7 @@ export function BottomNav() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <Icon
-                className={cn(
-                  "h-5 w-5 transition-transform duration-150",
-                  isActive && "scale-110"
-                )}
-              />
-              <span
-                className={cn(
-                  "text-xs font-medium transition-colors",
-                  isActive ? "text-primary" : "text-muted-foreground"
-                )}
-              >
-                {item.label}
-              </span>
+              <BottomNavItem item={item} isActive={isActive} />
             </Link>
           )
         })}
