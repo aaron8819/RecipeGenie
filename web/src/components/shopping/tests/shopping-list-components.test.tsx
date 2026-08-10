@@ -338,6 +338,66 @@ describe("ShoppingItemRow", () => {
   })
 
   it.each([
+    [
+      "garlic",
+      { originalItem: "garlic", originalAmount: 1, originalUnit: "clove", preparationModifiers: ["finely grated", "small"] },
+      "Needs: 1 finely grated small garlic clove",
+    ],
+    [
+      "garlic",
+      { originalItem: "garlic", originalAmount: 1, originalUnit: "clove", preparationModifiers: ["finely grated"] },
+      "Needs: 1 finely grated garlic clove",
+    ],
+    [
+      "avocado",
+      { originalItem: "avocado", originalAmount: 1, originalUnit: "count", preparationModifiers: ["diced", "sliced"] },
+      "Needs: 1 sliced or diced avocado",
+    ],
+    [
+      "jasmine rice",
+      { originalItem: "jasmine rice", originalAmount: 2, originalUnit: "cup", preparationModifiers: ["cooked", "warm"] },
+      "Needs: 2 cup warm cooked jasmine rice",
+    ],
+    [
+      "water",
+      { originalItem: "water", originalAmount: null, originalUnit: "", preparationModifiers: ["as needed"] },
+      "Needs: as needed water",
+    ],
+    [
+      "kosher salt",
+      { originalItem: "kosher salt", originalAmount: 0.5, originalUnit: "tsp", preparationModifiers: ["to taste"] },
+      "Needs: ½ tsp kosher salt, to taste",
+    ],
+  ])("renders source preparation separately from the %s purchase row", (
+    purchaseItem,
+    source,
+    expected
+  ) => {
+    render(
+      <ShoppingItemRow
+        item={item({
+          item: purchaseItem,
+          amount: source.originalAmount,
+          unit: source.originalUnit,
+          sources: [{ recipeName: "Source Recipe", ...source }],
+        })}
+        isDesktop={false}
+        sourceDisplay="summary"
+        isCheckingOff={false}
+        isRemoving={false}
+        isAddingToPantry={false}
+        recipeColorMap={new Map()}
+        onCheckOff={() => {}}
+        onAddToPantry={() => {}}
+        onRemove={() => {}}
+      />
+    )
+
+    expect(screen.getByText(purchaseItem)).toBeInTheDocument()
+    expect(screen.getByText(expected)).toBeInTheDocument()
+  })
+
+  it.each([
     ["egg", 1, "egg"],
     ["egg", 2, "eggs"],
     ["large egg", 3, "large eggs"],

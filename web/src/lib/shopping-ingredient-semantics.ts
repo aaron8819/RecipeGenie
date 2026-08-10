@@ -192,6 +192,24 @@ const ONION_PURCHASE_ALIASES = new Map<string, string>([
   ['yellow onion', 'onion'],
 ])
 
+const ONION_SIZE_PREPARATIONS = [
+  'extra large',
+  'small',
+  'medium',
+  'large',
+] as const
+
+const ONION_PURCHASE_NAMES = new Set([
+  'onion',
+  'white onion',
+  'yellow onion',
+  'red onion',
+  'green onion',
+  'pearl onion',
+  'pickled onion',
+  'pickled red onion',
+])
+
 const DISPLAY_PLURALS: Record<string, string> = {
   apple: 'apples',
   banana: 'bananas',
@@ -397,6 +415,38 @@ function stripGenericPreparation(
   return words.join(' ')
 }
 
+function stripOnionSizePreparation(
+  value: string,
+  preparation: Set<string>
+): string {
+  let remaining = value
+  const removed: string[] = []
+  let changed = true
+
+  while (changed) {
+    changed = false
+    for (const phrase of [...ONION_SIZE_PREPARATIONS, ...PREPARATION_WORDS]
+      .sort((left, right) => right.length - left.length)) {
+      if (remaining.startsWith(`${phrase} `)) {
+        removed.push(phrase)
+        remaining = remaining.slice(phrase.length).trim()
+        changed = true
+        break
+      }
+    }
+  }
+
+  if (!ONION_PURCHASE_NAMES.has(remaining) ||
+      !removed.some((phrase) => ONION_SIZE_PREPARATIONS.includes(
+        phrase as typeof ONION_SIZE_PREPARATIONS[number]
+      ))) {
+    return value
+  }
+
+  addPreparation(preparation, ...removed)
+  return remaining
+}
+
 function inferQuantityKind(
   unit: string,
   requested: ShoppingQuantityKind | undefined
@@ -513,6 +563,7 @@ export function resolveShoppingIngredientSemantics(
     }
   }
 
+  purchaseName = stripOnionSizePreparation(purchaseName, preparation)
   purchaseName = ONION_PURCHASE_ALIASES.get(purchaseName) || purchaseName
 
   purchaseName = canonicalizeControlledNoun(purchaseName)

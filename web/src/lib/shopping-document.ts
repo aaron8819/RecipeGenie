@@ -715,6 +715,18 @@ function legacyAggregateDiscriminator(aggregateKey: string): readonly unknown[] 
   }
 }
 
+function currentAggregateDiscriminator(aggregateKey: string): readonly unknown[] | null {
+  try {
+    const parsed = JSON.parse(aggregateKey)
+    return Array.isArray(parsed) && parsed[0] === 'shopping-aggregate' &&
+      parsed[1] === 2 && parsed.length > 3 && Array.isArray(parsed[3])
+      ? parsed[3]
+      : null
+  } catch {
+    return null
+  }
+}
+
 function legacyQuantityKind(
   ingredient: ShoppingRecipeIngredientV1
 ): ShoppingQuantityKind | undefined {
@@ -963,6 +975,152 @@ export function upgradeShoppingDocumentV1(
   return v2.ok ? upgradeShoppingDocumentV2(v2.document) : v2
 }
 
+function reconcileShoppingDocumentV3(
+  document: ShoppingDocumentV3
+): ShoppingDocumentValidationResult {
+  const preferencePurchaseKeys = legacyPreferencePurchaseKeys(
+    document.preferences
+  )
+  const remapPreferenceKey = (persistedKey: string): PurchaseKey => {
+    const literalKey = normalizeShoppingLiteralIdentity(persistedKey)
+    return preferencePurchaseKeys.get(literalKey) ||
+      resolveShoppingIngredientSemantics({ item: persistedKey }).purchaseKey
+  }
+
+  const semanticsByAggregate = new Map<string, ShoppingIngredientSemantics>()
+  const purchaseKeyByAggregate = new Map<string, PurchaseKey>()
+  const candidateAggregateByPersisted = new Map<string, string>()
+  for (const entry of Object.values(document.recipeEntries)) {
+    for (const ingredient of entry.ingredients) {
+      if (semanticsByAggregate.has(ingredient.aggregateKey)) continue
+      const semantics = resolveShoppingIngredientSemantics({
+        item: ingredient.purchaseKey,
+        unit: ingredient.purchaseUnit,
+        quantityKind: ingredient.quantityKind,
+        fallbackCategoryKey: ingredient.defaultCategoryKey,
+      })
+      const purchaseKey = preferencePurchaseKeys.get(
+        normalizeShoppingLiteralIdentity(ingredient.purchaseKey)
+      ) || semantics.purchaseKey
+      semanticsByAggregate.set(ingredient.aggregateKey, semantics)
+      purchaseKeyByAggregate.set(ingredient.aggregateKey, purchaseKey)
+      candidateAggregateByPersisted.set(
+        ingredient.aggregateKey,
+        createShoppingAggregateKey(
+          purchaseKey,
+          currentAggregateDiscriminator(ingredient.aggregateKey)
+        )
+      )
+    }
+  }
+
+  const persistedKeysByCandidate = new Map<string, string[]>()
+  for (const [persistedKey, candidate] of candidateAggregateByPersisted) {
+    persistedKeysByCandidate.set(candidate, [
+      ...(persistedKeysByCandidate.get(candidate) || []),
+      persistedKey,
+    ])
+  }
+  const aggregateByPersisted = new Map(candidateAggregateByPersisted)
+  for (const persistedKeys of persistedKeysByCandidate.values()) {
+    const overrideSignatures = new Set(persistedKeys.map((persistedKey) =>
+      stableJsonSignature(document.itemOverrides[persistedKey] || {})))
+    if (overrideSignatures.size <= 1) continue
+    for (const persistedKey of persistedKeys) {
+      aggregateByPersisted.set(
+        persistedKey,
+        createShoppingAggregateKey(
+          purchaseKeyByAggregate.get(persistedKey)!,
+          ['semantic-conflict', persistedKey]
+        )
+      )
+    }
+  }
+
+  const recipeEntries = Object.fromEntries(Object.entries(document.recipeEntries)
+    .map(([recipeId, entry]) => [recipeId, {
+      ...entry,
+      ingredients: entry.ingredients.map((ingredient): ShoppingRecipeIngredientV2 => {
+        const semantics = semanticsByAggregate.get(ingredient.aggregateKey)!
+        const purchaseKey = purchaseKeyByAggregate.get(ingredient.aggregateKey)!
+        return {
+          ...ingredient,
+          purchaseKey,
+          aggregateKey: aggregateByPersisted.get(ingredient.aggregateKey)!,
+          displayName: purchaseKey === semantics.purchaseKey
+            ? ingredient.purchaseKey === semantics.purchaseKey
+              ? ingredient.displayName
+              : semantics.purchaseName
+            : primaryLegacyDisplayName(ingredient.displayName),
+          familyKey: semantics.familyKey,
+          preparation: [...new Set([
+            ...ingredient.preparation,
+            ...semantics.preparation,
+          ])].sort(),
+          purchaseUnit: semantics.purchaseUnit,
+          quantityKind: semantics.quantityKind,
+          defaultCategoryKey: semantics.defaultCategoryKey,
+          pantryMatchKeys: uniqueRemappedKeys([
+            purchaseKey,
+            ...semantics.pantryMatchKeys,
+            ...ingredient.pantryMatchKeys,
+          ], (key) => key === ingredient.purchaseKey
+            ? purchaseKey
+            : resolveShoppingIngredientSemantics({ item: key }).purchaseKey),
+          familyMatchPolicy: semantics.familyMatchPolicy,
+          exclusionFamily: shoppingExclusionFamily(semantics) || undefined,
+        }
+      }),
+    }]))
+
+  const itemOverrides: Record<AggregateKey, ShoppingItemOverrideV2> = {}
+  for (const [persistedKey, override] of Object.entries(document.itemOverrides)) {
+    const aggregateKey = aggregateByPersisted.get(persistedKey) || persistedKey
+    if (Object.keys(override).length === 0) continue
+    if (!itemOverrides[aggregateKey]) itemOverrides[aggregateKey] = override
+  }
+
+  const categoryByIngredient: Record<PurchaseKey, string> = {}
+  for (const [persistedKey, categoryKey] of Object.entries(
+    document.preferences.categoryByIngredient
+  )) {
+    const purchaseKey = remapPreferenceKey(persistedKey)
+    if (purchaseKey && categoryByIngredient[purchaseKey] === undefined) {
+      categoryByIngredient[purchaseKey] = categoryKey
+    }
+  }
+
+  const ingredientOrderByCategory: IngredientOrderByCategory = {}
+  const seenOrderingKeys = new Set<PurchaseKey>()
+  for (const [categoryKey, order] of Object.entries(
+    document.preferences.ingredientOrderByCategory
+  )) {
+    for (const purchaseKey of uniqueRemappedKeys(order, remapPreferenceKey)) {
+      if (seenOrderingKeys.has(purchaseKey)) continue
+      seenOrderingKeys.add(purchaseKey)
+      ingredientOrderByCategory[categoryKey] = [
+        ...(ingredientOrderByCategory[categoryKey] || []),
+        purchaseKey,
+      ]
+    }
+  }
+
+  return validateShoppingDocumentV3({
+    ...document,
+    recipeEntries,
+    itemOverrides,
+    preferences: {
+      ...document.preferences,
+      categoryByIngredient,
+      ingredientOrderByCategory,
+      excludedIngredientKeys: uniqueRemappedKeys(
+        document.preferences.excludedIngredientKeys,
+        remapPreferenceKey
+      ),
+    },
+  })
+}
+
 export function validateShoppingDocumentStateV3(
   value: unknown
 ): ShoppingDocumentValidationResult & { contentRevision?: number } {
@@ -971,7 +1129,10 @@ export function validateShoppingDocumentStateV3(
     return { ok: false, issues: [{ path: "contentRevision", message: "Expected a non-negative safe integer revision" }] }
   }
   const validation = validateShoppingDocumentV3(value.document)
-  const v2 = validation.ok ? validation : upgradeShoppingDocumentV2(value.document)
+  const reconciled = validation.ok
+    ? reconcileShoppingDocumentV3(validation.document)
+    : validation
+  const v2 = validation.ok ? reconciled : upgradeShoppingDocumentV2(value.document)
   const compatible = v2.ok ? v2 : upgradeShoppingDocumentV1(value.document)
   return { ...compatible, contentRevision: value.contentRevision as number }
 }
