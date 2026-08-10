@@ -60,7 +60,10 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
 import { resolveShoppingDropIntent } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
-import { createShoppingManualItemId } from "@/lib/shopping-row-reference"
+import {
+  createShoppingManualItemId,
+  requireShoppingRowRef,
+} from "@/lib/shopping-row-reference"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import { useRecipes } from "@/hooks/use-recipes"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
@@ -109,6 +112,11 @@ type ManualEditDraft = {
   itemName: string
   amount: string
   unit: string
+}
+
+type PendingCheckIntent = {
+  checked: boolean
+  version: number
 }
 
 function isManualOnlyItem(item: ShoppingItem) {
@@ -508,23 +516,25 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     </li>
   )
 }, (prevProps, nextProps) => {
-  // Custom comparison function for memo
-  return (
+  const sameItem = prevProps.item === nextProps.item || (
     prevProps.item.item === nextProps.item.item &&
     prevProps.item.rowId === nextProps.item.rowId &&
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
+    JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
+  )
+
+  return (
+    sameItem &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
     prevProps.isRemoving === nextProps.isRemoving &&
     prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
     prevProps.isDesktop === nextProps.isDesktop &&
     prevProps.showDragHandle === nextProps.showDragHandle &&
     prevProps.showSwipeHint === nextProps.showSwipeHint &&
-    prevProps.onEdit === nextProps.onEdit &&
-    prevProps.editorContent === nextProps.editorContent &&
-    JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
+    prevProps.editorContent === nextProps.editorContent
   )
 })
 
@@ -580,21 +590,24 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
     </li>
   )
 }, (prevProps, nextProps) => {
-  return (
+  const sameItem = prevProps.item === nextProps.item || (
     prevProps.item.item === nextProps.item.item &&
     prevProps.item.rowId === nextProps.item.rowId &&
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
+    JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
+  )
+
+  return (
+    sameItem &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
     prevProps.isRemoving === nextProps.isRemoving &&
     prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
     prevProps.isDesktop === nextProps.isDesktop &&
     prevProps.showSwipeHint === nextProps.showSwipeHint &&
-    prevProps.onEdit === nextProps.onEdit &&
-    prevProps.editorContent === nextProps.editorContent &&
-    JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
+    prevProps.editorContent === nextProps.editorContent
   )
 })
 
@@ -669,7 +682,11 @@ export function ShoppingListView() {
   })
   const [manualEditError, setManualEditError] = useState<string | null>(null)
   const [hideCompletedItems, setHideCompletedItems] = useState(false)
-  const [pendingCheckItems, setPendingCheckItems] = useState<Set<string>>(new Set())
+  const [pendingCheckIntents, setPendingCheckIntents] = useState<
+    Map<string, PendingCheckIntent>
+  >(new Map())
+  const pendingCheckIntentsRef = useRef(pendingCheckIntents)
+  const nextCheckIntentVersionRef = useRef(0)
   const [pendingPantryItems, setPendingPantryItems] = useState<Set<string>>(new Set())
   // Tracks items currently being added to prevent duplicate concurrent submissions
   const [activeAdditions, setActiveAdditions] = useState<Set<string>>(new Set())
@@ -828,25 +845,35 @@ export function ShoppingListView() {
     })
   }, [addToPantryAndRemove, undoToast])
 
-  // Handle check-off with per-item pending tracking
+  const settleCheckIntent = useCallback((rowRef: string, version: number) => {
+    const current = pendingCheckIntentsRef.current
+    if (current.get(rowRef)?.version !== version) return
+
+    const next = new Map(current)
+    next.delete(rowRef)
+    pendingCheckIntentsRef.current = next
+    setPendingCheckIntents(next)
+  }, [])
+
+  // Keep the latest per-row intent visible while durable document writes run.
   const handleCheckOff = useCallback((item: ShoppingItem) => {
-    const itemKey = item.rowId || item.item.toLowerCase().trim()
+    const rowRef = requireShoppingRowRef(item, "check-off")
 
-    // Add to pending set
-    setPendingCheckItems(prev => new Set(prev).add(itemKey))
+    const current = pendingCheckIntentsRef.current
+    const checked = !(current.get(rowRef)?.checked ?? item.checked ?? false)
+    const version = nextCheckIntentVersionRef.current + 1
+    nextCheckIntentVersionRef.current = version
 
-    // Perform mutation
-    checkOffItem.mutate(item, {
-      onSettled: () => {
-        // Remove from pending set when complete (success or error)
-        setPendingCheckItems(prev => {
-          const next = new Set(prev)
-          next.delete(itemKey)
-          return next
-        })
-      },
-    })
-  }, [checkOffItem])
+    const next = new Map(current)
+    next.set(rowRef, { checked, version })
+    pendingCheckIntentsRef.current = next
+    setPendingCheckIntents(next)
+
+    void checkOffItem.mutateAsync({ rowRef, checked }).then(
+      () => settleCheckIntent(rowRef, version),
+      () => settleCheckIntent(rowRef, version)
+    )
+  }, [checkOffItem, settleCheckIntent])
 
   // Toggle recipes section collapse (mobile only)
   const toggleRecipeSection = useCallback(() => {
@@ -886,10 +913,17 @@ export function ShoppingListView() {
   // Only show loading on initial load with no cached data
   const showLoading = isLoading && !shoppingList
 
+  const optimisticItems = useMemo(() => {
+    return (projectedShoppingList.items || []).map((item) => {
+      const intent = item.rowId ? pendingCheckIntents.get(item.rowId) : undefined
+      return intent ? { ...item, checked: intent.checked } : item
+    })
+  }, [pendingCheckIntents, projectedShoppingList.items])
+
   // Filter items for pending deletions
   const filteredItems = useMemo(() => {
-    return deriveVisibleShoppingItems(projectedShoppingList.items || [])
-  }, [projectedShoppingList.items])
+    return deriveVisibleShoppingItems(optimisticItems)
+  }, [optimisticItems])
 
   useEffect(() => {
     if (!editingItemRowId) return
@@ -1016,10 +1050,16 @@ export function ShoppingListView() {
   const displayedCategoryViewModels = useMemo(() => {
     if (isManageMode) return categoryViewModels
 
-    const activeCategories = categoryViewModels.filter((category) => category.uncheckedCount > 0)
-    const completedCategories = categoryViewModels.filter((category) => category.uncheckedCount === 0)
+    const isInteractiveCategory = (category: (typeof categoryViewModels)[number]) =>
+      category.uncheckedCount > 0 || category.items.some((item) =>
+        item.checked && !!item.rowId && pendingCheckIntents.has(item.rowId)
+      )
+    const activeCategories = categoryViewModels.filter(isInteractiveCategory)
+    const completedCategories = categoryViewModels.filter((category) =>
+      !isInteractiveCategory(category)
+    )
     return hideCompletedItems ? activeCategories : [...activeCategories, ...completedCategories]
-  }, [categoryViewModels, hideCompletedItems, isManageMode])
+  }, [categoryViewModels, hideCompletedItems, isManageMode, pendingCheckIntents])
 
   const allItemIds = useMemo(() => {
     return deriveSortableItemIds(filteredItems)
@@ -1355,11 +1395,18 @@ export function ShoppingListView() {
   const shoppingListContent = (
     <>
       {displayedCategoryViewModels.map((categoryData, categoryIndex) => {
+        const pendingCheckedCount = categoryData.items.filter((item) =>
+          item.checked && !!item.rowId && pendingCheckIntents.has(item.rowId)
+        ).length
+        const interactiveUncheckedCount =
+          categoryData.uncheckedCount + pendingCheckedCount
         const items = isManageMode
           ? categoryData.items
           : prioritizeUncheckedItems(
               hideCompletedItems
-                ? categoryData.items.filter((item) => !item.checked)
+                ? categoryData.items.filter((item) =>
+                    !item.checked || (!!item.rowId && pendingCheckIntents.has(item.rowId))
+                  )
                 : categoryData.items
             )
         const isDragTarget =
@@ -1370,7 +1417,7 @@ export function ShoppingListView() {
 
         const isCollapsed = !isCategoryExpanded(
           effectiveCategoryIntents.get(categoryData.key),
-          categoryData.uncheckedCount
+          interactiveUncheckedCount
         )
 
         return (
@@ -1391,12 +1438,15 @@ export function ShoppingListView() {
               isCollapsed={isCollapsed}
               isDragTarget={!!isDragTarget}
               isBulkCheckOffPending={bulkCheckOff.isPending}
-              onToggleCategory={() => toggleCategory(categoryData.key, categoryData.uncheckedCount)}
+              onToggleCategory={() => toggleCategory(categoryData.key, interactiveUncheckedCount)}
               onBulkCheckOff={() => handleBulkCheckOff(items)}
               compact={!isManageMode}
             >
               <ul className="divide-y divide-stone-100" style={{ contain: "layout style paint" }}>
                 {items.map((item, index) => {
+                  const pendingCheckIntent = item.rowId
+                    ? pendingCheckIntents.get(item.rowId)
+                    : undefined
                   const showHintForThisItem = categoryIndex === 0 && index === 0 && showSwipeHint
                   const reactKey =
                     item.rowId ||
@@ -1438,7 +1488,7 @@ export function ShoppingListView() {
                     onRemove: () => handleRemoveItem(item),
                     onAddToPantry: () => handleAddToPantry(item),
                     onEdit: isManualOnlyItem(item) ? () => handleStartEditingManualItem(item) : undefined,
-                    isCheckingOff: pendingCheckItems.has(item.rowId || item.item.toLowerCase().trim()),
+                    isCheckingOff: Boolean(pendingCheckIntent),
                     isRemoving: false,
                     isAddingToPantry: pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim()),
                     recipeColorMap,

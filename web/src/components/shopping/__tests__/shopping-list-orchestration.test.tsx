@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { performance as nodePerformance } from "node:perf_hooks"
 import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ShoppingListView } from "../shopping-list"
@@ -8,6 +9,17 @@ import type { ShoppingConfig, ShoppingItem, ShoppingList } from "@/types/databas
 globalThis.React = React
 
 type ResolveFn = () => void
+
+type CheckIntent = {
+  rowRef: string
+  checked: boolean
+}
+
+type PendingCheckMutation = {
+  intent: CheckIntent
+  resolve: (intent: CheckIntent) => void
+  reject: (error: Error) => void
+}
 
 const shoppingListeners = new Set<() => void>()
 const removeItemMutate = vi.fn()
@@ -31,6 +43,10 @@ const addToPantryAndRemoveMutate = vi.fn<
   (item: ShoppingItem, options?: { onSuccess?: (data: { wasAdded: boolean }) => void; onSettled?: () => void }) => void
 >()
 const reorderShoppingMutateAsync = vi.fn()
+const checkOffMutateAsync = vi.fn<
+  (intent: CheckIntent) => Promise<CheckIntent>
+>()
+const pendingCheckMutations: PendingCheckMutation[] = []
 let dndOnDragEnd: ((event: {
   active: { id: string }
   over: { id: string } | null
@@ -165,6 +181,42 @@ function chooseRowAction(name: string, rowIndex = 0) {
     screen.getAllByRole("button", { name: "Item actions" })[rowIndex]
   )
   fireEvent.click(screen.getByRole("menuitem", { name }))
+}
+
+function getItemCheckbox(itemName: string) {
+  const row = screen.getByText(itemName).closest('[data-testid="shopping-item-row"]')
+  if (!row) throw new Error(`Shopping row not found for ${itemName}`)
+  return within(row as HTMLElement).getByRole("button", {
+    name: /^(Check off|Uncheck) item$/,
+  })
+}
+
+async function resolveNextCheckMutation() {
+  const pending = pendingCheckMutations.shift()
+  if (!pending) throw new Error("No pending check mutation to resolve")
+
+  await act(async () => {
+    updateShoppingList((list) => ({
+      ...list,
+      items: list.items.map((item) =>
+        item.rowId === pending.intent.rowRef
+          ? { ...item, checked: pending.intent.checked }
+          : item
+      ),
+    }))
+    pending.resolve(pending.intent)
+    await Promise.resolve()
+  })
+}
+
+async function rejectNextCheckMutation() {
+  const pending = pendingCheckMutations.shift()
+  if (!pending) throw new Error("No pending check mutation to reject")
+
+  await act(async () => {
+    pending.reject(new Error("write failed"))
+    await Promise.resolve()
+  })
 }
 
 function setMobileViewport() {
@@ -330,7 +382,7 @@ vi.mock("@/hooks/use-shopping", () => ({
     isPending: false,
   }),
   useCheckOffItem: () => ({
-    mutate: vi.fn(),
+    mutateAsync: checkOffMutateAsync,
     isPending: false,
   }),
   useBulkCheckOff: () => {
@@ -546,6 +598,7 @@ vi.mock("@/hooks/use-shopping", () => ({
   vi.clearAllMocks()
   bulkMutationEvents.length = 0
   bulkMutationResolvers.length = 0
+  pendingCheckMutations.length = 0
   moveExcludedResolvers.length = 0
   dndOnDragEnd = null
   currentConfig = makeConfig()
@@ -660,6 +713,9 @@ vi.mock("@/hooks/use-shopping", () => ({
     }))
     return { rowId: item.rowId }
   })
+  checkOffMutateAsync.mockImplementation((intent) => new Promise(
+    (resolve, reject) => pendingCheckMutations.push({ intent, resolve, reject })
+  ))
 
   vi.stubGlobal("requestAnimationFrame", vi.fn(() => 0))
   vi.stubGlobal("cancelAnimationFrame", vi.fn())
@@ -1069,6 +1125,157 @@ describe("ShoppingListView orchestration", () => {
       behavior: "auto",
       block: "start",
     })
+  })
+
+  it("checks a row visually before persistence resolves", () => {
+    currentShoppingList = makeList({ items: [makeItem("apples")] })
+    renderShoppingList()
+
+    fireEvent.click(getItemCheckbox("apples"))
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
+    expect(getItemCheckbox("apples")).not.toBeDisabled()
+    expect(checkOffMutateAsync).toHaveBeenCalledWith({
+      rowRef: "manual:apples",
+      checked: true,
+    })
+    expect(pendingCheckMutations).toHaveLength(1)
+  })
+
+  it("unchecks a row visually before persistence resolves", () => {
+    currentShoppingList = makeList({
+      items: [makeItem("apples", { checked: true })],
+    })
+    renderShoppingList()
+    toggleCategory("produce")
+
+    fireEvent.click(getItemCheckbox("apples"))
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
+    expect(checkOffMutateAsync).toHaveBeenCalledWith({
+      rowRef: "manual:apples",
+      checked: false,
+    })
+  })
+
+  it("accepts rapid toggles on different rows while earlier writes are unresolved", async () => {
+    currentShoppingList = makeList({
+      items: [makeItem("apples"), makeItem("bananas"), makeItem("carrots")],
+    })
+    renderShoppingList()
+
+    fireEvent.click(getItemCheckbox("apples"))
+    fireEvent.click(getItemCheckbox("bananas"))
+    fireEvent.click(getItemCheckbox("carrots"))
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("bananas")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("carrots")).toHaveAccessibleName("Uncheck item")
+    expect(pendingCheckMutations).toHaveLength(3)
+
+    await resolveNextCheckMutation()
+    await resolveNextCheckMutation()
+    await resolveNextCheckMutation()
+    toggleCategory("produce")
+
+    for (const itemName of ["apples", "bananas", "carrots"]) {
+      expect(getItemCheckbox(itemName)).toHaveAccessibleName("Uncheck item")
+      expect(getItemCheckbox(itemName)).not.toHaveAttribute("aria-busy")
+    }
+  })
+
+  it("keeps a 92-row list interactive while multiple writes are unresolved", () => {
+    currentShoppingList = makeList({
+      items: Array.from({ length: 92 }, (_, index) => makeItem(
+        `benchmark item ${index}`,
+        { rowId: `manual:benchmark-${index}` }
+      )),
+    })
+    renderShoppingList()
+
+    const durations = Array.from({ length: 12 }, (_, index) => {
+      const checkbox = getItemCheckbox(`benchmark item ${index}`)
+      const startedAt = nodePerformance.now()
+      fireEvent.click(checkbox)
+      expect(checkbox).toHaveAccessibleName("Uncheck item")
+      return nodePerformance.now() - startedAt
+    })
+
+    expect(pendingCheckMutations).toHaveLength(12)
+    expect(screen.getAllByRole("button", { name: "Uncheck item" })).toHaveLength(12)
+
+    if (process.env.RG_PERF_LOG === "1") {
+      const sorted = [...durations].sort((left, right) => left - right)
+      const mean = durations.reduce((total, duration) => total + duration, 0) /
+        durations.length
+      console.info(JSON.stringify({
+        benchmark: "shopping-checkbox-92-row",
+        samples: durations.length,
+        meanMs: Number(mean.toFixed(3)),
+        medianMs: Number(sorted[Math.floor(sorted.length / 2)].toFixed(3)),
+        p95Ms: Number(sorted[Math.ceil(sorted.length * 0.95) - 1].toFixed(3)),
+      }))
+    }
+  })
+
+  it("keeps the newest same-row intent through an older successful write", async () => {
+    currentShoppingList = makeList({ items: [makeItem("apples")] })
+    renderShoppingList()
+
+    fireEvent.click(getItemCheckbox("apples"))
+    fireEvent.click(getItemCheckbox("apples"))
+
+    expect(checkOffMutateAsync.mock.calls.map(([intent]) => intent.checked))
+      .toEqual([true, false])
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+
+    await resolveNextCheckMutation()
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
+
+    await resolveNextCheckMutation()
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
+  })
+
+  it("keeps the newest same-row intent through an older failed write", async () => {
+    currentShoppingList = makeList({ items: [makeItem("apples")] })
+    renderShoppingList()
+
+    fireEvent.click(getItemCheckbox("apples"))
+    fireEvent.click(getItemCheckbox("apples"))
+
+    await rejectNextCheckMutation()
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
+
+    await resolveNextCheckMutation()
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
+  })
+
+  it("rolls back a failed current intent and allows an immediate retry", async () => {
+    currentShoppingList = makeList({ items: [makeItem("apples")] })
+    renderShoppingList()
+
+    fireEvent.click(getItemCheckbox("apples"))
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+
+    await rejectNextCheckMutation()
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
+
+    fireEvent.click(getItemCheckbox("apples"))
+
+    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(checkOffMutateAsync).toHaveBeenCalledTimes(2)
   })
 
   it("applies bulk check-off optimistically and keeps the checked state stable after settlement", async () => {

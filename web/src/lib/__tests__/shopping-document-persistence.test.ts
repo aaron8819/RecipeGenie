@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   createEmptyShoppingDocument,
+  projectShoppingDocument,
   type ShoppingDocumentStateV3,
 } from '../shopping-document'
 import {
@@ -82,5 +83,34 @@ describe("Shopping document CAS persistence", () => {
     })
 
     expect(write).toHaveBeenCalledWith(initial, initial)
+  })
+
+  it("round-trips an explicit checked intent through persistence and projection", async () => {
+    const initial = state(6)
+    initial.document.manualItems.push({
+      id: "manual-a",
+      displayName: "paper towels",
+      quantity: null,
+      categoryKey: "misc",
+      bucket: "items",
+      checked: false,
+    })
+
+    const persisted = await persistShoppingMutationWithReplay({
+      initial,
+      mutation: {
+        type: "setChecked",
+        rowRef: "manual:manual-a",
+        checked: true,
+      },
+      write: async (_current, next) => JSON.parse(JSON.stringify(next)),
+      refetch: vi.fn(),
+    })
+
+    expect(persisted.contentRevision).toBe(7)
+    expect(projectShoppingDocument(persisted.document).rows[0]).toMatchObject({
+      rowRef: "manual:manual-a",
+      checked: true,
+    })
   })
 })

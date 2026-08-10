@@ -426,7 +426,7 @@ export function ShoppingItemRow({
           type="button"
           data-checkbox="true"
           onClick={onCheckOff}
-          disabled={isCheckingOff}
+          aria-busy={isCheckingOff || undefined}
           className="my-0 flex min-h-[52px] min-w-[52px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:min-h-[48px] md:min-w-[48px]"
           aria-label={isChecked ? "Uncheck item" : "Check off item"}
         >

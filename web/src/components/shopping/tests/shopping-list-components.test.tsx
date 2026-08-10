@@ -204,7 +204,7 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByRole("button", { name: "Item actions" }).className).not.toContain("hidden")
   })
 
-  it("keeps mobile action trigger centered with consistent touch targets and disables busy actions", () => {
+  it("keeps mobile action trigger centered and leaves a busy check-off actionable", () => {
     render(
       <ShoppingItemRow
         item={item({ checked: true, item: "milk" })}
@@ -222,7 +222,8 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.getByTestId("shopping-item-row").className).toContain("items-center")
     expect(screen.getByText("Swipe left to delete")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Uncheck item" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Uncheck item" })).toHaveAttribute("aria-busy", "true")
+    expect(screen.getByRole("button", { name: "Uncheck item" })).not.toBeDisabled()
     expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("h-11")
     expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("w-11")
     expect(screen.getByRole("button", { name: "Item actions" }).className).not.toContain("hidden")
