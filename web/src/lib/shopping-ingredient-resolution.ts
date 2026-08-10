@@ -202,9 +202,14 @@ export function resolveShoppingIngredient({
     ? purchase.purchaseQuantity ?? 0
     : (purchase.purchaseQuantity ?? 0) * scale
   const purchaseUnit = normalizeUnit(purchase.purchaseUnit || "")
-  const alternatives = ingredient.alternatives?.map((alternative) =>
-    resolveShoppingIngredientSemantics({ item: alternative }).purchaseName
-  )
+  const alternativeSemantics = ingredient.alternatives
+    ?.map((alternative) => resolveShoppingIngredientSemantics({ item: alternative }))
+  const alternatives = alternativeSemantics
+    ?.map((alternative) => alternative.purchaseName)
+    .filter((alternative, index, values) =>
+      alternative !== purchase.purchaseName &&
+      values.indexOf(alternative) === index
+    )
   const displayName = alternatives?.length
     ? `${purchase.purchaseName} (or ${alternatives.join(", ")})`
     : purchase.purchaseName
@@ -259,7 +264,12 @@ export function resolveShoppingIngredient({
           },
     purchaseUnit,
     familyKey: semantics.familyKey,
-    preparation: semantics.preparation,
+    preparation: [...new Set([
+      ...semantics.preparation,
+      ...(alternativeSemantics || [])
+        .filter((alternative) => alternative.purchaseName === semantics.purchaseName)
+        .flatMap((alternative) => alternative.preparation),
+    ])].sort(),
     quantityKind: semantics.quantityKind,
     defaultCategoryKey,
     defaultCategoryOrder,

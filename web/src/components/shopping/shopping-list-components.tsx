@@ -170,27 +170,58 @@ function getDisplayItemName(item: ShoppingItem): string {
 function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]>[number]): string | null {
   if (!source.originalItem) return null
 
+  const preparations = new Set(source.preparationModifiers || [])
+  const suffixes = ['to taste', 'for garnish', 'for serving', 'for topping', 'divided', 'plus more']
+    .filter((preparation) => preparations.delete(preparation))
+  const asNeeded = preparations.delete('as needed')
+  const preparationOrder = [
+    'warm', 'cooked', 'day-old', 'finely grated', 'finely minced',
+    'thinly sliced', 'sliced', 'diced', 'small', 'medium', 'large',
+    'extra large', 'chopped', 'crushed', 'cubed', 'grated', 'halved',
+    'juiced', 'mashed', 'minced', 'peeled', 'quartered', 'shredded',
+    'zested', 'drained', 'rinsed', 'softened', 'fresh',
+  ]
+  const orderedPreparations = [
+    ...preparationOrder.filter((preparation) => preparations.delete(preparation)),
+    ...[...preparations].sort(),
+  ]
+  const slicedIndex = orderedPreparations.indexOf('sliced')
+  const dicedIndex = orderedPreparations.indexOf('diced')
+  if (slicedIndex >= 0 && dicedIndex >= 0) {
+    const combinedIndex = Math.min(slicedIndex, dicedIndex)
+    orderedPreparations.splice(dicedIndex, 1)
+    orderedPreparations.splice(slicedIndex, 1)
+    orderedPreparations.splice(combinedIndex, 0, 'sliced or diced')
+  }
+  const sourceUnit = getIngredientDisplayUnit(source.originalUnit || '')
+  let itemUnitSuffix = ''
+  if (source.originalItem === 'garlic' && sourceUnit === 'clove') {
+    itemUnitSuffix = source.originalAmount === 1 ? ' clove' : ' cloves'
+  }
+  const itemPhrase = `${orderedPreparations.join(' ')}${orderedPreparations.length ? ' ' : ''}${source.originalItem}${itemUnitSuffix}`
+  const qualifiedItem = `${asNeeded ? 'as needed ' : ''}${itemPhrase}${suffixes.length ? `, ${suffixes.join(', ')}` : ''}`
+  const displayUnit = itemUnitSuffix ? '' : sourceUnit
+
   const structured = formatStructuredRecipeQuantity(
     source.exactQuantityV1,
-    source.exactAuthoredUnit ?? source.originalUnit ?? "",
+    itemUnitSuffix ? '' : source.exactAuthoredUnit ?? source.originalUnit ?? "",
     source.exactPackageV1
   )
   if (structured) {
-    return `${structured.text} ${source.originalItem}`
+    return `${structured.text} ${qualifiedItem}`
   }
 
   const rangeAmount = formatEncodedRangeAmount(
     source.originalAmount,
-    source.originalUnit || ""
+    displayUnit
   )
   if (rangeAmount) {
-    return `${rangeAmount} ${source.originalItem}`
+    return `${rangeAmount} ${qualifiedItem}`
   }
 
   const amount = source.originalAmount ? toFraction(source.originalAmount) : ""
-  const unit = getIngredientDisplayUnit(source.originalUnit || "")
-  const prefix = amount ? `${amount}${unit ? ` ${unit}` : ""} ` : ""
-  return `${prefix}${source.originalItem}`.trim()
+  const prefix = amount ? `${amount}${displayUnit ? ` ${displayUnit}` : ""} ` : ""
+  return `${prefix}${qualifiedItem}`.trim()
 }
 
 function buildSourceDetailLabel(item: ShoppingItem): string | null {

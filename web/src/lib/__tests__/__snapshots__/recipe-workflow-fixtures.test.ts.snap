@@ -2478,14 +2478,15 @@ exports[`recipe workflow fixture corpus v1 > 'parenthetical-preparation' 1`] = `
           },
         },
         "excludedBy": undefined,
-        "item": "large onion",
+        "item": "onion",
         "sources": [
           {
             "originalAmount": 1,
-            "originalItem": "large onion",
+            "originalItem": "onion",
             "originalUnit": "count",
             "preparationModifiers": [
               "diced",
+              "large",
             ],
             "recipeId": "parenthetical-preparation",
           },

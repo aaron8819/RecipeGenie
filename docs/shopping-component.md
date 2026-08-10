@@ -88,6 +88,13 @@ contributions aggregate. Structured ranges, packages, and source quantities
 remain exact. An unchecked, unquantified manual row may be hidden while a safe
 same-purchase derived row is visible; the persisted manual row is unchanged.
 
+Shopping purchase identity removes only explicitly recognized preparation and
+use qualifiers from recipe wording. Unknown adjectives remain literal.
+Generic, white, and yellow onion share the `onion` purchase identity; red,
+green, pearl, and pickled onion forms remain distinct. Exact recipe quantities
+and semantic preparation metadata remain available to source detail even when
+the primary row uses the cleaned purchase name.
+
 ## Verification
 
 Run from `web/`:
@@ -98,4 +105,4 @@ npm run test -- --run src/lib/__tests__/shopping-document.test.ts src/lib/__test
 supabase test db --local --workdir ..
 ```
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
