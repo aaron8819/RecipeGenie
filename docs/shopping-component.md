@@ -15,7 +15,7 @@ and reusable Shopping preferences. Rendered `items`, `already_have`, and
 | `web/src/lib/shopping-ingredient-semantics.ts` | Central purchase, family, preparation, quantity, category, Pantry, and exclusion semantics. |
 | `web/src/lib/shopping-ingredient-resolution.ts` | Resolves recipe structure through the central semantic authority. |
 | `web/src/hooks/shopping/use-shopping-document.ts` | The only runtime Shopping read/write seam; CAS, replay, Pantry bridge, and UI adapters. |
-| `web/src/components/shopping/shopping-list.tsx` | Shopping UI orchestration and immediate inverse-write Undo UX. |
+| `web/src/components/shopping/shopping-list.tsx` | Shopping UI orchestration, per-row optimistic check-off state, and immediate inverse-write Undo UX. |
 | `supabase/migrations/018_shopping_document_cutover.sql` | Atomic legacy conversion and physical schema cutover. |
 | `supabase/migrations/019_personalized_shopping_order.sql` | V1-to-V2 conversion and strict personalized-order persistence. |
 | `supabase/migrations/020_shopping_document_v3.sql` | V2/V3 compatibility validation and Pantry bridge support while retaining the V2 database default. |
@@ -29,6 +29,10 @@ and reusable Shopping preferences. Rendered `items`, `already_have`, and
   `WHERE content_revision = expected`, advancing the revision exactly once.
 - On conflict the client refetches, replays the same intent once, and retries
   once. A second conflict is surfaced to the user.
+- Check-off interactions render the latest versioned per-row intent immediately
+  while owner-scoped document writes remain serialized. Only the current intent
+  may clear its optimistic state, so stale success or failure cannot overwrite a
+  newer same-row tap. A pending checked row remains actionable until settlement.
 - Recipe entries are keyed by immutable recipe UUID and there is at most one
   active entry per recipe.
 - Manual IDs and derived aggregate keys produce stable `manual:*` and

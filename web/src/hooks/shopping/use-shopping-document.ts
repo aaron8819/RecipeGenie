@@ -382,13 +382,16 @@ export function useRestoreShoppingItem() {
 }
 
 export function useCheckOffItem() {
-  return useShoppingMutation((_state, item: ShoppingItem) => ({
+  return useShoppingMutation((_state, intent: {
+    rowRef: RowRef
+    checked: boolean
+  }) => ({
     mutation: {
       type: 'setChecked',
-      rowRef: requireShoppingRowRef(item),
-      checked: !item.checked,
+      rowRef: intent.rowRef,
+      checked: intent.checked,
     },
-    value: item,
+    value: intent,
   }))
 }
 
