@@ -112,6 +112,19 @@ function run(command, args, options = {}) {
   }
 }
 
+export function resolveSupabaseCli(webRoot, platform = process.platform) {
+  const platformPath = platform === 'win32' ? path.win32 : path.posix
+  const invocation = platformPath.join(
+    'node_modules',
+    '.bin',
+    platform === 'win32' ? 'supabase.cmd' : 'supabase'
+  )
+  return {
+    absolutePath: platformPath.join(webRoot, invocation),
+    invocation,
+  }
+}
+
 export function findLocalCredentials(webRoot) {
   const localPath = path.join(webRoot, '.env.e2e.local')
   if (fs.existsSync(localPath)) {
@@ -142,13 +155,8 @@ export function createLocalRuntime(webRoot) {
     throw new Error(`Local E2E requires Node 22; found ${process.version}`)
   }
 
-  const supabaseCommand = path.join(
-    webRoot,
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'supabase.cmd' : 'supabase'
-  )
-  if (!fs.existsSync(supabaseCommand)) {
+  const supabaseCommand = resolveSupabaseCli(webRoot)
+  if (!fs.existsSync(supabaseCommand.absolutePath)) {
     throw new Error('Supabase CLI is missing. Run npm ci from web/ with Node 22 and npm 10.')
   }
 
@@ -156,10 +164,10 @@ export function createLocalRuntime(webRoot) {
   if (!docker.ok) throw new Error('Docker is unavailable. Start Docker Desktop and retry.')
 
   const supabaseArgs = (args) => [...args, '--workdir', '..']
-  const status = () => run(supabaseCommand, supabaseArgs(['status', '-o', 'env']), { cwd: webRoot })
-  const start = () => run(supabaseCommand, supabaseArgs(['start']), { cwd: webRoot })
+  const status = () => run(supabaseCommand.invocation, supabaseArgs(['status', '-o', 'env']), { cwd: webRoot })
+  const start = () => run(supabaseCommand.invocation, supabaseArgs(['start']), { cwd: webRoot })
   const reset = () => run(
-    supabaseCommand,
+    supabaseCommand.invocation,
     supabaseArgs(['db', 'reset', '--local']),
     { cwd: webRoot }
   )

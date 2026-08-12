@@ -144,9 +144,9 @@ test.describe('Pantry Management', () => {
     const originalBlackPepper = await blackPepper.isChecked()
     const saveSalt = page.waitForResponse((response) =>
       response.request().method() === 'PATCH' &&
-      response.url().includes('/rest/v1/user_config')
+      response.url().includes('/rest/v1/shopping_list')
     )
-    await salt.setChecked(!originalSalt)
+    await salt.click()
     expect((await saveSalt).ok()).toBe(true)
     await expect(salt).toBeChecked({ checked: !originalSalt })
     await expect(blackPepper).toBeChecked({ checked: originalBlackPepper })
@@ -162,9 +162,9 @@ test.describe('Pantry Management', () => {
 
     const restoreSalt = page.waitForResponse((response) =>
       response.request().method() === 'PATCH' &&
-      response.url().includes('/rest/v1/user_config')
+      response.url().includes('/rest/v1/shopping_list')
     )
-    await page.getByRole('checkbox', { name: 'Salt variants' }).setChecked(originalSalt)
+    await page.getByRole('checkbox', { name: 'Salt variants' }).click()
     expect((await restoreSalt).ok()).toBe(true)
   })
 

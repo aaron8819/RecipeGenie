@@ -17,8 +17,6 @@ type RecipeDraft = {
 type RecipeRunState = {
   runId: string
   recipeUuids: Set<string>
-  contributionRecipeUuids: Set<string>
-  idempotencyKeys: Set<string>
 }
 
 function captureRecipeIdentity(request: Request, state: RecipeRunState) {
@@ -39,31 +37,10 @@ function captureRecipeIdentity(request: Request, state: RecipeRunState) {
       }
     }
   }
-
-  if (url.includes('/api/shopping/recipe-contributions')) {
-    const command = payload as {
-      recipeIds?: unknown
-      idempotencyKey?: unknown
-    } | null
-    const recipeIds = command?.recipeIds
-    if (Array.isArray(recipeIds)) {
-      for (const recipeUuid of recipeIds) {
-        if (typeof recipeUuid === 'string' && UUID_PATTERN.test(recipeUuid)) {
-          state.contributionRecipeUuids.add(recipeUuid)
-        }
-      }
-    }
-    if (typeof command?.idempotencyKey === 'string' && command.idempotencyKey) {
-      state.idempotencyKeys.add(command.idempotencyKey)
-    }
-  }
 }
 
 async function cleanupRecipeRun(state: RecipeRunState) {
-  const recipeUuids = [...new Set([
-    ...state.recipeUuids,
-    ...state.contributionRecipeUuids,
-  ])]
+  const recipeUuids = [...state.recipeUuids]
   if (recipeUuids.length === 0) return
 
   const supabase = createClient(E2E_CONFIG.supabaseUrl, E2E_CONFIG.supabaseAnonKey, {
@@ -89,20 +66,23 @@ async function cleanupRecipeRun(state: RecipeRunState) {
       if (error) throw error
     }
 
-    const [recipeResult, contributionResult] = await Promise.all([
+    const [recipeResult, shoppingResult] = await Promise.all([
       supabase.from('recipes').select('recipe_uuid').in('recipe_uuid', recipeUuids),
-      supabase
-        .from('shopping_recipe_contributions')
-        .select('recipe_uuid')
-        .in('recipe_uuid', recipeUuids),
+      supabase.from('shopping_list').select('document'),
     ])
     if (recipeResult.error) throw recipeResult.error
-    if (contributionResult.error) throw contributionResult.error
+    if (shoppingResult.error) throw shoppingResult.error
     expect(recipeResult.data, `recipe cleanup failed for run ${state.runId}`).toEqual([])
-    expect(
-      contributionResult.data,
-      `shopping contribution cleanup failed for run ${state.runId}`
-    ).toEqual([])
+    for (const row of shoppingResult.data) {
+      const recipeEntries = (row.document as { recipeEntries?: Record<string, unknown> })
+        .recipeEntries || {}
+      for (const recipeUuid of recipeUuids) {
+        expect(
+          recipeEntries[recipeUuid],
+          `Shopping document cleanup failed for run ${state.runId}`
+        ).toBeUndefined()
+      }
+    }
   } finally {
     await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
   }
@@ -119,30 +99,19 @@ async function expectDeletedRecipeState(recipeUuid: string, ingredient: string) 
   if (signInError) throw signInError
 
   try {
-    const [recipeResult, contributionResult, shoppingResult] = await Promise.all([
+    const [recipeResult, shoppingResult] = await Promise.all([
       supabase.from('recipes').select('recipe_uuid').eq('recipe_uuid', recipeUuid),
-      supabase
-        .from('shopping_recipe_contributions')
-        .select('recipe_uuid')
-        .eq('recipe_uuid', recipeUuid),
-      supabase
-        .from('shopping_list')
-        .select('items,already_have,excluded,source_recipe_uuids'),
+      supabase.from('shopping_list').select('document'),
     ])
     if (recipeResult.error) throw recipeResult.error
-    if (contributionResult.error) throw contributionResult.error
     if (shoppingResult.error) throw shoppingResult.error
 
     expect(recipeResult.data).toEqual([])
-    expect(contributionResult.data).toEqual([])
-
-    const projection = shoppingResult.data[0]
-    expect(projection?.source_recipe_uuids || []).not.toContain(recipeUuid)
-    expect(JSON.stringify([
-      projection?.items,
-      projection?.already_have,
-      projection?.excluded,
-    ])).not.toContain(ingredient)
+    const document = shoppingResult.data[0]?.document as {
+      recipeEntries?: Record<string, unknown>
+    } | undefined
+    expect(document?.recipeEntries?.[recipeUuid]).toBeUndefined()
+    expect(JSON.stringify(document?.recipeEntries || {})).not.toContain(ingredient)
   } finally {
     await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined)
   }
@@ -152,8 +121,17 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function shoppingItemName(value: string): RegExp {
-  return new RegExp(`^${escapeRegex(value)}s?$`, 'i')
+function normalizedShoppingText(value: string): RegExp {
+  return new RegExp(
+    value.split(/[\s-]+/).map(escapeRegex).join('[\\s-]+'),
+    'i'
+  )
+}
+
+function shoppingRowsByItem(page: Page, value: string) {
+  return page.locator('[data-testid^="shopping-row-"]').filter({
+    hasText: normalizedShoppingText(value),
+  })
 }
 
 function buildRecipe(seed: string): RecipeDraft {
@@ -220,14 +198,15 @@ async function returnFromRecipeDetail(page: Page) {
 async function searchRecipes(page: Page, value: string) {
   const input = page.getByLabel(/search recipes by name or category/i)
   await input.fill(value)
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(value)
 }
 
 async function addOpenRecipeToShopping(page: Page) {
   const detailPage = page.getByTestId('recipe-detail-page')
   const button = detailPage.getByRole('button', { name: /add to shopping list/i })
   const response = page.waitForResponse((candidate) =>
-    candidate.url().includes('/api/shopping/recipe-contributions') &&
-    candidate.request().method() === 'POST'
+    candidate.url().includes('/rest/v1/shopping_list') &&
+    candidate.request().method() === 'PATCH'
   )
   await button.click()
   expect((await response).ok()).toBe(true)
@@ -252,8 +231,6 @@ test.describe('Recipes', () => {
     const run: RecipeRunState = {
       runId: randomUUID(),
       recipeUuids: new Set(),
-      contributionRecipeUuids: new Set(),
-      idempotencyKeys: new Set(),
     }
     recipeRun = run
     page.on('request', (request) => captureRecipeIdentity(request, run))
@@ -354,9 +331,13 @@ test.describe('Recipes', () => {
 
     await navigateToRoute('shopping')
     await page.getByRole('button', { name: /jump to protein/i }).click()
-    await expect(page.getByText(recipe.ingredients[0].item, { exact: true })).toBeVisible()
+    await expect(page.locator('[data-testid^="shopping-row-"]').filter({
+      hasText: normalizedShoppingText(recipe.ingredients[0].item),
+    })).toBeVisible()
     await page.getByRole('button', { name: /jump to fresh produce/i }).click()
-    await expect(page.getByText(recipe.ingredients[1].item, { exact: true })).toBeVisible()
+    await expect(page.locator('[data-testid^="shopping-row-"]').filter({
+      hasText: normalizedShoppingText(recipe.ingredients[1].item),
+    })).toBeVisible()
 
     await page.getByRole('button', { name: `From ${recipe.name}` }).first().click()
     await expect(page).toHaveURL(/\/recipes\/[^/?]+\?from=shopping/)
@@ -408,14 +389,14 @@ Ingredients:
 
     await dialog.getByRole('button', { name: /apply to form/i }).click()
     const amountInput = dialog.locator('input[placeholder="Amt"]').first()
-    await expect(amountInput).toHaveValue('0.5–1')
+    await expect(amountInput).toHaveValue('½–1')
     await amountInput.fill('0.5-1')
     await amountInput.press('Tab')
-    await expect(amountInput).toHaveValue('0.5–1')
+    await expect(amountInput).toHaveValue('0.5-1')
 
     await dialog.getByRole('button', { name: /^add recipe$/i }).click()
     let detailPage = page.getByTestId('recipe-detail-page')
-    await expect(detailPage.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
+    await expect(detailPage.getByText('0.5-1 tsp', { exact: true })).toBeVisible()
     await expect(detailPage.getByText(ingredient, { exact: true })).toBeVisible()
 
     await expect(detailPage.getByRole('heading', { name: /Ingredients/ })).toBeVisible()
@@ -423,7 +404,7 @@ Ingredients:
     await detailPage.getByRole('button', { name: /edit recipe/i }).click()
     const editDialog = page.getByRole('dialog').first()
     await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
-    await expect(editDialog.locator('input[placeholder="Amt"]').first()).toHaveValue('0.5–1')
+    await expect(editDialog.locator('input[placeholder="Amt"]').first()).toHaveValue('0.5-1')
     await editDialog.getByRole('button', { name: /save changes/i }).click()
     await expect(editDialog).toBeHidden({ timeout: 15000 })
 
@@ -431,13 +412,17 @@ Ingredients:
     await searchRecipes(page, recipeName)
     await page.getByText(recipeName, { exact: true }).click()
     detailPage = page.getByTestId('recipe-detail-page')
-    await expect(detailPage.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
+    await expect(detailPage.getByText('0.5-1 tsp', { exact: true })).toBeVisible()
     await addOpenRecipeToShopping(page)
     await returnFromRecipeDetail(page)
 
     await navigateToRoute('shopping')
-    await expect(page.getByText('0.5–1 tsp', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: `From ${recipeName}` })).toBeVisible()
+    const shoppingRow = shoppingRowsByItem(page, ingredient)
+    await expect(shoppingRow).toContainText(/½[–-]1 tsp/)
+    await expect(page.getByRole('button', {
+      name: `From ${recipeName}`,
+      exact: true,
+    })).toBeVisible()
     await expect(page.getByText('½ 0.5-1 tsp', { exact: true })).toHaveCount(0)
   })
 
@@ -463,8 +448,8 @@ Ingredients:
     await returnFromRecipeDetail(page)
 
     await navigateToRoute('shopping')
-    await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(1)
-    await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(1)
+    await expect(shoppingRowsByItem(page, originalIngredient)).toHaveCount(1)
+    await expect(shoppingRowsByItem(page, deletedIngredient)).toHaveCount(1)
 
     await navigateToRoute('recipes')
     await searchRecipes(page, recipe.name)
@@ -473,6 +458,7 @@ Ingredients:
 
     const editDialog = page.getByRole('dialog').first()
     await editDialog.locator('#servings-edit').fill('8')
+    await editDialog.locator('#yield-text-edit').fill('8 servings')
     await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
     await editDialog.locator('input[placeholder="Ingredient"]').first().fill(editedIngredient)
     await editDialog.getByRole('button', {
@@ -490,21 +476,21 @@ Ingredients:
     await returnFromRecipeDetail(page)
 
     await navigateToRoute('shopping')
-    await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(1)
-    await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(0)
-    await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(0)
+    await expect(shoppingRowsByItem(page, editedIngredient)).toHaveCount(1)
+    await expect(shoppingRowsByItem(page, originalIngredient)).toHaveCount(0)
+    await expect(shoppingRowsByItem(page, deletedIngredient)).toHaveCount(0)
 
     await page.reload()
-    await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(1)
-    await expect(page.getByText(originalIngredient, { exact: true })).toHaveCount(0)
-    await expect(page.getByText(shoppingItemName(deletedIngredient))).toHaveCount(0)
+    await expect(shoppingRowsByItem(page, editedIngredient)).toHaveCount(1)
+    await expect(shoppingRowsByItem(page, originalIngredient)).toHaveCount(0)
+    await expect(shoppingRowsByItem(page, deletedIngredient)).toHaveCount(0)
 
     await navigateToRoute('recipes')
     await searchRecipes(page, recipe.name)
     await page.getByText(recipe.name, { exact: true }).click()
     await deleteOpenRecipe(page)
     await navigateToRoute('shopping')
-    await expect(page.getByText(editedIngredient, { exact: true })).toHaveCount(0)
+    await expect(shoppingRowsByItem(page, editedIngredient)).toHaveCount(0)
   })
 
   test('deletes an active recipe contribution through one visible confirmation @smoke', async ({ page, navigateToRoute }) => {
@@ -518,7 +504,7 @@ Ingredients:
     page.on('request', (request) => {
       const url = request.url()
       if (url.includes('/rest/v1/recipes')
-        || url.includes('/api/shopping/recipe-contributions')
+        || url.includes('/rest/v1/shopping_list')
         || url.includes('/rest/v1/rpc/delete_recipe')) {
         identityWrites.push(request)
       }
@@ -530,9 +516,7 @@ Ingredients:
 
     await createRecipe(page, recipe)
     const detailPage = page.getByTestId('recipe-detail-page')
-    const addToShoppingButton = detailPage.getByRole('button', { name: /add to shopping list/i })
-    await addToShoppingButton.click()
-    await expect(addToShoppingButton).toBeEnabled({ timeout: 15000 })
+    await addOpenRecipeToShopping(page)
 
     await detailPage.getByRole('button', { name: /delete recipe/i }).click()
     const confirmation = page.getByRole('alertdialog')
@@ -553,24 +537,25 @@ Ingredients:
     const recipeCreate = identityWrites.find((request) =>
       request.method() === 'POST' && request.url().includes('/rest/v1/recipes')
     )
-    const contributionWrites = identityWrites.filter((request) =>
-      request.url().includes('/api/shopping/recipe-contributions')
+    const shoppingWrites = identityWrites.filter((request) =>
+      request.method() === 'PATCH' && request.url().includes('/rest/v1/shopping_list')
     )
     const recipeDelete = identityWrites.find((request) =>
       request.url().includes('/rest/v1/rpc/delete_recipe')
     )
     expect(recipeCreate).toBeDefined()
     expect(recipeDelete).toBeDefined()
-    expect(contributionWrites).toHaveLength(1)
+    expect(shoppingWrites).toHaveLength(1)
 
     const createPayload = recipeCreate?.postDataJSON() as Record<string, unknown>
     expect(createPayload.recipe_uuid).toEqual(expect.stringMatching(UUID_PATTERN))
     expect(createPayload.id).toBe(createPayload.recipe_uuid)
 
-    for (const request of contributionWrites) {
-      const payload = request.postDataJSON() as { recipeIds?: unknown[] }
-      expect(payload.recipeIds).toEqual([expect.stringMatching(UUID_PATTERN)])
+    const shoppingPayload = shoppingWrites[0].postDataJSON() as {
+      document?: { recipeEntries?: Record<string, { recipeId?: unknown }> }
     }
+    expect(shoppingPayload.document?.recipeEntries?.[createPayload.recipe_uuid as string])
+      .toMatchObject({ recipeId: createPayload.recipe_uuid })
 
     const deletePayload = recipeDelete?.postDataJSON() as Record<string, unknown>
     expect(deletePayload).toEqual({ p_recipe_uuid: expect.stringMatching(UUID_PATTERN) })
@@ -606,12 +591,12 @@ Ingredients:
     await returnFromRecipeDetail(page)
     await navigateToRoute('shopping')
 
-    const pantryRow = page.getByText(pantryRecipe.ingredients[0].item, { exact: true })
-      .locator('xpath=ancestor::*[.//button[@aria-label="Add to pantry"]][1]')
+    const pantryRow = shoppingRowsByItem(page, pantryRecipe.ingredients[0].item)
     const pantryResponse = page.waitForResponse((response) =>
-      response.url().includes('/rest/v1/rpc/move_shopping_item_to_pantry')
+      response.url().includes('/rest/v1/rpc/move_shopping_document_item_to_pantry')
     )
-    await pantryRow.getByRole('button', { name: /add to pantry/i }).click()
+    await pantryRow.getByRole('button', { name: /item actions/i }).click()
+    await page.getByRole('menuitem', { name: /add to pantry/i }).click()
     expect((await pantryResponse).ok()).toBe(true)
     await expect(page.getByRole('button', {
       name: new RegExp(`^Restore ${escapeRegex(pantryRecipe.ingredients[0].item)}`, 'i'),

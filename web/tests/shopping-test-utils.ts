@@ -3,35 +3,25 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { TEST_USER } from './fixtures'
 import type { ShoppingItem } from '@/types/database'
+import {
+  createEmptyShoppingDocument,
+  type ShoppingDocumentV3,
+  type ShoppingManualItemV1,
+  type ShoppingRecipeEntryV2,
+} from '@/lib/shopping-document'
+import { resolveRecipeShoppingIngredients } from '@/lib/shopping-ingredient-resolution'
+import { createShoppingPurchaseKey } from '@/lib/shopping-list-normalization'
 
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 type ShoppingListRow = {
-  user_id: string
-  items: ShoppingItem[]
-  already_have: ShoppingItem[]
-  excluded: ShoppingItem[]
-  source_recipes: string[]
-  scale: number
-  total_servings: number
-  custom_order: boolean
-  generated_at: string
-}
-
-type UserConfigRow = {
-  user_id: string
-  excluded_keywords: string[]
-}
-
-type PantryRow = {
-  id: string
-  user_id: string
-  item: string
-  created_at: string
+  document: ShoppingDocumentV3
+  content_revision: number
 }
 
 type ShoppingSeedState = {
   items?: ShoppingItem[]
+  derivedItems?: ShoppingItem[]
   alreadyHave?: ShoppingItem[]
   excluded?: ShoppingItem[]
   pantryItems?: string[]
@@ -97,79 +87,75 @@ async function getUserId(supabase: SupabaseClient): Promise<string> {
   return user.id
 }
 
-function dedupeBy<T>(items: T[], getKey: (item: T) => string): T[] {
-  const seen = new Set<string>()
-  const result: T[] = []
-
-  for (const item of items) {
-    const key = getKey(item)
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(item)
-  }
-
-  return result
-}
-
-function normalizeShoppingListRow(userId: string, row: Partial<ShoppingListRow> | null | undefined): ShoppingListRow {
+function toManualItem(item: ShoppingItem, bucket: ShoppingManualItemV1['bucket']): ShoppingManualItemV1 {
+  if (!item.rowId) throw new Error('Seeded Shopping rows require a rowId')
   return {
-    user_id: userId,
-    items: (row?.items || []) as ShoppingItem[],
-    already_have: (row?.already_have || []) as ShoppingItem[],
-    excluded: (row?.excluded || []) as ShoppingItem[],
-    source_recipes: (row?.source_recipes || []) as string[],
-    scale: row?.scale ?? 1,
-    total_servings: row?.total_servings ?? 0,
-    custom_order: row?.custom_order ?? false,
-    generated_at: row?.generated_at || new Date().toISOString(),
+    id: item.rowId.replace(/^manual:/, ''),
+    displayName: item.item,
+    quantity: item.amount === null ? null : { amount: item.amount, unit: item.unit },
+    categoryKey: item.categoryKey,
+    bucket,
+    checked: item.checked ?? false,
   }
 }
 
-async function writeShoppingListRow(
-  supabase: SupabaseClient,
-  userId: string,
-  row: ShoppingListRow,
-  exists: boolean
-) {
-  const payload = {
-    user_id: userId,
-    items: row.items as unknown as Json,
-    already_have: row.already_have as unknown as Json,
-    excluded: row.excluded as unknown as Json,
-    source_recipes: row.source_recipes,
-    scale: row.scale,
-    total_servings: row.total_servings,
-    custom_order: row.custom_order,
-    generated_at: row.generated_at,
+function toRecipeEntry(item: ShoppingItem): ShoppingRecipeEntryV2 {
+  const source = item.sources?.find((candidate) => candidate.recipeId)
+  if (!source?.recipeId) {
+    throw new Error('Seeded derived Shopping rows require recipe provenance')
   }
 
-  const result = exists
-    ? await supabase.from('shopping_list').update(payload).eq('user_id', userId)
-    : await supabase.from('shopping_list').insert(payload)
+  const scaleV1 = { numerator: '1', denominator: '1' }
+  const ingredients = resolveRecipeShoppingIngredients(
+    [{
+      label: null,
+      ingredients: [{
+        item: item.item,
+        amount: item.amount,
+        unit: item.unit,
+      }],
+    }],
+    { scale: 1, exactScaleV1: scaleV1, recipeId: source.recipeId }
+  ).map(({
+    runtime: _runtime,
+    sourceOrdinal: _sourceOrdinal,
+    defaultCategoryOrder: _defaultCategoryOrder,
+    ...ingredient
+  }) => ingredient)
 
-  if (result.error) {
-    throw result.error
+  return {
+    recipeId: source.recipeId,
+    recipeName: source.recipeName,
+    selectedServings: 1,
+    scaleV1,
+    ingredients,
   }
 }
 
-async function writeUserConfigRow(
+async function writeShoppingDocument(
   supabase: SupabaseClient,
   userId: string,
-  excludedKeywords: string[],
-  exists: boolean
+  document: ShoppingDocumentV3
 ) {
-  const payload = {
-    user_id: userId,
-    excluded_keywords: excludedKeywords,
-  }
+  const { data: current, error: readError } = await supabase
+    .from('shopping_list')
+    .select('content_revision')
+    .eq('user_id', userId)
+    .single()
+  if (readError) throw readError
 
-  const result = exists
-    ? await supabase.from('user_config').update(payload).eq('user_id', userId)
-    : await supabase.from('user_config').insert(payload)
-
-  if (result.error) {
-    throw result.error
-  }
+  const { data, error } = await supabase
+    .from('shopping_list')
+    .update({
+      document: document as unknown as Json,
+      content_revision: current.content_revision + 1,
+    })
+    .eq('user_id', userId)
+    .eq('content_revision', current.content_revision)
+    .select('content_revision')
+    .maybeSingle()
+  if (error) throw error
+  if (!data) throw new Error('Shopping test fixture lost its CAS race')
 }
 
 export async function acquireShoppingSpecLock(): Promise<() => void> {
@@ -198,41 +184,37 @@ export async function seedShoppingState(state: ShoppingSeedState): Promise<() =>
   const supabase = await getAuthedSupabase()
   const userId = await getUserId(supabase)
 
-  const [{ data: existingList }, { data: existingConfig }] = await Promise.all([
-    supabase.from('shopping_list').select('*').eq('user_id', userId).maybeSingle(),
-    supabase.from('user_config').select('user_id, excluded_keywords').eq('user_id', userId).maybeSingle(),
-  ])
+  const { data: existingList, error: listError } = await supabase
+    .from('shopping_list')
+    .select('document,content_revision')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (listError) throw listError
+  if (!existingList) throw new Error('Authenticated Shopping test user has no document')
 
-  const previousList = normalizeShoppingListRow(userId, existingList as Partial<ShoppingListRow> | null)
-  const previousExcludedKeywords = ((existingConfig as Partial<UserConfigRow> | null)?.excluded_keywords || []) as string[]
-  const shoppingListExists = !!existingList
-  const userConfigExists = !!existingConfig
-  const pantryItems = state.pantryItems || []
-
-  const nextList: ShoppingListRow = {
-    ...previousList,
-    items: dedupeBy([...(previousList.items || []), ...(state.items || [])], (item) => item.rowId || `${item.item}-${item.unit || ''}`),
-    already_have: dedupeBy(
-      [...(previousList.already_have || []), ...(state.alreadyHave || [])],
-      (item) => item.rowId || `${item.item}-${item.unit || ''}`
-    ),
-    excluded: dedupeBy(
-      [...(previousList.excluded || []), ...(state.excluded || [])],
-      (item) => item.rowId || `${item.item}-${item.unit || ''}`
-    ),
-    // Synthetic row provenance is historical snapshot evidence, not a live
-    // recipe membership write. Keep canonical source arrays unchanged.
-    source_recipes: previousList.source_recipes,
-    generated_at: new Date().toISOString(),
-  }
-
-  const nextExcludedKeywords = dedupeBy(
-    [...previousExcludedKeywords, ...(state.excludedKeywords || [])],
-    (keyword) => keyword.toLowerCase()
+  const previousDocument = structuredClone(
+    (existingList as unknown as ShoppingListRow).document
   )
+  const pantryItems = state.pantryItems || []
+  const nextDocument = createEmptyShoppingDocument()
+  nextDocument.recipeEntries = Object.fromEntries(
+    (state.derivedItems || []).map((item) => {
+      const entry = toRecipeEntry(item)
+      return [entry.recipeId, entry]
+    })
+  )
+  nextDocument.manualItems = [
+    ...(state.items || []).map((item) => toManualItem(item, 'items')),
+    ...(state.alreadyHave || []).map((item) => toManualItem(item, 'already_have')),
+    ...(state.excluded || []).map((item) => toManualItem(item, 'excluded')),
+  ]
+  nextDocument.preferences.excludedIngredientKeys = [...new Set(
+    (state.excludedKeywords || [])
+      .map((keyword) => createShoppingPurchaseKey(keyword))
+      .filter(Boolean)
+  )]
 
-  await writeShoppingListRow(supabase, userId, nextList, shoppingListExists)
-  await writeUserConfigRow(supabase, userId, nextExcludedKeywords, userConfigExists)
+  await writeShoppingDocument(supabase, userId, nextDocument)
 
   if (pantryItems.length > 0) {
     const now = new Date().toISOString()
@@ -249,8 +231,7 @@ export async function seedShoppingState(state: ShoppingSeedState): Promise<() =>
   }
 
   return async () => {
-    await writeShoppingListRow(supabase, userId, previousList, shoppingListExists)
-    await writeUserConfigRow(supabase, userId, previousExcludedKeywords, userConfigExists)
+    await writeShoppingDocument(supabase, userId, previousDocument)
 
     if (pantryItems.length > 0) {
       const pantryDelete = await supabase.from('pantry_items').delete().eq('user_id', userId).in('item', pantryItems)
