@@ -21,6 +21,15 @@ function fixtureQuery({ missingTable } = {}) {
 }
 
 describe("production database checks", () => {
+  it("expects the Shopping V2/V3 compatibility constraint", () => {
+    expect(expectedCatalog.constraints).toContain(
+      "shopping_list_document_v3_compatibility_check",
+    )
+    expect(expectedCatalog.constraints).not.toContain(
+      "shopping_list_document_v2_check",
+    )
+  })
+
   it("passes controlled catalog and read fixtures", async () => {
     const results = await runChecks(createDatabaseChecks("012_enforce_uuid_active_recipe_writes"), {
       query: fixtureQuery(),
