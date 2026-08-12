@@ -33,6 +33,14 @@ describe('local E2E runtime guards', () => {
     })
   })
 
+  it('invokes the POSIX Supabase shim relative to a worktree path with spaces', () => {
+    const resolved = resolveSupabaseCli('/worktrees/Recipe Genie/web', 'linux')
+    expect(resolved).toEqual({
+      absolutePath: '/worktrees/Recipe Genie/web/node_modules/.bin/supabase',
+      invocation: 'node_modules/.bin/supabase',
+    })
+  })
+
   it('accepts only the exact local Supabase origin', () => {
     expect(assertLocalSupabaseUrl(LOCAL_SUPABASE_ORIGIN)).toBe(LOCAL_SUPABASE_ORIGIN)
     for (const unsafe of [

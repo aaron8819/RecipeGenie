@@ -113,13 +113,14 @@ function run(command, args, options = {}) {
 }
 
 export function resolveSupabaseCli(webRoot, platform = process.platform) {
-  const invocation = path.join(
+  const platformPath = platform === 'win32' ? path.win32 : path.posix
+  const invocation = platformPath.join(
     'node_modules',
     '.bin',
     platform === 'win32' ? 'supabase.cmd' : 'supabase'
   )
   return {
-    absolutePath: path.join(webRoot, invocation),
+    absolutePath: platformPath.join(webRoot, invocation),
     invocation,
   }
 }
