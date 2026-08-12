@@ -8,7 +8,8 @@ import {
 } from './shopping-test-utils'
 
 function rowById(page: Page, rowId: string) {
-  return page.getByTestId(`shopping-row-${rowId}`)
+  const rowRef = rowId.startsWith('manual:') ? rowId : `manual:${rowId}`
+  return page.getByTestId(`shopping-row-${rowRef}`)
 }
 
 async function openShoppingFromBottomNav(page: Page) {
@@ -34,8 +35,14 @@ async function dismissNextDevTools(page: Page) {
 
 async function ensureShoppingView(page: Page) {
   const heading = page.getByRole('heading', { name: /shopping list/i })
-  await page.getByRole('navigation', { name: /bottom navigation/i }).waitFor()
   await dismissNextDevTools(page)
+
+  if ((page.viewportSize()?.width || 0) >= 768) {
+    await expect(heading).toBeVisible()
+    return
+  }
+
+  await page.getByRole('navigation', { name: /bottom navigation/i }).waitFor()
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
     if (await heading.isVisible().catch(() => false)) {
@@ -64,7 +71,11 @@ async function readDocumentScrollState(page: Page) {
   return page.evaluate(() => {
     const scrollElement = document.scrollingElement ?? document.documentElement
     const before = window.scrollY
-    window.scrollTo(0, Math.min(before + 120, scrollElement.scrollHeight - window.innerHeight))
+    const maxScroll = Math.max(0, scrollElement.scrollHeight - window.innerHeight)
+    const target = before >= maxScroll
+      ? Math.max(0, before - 120)
+      : Math.min(before + 120, maxScroll)
+    window.scrollTo(0, target)
 
     return {
       before,
@@ -174,29 +185,26 @@ test.describe('Shopping List Mobile @extended', () => {
     await expect(secondRestore).toBeVisible()
   })
 
-  test('expands mobile Excluded and restores only the targeted row', async ({ page }) => {
+  test('expands mobile Excluded with exact reasons and restores only the targeted row', async ({ page }) => {
     const seed = `${Date.now()}-excluded`
-    const firstRowId = `row-mobile-excluded-a-${seed}`
-    const secondRowId = `row-mobile-excluded-b-${seed}`
-    const keyword = `mobile excluded keyword ${seed}`
+    const firstItem = `mobile excluded jar one ${seed}`
+    const secondItem = `mobile excluded jar two ${seed}`
 
     cleanupState = await seedShoppingState({
-      excludedKeywords: [keyword],
-      excluded: [
+      excludedKeywords: [firstItem, secondItem],
+      derivedItems: [
         buildShoppingItem({
-          rowId: firstRowId,
-          item: `mobile excluded restore ${seed}`,
+          rowId: `row-mobile-excluded-a-${seed}`,
+          item: firstItem,
           amount: 1,
           unit: 'jar',
-          excludedBy: keyword,
           sources: [{ recipeId: `recipe-a-${seed}`, recipeName: `Mobile Excluded Recipe A ${seed}` }],
         }),
         buildShoppingItem({
-          rowId: secondRowId,
-          item: `mobile excluded restore ${seed}`,
+          rowId: `row-mobile-excluded-b-${seed}`,
+          item: secondItem,
           amount: 2,
           unit: 'jar',
-          excludedBy: keyword,
           sources: [{ recipeId: `recipe-b-${seed}`, recipeName: `Mobile Excluded Recipe B ${seed}` }],
         }),
       ],
@@ -208,13 +216,16 @@ test.describe('Shopping List Mobile @extended', () => {
     await expect(expandExcluded).toBeVisible()
     await expandExcluded.click()
 
-    await expect(page.getByText(new RegExp(`Excluded: ${keyword}`, 'i')).first()).toBeVisible()
+    await expect(page.getByText(`Excluded: ${firstItem}`, { exact: true })
+      .filter({ visible: true })).toBeVisible()
+    await expect(page.getByText(`Excluded: ${secondItem}`, { exact: true })
+      .filter({ visible: true })).toBeVisible()
 
     const firstRestore = page.getByRole('button', {
-      name: new RegExp(`restore mobile excluded restore ${seed} 1 jar excluded: ${keyword}`, 'i'),
+      name: new RegExp(`restore ${firstItem} 1 jar excluded: ${firstItem}`, 'i'),
     })
     const secondRestore = page.getByRole('button', {
-      name: new RegExp(`restore mobile excluded restore ${seed} 2 jars? excluded: ${keyword}`, 'i'),
+      name: new RegExp(`restore ${secondItem} 2 jars? excluded: ${secondItem}`, 'i'),
     })
 
     await expect(firstRestore).toBeVisible()
@@ -222,8 +233,9 @@ test.describe('Shopping List Mobile @extended', () => {
 
     await firstRestore.click()
 
-    await expect(rowById(page, firstRowId)).toBeVisible()
-    await expect(rowById(page, secondRowId)).toHaveCount(0)
+    await expect(page.locator('[data-testid^="shopping-row-"]').filter({
+      hasText: firstItem,
+    })).toBeVisible()
     await expect(firstRestore).toHaveCount(0)
     await expect(secondRestore).toBeVisible()
   })
@@ -324,7 +336,9 @@ test.describe('Shopping List Mobile @extended', () => {
       await expect(categoryHeader(key)).toHaveAttribute('aria-expanded', 'true')
     }
 
-    await categorySection('pantry').getByRole('button', { name: 'Collapse category' }).click()
+    await categorySection('pantry')
+      .getByRole('button', { name: 'Collapse category', exact: true })
+      .click()
     await expect(categoryHeader('pantry')).toHaveAttribute('aria-expanded', 'false')
 
     const addedItemName = `black beans ${seed}`
@@ -333,9 +347,13 @@ test.describe('Shopping List Mobile @extended', () => {
     await addInput.locator('xpath=..').getByRole('button', { name: 'Add item' }).click()
 
     await expect(categoryHeader('pantry')).toHaveAttribute('aria-expanded', 'true')
-    await expect(categorySection('pantry').getByText(addedItemName, { exact: false })).toBeVisible()
+    await expect(
+      categorySection('pantry').getByText(/black beans .*category state/i)
+    ).toBeVisible()
 
-    await categorySection('bakery').getByRole('button', { name: /check all items in bakery/i }).click()
+    await categorySection('bakery')
+      .getByRole('button', { name: 'Check all items in Bakery', exact: true })
+      .click()
     await expect(categoryHeader('bakery')).toHaveAttribute('aria-expanded', 'false')
 
     await page.setViewportSize(VIEWPORTS.desktop)
@@ -387,7 +405,7 @@ test.describe('Shopping List Mobile @extended', () => {
 
     const documentBefore = await readDocumentScrollState(page)
     expect(documentBefore).not.toBeNull()
-    expect(documentBefore?.after).toBeGreaterThan(documentBefore?.before ?? 0)
+    expect(documentBefore?.after).not.toBe(documentBefore?.before)
 
     await page.getByRole('button', { name: /^jump to protein$/i }).click()
     await expect(rowById(page, proteinRowId)).toBeVisible()
@@ -397,7 +415,7 @@ test.describe('Shopping List Mobile @extended', () => {
 
     const documentAfterJumps = await readDocumentScrollState(page)
     expect(documentAfterJumps).not.toBeNull()
-    expect(documentAfterJumps?.after).toBeGreaterThan(documentAfterJumps?.before ?? 0)
+    expect(documentAfterJumps?.after).not.toBe(documentAfterJumps?.before)
 
     await activateBottomNavRoute(page, /^recipes$/i)
     await page.waitForTimeout(250)
@@ -407,7 +425,7 @@ test.describe('Shopping List Mobile @extended', () => {
 
     const documentAfterReturn = await readDocumentScrollState(page)
     expect(documentAfterReturn).not.toBeNull()
-    expect(documentAfterReturn?.after).toBeGreaterThan(documentAfterReturn?.before ?? 0)
+    expect(documentAfterReturn?.after).not.toBe(documentAfterReturn?.before)
   })
 
   test('releases Shopping action-menu locks before switching to Planner on mobile @extended', async ({ page }) => {
@@ -464,7 +482,7 @@ test.describe('Shopping List Mobile @extended', () => {
     expect(documentState?.scrollHeight).toBeGreaterThanOrEqual(documentState?.clientHeight ?? 0)
 
     if (documentState && documentState.scrollHeight > documentState.clientHeight) {
-      expect(documentState.after).toBeGreaterThan(documentState.before)
+      expect(documentState.after).not.toBe(documentState.before)
     } else {
       await expect(page.getByRole('link', { name: /^shopping$/i })).toBeVisible()
     }

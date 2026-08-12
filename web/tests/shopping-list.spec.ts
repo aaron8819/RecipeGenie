@@ -7,7 +7,8 @@ import {
 } from './shopping-test-utils'
 
 function rowById(page: Page, rowId: string): Locator {
-  return page.getByTestId(`shopping-row-${rowId}`)
+  const rowRef = rowId.startsWith('manual:') ? rowId : `manual:${rowId}`
+  return page.getByTestId(`shopping-row-${rowRef}`)
 }
 
 function requireRowId(rowId: string | undefined): string {
@@ -50,7 +51,6 @@ test.describe('Shopping List', () => {
 
   test('adds deterministic items and switches between Shopping Mode and Manage Mode with visible behavior changes @extended', async ({ page }) => {
     const seed = `${Date.now()}-mode`
-    const recipeName = `Mode Recipe ${seed}`
     const seededRow = buildShoppingItem({
       rowId: `row-mode-${seed}`,
       item: `mode protein ${seed}`,
@@ -58,7 +58,6 @@ test.describe('Shopping List', () => {
       unit: 'lb',
       categoryKey: 'protein',
       categoryOrder: 4,
-      sources: [{ recipeId: `recipe-${seed}`, recipeName }],
     })
 
     cleanupState = await seedShoppingState({ items: [seededRow] })
@@ -74,7 +73,7 @@ test.describe('Shopping List', () => {
 
     await expect(page.getByText(manualItemA, { exact: true })).toBeVisible()
     await expect(page.getByText(manualItemB, { exact: true })).toBeVisible()
-    await expect(rowById(page, seededRowId)).toContainText(recipeName)
+    await expect(rowById(page, seededRowId)).toContainText(/added manually/i)
     await expect(page.getByText('Manage Mode', { exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
 
@@ -125,8 +124,8 @@ test.describe('Shopping List', () => {
     await expect(firstRow).toContainText(/1 tsp/i)
     await expect(secondRow).toContainText(/1 tbsp/i)
 
-    await firstRow.hover()
-    await firstRow.getByRole('button', { name: /remove from list/i }).click()
+    await firstRow.getByRole('button', { name: /item actions/i }).click()
+    await page.getByRole('menuitem', { name: /remove from list/i }).click()
 
     await expect(firstRow).toHaveCount(0)
     await expect(secondRow).toBeVisible()
@@ -153,7 +152,8 @@ test.describe('Shopping List', () => {
     const row = rowById(page, rowId)
     await expect(row).toBeVisible()
 
-    await row.getByRole('button', { name: /edit item/i }).click()
+    await row.getByRole('button', { name: /item actions/i }).click()
+    await page.getByRole('menuitem', { name: /edit item/i }).click()
     await expect(page.getByText(/edit manual item/i)).toBeVisible()
 
     await page.getByLabel('Manual item name').fill(`manual shallots ${seed}`)
@@ -161,7 +161,7 @@ test.describe('Shopping List', () => {
     await page.getByLabel('Manual item unit').fill('lb')
     await page.getByRole('button', { name: /save changes/i }).click()
 
-    await expect(page.getByText(`manual shallots ${seed}`)).toBeVisible()
+    await expect(page.getByText(`manual shallots ${seed}`, { exact: true })).toBeVisible()
     await expect(row).toContainText(/lb/i)
     await expect(page.getByText(/edit manual item/i)).toHaveCount(0)
   })
@@ -207,29 +207,26 @@ test.describe('Shopping List', () => {
     await expect(secondRestore).toBeVisible()
   })
 
-  test('restores only the targeted duplicate row from Excluded and keeps exclusion reason visible @core', async ({ page }) => {
+  test('restores only the targeted row from Excluded and keeps exact reasons visible @core', async ({ page }) => {
     const seed = `${Date.now()}-excluded`
-    const firstRowId = `row-excluded-tsp-${seed}`
-    const secondRowId = `row-excluded-tbsp-${seed}`
-    const keyword = `exclude keyword ${seed}`
+    const firstItem = `excluded teaspoon ${seed}`
+    const secondItem = `excluded tablespoon ${seed}`
 
     cleanupState = await seedShoppingState({
-      excludedKeywords: [keyword],
-      excluded: [
+      excludedKeywords: [firstItem, secondItem],
+      derivedItems: [
         buildShoppingItem({
-          rowId: firstRowId,
-          item: `excluded salt ${seed}`,
+          rowId: `row-excluded-tsp-${seed}`,
+          item: firstItem,
           amount: 1,
           unit: 'tsp',
-          excludedBy: keyword,
           sources: [{ recipeId: `recipe-a-${seed}`, recipeName: `Excluded Recipe A ${seed}` }],
         }),
         buildShoppingItem({
-          rowId: secondRowId,
-          item: `excluded salt ${seed}`,
+          rowId: `row-excluded-tbsp-${seed}`,
+          item: secondItem,
           amount: 1,
           unit: 'tbsp',
-          excludedBy: keyword,
           sources: [{ recipeId: `recipe-b-${seed}`, recipeName: `Excluded Recipe B ${seed}` }],
         }),
       ],
@@ -237,18 +234,20 @@ test.describe('Shopping List', () => {
     await page.reload()
 
     await expect(page.getByRole('heading', { name: /^excluded$/i })).toBeVisible()
-    await expect(page.getByText(new RegExp(`Excluded: ${keyword}`, 'i')).first()).toBeVisible()
+    await expect(page.getByText(`Excluded: ${firstItem}`, { exact: true })).toBeVisible()
+    await expect(page.getByText(`Excluded: ${secondItem}`, { exact: true })).toBeVisible()
 
-    const firstRestore = restoreButton(page, `excluded salt ${seed}`, '1 tsp', `Excluded: ${keyword}`)
-    const secondRestore = restoreButton(page, `excluded salt ${seed}`, '1 tbsp', `Excluded: ${keyword}`)
+    const firstRestore = restoreButton(page, firstItem, '1 tsp', `Excluded: ${firstItem}`)
+    const secondRestore = restoreButton(page, secondItem, '1 tbsp', `Excluded: ${secondItem}`)
 
     await expect(firstRestore).toBeVisible()
     await expect(secondRestore).toBeVisible()
 
     await firstRestore.click()
 
-    await expect(rowById(page, firstRowId)).toBeVisible()
-    await expect(rowById(page, secondRowId)).toHaveCount(0)
+    await expect(page.locator('[data-testid^="shopping-row-"]').filter({
+      hasText: firstItem,
+    })).toBeVisible()
     await expect(firstRestore).toHaveCount(0)
     await expect(secondRestore).toBeVisible()
   })

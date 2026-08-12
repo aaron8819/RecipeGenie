@@ -174,6 +174,12 @@ async function seedPantryAndExcludedState(
   await page.keyboard.press('Enter')
 
   const excludedInput = page.getByPlaceholder(/add excluded keyword/i)
+  if (!(await excludedInput.isVisible().catch(() => false))) {
+    await page
+      .getByRole('navigation', { name: /pantry sections/i })
+      .getByRole('button', { name: /^excluded/i })
+      .click()
+  }
   await excludedInput.waitFor({ state: 'visible', timeout: 10000 })
   await excludedInput.fill(smokeRecipe.excludedItem)
   await page.keyboard.press('Enter')
@@ -235,7 +241,9 @@ test.describe('Shopping Mode Smoke @core', () => {
       .click()
 
     await expect(page.getByText(/recipes in list/i)).toBeVisible()
-    await expect(page.getByRole('button', { name: /show recipes in list/i })).toBeVisible()
+    await expect(page.getByRole('button', {
+      name: new RegExp(`^${smokeRecipe.name} chicken · 4 servings$`, 'i'),
+    })).toBeVisible()
     await expect(page.getByText(/^from /i).first()).toBeVisible()
     await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
     await expect(page.getByText(/manage mode/i)).toHaveCount(0)

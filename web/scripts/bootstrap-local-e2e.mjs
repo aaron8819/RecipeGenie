@@ -199,15 +199,15 @@ async function seedRepresentativeData(client, userId) {
   ]
   const { error: shoppingError } = await client.from('shopping_list').update({
     document: {
-      schemaVersion: 1,
+      schemaVersion: 3,
       recipeEntries: {},
       manualItems,
       itemOverrides: {},
-      order: manualItems.map((item) => `manual:${item.id}`),
       preferences: {
         categoryByIngredient: {},
         customCategories: [{ id: 'empty-local-fixture', name: 'Empty Local Fixture', order: 9 }],
         categoryOrder: [],
+        ingredientOrderByCategory: {},
         excludedIngredientKeys: ['cilantro'],
         excludeSaltVariants: false,
         excludeBlackPepperVariants: false,
