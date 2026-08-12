@@ -31,6 +31,31 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Canonical desktop redesign contract.
+        "canvas": "rgb(var(--rg-desktop-canvas) / <alpha-value>)",
+        "shell": "rgb(var(--rg-desktop-shell) / <alpha-value>)",
+        "surface-raised": "rgb(var(--rg-desktop-surface-raised) / <alpha-value>)",
+        "surface-highest": "rgb(var(--rg-desktop-surface-highest) / <alpha-value>)",
+        "border-warm": "rgb(var(--rg-desktop-border-warm) / <alpha-value>)",
+        "brand-primary": "rgb(var(--rg-desktop-brand-primary) / <alpha-value>)",
+        "emphasis-dark": "rgb(var(--rg-desktop-emphasis-dark) / <alpha-value>)",
+        "cta": "rgb(var(--rg-desktop-cta) / <alpha-value>)",
+        "semantic-secondary": "rgb(var(--rg-desktop-semantic-secondary) / <alpha-value>)",
+        "text-primary": "rgb(var(--rg-desktop-text-primary) / <alpha-value>)",
+        "text-variant": "rgb(var(--rg-desktop-text-variant) / <alpha-value>)",
+        "text-muted": "rgb(var(--rg-desktop-text-muted) / <alpha-value>)",
+        "error": "rgb(var(--rg-desktop-error) / <alpha-value>)",
+        "focus": "rgb(var(--rg-desktop-focus) / <alpha-value>)",
+        "accent-peach": "rgb(var(--rg-desktop-accent-peach) / <alpha-value>)",
+        "accent-mint": "rgb(var(--rg-desktop-accent-mint) / <alpha-value>)",
+        "accent-lavender": "rgb(var(--rg-desktop-accent-lavender) / <alpha-value>)",
+        "accent-rose": "rgb(var(--rg-desktop-accent-rose) / <alpha-value>)",
+        // The existing shared/shadcn theme contract owns these aliases. Auth,
+        // shared shell/UI, Pantry, domain Settings, mobile, and unmigrated
+        // Recipes, Planner, and Shopping code use them through the phased
+        // redesign. Remove only after a repository-wide audit confirms every
+        // remaining consumer has migrated; Pantry, Settings, and mobile alone
+        // are not a sufficient removal condition.
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -78,13 +103,8 @@ const config: Config = {
           900: "hsl(8, 70%, 15%)",
         },
         // Mobile redesign (planner_mobile_redesign ref)
-        "card-cream": "#F8F6F0",
+        "card-cream": "rgb(var(--rg-desktop-surface-raised) / <alpha-value>)",
         "border-muted": "#E2E0D5",
-        // Recipes Stitch redesign (recipes_redesign ref)
-        "accent-peach": "#fbe7d1",
-        "accent-mint": "#dcf4e9",
-        "accent-lavender": "#e8e1f5",
-        "accent-rose": "#fce4e4",
         // Shopping list Stitch redesign (shoppinglist_redesign ref)
         "accent-green": "#A3B18A",
         // Extended Sage palette

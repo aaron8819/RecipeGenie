@@ -4,7 +4,27 @@
 
 @layer base {
   :root {
-    /* Stitch redesign: Deep Farm Green, Sage, Terracotta, Cream */
+    /* Canonical desktop redesign tokens (RGB channels for Tailwind opacity). */
+    --rg-desktop-canvas: 250 248 245;
+    --rg-desktop-shell: 255 248 246;
+    --rg-desktop-surface-raised: 248 246 240;
+    --rg-desktop-surface-highest: 255 255 255;
+    --rg-desktop-border-warm: 230 224 216;
+    --rg-desktop-brand-primary: 47 75 52;
+    --rg-desktop-emphasis-dark: 25 52 31;
+    --rg-desktop-cta: 224 106 83;
+    --rg-desktop-semantic-secondary: 163 61 42;
+    --rg-desktop-text-primary: 36 25 21;
+    --rg-desktop-text-variant: 66 72 66;
+    --rg-desktop-text-muted: 139 128 123;
+    --rg-desktop-error: 186 26 26;
+    --rg-desktop-focus: 47 75 52;
+    --rg-desktop-accent-peach: 251 231 209;
+    --rg-desktop-accent-mint: 220 244 233;
+    --rg-desktop-accent-lavender: 232 225 245;
+    --rg-desktop-accent-rose: 252 228 228;
+
+    /* Existing shadcn theme aliases. */
     --background: 40 33% 98%;
     --foreground: 20 25% 15%;
     --card: 40 25% 98%;
