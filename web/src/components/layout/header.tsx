@@ -35,10 +35,10 @@ export function Header({ userEmail, onSignOut }: HeaderProps) {
           >
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
               <Image
-                src="/recipe-genie-mark.svg"
+                src="/recipe-genie-mark.png"
                 alt=""
-                width={28}
-                height={34}
+                width={462}
+                height={426}
                 className="h-8 w-auto"
                 loading="eager"
                 unoptimized
@@ -46,12 +46,6 @@ export function Header({ userEmail, onSignOut }: HeaderProps) {
                 data-slot="recipe-genie-mark"
               />
             </div>
-            <span
-              className="flex-shrink-0 font-brand text-[1.375rem] font-semibold leading-none tracking-[-0.015em] text-primary sm:text-[1.75rem]"
-              data-slot="recipe-genie-wordmark"
-            >
-              Recipe Genie
-            </span>
           </Link>
           <OnboardingDialog
             trigger={

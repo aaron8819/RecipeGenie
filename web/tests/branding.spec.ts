@@ -135,7 +135,12 @@ test.describe('responsive authenticated shell', () => {
     })
     await expect(brandLink).toHaveAttribute('href', '/planner')
     await expect(brandLink.locator('img')).toHaveAttribute('alt', '')
-    expect((await page.request.get('/recipe-genie-mark.svg')).ok()).toBe(true)
+    await expect(brandLink.locator('img')).toHaveAttribute(
+      'src',
+      '/recipe-genie-lockup.png'
+    )
+    await expect(brandLink.getByText('Recipe Genie')).toHaveCount(0)
+    expect((await page.request.get('/recipe-genie-lockup.png')).ok()).toBe(true)
 
     const routeCaptures = [
       { path: '/recipes', active: 'Recipes', name: 'recipes' },
@@ -230,6 +235,15 @@ test.describe('responsive authenticated shell', () => {
 
     await page.setViewportSize({ width: 390, height: 844 })
     await setupAuth()
+
+    const mobileBrandLink = page.getByRole('banner').getByRole('link', {
+      name: 'Go to Planner',
+    })
+    await expect(mobileBrandLink.locator('img')).toHaveAttribute(
+      'src',
+      '/recipe-genie-mark.png'
+    )
+    await expect(mobileBrandLink.getByText('Recipe Genie')).toHaveCount(0)
 
     const sidebar = page.getByRole('complementary', {
       name: 'Recipe Genie desktop navigation',

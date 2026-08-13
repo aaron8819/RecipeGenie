@@ -56,14 +56,12 @@ describe("route navigation", () => {
     })
     expect(brandLink).toHaveAttribute("href", "/planner")
 
-    const brandMark = container.querySelector(
-      '[data-slot="recipe-genie-mark"]'
+    const brandLockup = container.querySelector(
+      '[data-slot="recipe-genie-lockup"]'
     )
-    expect(brandMark).toHaveAttribute("src", "/recipe-genie-mark.svg")
-    expect(brandMark).toHaveAttribute("alt", "")
-    expect(
-      container.querySelector('[data-slot="recipe-genie-wordmark"]')
-    ).toHaveTextContent("Recipe Genie")
+    expect(brandLockup).toHaveAttribute("src", "/recipe-genie-lockup.png")
+    expect(brandLockup).toHaveAttribute("alt", "")
+    expect(within(brandLink).queryByText("Recipe Genie")).not.toBeInTheDocument()
 
     const navigation = screen.getByRole("navigation", {
       name: "Primary navigation",
@@ -131,7 +129,12 @@ describe("route navigation", () => {
     )
     expect(
       container.querySelector('[data-slot="recipe-genie-mark"]')
-    ).toHaveAttribute("src", "/recipe-genie-mark.svg")
+    ).toHaveAttribute("src", "/recipe-genie-mark.png")
+    expect(
+      within(screen.getByRole("link", { name: "Go to Planner" })).queryByText(
+        "Recipe Genie"
+      )
+    ).not.toBeInTheDocument()
 
     const bottomNavigation = screen.getByRole("navigation", {
       name: "Bottom navigation",

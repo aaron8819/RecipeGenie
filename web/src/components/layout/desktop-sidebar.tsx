@@ -74,21 +74,16 @@ export function DesktopSidebar({
           className="flex flex-col items-center rounded-lg text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-shell"
         >
           <Image
-            src="/recipe-genie-mark.svg"
+            src="/recipe-genie-lockup.png"
             alt=""
-            width={72}
-            height={61}
-            className="h-[3.75rem] w-auto"
+            width={689}
+            height={576}
+            className="h-auto w-[6.25rem]"
             priority
+            unoptimized
             aria-hidden="true"
-            data-slot="recipe-genie-mark"
+            data-slot="recipe-genie-lockup"
           />
-          <span
-            className="mt-1 font-brand text-[1.6rem] font-semibold leading-none tracking-[-0.015em] text-brand-primary"
-            data-slot="recipe-genie-wordmark"
-          >
-            Recipe Genie
-          </span>
         </Link>
       </div>
 
