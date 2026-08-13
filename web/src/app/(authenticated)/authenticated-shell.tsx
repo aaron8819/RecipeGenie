@@ -4,7 +4,12 @@ import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { AuthForm } from "@/components/auth/auth-form"
-import { BottomNav, FirstRunOnboarding, Header } from "@/components/layout"
+import {
+  BottomNav,
+  DesktopSidebar,
+  FirstRunOnboarding,
+  Header,
+} from "@/components/layout"
 import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
@@ -102,19 +107,26 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <main className="min-h-screen bg-background pb-[var(--bottom-nav-safe-height)] md:pb-6 md:pt-[var(--header-height)]">
+    <div className="min-h-screen bg-background pb-[var(--bottom-nav-safe-height)] lg:bg-canvas lg:pb-0">
       <div className="recipe-detail-print-hidden">
+        <DesktopSidebar
+          userEmail={user?.email}
+          onSignOut={() => void signOut()}
+        />
         <Header userEmail={user?.email} onSignOut={() => void signOut()} />
       </div>
 
-      <div
-        className={cn(
-          "container mx-auto w-full max-w-full",
-          /^\/recipes\/[^/]+$/.test(pathname) ? "p-0" : "px-4 py-4"
-        )}
-      >
-        {children}
-      </div>
+      <main className="lg:pl-64">
+        <div
+          className={cn(
+            "mx-auto w-full max-w-full lg:p-8",
+            /^\/recipes\/[^/]+$/.test(pathname) ? "p-0" : "px-4 py-4"
+          )}
+          data-slot="desktop-page-canvas"
+        >
+          {children}
+        </div>
+      </main>
 
       <div className="recipe-detail-print-hidden">
         <BottomNav />
@@ -124,6 +136,6 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
         open={showOnboarding}
         onComplete={completeOnboarding}
       />
-    </main>
+    </div>
   )
 }

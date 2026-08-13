@@ -51,7 +51,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card/95 backdrop-blur-md safe-area-bottom md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card/95 backdrop-blur-md safe-area-bottom lg:hidden"
       aria-label="Bottom navigation"
       style={{ minHeight: "var(--bottom-nav-safe-height)" }}
     >
@@ -68,7 +68,7 @@ export function BottomNav() {
               className={cn(
                 "flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-150",
                 "min-w-[64px] rounded-lg",
-                "active:scale-95",
+                "active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset",
                 isActive
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
