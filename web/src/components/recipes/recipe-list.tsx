@@ -552,7 +552,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
               className="w-full h-auto py-3.5 md:py-5 pl-10 md:pl-12 pr-4 md:pr-5 text-sm md:text-base bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm focus:ring-2 focus:ring-primary focus:border-primary rounded-2xl placeholder:text-slate-400 outline-none transition-all"
             />
           </div>
-          <p className="px-1 -mt-3 mb-6 text-xs md:text-sm text-slate-500 dark:text-slate-400">
+          <p className="px-1 -mt-3 mb-6 text-xs md:text-sm text-slate-500 dark:text-slate-400 lg:text-text-variant">
             Search matches recipe names and categories.
           </p>
         </div>
@@ -560,7 +560,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
 
       {/* Desktop toolbar */}
       {isDesktop && (
-        <div className="hidden md:flex md:flex-row md:flex-nowrap md:items-center md:justify-between gap-6 mb-8 md:mb-10 w-full min-w-0">
+        <div className="hidden md:flex md:flex-row md:flex-wrap 2xl:flex-nowrap md:items-center md:justify-between gap-6 mb-8 md:mb-10 w-full min-w-0">
           <div className="flex flex-nowrap items-center gap-4 min-w-0 overflow-visible pb-0">
             <Select value={category || "all"} onValueChange={(v) => setCategory(v === "all" ? null : v)}>
               <SelectTrigger

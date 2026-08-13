@@ -32,6 +32,7 @@ vi.mock("@/components/layout", () => ({
   Header: ({ onSignOut }: { onSignOut: () => void }) => (
     <button onClick={onSignOut}>Shell sign out</button>
   ),
+  DesktopSidebar: () => <aside>Desktop shell navigation</aside>,
   BottomNav: () => <nav>Shell navigation</nav>,
   FirstRunOnboarding: ({ open }: { open: boolean }) =>
     open ? <div>First-run onboarding</div> : null,
@@ -127,6 +128,7 @@ describe("AuthenticatedShell", () => {
     )
 
     expect(screen.getByText("Private route")).toBeInTheDocument()
+    expect(screen.getByText("Desktop shell navigation")).toBeInTheDocument()
     expect(screen.getByText("Shell navigation")).toBeInTheDocument()
     expect(screen.getByText("First-run onboarding")).toBeInTheDocument()
 

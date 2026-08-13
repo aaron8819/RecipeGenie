@@ -16,22 +16,24 @@ test.describe('Navigation', () => {
 
     await expect(page).toHaveURL(/\/recipes$/)
     await expect(page.getByRole('link', { name: /go to planner/i })).toBeVisible()
-    const headerNav = page.locator('header').getByRole('navigation')
+    const primaryNavigation = page.getByRole('navigation', { name: 'Primary navigation' })
+
+    await expect(primaryNavigation.getByRole('link')).toHaveCount(routes.length)
 
     for (const route of routes) {
       const label = route[0].toUpperCase() + route.slice(1)
-      const link = headerNav.getByRole('link', { name: label, exact: true })
+      const link = primaryNavigation.getByRole('link', { name: label, exact: true })
       await expect(link).toBeVisible()
       await expect(link).toHaveAttribute('href', `/${route}`)
     }
 
-    await expect(headerNav.getByRole('link', { name: 'Recipes', exact: true })).toHaveAttribute(
+    await expect(primaryNavigation.getByRole('link', { name: 'Recipes', exact: true })).toHaveAttribute(
       'aria-current',
       'page'
     )
     await expect(page.getByRole('button', { name: /help/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /sign out/i })).toBeVisible()
-    await expect(page.getByRole('navigation', { name: /bottom navigation/i })).toHaveCount(0)
+    await expect(page.getByRole('navigation', { name: /bottom navigation/i })).toBeHidden()
   })
 
   test('navigates all mobile routes with one active link and one screen @extended', async ({
