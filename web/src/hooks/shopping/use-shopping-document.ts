@@ -306,7 +306,7 @@ export function useAddShoppingItem() {
       unit: input.unit,
       fallbackCategoryKey,
     })
-    const name = itemSemantics.purchaseName
+    const displayName = input.itemName.trim()
     let pantryItems = pantryQuery.data
     if (!pantryItems) {
       pantryItems = (await pantryQuery.refetch({ throwOnError: true })).data
@@ -331,7 +331,7 @@ export function useAddShoppingItem() {
     const defaultCategory = itemSemantics.defaultCategoryKey
     const item: ShoppingManualItemV1 = {
       id: input.rowId,
-      displayName: name,
+      displayName,
       quantity: input.amount == null && !input.unit
         ? null
         : { amount: input.amount ?? null, unit: normalizeUnit(input.unit || '') },
@@ -359,7 +359,7 @@ export function useUpdateShoppingItem() {
       item: input.updates.itemName,
       unit: input.updates.unit,
     })
-    const name = itemSemantics.purchaseName
+    const displayName = input.updates.itemName.trim()
     const projection = projectShoppingDocument(state.document)
     if (projection.rows.some((row) =>
       row.rowRef !== rowRef &&
@@ -376,7 +376,7 @@ export function useUpdateShoppingItem() {
       mutation: {
         type: 'editManualItem',
         id: rowRef.slice('manual:'.length),
-        changes: { displayName: name, quantity },
+        changes: { displayName, quantity },
       },
       value: { item: input.item, updates: input.updates },
     }

@@ -156,14 +156,17 @@ test.describe('Shopping List', () => {
     await page.getByRole('menuitem', { name: /edit item/i }).click()
     await expect(page.getByText(/edit manual item/i)).toBeVisible()
 
-    await page.getByLabel('Manual item name').fill(`manual shallots ${seed}`)
+    await page.getByLabel('Manual item name').fill('eggs')
     await page.getByLabel('Manual item amount').fill('0.5')
     await page.getByLabel('Manual item unit').fill('lb')
     await page.getByRole('button', { name: /save changes/i }).click()
 
-    await expect(page.getByText(`manual shallots ${seed}`, { exact: true })).toBeVisible()
+    await expect(page.getByText('eggs', { exact: true })).toBeVisible()
     await expect(row).toContainText(/lb/i)
     await expect(page.getByText(/edit manual item/i)).toHaveCount(0)
+
+    await page.reload()
+    await expect(page.getByText('eggs', { exact: true })).toBeVisible()
   })
 
   test('restores only the targeted duplicate row from In Pantry and keeps trust context visible @core', async ({ page }) => {

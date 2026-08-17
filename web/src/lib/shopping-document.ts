@@ -1445,7 +1445,11 @@ export function projectShoppingDocument(
       aggregateKey,
       orderingKey,
       purchaseKeys: [...new Set(occurrences.map((item) => item.purchaseKey))],
-      displayName: override?.displayName || occurrences[0].displayName,
+      displayName: override?.displayName ||
+        occurrences.find((occurrence) =>
+          occurrence.displayName === occurrence.purchaseKey
+        )?.displayName ||
+        occurrences[0].displayName,
       quantity: projectedQuantity,
       additionalQuantities: projectedAdditional.length > 0
         ? projectedAdditional

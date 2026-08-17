@@ -192,12 +192,20 @@ function setup(
 async function addOliveOil(
   hook: ReturnType<typeof setup>
 ): Promise<unknown> {
+  return addManualItem(hook, 'olive oil')
+}
+
+async function addManualItem(
+  hook: ReturnType<typeof setup>,
+  itemName: string,
+  rowId = 'manual-new'
+): Promise<unknown> {
   let error: unknown
   await act(async () => {
     try {
       await hook.result.current.mutateAsync({
-        itemName: 'olive oil',
-        rowId: 'manual-new',
+        itemName,
+        rowId,
       })
     } catch (caught) {
       error = caught
@@ -245,6 +253,65 @@ describe('useAddShoppingItem active-list duplicate behavior', () => {
     expect(database.updateCalls).toHaveBeenCalledTimes(1)
     expect(hook.queryClient.getQueryData<ShoppingDocumentStateV3>(SHOPPING_KEY)
       ?.document.manualItems).toHaveLength(1)
+  })
+
+  it.each([
+    ['eggs', 'egg'],
+    ['mushrooms', 'mushroom'],
+  ])('persists manual surface text %s with semantic identity %s', async (
+    displayName,
+    purchaseKey
+  ) => {
+    const hook = setup(createEmptyShoppingDocument(), [])
+
+    expect(await addManualItem(hook, displayName)).toBeUndefined()
+    const persisted = hook.queryClient.getQueryData<ShoppingDocumentStateV3>(
+      SHOPPING_KEY
+    )?.document
+    expect(persisted?.manualItems).toEqual([
+      expect.objectContaining({ displayName }),
+    ])
+    expect(projectShoppingDocument(persisted!).items).toEqual([
+      expect.objectContaining({
+        displayName,
+        orderingKey: purchaseKey,
+      }),
+    ])
+  })
+
+  it('still rejects singular and plural manual semantic duplicates', async () => {
+    const hook = setup(withManualOliveOil('egg'), [])
+
+    expect(await addManualItem(hook, 'eggs')).toEqual(
+      new Error('Item already in shopping list')
+    )
+    expect(database.updateCalls).not.toHaveBeenCalled()
+  })
+
+  it('preserves an explicitly edited plural while retaining semantic identity', async () => {
+    const document = withManualOliveOil('egg', 'manual-egg')
+    const hook = setup(document, [])
+
+    expect(await updateManualItem(hook, {
+      rowId: 'manual:manual-egg',
+      orderingKey: 'egg',
+      item: 'egg',
+      amount: null,
+      unit: '',
+      categoryKey: 'pantry',
+      categoryOrder: 1,
+      sources: [{ recipeName: 'Manual' }],
+      checked: false,
+    }, 'eggs')).toBeUndefined()
+    const persisted = hook.queryClient.getQueryData<ShoppingDocumentStateV3>(
+      SHOPPING_KEY
+    )?.document
+    expect(persisted?.manualItems).toEqual([
+      expect.objectContaining({ id: 'manual-egg', displayName: 'eggs' }),
+    ])
+    expect(projectShoppingDocument(persisted!).items).toEqual([
+      expect.objectContaining({ displayName: 'eggs', orderingKey: 'egg' }),
+    ])
   })
 
   it('rejects an active manual duplicate with actionable feedback and no PATCH', async () => {

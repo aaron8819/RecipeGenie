@@ -127,64 +127,137 @@ const CONTROLLED_PHRASE_ALIASES: Record<string, string> = {
   evoo: 'extra virgin olive oil',
 }
 
-const PREPARATION_WORDS = new Set([
-  'chopped',
-  'crushed',
-  'cubed',
-  'diced',
-  'grated',
-  'halved',
-  'juiced',
-  'mashed',
-  'minced',
-  'peeled',
-  'quartered',
-  'shredded',
-  'sliced',
-  'zested',
+type PreparationDefinition = {
+  evidence: readonly string[]
+  structured?: true
+  leading?: true
+  trailing?: true
+  trailingBeforeAlternative?: true
+}
+
+function preparation(
+  evidence: readonly string[],
+  positions: Omit<PreparationDefinition, 'evidence'>
+): PreparationDefinition {
+  return { evidence, ...positions }
+}
+
+const PREPARATION_DEFINITIONS = new Map<string, PreparationDefinition>([
+  ...[
+    'chopped',
+    'crushed',
+    'cubed',
+    'diced',
+    'grated',
+    'halved',
+    'juiced',
+    'mashed',
+    'minced',
+    'peeled',
+    'quartered',
+    'shredded',
+    'sliced',
+    'zested',
+  ].map((phrase): [string, PreparationDefinition] => [
+    phrase,
+    preparation([phrase], { structured: true, leading: true, trailing: true }),
+  ]),
+  ['as needed', preparation(['as needed'], {
+    structured: true,
+    leading: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['divided', preparation(['divided'], {
+    structured: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['drained', preparation(['drained'], { structured: true })],
+  ['finely chopped', preparation(['finely chopped'], {
+    structured: true,
+    leading: true,
+  })],
+  ['finely diced', preparation(['finely diced'], {
+    structured: true,
+    leading: true,
+  })],
+  ['finely grated', preparation(['finely grated'], {
+    structured: true,
+    leading: true,
+  })],
+  ['finely minced', preparation(['finely minced'], {
+    structured: true,
+    leading: true,
+  })],
+  ['for garnish', preparation(['for garnish'], {
+    structured: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['for serving', preparation(['for serving'], {
+    structured: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['for topping', preparation(['for topping'], {
+    structured: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['juice and zest', preparation(['juiced', 'zested'], { structured: true })],
+  ['optional', preparation([], {
+    structured: true,
+    leading: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['or to taste', preparation(['to taste'], {
+    structured: true,
+    leading: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['plus more', preparation(['plus more'], {
+    structured: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
+  ['rinsed', preparation(['rinsed'], { structured: true })],
+  ['roughly chopped', preparation(['roughly chopped'], {
+    structured: true,
+    leading: true,
+  })],
+  ['sliced or diced', preparation(['diced', 'sliced'], {
+    structured: true,
+    leading: true,
+  })],
+  ['softened', preparation(['softened'], { structured: true })],
+  ['thinly sliced', preparation(['thinly sliced'], {
+    structured: true,
+    leading: true,
+  })],
+  ['to taste', preparation(['to taste'], {
+    structured: true,
+    trailing: true,
+    trailingBeforeAlternative: true,
+  })],
 ])
 
-const STRUCTURED_PREPARATION_MODIFIERS = new Set([
-  ...PREPARATION_WORDS,
-  'as needed',
-  'divided',
-  'drained',
-  'finely grated',
-  'finely minced',
-  'for garnish',
-  'for serving',
-  'for topping',
-  'or to taste',
-  'plus more',
-  'rinsed',
-  'softened',
-  'thinly sliced',
-  'to taste',
-])
+function preparationPhrasesAt(position: 'leading' | 'trailing'): string[] {
+  return [...PREPARATION_DEFINITIONS]
+    .filter(([, definition]) => definition[position])
+    .map(([phrase]) => phrase)
+    .sort((left, right) => right.length - left.length)
+}
 
-const ITEM_PREPARATION_PREFIXES = [
-  'finely grated',
-  'finely minced',
-  'sliced or diced',
-  'thinly sliced',
-]
-
-const ITEM_QUALIFIER_PREFIXES = [
-  'as needed',
-  'or to taste',
-]
-
-const ITEM_QUALIFIER_SUFFIXES = [
-  'as needed',
-  'divided',
-  'for garnish',
-  'for serving',
-  'for topping',
-  'optional',
-  'or to taste',
-  'plus more',
-  'to taste',
-]
+const LEADING_PREPARATION_PHRASES = preparationPhrasesAt('leading')
+const TRAILING_QUALIFIER_PHRASES = preparationPhrasesAt('trailing')
+  .filter((phrase) =>
+    PREPARATION_DEFINITIONS.get(phrase)?.trailingBeforeAlternative)
+const TRAILING_PREPARATION_PHRASES = preparationPhrasesAt('trailing')
+  .filter((phrase) =>
+    !PREPARATION_DEFINITIONS.get(phrase)?.trailingBeforeAlternative)
 
 const ONION_PURCHASE_ALIASES = new Map<string, string>([
   ['onion', 'onion'],
@@ -355,9 +428,9 @@ function collectModifierPreparation(
   if (!modifier) return []
   const identityModifiers: string[] = []
   for (const part of modifier.split(',').map(normalizeText).filter(Boolean)) {
-    if (part === 'optional') continue
-    if (STRUCTURED_PREPARATION_MODIFIERS.has(part)) {
-      preparation.add(part)
+    const definition = PREPARATION_DEFINITIONS.get(part)
+    if (definition?.structured) {
+      addPreparation(preparation, ...definition.evidence)
     } else {
       identityModifiers.push(part)
     }
@@ -373,13 +446,13 @@ function stripGenericPreparation(
   let changed = true
   while (changed) {
     changed = false
-    for (const phrase of [
-      ...ITEM_QUALIFIER_PREFIXES,
-      ...ITEM_PREPARATION_PREFIXES,
-    ]) {
+    for (const phrase of LEADING_PREPARATION_PHRASES) {
       if (remaining === phrase || remaining.startsWith(`${phrase} `)) {
         remaining = remaining.slice(phrase.length).trim()
-        preparation.add(phrase)
+        addPreparation(
+          preparation,
+          ...(PREPARATION_DEFINITIONS.get(phrase)?.evidence || [])
+        )
         changed = true
         break
       }
@@ -389,10 +462,13 @@ function stripGenericPreparation(
   changed = true
   while (changed) {
     changed = false
-    for (const phrase of ITEM_QUALIFIER_SUFFIXES) {
+    for (const phrase of TRAILING_QUALIFIER_PHRASES) {
       if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
         remaining = remaining.slice(0, -phrase.length).trim()
-        preparation.add(phrase === 'or to taste' ? 'to taste' : phrase)
+        addPreparation(
+          preparation,
+          ...(PREPARATION_DEFINITIONS.get(phrase)?.evidence || [])
+        )
         changed = true
         break
       }
@@ -401,18 +477,22 @@ function stripGenericPreparation(
 
   if (/\bor\b/.test(remaining)) return remaining
 
-  const words = remaining.split(' ').filter(Boolean)
-  while (words.length > 0 &&
-    (PREPARATION_WORDS.has(words[0]) || words[0] === 'optional')) {
-    const word = words.shift()!
-    if (word !== 'optional') preparation.add(word)
+  changed = true
+  while (changed) {
+    changed = false
+    for (const phrase of TRAILING_PREPARATION_PHRASES) {
+      if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
+        remaining = remaining.slice(0, -phrase.length).trim()
+        addPreparation(
+          preparation,
+          ...(PREPARATION_DEFINITIONS.get(phrase)?.evidence || [])
+        )
+        changed = true
+        break
+      }
+    }
   }
-  while (words.length > 0 &&
-    (PREPARATION_WORDS.has(words.at(-1)!) || words.at(-1) === 'optional')) {
-    const word = words.pop()!
-    if (word !== 'optional') preparation.add(word)
-  }
-  return words.join(' ')
+  return remaining
 }
 
 function stripOnionSizePreparation(
@@ -425,7 +505,7 @@ function stripOnionSizePreparation(
 
   while (changed) {
     changed = false
-    for (const phrase of [...ONION_SIZE_PREPARATIONS, ...PREPARATION_WORDS]
+    for (const phrase of [...ONION_SIZE_PREPARATIONS, ...LEADING_PREPARATION_PHRASES]
       .sort((left, right) => right.length - left.length)) {
       if (remaining.startsWith(`${phrase} `)) {
         removed.push(phrase)
@@ -443,7 +523,10 @@ function stripOnionSizePreparation(
     return value
   }
 
-  addPreparation(preparation, ...removed)
+  for (const phrase of removed) {
+    const definition = PREPARATION_DEFINITIONS.get(phrase)
+    addPreparation(preparation, ...(definition?.evidence || [phrase]))
+  }
   return remaining
 }
 

@@ -43,6 +43,19 @@ function persistedLine(
   return ingredient
 }
 
+function persistedIngredient(
+  ingredient: Parameters<typeof resolveShoppingIngredient>[0]['ingredient'],
+  recipeId: string
+): ShoppingRecipeIngredientV2 {
+  const {
+    runtime: _runtime,
+    sourceOrdinal: _sourceOrdinal,
+    defaultCategoryOrder: _defaultCategoryOrder,
+    ...persisted
+  } = resolveShoppingIngredient({ ingredient, recipeId })
+  return persisted
+}
+
 function documentWithLines(lines: string[]): ShoppingDocumentV3 {
   const document = createEmptyShoppingDocument()
   document.recipeEntries['recipe-a'] = {
@@ -146,6 +159,35 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     expect(semantics('cilantro', '', 'chopped')).toMatchObject({
       purchaseKey: 'cilantro',
       preparation: ['chopped'],
+    })
+  })
+
+  it.each([
+    ['cilantro', 'finely chopped', 'finely chopped cilantro', ['finely chopped']],
+    ['garlic', 'finely minced', 'finely minced garlic', ['finely minced']],
+    ['onion', 'finely diced', 'finely diced onion', ['finely diced']],
+    ['parsley', 'roughly chopped', 'roughly chopped parsley', ['roughly chopped']],
+    ['avocado', 'sliced or diced', 'sliced or diced avocado', ['diced', 'sliced']],
+  ])('uses one preparation classification for %s / %s', (
+    item,
+    modifier,
+    leadingItem,
+    evidence
+  ) => {
+    expect(semantics(item, '', modifier)).toMatchObject({
+      purchaseKey: item,
+      preparation: evidence,
+    })
+    expect(semantics(leadingItem)).toMatchObject({
+      purchaseKey: item,
+      preparation: evidence,
+    })
+  })
+
+  it('retains composite citrus preparation without adding it to identity', () => {
+    expect(semantics('lime', 'count', 'juice and zest')).toMatchObject({
+      purchaseKey: 'lime',
+      preparation: ['juiced', 'zested'],
     })
   })
 
@@ -268,6 +310,21 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
   it('keeps ambiguous preparation alternatives literal', () => {
     expect(semantics('tomatoes, drained, chopped, or diced').purchaseKey)
       .toBe('tomatoes drained chopped or diced')
+  })
+
+  it('keeps malformed preparation alternatives literal', () => {
+    expect(semantics(
+      'garlic',
+      '',
+      'finely minced (or red pepper flakes)'
+    ).purchaseKey).toBe('finely minced (or red pepper flakes) garlic')
+  })
+
+  it('keeps compound salt and pepper requirements outside both exclusion families', () => {
+    expect(semantics('salt and pepper')).toMatchObject({
+      purchaseKey: 'salt and pepper',
+      familyKey: 'salt and pepper',
+    })
   })
 })
 
@@ -403,6 +460,68 @@ describe('Shopping projection semantic behavior', () => {
       .toHaveLength(4)
     expect(row.find((item) => item.displayName === 'avocado')?.sources[3]
       .preparationModifiers).toEqual(['diced', 'sliced'])
+  })
+
+  it('aggregates production garlic and cilantro preparation variants by identity', () => {
+    const rows = projectShoppingDocument(documentWithLines([
+      '8 cloves garlic',
+      '3 cloves garlic, finely chopped',
+      '1 tbsp cilantro',
+      '1 tbsp cilantro, finely chopped',
+    ])).items
+
+    expect(rows).toHaveLength(2)
+    expect(rows.find((item) => item.orderingKey === 'garlic')).toMatchObject({
+      displayName: 'garlic',
+      quantity: { amount: 11, unit: 'clove' },
+    })
+    expect(rows.find((item) => item.orderingKey === 'cilantro')).toMatchObject({
+      displayName: 'cilantro',
+      quantity: { amount: 2, unit: 'tbsp' },
+    })
+  })
+
+  it('keeps alternative evidence but uses a hard requirement for merged display', () => {
+    const document = createEmptyShoppingDocument()
+    const alternative = persistedIngredient({
+      item: 'cilantro',
+      amount: 1,
+      unit: 'tbsp',
+      alternatives: ['parsley'],
+    }, 'recipe-a')
+    const required = persistedIngredient({
+      item: 'cilantro',
+      amount: 1,
+      unit: 'tbsp',
+      modifier: 'finely chopped',
+    }, 'recipe-z')
+    document.recipeEntries['recipe-a'] = {
+      recipeId: 'recipe-a',
+      recipeName: 'Alternative cilantro',
+      selectedServings: 1,
+      scaleV1: { numerator: '1', denominator: '1' },
+      ingredients: [alternative],
+    }
+    document.recipeEntries['recipe-z'] = {
+      recipeId: 'recipe-z',
+      recipeName: 'Required cilantro',
+      selectedServings: 1,
+      scaleV1: { numerator: '1', denominator: '1' },
+      ingredients: [required],
+    }
+
+    expect(alternative).toMatchObject({
+      purchaseKey: 'cilantro',
+      displayName: 'cilantro (or parsley)',
+      pantryMatchKeys: ['cilantro', 'parsley'],
+    })
+    expect(projectShoppingDocument(document).items).toEqual([
+      expect.objectContaining({
+        orderingKey: 'cilantro',
+        displayName: 'cilantro',
+        quantity: expect.objectContaining({ amount: 2, unit: 'tbsp' }),
+      }),
+    ])
   })
 
   it('merges only the approved onion purchase forms', () => {

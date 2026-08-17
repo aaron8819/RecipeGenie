@@ -102,6 +102,18 @@ green, pearl, and pickled onion forms remain distinct. Exact recipe quantities
 and semantic preparation metadata remain available to source detail even when
 the primary row uses the cleaned purchase name.
 
+One exact preparation vocabulary classifies supported structured modifiers and
+leading/trailing forms. Composite `juice and zest` evidence becomes `juiced`
+plus `zested`, but malformed component data such as `lime juice` with a count
+unit remains `lime juice` until its recipe record is repaired. Resolver changes
+affect only newly generated recipe contributions; persisted contributions are
+not silently regenerated.
+
+Manual rows preserve the user's trimmed surface text for display while deriving
+duplicate, Pantry, and ordering identity from the same canonical semantics as
+recipe ingredients. A merged recipe row uses a hard primary requirement for
+display when another source offers that ingredient only as an alternative.
+
 ## Verification
 
 Run from `web/`:
@@ -112,4 +124,4 @@ npm run test -- --run src/lib/__tests__/shopping-document.test.ts src/lib/__test
 supabase test db --local --workdir ..
 ```
 
-Last updated: 2026-08-10
+Last updated: 2026-08-17

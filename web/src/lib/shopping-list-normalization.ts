@@ -133,10 +133,10 @@ function normalizeWholeProduce(
     quantityKind: input.quantityKind,
     fallbackCategoryKey: input.fallbackCategoryKey,
   })
-  const prepIntent =
-    options?.prepIntent ||
-    originalSemantics.preparation.join(', ') ||
-    undefined
+  const preparation = options?.prepIntent
+    ? [options.prepIntent]
+    : originalSemantics.preparation
+  const prepIntent = preparation.join(', ') || undefined
 
   return {
     purchaseName,
@@ -148,7 +148,7 @@ function normalizeWholeProduce(
     prepIntent,
     semantics: {
       ...semantics,
-      preparation: prepIntent ? [prepIntent] : semantics.preparation,
+      preparation,
     },
     confidence: options?.confidence ?? "high",
     reason: options?.reason ?? "whole produce purchase",

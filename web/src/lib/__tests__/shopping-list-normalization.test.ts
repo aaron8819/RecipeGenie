@@ -307,6 +307,40 @@ describe('normalizeShoppingPurchase', () => {
     })
   })
 
+  it('retains composite citrus preparation for safely identified whole fruit', () => {
+    expect(normalizeShoppingPurchase({
+      item: 'lime',
+      amount: 1,
+      unit: 'count',
+      modifier: 'juice and zest',
+    })).toMatchObject({
+      purchaseName: 'lime',
+      purchaseUnit: 'count',
+      prepIntent: 'juiced, zested',
+      semantics: {
+        purchaseKey: 'lime',
+        preparation: ['juiced', 'zested'],
+      },
+    })
+  })
+
+  it('does not over-normalize malformed citrus component data', () => {
+    expect(normalizeShoppingPurchase({
+      item: 'lime juice',
+      amount: 1,
+      unit: 'count',
+      modifier: 'juice and zest',
+    })).toMatchObject({
+      purchaseName: 'lime juice',
+      purchaseUnit: 'count',
+      purchaseQuantity: 1,
+      semantics: {
+        purchaseKey: 'lime juice',
+        preparation: ['juiced', 'zested'],
+      },
+    })
+  })
+
   it('keeps measured produce forms in their measured units', () => {
     expect(normalizeShoppingPurchase({ item: 'onion', amount: 1, unit: 'cup' })).toMatchObject({
       purchaseName: 'onion',
