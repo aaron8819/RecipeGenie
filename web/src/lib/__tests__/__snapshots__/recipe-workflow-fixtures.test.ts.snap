@@ -1536,19 +1536,18 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
       },
       {
         "additionalAmounts": undefined,
-        "amount": 2,
+        "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
         "excludedBy": undefined,
         "item": "lemon",
         "sources": [
-          {
-            "originalAmount": 0.3333333333333333,
-            "originalItem": "lemon",
-            "originalUnit": "count",
-            "preparationModifiers": [
-              "juiced",
-            ],
-            "recipeId": "multiple-components-chicken",
-          },
           {
             "originalAmount": 1,
             "originalItem": "lemon",
@@ -1558,6 +1557,30 @@ exports[`recipe workflow fixture corpus v1 > 'multiple-components-chicken' 1`] =
           },
         ],
         "unit": "count",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
+        "excludedBy": undefined,
+        "item": "lemon juice",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "lemon juice",
+            "originalUnit": "tbsp",
+            "preparationModifiers": undefined,
+            "recipeId": "multiple-components-chicken",
+          },
+        ],
+        "unit": "tbsp",
       },
       {
         "additionalAmounts": undefined,
@@ -2021,19 +2044,17 @@ exports[`recipe workflow fixture corpus v1 > 'noisy-copied-heading' 1`] = `
           },
         },
         "excludedBy": undefined,
-        "item": "lime",
+        "item": "lime juice",
         "sources": [
           {
-            "originalAmount": 0.5,
-            "originalItem": "lime",
-            "originalUnit": "count",
-            "preparationModifiers": [
-              "juiced",
-            ],
+            "originalAmount": 1,
+            "originalItem": "lime juice",
+            "originalUnit": "tbsp",
+            "preparationModifiers": undefined,
             "recipeId": "noisy-copied-heading",
           },
         ],
-        "unit": "count",
+        "unit": "tbsp",
       },
       {
         "additionalAmounts": undefined,
@@ -2909,30 +2930,51 @@ exports[`recipe workflow fixture corpus v1 > 'sauce-duplicate-citrus-prep' 1`] =
     "items": [
       {
         "additionalAmounts": undefined,
-        "amount": 1,
+        "amount": 2,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "2",
+          "value": {
+            "denominator": "1",
+            "numerator": "2",
+          },
+        },
         "excludedBy": undefined,
-        "item": "lemon",
+        "item": "lemon juice",
         "sources": [
           {
-            "originalAmount": 0.6666666666666666,
-            "originalItem": "lemon",
-            "originalUnit": "count",
-            "preparationModifiers": [
-              "juiced",
-            ],
-            "recipeId": "sauce-duplicate-citrus-prep",
-          },
-          {
-            "originalAmount": 1,
-            "originalItem": "lemon",
-            "originalUnit": "count",
-            "preparationModifiers": [
-              "zested",
-            ],
+            "originalAmount": 2,
+            "originalItem": "lemon juice",
+            "originalUnit": "tbsp",
+            "preparationModifiers": undefined,
             "recipeId": "sauce-duplicate-citrus-prep",
           },
         ],
-        "unit": "count",
+        "unit": "tbsp",
+      },
+      {
+        "additionalAmounts": undefined,
+        "amount": 1,
+        "exactQuantity": {
+          "kind": "exact",
+          "lexeme": "1",
+          "value": {
+            "denominator": "1",
+            "numerator": "1",
+          },
+        },
+        "excludedBy": undefined,
+        "item": "lemon zest",
+        "sources": [
+          {
+            "originalAmount": 1,
+            "originalItem": "lemon zest",
+            "originalUnit": "tbsp",
+            "preparationModifiers": undefined,
+            "recipeId": "sauce-duplicate-citrus-prep",
+          },
+        ],
+        "unit": "tbsp",
       },
       {
         "additionalAmounts": undefined,

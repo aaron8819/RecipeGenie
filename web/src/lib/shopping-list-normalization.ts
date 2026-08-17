@@ -43,10 +43,6 @@ const CITRUS_PURCHASE_NAMES: Record<string, string> = {
   lemon: "lemon",
   lemons: "lemon",
 }
-const CITRUS_YIELDS: Record<string, { juiceTbsp: number; zestTbsp: number }> = {
-  lemon: { juiceTbsp: 3, zestTbsp: 1 },
-  lime: { juiceTbsp: 2, zestTbsp: 2 / 3 },
-}
 const WHOLE_PRODUCE_PURCHASE_NAMES: Record<string, string> = {
   ...CITRUS_PURCHASE_NAMES,
   onion: "onion",
@@ -119,7 +115,13 @@ function createBasePurchaseNormalization(
 function normalizeWholeProduce(
   input: ShoppingPurchaseNormalizationInput,
   purchaseName: string,
-  options?: { prepIntent?: string; quantity?: number | null; confidence?: "high" | "medium"; reason: string }
+  options?: {
+    prepIntent?: string
+    preparations?: string[]
+    quantity?: number | null
+    confidence?: "high" | "medium"
+    reason: string
+  }
 ): ShoppingPurchaseNormalization {
   const quantity = options?.quantity ?? input.amount ?? (WHOLE_PRODUCE_DEFAULTS.has(purchaseName) ? 1 : null)
   const originalSemantics = resolveShoppingIngredientSemantics({
@@ -133,9 +135,9 @@ function normalizeWholeProduce(
     quantityKind: input.quantityKind,
     fallbackCategoryKey: input.fallbackCategoryKey,
   })
-  const preparation = options?.prepIntent
+  const preparation = options?.preparations || (options?.prepIntent
     ? [options.prepIntent]
-    : originalSemantics.preparation
+    : originalSemantics.preparation)
   const prepIntent = preparation.join(', ') || undefined
 
   return {
@@ -153,60 +155,6 @@ function normalizeWholeProduce(
     confidence: options?.confidence ?? "high",
     reason: options?.reason ?? "whole produce purchase",
   }
-}
-
-function tablespoonsFromVolume(amount: number, unit: string): number | null {
-  switch (normalizeUnit(unit)) {
-    case "tbsp":
-      return amount
-    case "tsp":
-      return amount / 3
-    case "cup":
-      return amount * 16
-    case "fl oz":
-      return amount * 2
-    case "ml":
-      return amount / 14.787
-    default:
-      return null
-  }
-}
-
-function citrusQuantityFromMeasuredVolume(
-  fruitName: string,
-  prepIntent: "juiced" | "zested",
-  amount: number | null | undefined,
-  unit: string | null | undefined
-): number | null {
-  if (!amount || !unit) return null
-
-  const tablespoons = tablespoonsFromVolume(amount, unit)
-  if (!tablespoons) return null
-
-  const yieldKey = prepIntent === "juiced" ? "juiceTbsp" : "zestTbsp"
-  return tablespoons / CITRUS_YIELDS[fruitName][yieldKey]
-}
-
-function normalizeMeasuredCitrus(
-  input: ShoppingPurchaseNormalizationInput,
-  fruitName: string,
-  prepIntent: "juiced" | "zested",
-  reason: string,
-  parsedAmount?: number | null,
-  parsedUnit?: string | null
-): ShoppingPurchaseNormalization | null {
-  const amount = parsedAmount ?? input.amount
-  const unit = parsedUnit ?? input.unit
-  const quantity = citrusQuantityFromMeasuredVolume(fruitName, prepIntent, amount, unit)
-
-  if (!quantity) return null
-
-  return normalizeWholeProduce(input, fruitName, {
-    quantity,
-    prepIntent,
-    confidence: "medium",
-    reason,
-  })
 }
 
 /**
@@ -257,30 +205,19 @@ export function normalizeShoppingPurchase(
   const normalizedUnit = normalizeUnit(input.unit || "")
   const base = createBasePurchaseNormalization(input)
 
-  const measuredCitrusName = normalizedName.match(/^(?:fresh\s+)?(lemon|lime)\s+(juice|zest)$/)
-  if (measuredCitrusName) {
-    const measured = normalizeMeasuredCitrus(
-      input,
-      measuredCitrusName[1],
-      measuredCitrusName[2] === "juice" ? "juiced" : "zested",
-      "measured citrus component"
-    )
-    if (measured) return measured
-  }
-
-  const leadingMeasuredCitrus = normalizedName.match(
-    /^(\d+(?:\.\d+)?|\d+\/\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+([a-z ]+?)\s+(?:fresh\s+)?(lemon|lime)\s+(juice|zest)$/
+  const compositeCitrus = normalizedName.match(
+    /^juice and zest (?:of|from) (?:(\d+(?:\.\d+)?|\d+\/\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+)?(limes?|lemons?)$/
   )
-  if (leadingMeasuredCitrus) {
-    const measured = normalizeMeasuredCitrus(
-      input,
-      leadingMeasuredCitrus[3],
-      leadingMeasuredCitrus[4] === "juice" ? "juiced" : "zested",
-      "embedded measured citrus component",
-      parseQuantityToken(leadingMeasuredCitrus[1]),
-      leadingMeasuredCitrus[2]
-    )
-    if (measured) return measured
+  if (compositeCitrus) {
+    const purchaseName = CITRUS_PURCHASE_NAMES[compositeCitrus[2]]
+    const parsedQuantity = compositeCitrus[1]
+      ? parseQuantityToken(compositeCitrus[1])
+      : null
+    return normalizeWholeProduce(input, purchaseName, {
+      quantity: parsedQuantity ?? input.amount ?? null,
+      preparations: ['juiced', 'zested'],
+      reason: "explicit whole citrus juice-and-zest quantity",
+    })
   }
 
   const juiceOfCitrus = normalizedName.match(

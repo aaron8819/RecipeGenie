@@ -242,8 +242,9 @@ export function resolveShoppingIngredient({
   const citrusPrep =
     (purchase.purchaseName === "lemon" || purchase.purchaseName === "lime") &&
     purchaseUnit === "count" &&
-    (purchase.prepIntent === "juiced" || purchase.prepIntent === "zested")
-      ? purchase.prepIntent
+    (semantics.preparation.includes("juiced") ||
+      semantics.preparation.includes("zested"))
+      ? semantics.preparation.includes("juiced") ? "juiced" : "zested"
       : undefined
 
   return {

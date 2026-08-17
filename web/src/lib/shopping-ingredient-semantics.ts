@@ -176,19 +176,21 @@ const PREPARATION_DEFINITIONS = new Map<string, PreparationDefinition>([
   ['drained', preparation(['drained'], { structured: true })],
   ['finely chopped', preparation(['finely chopped'], {
     structured: true,
-    leading: true,
+    trailing: true,
   })],
   ['finely diced', preparation(['finely diced'], {
     structured: true,
-    leading: true,
+    trailing: true,
   })],
   ['finely grated', preparation(['finely grated'], {
     structured: true,
     leading: true,
+    trailing: true,
   })],
   ['finely minced', preparation(['finely minced'], {
     structured: true,
     leading: true,
+    trailing: true,
   })],
   ['for garnish', preparation(['for garnish'], {
     structured: true,
@@ -226,7 +228,7 @@ const PREPARATION_DEFINITIONS = new Map<string, PreparationDefinition>([
   ['rinsed', preparation(['rinsed'], { structured: true })],
   ['roughly chopped', preparation(['roughly chopped'], {
     structured: true,
-    leading: true,
+    trailing: true,
   })],
   ['sliced or diced', preparation(['diced', 'sliced'], {
     structured: true,
@@ -236,6 +238,7 @@ const PREPARATION_DEFINITIONS = new Map<string, PreparationDefinition>([
   ['thinly sliced', preparation(['thinly sliced'], {
     structured: true,
     leading: true,
+    trailing: true,
   })],
   ['to taste', preparation(['to taste'], {
     structured: true,
@@ -421,7 +424,10 @@ export function normalizeShoppingLiteralIdentity(value: string): string {
   return canonicalizeControlledNoun(normalizeText(value))
 }
 
-function collectModifierPreparation(
+// The modifier field is structural evidence supplied by a recipe form or by
+// the parser after it recognizes a trailing modifier. It is intentionally
+// stronger than preparation-looking words embedded in the item name.
+function collectStructuredPreparationEvidence(
   modifier: string | null | undefined,
   preparation: Set<string>
 ): string[] {
@@ -438,7 +444,10 @@ function collectModifierPreparation(
   return identityModifiers
 }
 
-function stripGenericPreparation(
+// Free-text item handling retains the pre-V3 leading vocabulary, but newly
+// supported multi-word phrases are not stripped from the front of product
+// names without structural evidence. Trailing matches use longest-first order.
+function stripFreeTextPreparationEvidence(
   value: string,
   preparation: Set<string>
 ): string {
@@ -551,13 +560,13 @@ export function resolveShoppingIngredientSemantics(
   input: ShoppingIngredientSemanticsInput
 ): ShoppingIngredientSemantics {
   const preparation = new Set<string>()
-  const identityModifiers = collectModifierPreparation(
+  const identityModifiers = collectStructuredPreparationEvidence(
     input.modifier,
     preparation
   )
 
   let purchaseUnit = normalizeShoppingUnit(input.unit || '')
-  let purchaseName = stripGenericPreparation(
+  let purchaseName = stripFreeTextPreparationEvidence(
     normalizeShoppingLiteralIdentity(input.item),
     preparation
   )

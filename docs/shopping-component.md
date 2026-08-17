@@ -102,12 +102,26 @@ green, pearl, and pickled onion forms remain distinct. Exact recipe quantities
 and semantic preparation metadata remain available to source detail even when
 the primary row uses the cleaned purchase name.
 
-One exact preparation vocabulary classifies supported structured modifiers and
-leading/trailing forms. Composite `juice and zest` evidence becomes `juiced`
-plus `zested`, but malformed component data such as `lime juice` with a count
-unit remains `lime juice` until its recipe record is repaired. Resolver changes
-affect only newly generated recipe contributions; persisted contributions are
-not silently regenerated.
+One exact preparation vocabulary classifies supported forms, but evidence
+strength is contextual. A structured modifier or parser-recognized trailing
+modifier is strong evidence; leading free text keeps only the established
+legacy canonicalizations and does not automatically strip newly recognized
+multi-word phrases. The established leading rules still canonicalize forms
+such as `sliced bread`, `shredded cheese`, `grated parmesan`, and `crushed
+tomatoes`; extending or correcting that older contract is outside this Tier 1
+change.
+
+Exact whole-fruit grammar such as `juice and zest of 1 lime` becomes one lime
+with `juiced` and `zested` preparation evidence. Measured or packaged component
+forms such as `2 tbsp lime juice` and `1 bottle lime juice` retain the `lime
+juice` purchase identity. Malformed component data such as `lime juice` with a
+count unit is not converted to whole fruit.
+
+Resolver changes affect only newly generated recipe contributions. A persisted
+V3 recipe contribution retains its stored purchase identity, aggregate key, and
+resolved semantic fields during validation, projection, and unrelated Shopping
+mutations. Updating an old contribution requires explicit recipe regeneration
+or a supported migration; ordinary reads do not silently reinterpret it.
 
 Manual rows preserve the user's trimmed surface text for display while deriving
 duplicate, Pantry, and ordering identity from the same canonical semantics as

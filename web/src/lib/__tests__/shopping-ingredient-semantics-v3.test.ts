@@ -163,24 +163,75 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
   })
 
   it.each([
-    ['cilantro', 'finely chopped', 'finely chopped cilantro', ['finely chopped']],
-    ['garlic', 'finely minced', 'finely minced garlic', ['finely minced']],
-    ['onion', 'finely diced', 'finely diced onion', ['finely diced']],
-    ['parsley', 'roughly chopped', 'roughly chopped parsley', ['roughly chopped']],
-    ['avocado', 'sliced or diced', 'sliced or diced avocado', ['diced', 'sliced']],
-  ])('uses one preparation classification for %s / %s', (
+    ['cilantro', 'finely chopped', ['finely chopped']],
+    ['garlic', 'finely minced', ['finely minced']],
+    ['onion', 'finely diced', ['finely diced']],
+    ['parsley', 'roughly chopped', ['roughly chopped']],
+    ['avocado', 'sliced or diced', ['diced', 'sliced']],
+  ])('uses structured modifier evidence for %s / %s', (
     item,
     modifier,
-    leadingItem,
     evidence
   ) => {
     expect(semantics(item, '', modifier)).toMatchObject({
       purchaseKey: item,
       preparation: evidence,
     })
-    expect(semantics(leadingItem)).toMatchObject({
-      purchaseKey: item,
-      preparation: evidence,
+  })
+
+  it.each([
+    ['finely chopped tomatoes', 'finely chopped tomato'],
+    ['finely diced tomatoes', 'finely diced tomato'],
+    ['roughly chopped onions', 'roughly chopped onion'],
+    ['ground turkey', 'ground turkey'],
+    ['smoked paprika', 'smoked paprika'],
+    ['dried oregano', 'dried oregano'],
+    ['roasted red peppers', 'roasted red pepper'],
+    ['pickled onions', 'pickled onion'],
+    ['frozen spinach', 'frozen spinach'],
+  ])('keeps product-form free text %s distinct', (item, expected) => {
+    expect(semantics(item)).toMatchObject({
+      purchaseKey: expected,
+      preparation: [],
+    })
+  })
+
+  it.each([
+    ['sliced bread', 'bread', 'sliced'],
+    ['shredded cheese', 'cheese', 'shredded'],
+    ['grated parmesan', 'parmesan', 'grated'],
+    ['crushed tomatoes', 'tomato', 'crushed'],
+  ])('captures the pre-existing leading-form contract for %s', (
+    item,
+    purchaseKey,
+    preparation
+  ) => {
+    expect(semantics(item)).toMatchObject({
+      purchaseKey,
+      preparation: [preparation],
+    })
+  })
+
+  it.each([
+    ['garlic, finely chopped', 'garlic', 'finely chopped'],
+    ['cilantro, roughly chopped', 'cilantro', 'roughly chopped'],
+    ['onion, finely diced', 'onion', 'finely diced'],
+  ])('uses the longest trailing preparation in %s', (
+    line,
+    purchaseKey,
+    preparation
+  ) => {
+    expect(semantics(line)).toMatchObject({
+      purchaseKey,
+      preparation: [preparation],
+    })
+    expect(parseIngredientLine(line)).toMatchObject({
+      item: purchaseKey,
+      modifier: preparation,
+    })
+    expect(resolvedLine(line)).toMatchObject({
+      purchaseKey,
+      preparation: [preparation],
     })
   })
 
@@ -188,6 +239,36 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     expect(semantics('lime', 'count', 'juice and zest')).toMatchObject({
       purchaseKey: 'lime',
       preparation: ['juiced', 'zested'],
+    })
+  })
+
+  it.each(['lime', 'lemon'])(
+    'parses whole-fruit juice-and-zest grammar for %s',
+    (fruit) => {
+      const line = `juice and zest of 1 ${fruit}`
+      expect(parseIngredientLine(line)).toMatchObject({ item: line })
+      expect(resolvedLine(line)).toMatchObject({
+        purchaseKey: fruit,
+        quantity: { amount: 1, unit: 'count' },
+        preparation: ['juiced', 'zested'],
+      })
+    }
+  )
+
+  it.each([
+    ['2 tbsp lime juice', 'lime juice', 2, 'tbsp'],
+    ['1 bottle lime juice', 'lime juice', 1, 'bottle'],
+    ['1 tbsp lemon zest', 'lemon zest', 1, 'tbsp'],
+    ['1 cup orange juice', 'orange juice', 1, 'cup'],
+  ])('keeps citrus product/component form %s unchanged', (
+    line,
+    purchaseKey,
+    amount,
+    unit
+  ) => {
+    expect(resolvedLine(line)).toMatchObject({
+      purchaseKey,
+      quantity: { amount, unit },
     })
   })
 
@@ -638,357 +719,108 @@ describe('manual row shadowing', () => {
   })
 })
 
-describe('ShoppingDocumentV3 semantic reconciliation', () => {
-  function historicalDocument(
-    ingredients: Array<[string, string]>
-  ): ShoppingDocumentV3 {
+describe('ShoppingDocumentV3 frozen semantic validation', () => {
+  function frozenDocument(purchaseKey: string): ShoppingDocumentV3 {
     const document = createEmptyShoppingDocument()
-    document.recipeEntries = Object.fromEntries(ingredients.map(
-      ([recipeId, purchaseKey]) => [recipeId, {
-        recipeId,
-        recipeName: `Historical ${purchaseKey}`,
-        selectedServings: 1,
-        scaleV1: { numerator: '1', denominator: '1' },
-        ingredients: [historicalV3Line(purchaseKey, `1 ${purchaseKey}`, recipeId)],
-      }]
-    ))
+    const aggregateKey = JSON.stringify([
+      'shopping-aggregate',
+      2,
+      purchaseKey,
+    ])
+    const ingredient = historicalV3Line(purchaseKey)
+    document.recipeEntries['recipe-frozen'] = {
+      recipeId: 'recipe-frozen',
+      recipeName: `Frozen ${purchaseKey}`,
+      selectedServings: 1,
+      scaleV1: { numerator: '1', denominator: '1' },
+      ingredients: [{
+        ...ingredient,
+        aggregateKey,
+        displayName: purchaseKey,
+        familyKey: purchaseKey,
+        preparation: [],
+        pantryMatchKeys: [purchaseKey],
+      }],
+    }
     return document
   }
 
-  it('preserves occurrence metadata shared by one current aggregate', () => {
-    const document = historicalDocument([
-      ['recipe-a', 'cumin'],
-      ['recipe-b', 'cumin'],
-    ])
-    const [produce, dairy] = Object.values(document.recipeEntries).map(
-      (entry) => entry.ingredients[0]
-    )
-    Object.assign(produce, {
-      quantity: { amount: 1, unit: 'tsp' },
-      purchaseUnit: 'tsp',
-      quantityKind: 'continuous',
-      defaultCategoryKey: 'produce',
-    })
-    Object.assign(dairy, {
-      quantity: { amount: 1, unit: 'tbsp' },
-      purchaseUnit: 'tbsp',
-      quantityKind: 'continuous',
-      defaultCategoryKey: 'dairy',
-    })
+  it.each([
+    'finely chopped cilantro',
+    'chopped garlic',
+  ])('preserves frozen recipe identity %s across read and projection', (
+    purchaseKey
+  ) => {
+    const document = frozenDocument(purchaseKey)
+    const original = JSON.parse(JSON.stringify(document))
+    const aggregateKey = document.recipeEntries['recipe-frozen'].ingredients[0]
+      .aggregateKey
+
     expect(validateShoppingDocumentV3(document).ok).toBe(true)
-
-    const reconciled = validateShoppingDocumentStateV3({
+    const validated = validateShoppingDocumentStateV3({
       document,
-      contentRevision: 7,
-    })
-    expect(reconciled.ok).toBe(true)
-    if (!reconciled.ok) return
-
-    expect(reconciled.document.recipeEntries['recipe-a'].ingredients[0])
-      .toMatchObject({
-        purchaseKey: 'cumin',
-        quantity: { amount: 1, unit: 'tsp' },
-        purchaseUnit: 'tsp',
-        quantityKind: 'continuous',
-        defaultCategoryKey: 'produce',
-      })
-    expect(reconciled.document.recipeEntries['recipe-b'].ingredients[0])
-      .toMatchObject({
-        purchaseKey: 'cumin',
-        quantity: { amount: 1, unit: 'tbsp' },
-        purchaseUnit: 'tbsp',
-        quantityKind: 'continuous',
-        defaultCategoryKey: 'dairy',
-      })
-
-    const repeated = validateShoppingDocumentStateV3({
-      document: JSON.parse(JSON.stringify(reconciled.document)),
-      contentRevision: 8,
-    })
-    expect(repeated.ok).toBe(true)
-    if (repeated.ok) expect(repeated.document).toEqual(reconciled.document)
-  })
-
-  it('remaps an alias without replacing occurrence metadata', () => {
-    const document = historicalDocument([
-      ['recipe-a', 'yellow onion'],
-      ['recipe-b', 'yellow onion'],
-    ])
-    const [produce, dairy] = Object.values(document.recipeEntries).map(
-      (entry) => entry.ingredients[0]
-    )
-    Object.assign(produce, {
-      quantity: { amount: 1, unit: 'tsp' },
-      preparation: ['diced'],
-      purchaseUnit: 'tsp',
-      quantityKind: 'continuous',
-      defaultCategoryKey: 'produce',
-    })
-    Object.assign(dairy, {
-      quantity: { amount: 2, unit: 'tbsp' },
-      preparation: ['sliced'],
-      purchaseUnit: 'tbsp',
-      quantityKind: 'continuous',
-      defaultCategoryKey: 'dairy',
-    })
-    expect(validateShoppingDocumentV3(document).ok).toBe(true)
-
-    const reconciled = validateShoppingDocumentStateV3({
-      document,
-      contentRevision: 9,
-    })
-    expect(reconciled.ok).toBe(true)
-    if (!reconciled.ok) return
-
-    const first = reconciled.document.recipeEntries['recipe-a'].ingredients[0]
-    const second = reconciled.document.recipeEntries['recipe-b'].ingredients[0]
-    expect(first).toMatchObject({
-      purchaseKey: 'onion',
-      displayName: 'onion',
-      quantity: { amount: 1, unit: 'tsp' },
-      preparation: ['diced'],
-      purchaseUnit: 'tsp',
-      quantityKind: 'continuous',
-      defaultCategoryKey: 'produce',
-    })
-    expect(second).toMatchObject({
-      purchaseKey: 'onion',
-      displayName: 'onion',
-      quantity: { amount: 2, unit: 'tbsp' },
-      preparation: ['sliced'],
-      purchaseUnit: 'tbsp',
-      quantityKind: 'continuous',
-      defaultCategoryKey: 'dairy',
-    })
-    expect(first.aggregateKey).toBe(second.aggregateKey)
-
-    const repeated = validateShoppingDocumentStateV3({
-      document: JSON.parse(JSON.stringify(reconciled.document)),
-      contentRevision: 10,
-    })
-    expect(repeated.ok).toBe(true)
-    if (repeated.ok) expect(repeated.document).toEqual(reconciled.document)
-  })
-
-  it.each(['yellow onion', 'white onion'])(
-    'reconciles an unambiguous persisted %s identity and preferences',
-    (historicalKey) => {
-      const document = historicalDocument([['recipe-a', historicalKey]])
-      const oldAggregate = document.recipeEntries['recipe-a'].ingredients[0]
-        .aggregateKey
-      document.itemOverrides[oldAggregate] = { checked: true }
-      document.preferences.categoryByIngredient[historicalKey] = 'dairy'
-      document.preferences.ingredientOrderByCategory = {
-        dairy: [historicalKey],
-      }
-      document.preferences.excludedIngredientKeys = [historicalKey]
-
-      const reconciled = validateShoppingDocumentStateV3({
-        document,
-        contentRevision: 4,
-      })
-      expect(reconciled.ok).toBe(true)
-      if (!reconciled.ok) return
-
-      const ingredient = reconciled.document.recipeEntries['recipe-a']
-        .ingredients[0]
-      expect(ingredient).toMatchObject({
-        purchaseKey: 'onion',
-        displayName: 'onion',
-        pantryMatchKeys: ['onion'],
-      })
-      expect(JSON.parse(ingredient.aggregateKey).slice(0, 3)).toEqual([
-        'shopping-aggregate',
-        2,
-        'onion',
-      ])
-      expect(reconciled.document.preferences.categoryByIngredient).toEqual({
-        onion: 'dairy',
-      })
-      expect(reconciled.document.preferences.ingredientOrderByCategory)
-        .toEqual({ dairy: ['onion'] })
-      expect(reconciled.document.preferences.excludedIngredientKeys)
-        .toEqual(['onion'])
-      expect(reconciled.document.itemOverrides).toEqual({
-        [ingredient.aggregateKey]: { checked: true },
-      })
-      expect(projectShoppingDocument(reconciled.document).rows[0])
-        .toMatchObject({ orderingKey: 'onion', categoryKey: 'dairy' })
-
-      const repeated = validateShoppingDocumentStateV3({
-        document: reconciled.document,
-        contentRevision: 5,
-      })
-      expect(repeated.ok).toBe(true)
-      if (repeated.ok) expect(repeated.document).toEqual(reconciled.document)
-    }
-  )
-
-  it('preserves conflicting historical category and cross-category order', () => {
-    const document = historicalDocument([
-      ['recipe-white', 'white onion'],
-      ['recipe-yellow', 'yellow onion'],
-    ])
-    document.preferences.categoryByIngredient = {
-      'white onion': 'produce',
-      'yellow onion': 'dairy',
-    }
-    document.preferences.ingredientOrderByCategory = {
-      produce: ['white onion'],
-      dairy: ['yellow onion'],
-    }
-
-    const reconciled = validateShoppingDocumentStateV3({
-      document,
-      contentRevision: 2,
-    })
-    expect(reconciled.ok).toBe(true)
-    if (!reconciled.ok) return
-
-    expect(reconciled.document.preferences.categoryByIngredient).toEqual(
-      document.preferences.categoryByIngredient
-    )
-    expect(reconciled.document.preferences.ingredientOrderByCategory).toEqual(
-      document.preferences.ingredientOrderByCategory
-    )
-    expect(Object.values(reconciled.document.recipeEntries).map((entry) =>
-      entry.ingredients[0].purchaseKey).sort()).toEqual([
-      'white onion',
-      'yellow onion',
-    ])
-    expect(projectShoppingDocument(reconciled.document).rows.map((row) => [
-      row.orderingKey,
-      row.categoryKey,
-    ])).toEqual([
-      ['white onion', 'produce'],
-      ['yellow onion', 'dairy'],
-    ])
-  })
-
-  it('preserves conflicting row overrides with stable discriminators', () => {
-    const document = historicalDocument([
-      ['recipe-white', 'white onion'],
-      ['recipe-yellow', 'yellow onion'],
-    ])
-    const [white, yellow] = Object.values(document.recipeEntries).map(
-      (entry) => entry.ingredients[0]
-    )
-    document.itemOverrides[white.aggregateKey] = { checked: true }
-    document.itemOverrides[yellow.aggregateKey] = { bucket: 'already_have' }
-
-    const reconciled = validateShoppingDocumentStateV3({
-      document,
-      contentRevision: 3,
-    })
-    expect(reconciled.ok).toBe(true)
-    if (!reconciled.ok) return
-
-    const ingredients = Object.values(reconciled.document.recipeEntries).map(
-      (entry) => entry.ingredients[0]
-    )
-    expect(ingredients.map((ingredient) => ingredient.purchaseKey))
-      .toEqual(['onion', 'onion'])
-    expect(new Set(ingredients.map((ingredient) => ingredient.aggregateKey)).size)
-      .toBe(2)
-    expect(Object.values(reconciled.document.itemOverrides)).toEqual([
-      { checked: true },
-      { bucket: 'already_have' },
-    ])
-
-    const repeated = validateShoppingDocumentStateV3({
-      document: reconciled.document,
       contentRevision: 4,
     })
-    expect(repeated.ok).toBe(true)
-    if (repeated.ok) expect(repeated.document).toEqual(reconciled.document)
+    expect(validated.ok).toBe(true)
+    if (!validated.ok) return
+
+    const ingredient = validated.document.recipeEntries['recipe-frozen']
+      .ingredients[0]
+    expect(ingredient).toMatchObject({
+      purchaseKey,
+      aggregateKey,
+      displayName: purchaseKey,
+      preparation: [],
+      pantryMatchKeys: [purchaseKey],
+    })
+    expect(validated.document).toEqual(original)
+    expect(projectShoppingDocument(validated.document).items[0]).toMatchObject({
+      orderingKey: purchaseKey,
+      aggregateKey,
+      displayName: purchaseKey,
+      sources: [expect.objectContaining({
+        preparationModifiers: undefined,
+      })],
+    })
   })
 
-  it('collapses compatible white and yellow onion state', () => {
-    const document = historicalDocument([
-      ['recipe-white', 'white onion'],
-      ['recipe-yellow', 'yellow onion'],
-    ])
-    const [white, yellow] = Object.values(document.recipeEntries).map(
-      (entry) => entry.ingredients[0]
-    )
-    document.itemOverrides = {
-      [white.aggregateKey]: { checked: true },
-      [yellow.aggregateKey]: { checked: true },
-    }
-    document.preferences.categoryByIngredient = {
-      'white onion': 'produce',
-      'yellow onion': 'produce',
-    }
-    document.preferences.ingredientOrderByCategory = {
-      produce: ['white onion', 'yellow onion'],
-    }
-    document.preferences.excludedIngredientKeys = [
-      'white onion',
-      'yellow onion',
-    ]
-
-    const reconciled = validateShoppingDocumentStateV3({
+  it('does not rewrite a frozen contribution during an unrelated mutation', () => {
+    const document = frozenDocument('finely chopped cilantro')
+    const frozenEntry = JSON.parse(JSON.stringify(
+      document.recipeEntries['recipe-frozen']
+    ))
+    const aggregateKey = frozenEntry.ingredients[0].aggregateKey
+    const validated = validateShoppingDocumentStateV3({
       document,
-      contentRevision: 11,
+      contentRevision: 8,
     })
-    expect(reconciled.ok).toBe(true)
-    if (!reconciled.ok) return
-
-    const ingredients = Object.values(reconciled.document.recipeEntries).map(
-      (entry) => entry.ingredients[0]
-    )
-    expect(ingredients.map((ingredient) => ingredient.purchaseKey))
-      .toEqual(['onion', 'onion'])
-    expect(new Set(ingredients.map((ingredient) => ingredient.aggregateKey)).size)
-      .toBe(1)
-    expect(reconciled.document.itemOverrides).toEqual({
-      [ingredients[0].aggregateKey]: { checked: true },
-    })
-    expect(reconciled.document.preferences.categoryByIngredient).toEqual({
-      onion: 'produce',
-    })
-    expect(reconciled.document.preferences.ingredientOrderByCategory).toEqual({
-      produce: ['onion'],
-    })
-    expect(reconciled.document.preferences.excludedIngredientKeys).toEqual([
-      'onion',
-    ])
-    expect(projectShoppingDocument(reconciled.document).rows).toHaveLength(1)
-
-    const repeated = validateShoppingDocumentStateV3({
-      document: JSON.parse(JSON.stringify(reconciled.document)),
-      contentRevision: 12,
-    })
-    expect(repeated.ok).toBe(true)
-    if (repeated.ok) expect(repeated.document).toEqual(reconciled.document)
-  })
-
-  it('merges a reconciled historical aggregate with a newly resolved entry', () => {
-    const document = historicalDocument([['recipe-old', 'yellow onion']])
-    const reconciled = validateShoppingDocumentStateV3({
-      document,
-      contentRevision: 1,
-    })
-    expect(reconciled.ok).toBe(true)
-    if (!reconciled.ok) return
+    expect(validated.ok).toBe(true)
+    if (!validated.ok) return
 
     const next = applyShoppingDocumentMutation({
-      document: reconciled.document,
-      contentRevision: reconciled.contentRevision!,
+      document: validated.document,
+      contentRevision: validated.contentRevision!,
     }, {
-      type: 'upsertRecipe',
-      entry: {
-        recipeId: 'recipe-new',
-        recipeName: 'Current onion',
-        selectedServings: 1,
-        scaleV1: { numerator: '1', denominator: '1' },
-        ingredients: [persistedLine('1 onion', 'recipe-new')],
-      },
+      type: 'setChecked',
+      rowRef: `derived:${aggregateKey}`,
+      checked: true,
     })
-    expect(projectShoppingDocument(next.document).items).toHaveLength(1)
-    expect(projectShoppingDocument(next.document).items[0]).toMatchObject({
-      orderingKey: 'onion',
-      quantity: { amount: 2, unit: 'count' },
+
+    expect(next.document.recipeEntries['recipe-frozen']).toEqual(frozenEntry)
+    expect(next.document.itemOverrides).toEqual({
+      [aggregateKey]: { checked: true },
+    })
+
+    const reloaded = validateShoppingDocumentStateV3({
+      document: JSON.parse(JSON.stringify(next.document)),
+      contentRevision: next.contentRevision,
+    })
+    expect(reloaded.ok).toBe(true)
+    if (!reloaded.ok) return
+    expect(reloaded.document.recipeEntries['recipe-frozen']).toEqual(frozenEntry)
+    expect(projectShoppingDocument(reloaded.document).items[0]).toMatchObject({
+      orderingKey: 'finely chopped cilantro',
+      checked: true,
     })
   })
 })
