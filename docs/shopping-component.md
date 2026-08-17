@@ -28,7 +28,10 @@ and reusable Shopping preferences. Rendered `items`, `already_have`, and
 - Every normal mutation applies one pure reducer and writes with
   `WHERE content_revision = expected`, advancing the revision exactly once.
 - On conflict the client refetches, replays the same intent once, and retries
-  once. A second conflict is surfaced to the user.
+  once. State-dependent preconditions are revalidated against the fresh
+  document before replay; manual add uses the operation's resolved Pantry
+  snapshot and active purchase identities, and aborts without a retry write if
+  another session added a duplicate. A second conflict is surfaced to the user.
 - Check-off interactions render the latest versioned per-row intent immediately
   while owner-scoped document writes remain serialized. Only the current intent
   may clear its optimistic state, so stale success or failure cannot overwrite a

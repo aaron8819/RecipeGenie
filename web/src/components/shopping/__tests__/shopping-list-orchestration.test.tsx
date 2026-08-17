@@ -1575,7 +1575,7 @@ describe("ShoppingListView orchestration", () => {
     expect(routerPush).toHaveBeenCalledWith("/recipes")
   })
 
-  it("shows inline add feedback when some manual items are duplicates", async () => {
+  it("keeps successful manual additions when another item is a duplicate", async () => {
     currentShoppingList = makeList({
       items: [makeItem("milk")],
     })

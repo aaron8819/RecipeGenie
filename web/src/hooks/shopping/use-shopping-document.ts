@@ -22,6 +22,7 @@ import {
 import {
   persistShoppingMutationWithReplay,
   ShoppingDocumentConflictError,
+  type ShoppingDocumentReplayValidator,
 } from '@/lib/shopping-document-persistence'
 import {
   createShoppingPurchaseKey,
@@ -34,6 +35,7 @@ import {
   parseRationalLexeme,
 } from '@/lib/recipe-quantity'
 import { normalizePantryItemName } from '@/lib/pantry'
+import { isAlreadyInShoppingListError } from '@/lib/shopping-feedback'
 import { getSupabase } from '@/lib/supabase/client'
 import { requireShoppingRowRef } from '@/lib/shopping-row-reference'
 import type {
@@ -55,7 +57,10 @@ type ShoppingDocumentRow = {
 type MutationPlan<TResult> = {
   mutation: ShoppingDocumentMutation
   value: TResult
+  validateReplay?: ShoppingDocumentReplayValidator
 }
+
+type DuplicateFeedbackOwner = 'mutation' | 'caller'
 
 function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV3 {
   const validation = validateShoppingDocumentStateV3({
@@ -219,7 +224,8 @@ function useShoppingMutation<TVariables, TResult>(
   createPlan: (
     state: ShoppingDocumentStateV3,
     variables: TVariables
-  ) => Promise<MutationPlan<TResult>> | MutationPlan<TResult>
+  ) => Promise<MutationPlan<TResult>> | MutationPlan<TResult>,
+  options: { duplicateFeedbackOwner?: DuplicateFeedbackOwner } = {}
 ) {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
@@ -239,13 +245,20 @@ function useShoppingMutation<TVariables, TResult>(
         write: (current, next) => writeShoppingDocumentCas(user!.id, current, next),
         refetch: fetchShoppingDocumentState,
         onRefetched: (fresh) => queryClient.setQueryData(shoppingKey, fresh),
+        validateReplay: plan.validateReplay,
       })
       queryClient.setQueryData(shoppingKey, state)
       return plan.value
     },
     onError: (error) => {
+      if (isAlreadyInShoppingListError(error) &&
+          options.duplicateFeedbackOwner === 'caller') {
+        return
+      }
       undoToast.show({
-        message: error instanceof ShoppingDocumentConflictError
+        message: isAlreadyInShoppingListError(error)
+          ? 'That item is already on the shopping list.'
+          : error instanceof ShoppingDocumentConflictError
           ? error.message
           : 'Could not update the shopping list. Try again.',
         duration: 4000,
@@ -279,6 +292,8 @@ function quantityFromItem(item: ShoppingItem) {
 }
 
 export function useAddShoppingItem() {
+  const pantryQuery = usePantryItems()
+
   return useShoppingMutation(async (state, input: {
     itemName: string
     amount?: number
@@ -292,11 +307,26 @@ export function useAddShoppingItem() {
       fallbackCategoryKey,
     })
     const name = itemSemantics.purchaseName
-    const projection = projectShoppingDocument(state.document)
-    if (projection.rows.some((row) =>
-      row.orderingKey === itemSemantics.purchaseKey)) {
-      throw new Error('Item already in shopping list')
+    let pantryItems = pantryQuery.data
+    if (!pantryItems) {
+      pantryItems = (await pantryQuery.refetch({ throwOnError: true })).data
     }
+    if (!pantryItems) throw new Error('Could not load Pantry items')
+
+    const resolvedPantryItems = [...pantryItems]
+    const manualRowRef = `manual:${input.rowId}`
+    const validateDuplicate = (current: ShoppingDocumentStateV3) => {
+      const projection = projectShoppingDocument(
+        current.document,
+        resolvedPantryItems
+      )
+      if (projection.items.some((row) =>
+        row.rowRef !== manualRowRef &&
+        row.orderingKey === itemSemantics.purchaseKey)) {
+        throw new Error('Item already in shopping list')
+      }
+    }
+    validateDuplicate(state)
     const purchaseKey = itemSemantics.purchaseKey
     const defaultCategory = itemSemantics.defaultCategoryKey
     const item: ShoppingManualItemV1 = {
@@ -310,7 +340,11 @@ export function useAddShoppingItem() {
       bucket: 'items',
       checked: false,
     }
-    return { mutation: { type: 'addManualItem', item }, value: item }
+    return {
+      mutation: { type: 'addManualItem', item },
+      value: item,
+      validateReplay: validateDuplicate,
+    }
   })
 }
 
@@ -346,7 +380,7 @@ export function useUpdateShoppingItem() {
       },
       value: { item: input.item, updates: input.updates },
     }
-  })
+  }, { duplicateFeedbackOwner: 'caller' })
 }
 
 export function useRemoveShoppingItem() {
