@@ -34,6 +34,7 @@ import {
   parseRationalLexeme,
 } from '@/lib/recipe-quantity'
 import { normalizePantryItemName } from '@/lib/pantry'
+import { isAlreadyInShoppingListError } from '@/lib/shopping-feedback'
 import { getSupabase } from '@/lib/supabase/client'
 import { requireShoppingRowRef } from '@/lib/shopping-row-reference'
 import type {
@@ -245,7 +246,9 @@ function useShoppingMutation<TVariables, TResult>(
     },
     onError: (error) => {
       undoToast.show({
-        message: error instanceof ShoppingDocumentConflictError
+        message: isAlreadyInShoppingListError(error)
+          ? 'That item is already on the shopping list.'
+          : error instanceof ShoppingDocumentConflictError
           ? error.message
           : 'Could not update the shopping list. Try again.',
         duration: 4000,
@@ -279,6 +282,8 @@ function quantityFromItem(item: ShoppingItem) {
 }
 
 export function useAddShoppingItem() {
+  const pantryQuery = usePantryItems()
+
   return useShoppingMutation(async (state, input: {
     itemName: string
     amount?: number
@@ -292,8 +297,14 @@ export function useAddShoppingItem() {
       fallbackCategoryKey,
     })
     const name = itemSemantics.purchaseName
-    const projection = projectShoppingDocument(state.document)
-    if (projection.rows.some((row) =>
+    let pantryItems = pantryQuery.data
+    if (!pantryItems) {
+      pantryItems = (await pantryQuery.refetch({ throwOnError: true })).data
+    }
+    if (!pantryItems) throw new Error('Could not load Pantry items')
+
+    const projection = projectShoppingDocument(state.document, pantryItems)
+    if (projection.items.some((row) =>
       row.orderingKey === itemSemantics.purchaseKey)) {
       throw new Error('Item already in shopping list')
     }
