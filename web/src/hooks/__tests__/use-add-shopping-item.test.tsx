@@ -2,7 +2,10 @@ import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAddShoppingItem } from '@/hooks/shopping/use-shopping-document'
+import {
+  useAddShoppingItem,
+  useUpdateShoppingItem,
+} from '@/hooks/shopping/use-shopping-document'
 import {
   createEmptyShoppingDocument,
   projectShoppingDocument,
@@ -14,7 +17,7 @@ import { resolveShoppingIngredient } from '@/lib/shopping-ingredient-resolution'
 import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics'
 import { parseIngredientLine } from '@/lib/recipe-parser'
 import { pantryKeys, shoppingKeys } from '@/lib/query-keys'
-import type { PantryItem } from '@/types/database'
+import type { PantryItem, ShoppingItem } from '@/types/database'
 
 const USER_ID = '00000000-0000-4000-8000-000000000001'
 const SHOPPING_KEY = shoppingKeys.detail(USER_ID)
@@ -24,6 +27,12 @@ const undoToastShow = vi.hoisted(() => vi.fn())
 const database = vi.hoisted(() => ({
   pantryRows: [] as unknown[],
   pantryResponse: null as Promise<unknown> | null,
+  shoppingRow: null as {
+    document: unknown
+    content_revision: number
+  } | null,
+  conflictState: null as ShoppingDocumentStateV3 | null,
+  shoppingSelectCalls: vi.fn(),
   updateError: null as { message: string } | null,
   updateCalls: vi.fn(),
 }))
@@ -55,20 +64,37 @@ vi.mock('@/lib/supabase/client', () => ({
       }
 
       return {
+        select: () => ({
+          single: async () => {
+            database.shoppingSelectCalls()
+            return database.shoppingRow
+              ? { data: database.shoppingRow, error: null }
+              : { data: null, error: { message: 'Shopping document not found' } }
+          },
+        }),
         update: (values: { document: unknown; content_revision: number }) => {
           database.updateCalls(values)
           const chain = {
             eq: () => chain,
             select: () => chain,
-            maybeSingle: async () => database.updateError
-              ? { data: null, error: database.updateError }
-              : {
-                  data: {
-                    document: values.document,
-                    content_revision: values.content_revision,
-                  },
-                  error: null,
-                },
+            maybeSingle: async () => {
+              if (database.updateError) {
+                return { data: null, error: database.updateError }
+              }
+              if (database.conflictState) {
+                database.shoppingRow = {
+                  document: database.conflictState.document,
+                  content_revision: database.conflictState.contentRevision,
+                }
+                database.conflictState = null
+                return { data: null, error: null }
+              }
+              database.shoppingRow = {
+                document: values.document,
+                content_revision: values.content_revision,
+              }
+              return { data: database.shoppingRow, error: null }
+            },
           }
           return chain
         },
@@ -111,11 +137,15 @@ function withDerivedOliveOil(line = '2 tbsp olive oil'): ShoppingDocumentV3 {
   return document
 }
 
-function withManualOliveOil(): ShoppingDocumentV3 {
+function withManualOliveOil(
+  input = 'olive oil',
+  id = 'manual-existing'
+): ShoppingDocumentV3 {
   const document = createEmptyShoppingDocument()
+  const semantics = resolveShoppingIngredientSemantics({ item: input })
   document.manualItems.push({
-    id: 'manual-existing',
-    displayName: 'olive oil',
+    id,
+    displayName: semantics.purchaseName,
     quantity: null,
     categoryKey: 'pantry',
     bucket: 'items',
@@ -124,8 +154,11 @@ function withManualOliveOil(): ShoppingDocumentV3 {
   return document
 }
 
-function state(document: ShoppingDocumentV3): ShoppingDocumentStateV3 {
-  return { document, contentRevision: 7 }
+function state(
+  document: ShoppingDocumentV3,
+  contentRevision = 7
+): ShoppingDocumentStateV3 {
+  return { document, contentRevision }
 }
 
 function setup(
@@ -138,7 +171,12 @@ function setup(
       mutations: { retry: false },
     },
   })
-  queryClient.setQueryData(SHOPPING_KEY, state(document))
+  const initial = state(document)
+  queryClient.setQueryData(SHOPPING_KEY, initial)
+  database.shoppingRow = {
+    document: initial.document,
+    content_revision: initial.contentRevision,
+  }
   if (pantryItems) queryClient.setQueryData(PANTRY_KEY, pantryItems)
 
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -146,6 +184,7 @@ function setup(
   )
   return {
     queryClient,
+    wrapper,
     ...renderHook(() => useAddShoppingItem(), { wrapper }),
   }
 }
@@ -167,11 +206,35 @@ async function addOliveOil(
   return error
 }
 
+async function updateManualItem(
+  hook: ReturnType<typeof setup>,
+  item: ShoppingItem,
+  itemName: string
+): Promise<unknown> {
+  let error: unknown
+  const { result } = renderHook(() => useUpdateShoppingItem(), {
+    wrapper: hook.wrapper,
+  })
+  await act(async () => {
+    try {
+      await result.current.mutateAsync({
+        item,
+        updates: { itemName },
+      })
+    } catch (caught) {
+      error = caught
+    }
+  })
+  return error
+}
+
 describe('useAddShoppingItem active-list duplicate behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     database.pantryRows = []
     database.pantryResponse = null
+    database.shoppingRow = null
+    database.conflictState = null
     database.updateError = null
   })
 
@@ -192,6 +255,7 @@ describe('useAddShoppingItem active-list duplicate behavior', () => {
     )
     expect(database.updateCalls).not.toHaveBeenCalled()
     await waitFor(() => {
+      expect(undoToastShow).toHaveBeenCalledTimes(1)
       expect(undoToastShow).toHaveBeenCalledWith({
         message: 'That item is already on the shopping list.',
         duration: 4000,
@@ -226,6 +290,48 @@ describe('useAddShoppingItem active-list duplicate behavior', () => {
       new Error('Item already in shopping list')
     )
     expect(database.updateCalls).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['the same purchase name', 'olive oil'],
+    ['a semantic equivalent', 'olive oil, divided'],
+  ])('rejects a replay when another session adds %s', async (_case, competingInput) => {
+    const hook = setup(createEmptyShoppingDocument(), [])
+    database.conflictState = state(
+      withManualOliveOil(competingInput, 'manual-other-session'),
+      8
+    )
+
+    expect(await addOliveOil(hook)).toEqual(
+      new Error('Item already in shopping list')
+    )
+
+    expect(database.updateCalls).toHaveBeenCalledTimes(1)
+    expect(database.shoppingSelectCalls).toHaveBeenCalledTimes(1)
+    const persisted = database.shoppingRow
+    expect(persisted?.content_revision).toBe(8)
+    const finalProjection = projectShoppingDocument(
+      persisted?.document as ShoppingDocumentV3,
+      []
+    )
+    expect(finalProjection.items.map((row) => ({
+      rowRef: row.rowRef,
+      purchaseKey: row.orderingKey,
+    }))).toEqual([{
+      rowRef: 'manual:manual-other-session',
+      purchaseKey: 'olive oil',
+    }])
+    expect((persisted?.document as ShoppingDocumentV3).manualItems
+      .map((item) => item.id)).toEqual(['manual-other-session'])
+    expect(hook.queryClient.getQueryData<ShoppingDocumentStateV3>(SHOPPING_KEY))
+      .toMatchObject({ contentRevision: 8 })
+    await waitFor(() => {
+      expect(undoToastShow).toHaveBeenCalledTimes(1)
+      expect(undoToastShow).toHaveBeenCalledWith({
+        message: 'That item is already on the shopping list.',
+        duration: 4000,
+      })
+    })
   })
 
   it('adds when a recipe-derived olive oil row is excluded', async () => {
@@ -283,10 +389,49 @@ describe('useAddShoppingItem active-list duplicate behavior', () => {
     expect(await addOliveOil(hook)).toEqual(database.updateError)
     expect(database.updateCalls).toHaveBeenCalledTimes(1)
     await waitFor(() => {
+      expect(undoToastShow).toHaveBeenCalledTimes(1)
       expect(undoToastShow).toHaveBeenCalledWith({
         message: 'Could not update the shopping list. Try again.',
         duration: 4000,
       })
     })
+  })
+
+  it('leaves duplicate feedback to the manual edit UI', async () => {
+    const document = createEmptyShoppingDocument()
+    document.manualItems.push(
+      {
+        id: 'manual-garlic',
+        displayName: 'garlic',
+        quantity: null,
+        categoryKey: 'produce',
+        bucket: 'items',
+        checked: false,
+      },
+      {
+        id: 'manual-milk',
+        displayName: 'milk',
+        quantity: null,
+        categoryKey: 'dairy',
+        bucket: 'items',
+        checked: false,
+      }
+    )
+    const hook = setup(document, [])
+
+    expect(await updateManualItem(hook, {
+      rowId: 'manual:manual-garlic',
+      orderingKey: 'garlic',
+      item: 'garlic',
+      amount: null,
+      unit: '',
+      categoryKey: 'produce',
+      categoryOrder: 1,
+      sources: [{ recipeName: 'Manual' }],
+      checked: false,
+    }, 'milk')).toEqual(new Error('Item already in shopping list'))
+
+    expect(database.updateCalls).not.toHaveBeenCalled()
+    expect(undoToastShow).not.toHaveBeenCalled()
   })
 })
