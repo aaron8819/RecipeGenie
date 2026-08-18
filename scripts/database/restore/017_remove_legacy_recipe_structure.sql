@@ -47,6 +47,24 @@ begin
     raise exception 'restored recovery tables are incomplete';
   end if;
 
+  if not exists (
+    select 1
+    from pg_catalog.pg_attribute a
+    join pg_catalog.pg_attrdef d
+      on d.adrelid = a.attrelid
+     and d.adnum = a.attnum
+    where a.attrelid = 'public.recipe_history'::regclass
+      and a.attname = 'id'
+      and not a.attisdropped
+      and a.attidentity = ''
+      and pg_catalog.pg_get_expr(d.adbin, d.adrelid) ~
+          '^nextval\(''(public\.)?recipe_history_id_seq''::regclass\)$'
+      and pg_catalog.pg_get_serial_sequence('public.recipe_history', 'id') =
+          'public.recipe_history_id_seq'
+  ) then
+    raise exception 'restored recipe_history.id generation is invalid';
+  end if;
+
   if (
     select count(*)
     from information_schema.columns
@@ -154,6 +172,7 @@ select json_build_object(
   'canonicalColumnsPresent', true,
   'requiredFunctionsPresent', true,
   'canonicalConstraintsPresent', true,
+  'recipeHistoryIdGenerationPresent', true,
   'authTriggerPresent', true,
   'recipeCountMatched', true,
   'shareCountMatched', true,
