@@ -48,6 +48,19 @@ const WHOLE_PRODUCE_PURCHASE_NAMES: Record<string, string> = {
   onion: "onion",
   onions: "onion",
 }
+const WHOLE_PRODUCE_PREPARATION_PATTERN =
+  'juiced and zested|zested and juiced|juice and zest|zest and juice|' +
+  'juiced|zested|diced|chopped|minced|sliced|wedges|cut into wedges'
+
+function wholeProducePreparations(value: string | undefined): string[] | undefined {
+  if (!value) return undefined
+  if (/^(?:juiced and zested|zested and juiced|juice and zest|zest and juice)$/.test(
+    value
+  )) {
+    return ['juiced', 'zested']
+  }
+  return [value.replace('cut into ', '')]
+}
 
 export type ShoppingPurchaseNormalization = {
   purchaseName: string
@@ -250,25 +263,28 @@ export function normalizeShoppingPurchase(
     return base
   }
 
-  const leadingWholeProduce = normalizedName.match(
-    /^(\d+(?:\.\d+)?|\d+\/\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(limes?|lemons?|onions?)(?:,?\s+(juiced|zested|diced|chopped|minced|sliced|wedges|cut into wedges))?$/
-  )
+  const leadingWholeProduce = normalizedName.match(new RegExp(
+    `^(\\d+(?:\\.\\d+)?|\\d+\\/\\d+|one|two|three|four|five|six|seven|` +
+    `eight|nine|ten|eleven|twelve)\\s+(limes?|lemons?|onions?)` +
+    `(?:,?\\s+(${WHOLE_PRODUCE_PREPARATION_PATTERN}))?$`
+  ))
   if (leadingWholeProduce) {
     const purchaseName = WHOLE_PRODUCE_PURCHASE_NAMES[leadingWholeProduce[2]]
     return normalizeWholeProduce(input, purchaseName, {
       quantity: parseQuantityToken(leadingWholeProduce[1]),
-      prepIntent: leadingWholeProduce[3]?.replace("cut into ", ""),
+      preparations: wholeProducePreparations(leadingWholeProduce[3]),
       reason: "explicit whole produce quantity",
     })
   }
 
-  const trailingPrepProduce = normalizedName.match(
-    /^(limes?|lemons?|onions?),?\s+(juiced|zested|diced|chopped|minced|sliced|wedges|cut into wedges)$/
-  )
+  const trailingPrepProduce = normalizedName.match(new RegExp(
+    `^(limes?|lemons?|onions?),?\\s+` +
+    `(${WHOLE_PRODUCE_PREPARATION_PATTERN})$`
+  ))
   if (trailingPrepProduce) {
     const purchaseName = WHOLE_PRODUCE_PURCHASE_NAMES[trailingPrepProduce[1]]
     return normalizeWholeProduce(input, purchaseName, {
-      prepIntent: trailingPrepProduce[2].replace("cut into ", ""),
+      preparations: wholeProducePreparations(trailingPrepProduce[2]),
       reason: "whole produce with prep intent",
     })
   }

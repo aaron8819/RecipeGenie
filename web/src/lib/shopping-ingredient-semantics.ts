@@ -208,6 +208,9 @@ const PREPARATION_DEFINITIONS = new Map<string, PreparationDefinition>([
     trailingBeforeAlternative: true,
   })],
   ['juice and zest', preparation(['juiced', 'zested'], { structured: true })],
+  ['juiced and zested', preparation(['juiced', 'zested'], {
+    structured: true,
+  })],
   ['optional', preparation([], {
     structured: true,
     leading: true,
@@ -233,6 +236,10 @@ const PREPARATION_DEFINITIONS = new Map<string, PreparationDefinition>([
   ['sliced or diced', preparation(['diced', 'sliced'], {
     structured: true,
     leading: true,
+  })],
+  ['zest and juice', preparation(['juiced', 'zested'], { structured: true })],
+  ['zested and juiced', preparation(['juiced', 'zested'], {
+    structured: true,
   })],
   ['softened', preparation(['softened'], { structured: true })],
   ['thinly sliced', preparation(['thinly sliced'], {
@@ -449,7 +456,8 @@ function collectStructuredPreparationEvidence(
 // names without structural evidence. Trailing matches use longest-first order.
 function stripFreeTextPreparationEvidence(
   value: string,
-  preparation: Set<string>
+  preparation: Set<string>,
+  allowTrailingPreparation = true
 ): string {
   let remaining = value
   let changed = true
@@ -486,9 +494,7 @@ function stripFreeTextPreparationEvidence(
 
   if (/\bor\b/.test(remaining)) return remaining
 
-  changed = true
-  while (changed) {
-    changed = false
+  if (allowTrailingPreparation) {
     for (const phrase of TRAILING_PREPARATION_PHRASES) {
       if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
         remaining = remaining.slice(0, -phrase.length).trim()
@@ -496,12 +502,22 @@ function stripFreeTextPreparationEvidence(
           preparation,
           ...(PREPARATION_DEFINITIONS.get(phrase)?.evidence || [])
         )
-        changed = true
         break
       }
     }
   }
   return remaining
+}
+
+function trailingModifierCandidate(value: string): {
+  item: string
+  modifier: string
+} | null {
+  const commaIndex = value.indexOf(',')
+  if (commaIndex < 0) return null
+  const item = value.slice(0, commaIndex).trim()
+  const modifier = normalizeText(value.slice(commaIndex + 1))
+  return item && modifier ? { item, modifier } : null
 }
 
 function stripOnionSizePreparation(
@@ -560,15 +576,29 @@ export function resolveShoppingIngredientSemantics(
   input: ShoppingIngredientSemanticsInput
 ): ShoppingIngredientSemantics {
   const preparation = new Set<string>()
+  const trailingCandidate = input.modifier
+    ? null
+    : trailingModifierCandidate(input.item)
+  const trailingDefinition = trailingCandidate
+    ? PREPARATION_DEFINITIONS.get(trailingCandidate.modifier)
+    : undefined
+  const supportedTrailingCandidate = Boolean(
+    trailingDefinition?.structured
+  )
   const identityModifiers = collectStructuredPreparationEvidence(
-    input.modifier,
+    input.modifier || (supportedTrailingCandidate
+      ? trailingCandidate?.modifier
+      : undefined),
     preparation
   )
 
   let purchaseUnit = normalizeShoppingUnit(input.unit || '')
   let purchaseName = stripFreeTextPreparationEvidence(
-    normalizeShoppingLiteralIdentity(input.item),
-    preparation
+    normalizeShoppingLiteralIdentity(
+      supportedTrailingCandidate ? trailingCandidate!.item : input.item
+    ),
+    preparation,
+    !trailingCandidate || supportedTrailingCandidate
   )
 
   const remainingIdentityModifiers = identityModifiers.filter((modifier) => {

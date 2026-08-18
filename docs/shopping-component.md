@@ -109,19 +109,29 @@ legacy canonicalizations and does not automatically strip newly recognized
 multi-word phrases. The established leading rules still canonicalize forms
 such as `sliced bread`, `shredded cheese`, `grated parmesan`, and `crushed
 tomatoes`; extending or correcting that older contract is outside this Tier 1
-change.
+change. A comma-delimited trailing candidate is normalized only when the whole
+candidate is supported. Unsupported compounds such as `very finely chopped`
+remain literal and are never partially stripped.
 
 Exact whole-fruit grammar such as `juice and zest of 1 lime` becomes one lime
 with `juiced` and `zested` preparation evidence. Measured or packaged component
 forms such as `2 tbsp lime juice` and `1 bottle lime juice` retain the `lime
 juice` purchase identity. Malformed component data such as `lime juice` with a
-count unit is not converted to whole fruit.
+count unit is not converted to whole fruit. Composite preparation evidence is
+stored in the existing preparation array, so one composite contribution counts
+one fruit. Independent juice-only or zest-only contributions remain separate
+requirements; a composite plus either one requires two fruits, and independent
+juice-only plus zest-only contributions also require two.
 
 Resolver changes affect only newly generated recipe contributions. A persisted
 V3 recipe contribution retains its stored purchase identity, aggregate key, and
-resolved semantic fields during validation, projection, and unrelated Shopping
-mutations. Updating an old contribution requires explicit recipe regeneration
-or a supported migration; ordinary reads do not silently reinterpret it.
+resolved semantic fields—including `quantityKind`—during validation,
+projection, and unrelated Shopping mutations. Discrete rounding is applied
+after contributions with the same persisted quantity semantics aggregate; a
+frozen continuous count remains continuous even when the current resolver would
+classify that unit as discrete. Updating an old contribution requires explicit
+recipe regeneration or a supported migration; ordinary reads do not silently
+reinterpret it.
 
 Manual rows preserve the user's trimmed surface text for display while deriving
 duplicate, Pantry, and ordering identity from the same canonical semantics as

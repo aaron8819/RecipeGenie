@@ -216,6 +216,7 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     ['garlic, finely chopped', 'garlic', 'finely chopped'],
     ['cilantro, roughly chopped', 'cilantro', 'roughly chopped'],
     ['onion, finely diced', 'onion', 'finely diced'],
+    ['garlic, chopped', 'garlic', 'chopped'],
   ])('uses the longest trailing preparation in %s', (
     line,
     purchaseKey,
@@ -235,10 +236,84 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     })
   })
 
+  it.each([
+    ['garlic, very finely chopped', 'garlic very finely chopped'],
+    ['garlic, chopped and minced', 'garlic chopped and minced'],
+    ['garlic, finely chopped and minced', 'garlic finely chopped and minced'],
+    ['cilantro, thoroughly roughly chopped', 'cilantro thoroughly roughly chopped'],
+  ])('keeps unsupported trailing compound %s literal', (line, purchaseKey) => {
+    expect(semantics(line)).toMatchObject({
+      purchaseKey,
+      preparation: [],
+    })
+  })
+
+  it.each([
+    [
+      'garlic, very finely chopped',
+      'garlic',
+      'very finely chopped',
+      'very finely chopped garlic',
+    ],
+    [
+      'garlic, chopped and minced',
+      'garlic',
+      'chopped and minced',
+      'chopped and minced garlic',
+    ],
+    [
+      'garlic, finely chopped and minced',
+      'garlic, finely chopped and minced',
+      undefined,
+      'garlic finely chopped and minced',
+    ],
+    [
+      'cilantro, thoroughly roughly chopped',
+      'cilantro, thoroughly roughly chopped',
+      undefined,
+      'cilantro thoroughly roughly chopped',
+    ],
+  ])('keeps parser modifier %s all-or-nothing', (
+    line,
+    item,
+    modifier,
+    purchaseKey
+  ) => {
+    expect(parseIngredientLine(line)).toMatchObject({ item, modifier })
+    expect(resolvedLine(line)).toMatchObject({
+      purchaseKey,
+      preparation: [],
+    })
+  })
+
   it('retains composite citrus preparation without adding it to identity', () => {
     expect(semantics('lime', 'count', 'juice and zest')).toMatchObject({
       purchaseKey: 'lime',
       preparation: ['juiced', 'zested'],
+    })
+  })
+
+  it.each([
+    ['1 lime, juiced and zested', 'lime'],
+    ['1 lemon, juiced and zested', 'lemon'],
+    ['1 lime, zested and juiced', 'lime'],
+  ])('retains both structured citrus preparations for %s', (line, fruit) => {
+    const parsed = parseIngredientLine(line)
+    expect(parsed).toMatchObject({
+      item: fruit,
+      amount: 1,
+      unit: 'count',
+      modifier: expect.stringMatching(/^(?:juiced and zested|zested and juiced)$/),
+    })
+    expect(semantics(`${fruit}, ${parsed.modifier}`, 'count')).toMatchObject({
+      purchaseKey: fruit,
+      preparation: ['juiced', 'zested'],
+    })
+    expect(resolvedLine(line)).toMatchObject({
+      purchaseKey: fruit,
+      quantity: { amount: 1, unit: 'count' },
+      preparation: ['juiced', 'zested'],
+      citrusPrep: undefined,
     })
   })
 
@@ -410,6 +485,33 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
 })
 
 describe('Shopping projection semantic behavior', () => {
+  it.each([
+    [['juice and zest of 1 lime'], 1],
+    [['juice and zest of 1 lime', 'zest of 1 lime'], 2],
+    [['juice and zest of 1 lime', 'juice of 1 lime'], 2],
+    [['juice of 1 lime', 'zest of 1 lime'], 2],
+    [['juice and zest of 2 limes'], 2],
+    [['1 lime, juiced and zested', 'zest of 1 lime'], 2],
+  ])('projects conservative whole-citrus demand for %j', (lines, amount) => {
+    const row = projectShoppingDocument(documentWithLines(lines)).items[0]
+    expect(row).toMatchObject({
+      orderingKey: 'lime',
+      quantity: { amount, unit: 'count' },
+    })
+  })
+
+  it('keeps measured citrus components separate from whole fruit', () => {
+    const rows = projectShoppingDocument(documentWithLines([
+      'juice and zest of 1 lime',
+      '2 tbsp lime juice',
+    ])).items
+    expect(rows).toHaveLength(2)
+    expect(rows.find((row) => row.orderingKey === 'lime')?.quantity)
+      .toMatchObject({ amount: 1, unit: 'count' })
+    expect(rows.find((row) => row.orderingKey === 'lime juice')?.quantity)
+      .toMatchObject({ amount: 2, unit: 'tbsp' })
+  })
+
   it.each([
     ['⅜ lemon', 1, 'count'],
     ['1.2 limes', 2, 'count'],
@@ -822,6 +924,59 @@ describe('ShoppingDocumentV3 frozen semantic validation', () => {
       orderingKey: 'finely chopped cilantro',
       checked: true,
     })
+  })
+
+  it('honors frozen continuous count semantics through mutation and reload', () => {
+    const document = frozenDocument('historical citrus')
+    const ingredient = document.recipeEntries['recipe-frozen'].ingredients[0]
+    ingredient.quantity = { amount: 1.25, unit: 'count' }
+    ingredient.purchaseUnit = 'count'
+    ingredient.quantityKind = 'continuous'
+    const frozenEntry = JSON.parse(JSON.stringify(
+      document.recipeEntries['recipe-frozen']
+    ))
+
+    const validated = validateShoppingDocumentStateV3({
+      document: JSON.parse(JSON.stringify(document)),
+      contentRevision: 12,
+    })
+    expect(validated.ok).toBe(true)
+    if (!validated.ok) return
+    expect(projectShoppingDocument(validated.document).items[0].quantity)
+      .toMatchObject({ amount: 1.25, unit: 'count' })
+
+    const next = applyShoppingDocumentMutation({
+      document: validated.document,
+      contentRevision: validated.contentRevision!,
+    }, {
+      type: 'setChecked',
+      rowRef: `derived:${ingredient.aggregateKey}`,
+      checked: true,
+    })
+    expect(next.document.recipeEntries['recipe-frozen']).toEqual(frozenEntry)
+
+    const reloaded = validateShoppingDocumentStateV3({
+      document: JSON.parse(JSON.stringify(next.document)),
+      contentRevision: next.contentRevision,
+    })
+    expect(reloaded.ok).toBe(true)
+    if (!reloaded.ok) return
+    expect(projectShoppingDocument(reloaded.document).items[0]).toMatchObject({
+      checked: true,
+      quantity: { amount: 1.25, unit: 'count' },
+    })
+  })
+
+  it('honors a frozen discrete kind when the current unit is continuous', () => {
+    const document = frozenDocument('historical measured item')
+    const ingredient = document.recipeEntries['recipe-frozen'].ingredients[0]
+    ingredient.quantity = { amount: 1.25, unit: 'cup' }
+    ingredient.purchaseUnit = 'cup'
+    ingredient.quantityKind = 'discrete'
+
+    expect(validateShoppingDocumentV3(document).ok).toBe(true)
+    expect(projectShoppingDocument(document).items[0].quantity)
+      .toMatchObject({ amount: 2, unit: 'cup' })
   })
 })
 

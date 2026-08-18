@@ -30,11 +30,11 @@ function frozenRecipeState(revision: number): ShoppingDocumentStateV3 {
       purchaseKey,
       aggregateKey,
       displayName: purchaseKey,
-      quantity: { amount: 1, unit: 'count' },
+      quantity: { amount: 1.25, unit: 'count' },
       familyKey: purchaseKey,
       preparation: [],
       purchaseUnit: 'count',
-      quantityKind: 'discrete',
+      quantityKind: 'continuous',
       defaultCategoryKey: 'produce',
       pantryMatchKeys: [purchaseKey],
       familyMatchPolicy: {},
@@ -89,6 +89,8 @@ describe("Shopping document CAS persistence", () => {
     expect(write).toHaveBeenCalledTimes(1)
     expect(result.document.recipeEntries['recipe-frozen']).toEqual(frozenEntry)
     expect(result.document.manualItems).toHaveLength(1)
+    expect(projectShoppingDocument(result.document).items[0].quantity)
+      .toMatchObject({ amount: 1.25, unit: 'count' })
   })
 
   it("refetches, replays, and retries exactly once after a conflict", async () => {

@@ -360,6 +360,27 @@ describe('normalizeShoppingPurchase', () => {
     })
   })
 
+  it.each([
+    ['1 lime, juiced and zested', 'lime'],
+    ['1 lemon, juiced and zested', 'lemon'],
+    ['1 lime, zested and juiced', 'lime'],
+  ])('normalizes structured whole-citrus composite %s', (item, fruit) => {
+    expect(normalizeShoppingPurchase({
+      item,
+      amount: null,
+      unit: '',
+    })).toMatchObject({
+      purchaseName: fruit,
+      purchaseUnit: 'count',
+      purchaseQuantity: 1,
+      prepIntent: 'juiced, zested',
+      semantics: {
+        purchaseKey: fruit,
+        preparation: ['juiced', 'zested'],
+      },
+    })
+  })
+
   it('does not over-normalize malformed citrus component data', () => {
     expect(normalizeShoppingPurchase({
       item: 'lime juice',

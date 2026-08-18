@@ -1138,37 +1138,18 @@ function mergeQuantity(
 
 function finalizeProjectedQuantity(
   quantity: ShoppingQuantity | null,
-  purchaseKey: PurchaseKey
+  quantityKind: ShoppingQuantityKind
 ): ShoppingQuantity | null {
   if (!quantity || quantity.amount === null ||
       quantity.exactPackageV1 || quantity.exactQuantityV1?.kind === 'range') {
     return quantity
   }
-  const quantityKind = resolveShoppingIngredientSemantics({
-    item: purchaseKey,
-    unit: quantity.unit,
-  }).quantityKind
   return {
     ...quantity,
     amount: quantityKind === 'discrete'
       ? Math.ceil(quantity.amount)
       : quantity.amount,
   }
-}
-
-type CitrusPrepNeeds = { juiced: number; zested: number }
-
-function citrusAmountToMerge(
-  prepByRecipe: Map<string, CitrusPrepNeeds>,
-  recipeId: string,
-  prep: "juiced" | "zested",
-  amount: number
-): number {
-  const previous = prepByRecipe.get(recipeId) || { juiced: 0, zested: 0 }
-  const previousApplied = Math.max(previous.juiced, previous.zested)
-  const next = { ...previous, [prep]: previous[prep] + amount }
-  prepByRecipe.set(recipeId, next)
-  return Math.max(next.juiced, next.zested) - previousApplied
 }
 
 function derivedClassification(
@@ -1245,26 +1226,40 @@ export function projectShoppingDocument(
   for (const [aggregateKey, occurrences] of groups) {
     const override = document.itemOverrides[aggregateKey]
     if (override?.suppressed) continue
+    const quantitiesByKind = new Map<ShoppingQuantityKind, {
+      primary: ShoppingQuantity | null
+      additional: ShoppingQuantity[]
+    }>()
+    for (const occurrence of occurrences) {
+      const current = quantitiesByKind.get(occurrence.quantityKind) || {
+        primary: null,
+        additional: [],
+      }
+      quantitiesByKind.set(
+        occurrence.quantityKind,
+        mergeQuantity(
+          current.primary,
+          current.additional,
+          occurrence.quantity
+        )
+      )
+    }
     let quantity: ShoppingQuantity | null = null
     let additionalQuantities: ShoppingQuantity[] = []
-    const citrusPrepByRecipe = new Map<string, CitrusPrepNeeds>()
-    for (const occurrence of occurrences) {
-      const occurrenceQuantity = occurrence.citrusPrep &&
-          occurrence.quantity?.amount != null &&
-          occurrence.quantity.unit === "count"
-        ? {
-            ...occurrence.quantity,
-            amount: citrusAmountToMerge(
-              citrusPrepByRecipe,
-              occurrence.recipeId,
-              occurrence.citrusPrep,
-              occurrence.quantity.amount
-            ),
-          }
-        : occurrence.quantity
-      const merged = mergeQuantity(quantity, additionalQuantities, occurrenceQuantity)
-      quantity = merged.primary
-      additionalQuantities = merged.additional
+    for (const [quantityKind, quantities] of quantitiesByKind) {
+      for (const candidate of [
+        quantities.primary,
+        ...quantities.additional,
+      ]) {
+        const finalized = finalizeProjectedQuantity(candidate, quantityKind)
+        const merged = mergeQuantity(
+          quantity,
+          additionalQuantities,
+          finalized
+        )
+        quantity = merged.primary
+        additionalQuantities = merged.additional
+      }
     }
     const classification = derivedClassification(
       occurrences,
@@ -1276,17 +1271,11 @@ export function projectShoppingDocument(
     const categoryKey = derivedCategory(document, occurrences)
     const projectedQuantity = override && 'quantity' in override
       ? override.quantity ?? null
-      : finalizeProjectedQuantity(quantity, orderingKey)
+      : quantity
     const projectedAdditional: ShoppingQuantity[] = override &&
         'quantity' in override
       ? []
       : additionalQuantities
-          .map((additional) => finalizeProjectedQuantity(
-            additional,
-            orderingKey
-          ))
-          .filter((additional): additional is ShoppingQuantity =>
-            additional !== null)
     rows.push({
       rowRef: `derived:${aggregateKey}`,
       aggregateKey,
