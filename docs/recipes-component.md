@@ -173,8 +173,15 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 
 - `Recipe.ingredientSections` and `Recipe.instructionSections` are the only
   app-facing structure fields.
-- The form converts canonical sections to its sortable editor representation
-  once on hydration and converts back once on submission.
+- The editor owns ingredient state as ordered canonical sections. Named,
+  unsectioned, and explicit duplicate same-label sections remain distinct
+  through hydration, editing, and submission.
+- Ingredient drag is scoped to the current section. Moving an ingredient to a
+  named or unsectioned section is an explicit row action, so visual order and
+  persisted membership cannot silently diverge.
+- Structured alternatives remain separate from the primary ingredient and are
+  always visible and editable in the ingredient row when present. Primary and
+  alternative semantic edits clear stale authored text before submission.
 - Detail and print render sections directly. Serving changes scale ingredient
   quantities without changing section boundaries.
 - Shopping flattens ingredient sections exactly once at its aggregation
@@ -199,7 +206,7 @@ Slice B and the separately reviewed Slice C cleanup are implemented. Migration
 `017_remove_legacy_recipe_structure.sql` removes the frozen columns and
 migration-only database converters; runtime models and generated types expose
 only canonical sections. Flat Schema.org/version 1 input, export, Shopping, and
-the sortable editor projection remain explicit non-persistence boundaries.
+derived validation projections remain explicit non-persistence boundaries.
 
 ### Dialog discard protection
 

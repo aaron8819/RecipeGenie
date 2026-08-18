@@ -1382,6 +1382,7 @@ type RecipeIngredientsSectionProps = {
   onAutoFix?: () => void
   onRemoveExactDuplicates?: () => void
   onAddIngredient: () => void
+  onAddSection: () => void
   children: React.ReactNode
 }
 
@@ -1393,6 +1394,7 @@ export function RecipeIngredientsSection({
   onAutoFix,
   onRemoveExactDuplicates,
   onAddIngredient,
+  onAddSection,
   children,
 }: RecipeIngredientsSectionProps) {
   const addLabelClass =
@@ -1468,14 +1470,16 @@ export function RecipeIngredientsSection({
         ) : null}
 
         {children}
-        <button
-          type="button"
-          onClick={onAddIngredient}
-          className="mt-3 text-xs font-bold text-primary flex items-center hover:opacity-80 transition-opacity"
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          ADD INGREDIENT
-        </button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={onAddIngredient}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add unsectioned ingredient
+          </Button>
+          <Button type="button" variant="outline" onClick={onAddSection}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add section
+          </Button>
+        </div>
       </div>
     )
   }
@@ -1544,14 +1548,24 @@ export function RecipeIngredientsSection({
         </div>
       ) : null}
       {children}
-      <button
-        type="button"
-        onClick={onAddIngredient}
-        className="mt-3 text-[10px] font-bold uppercase text-accent hover:text-primary transition-colors flex items-center gap-1 min-h-[44px] px-4 border border-dashed border-accent rounded-lg w-full justify-center"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Add Row
-      </button>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={onAddIngredient}
+          className="min-h-[44px] rounded-lg border border-dashed border-accent px-4 text-[10px] font-bold uppercase text-accent transition-colors hover:text-primary flex items-center gap-1 justify-center"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add unsectioned
+        </button>
+        <button
+          type="button"
+          onClick={onAddSection}
+          className="min-h-[44px] rounded-lg border border-dashed border-accent px-4 text-[10px] font-bold uppercase text-accent transition-colors hover:text-primary flex items-center gap-1 justify-center"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add section
+        </button>
+      </div>
     </div>
   )
 }

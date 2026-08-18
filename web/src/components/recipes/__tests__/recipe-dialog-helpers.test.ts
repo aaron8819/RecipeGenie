@@ -9,6 +9,7 @@ import {
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
   normalizeRecipeIngredient,
+  updateRecipeIngredientAlternatives,
   updateRecipeIngredientField,
 } from "../recipe-dialog.defaults"
 import type { Recipe } from "@/types/database"
@@ -35,6 +36,15 @@ import {
   MARKDOWN_TACO_SALAD_RECIPE_TEXT,
   STRUCTURED_LAMB_RECIPE_TEXT,
 } from "@/lib/__tests__/recipe-parser.fixtures"
+
+const ingredientSection = (
+  ingredients: Recipe["ingredientSections"][number]["ingredients"],
+  label: string | null = null
+): Recipe["ingredientSections"][number] => ({ label, ingredients })
+
+const flattenedFormIngredients = (
+  values: ReturnType<typeof buildNewRecipeDialogFormValues>
+) => values.ingredientSections.flatMap((section) => section.ingredients)
 
 describe("recipe dialog validation helpers", () => {
   it("ignores untouched blank rows and validates inconsistent amount/unit pairs", () => {
@@ -262,7 +272,7 @@ describe("recipe dialog defaults helpers", () => {
     const saved = buildRecipeSubmissionData({
       ...defaults,
       name: "Tomatoes",
-      ingredients: [scalar],
+      ingredientSections: [ingredientSection([scalar])],
       instructionGroups: [{ steps: ["Cook"] }],
     })
     const recipe = canonicalizeRecipeFixture({
@@ -359,7 +369,9 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: null,
       totalTimeMinutes: null,
       tags: [],
-      ingredients: [{ item: "", amount: null, unit: "" }],
+      ingredientSections: [
+        ingredientSection([{ item: "", amount: null, unit: "" }]),
+      ],
       instructionGroups: [{ steps: [""] }],
       notes: "",
       imageUrl: null,
@@ -371,11 +383,11 @@ describe("recipe dialog defaults helpers", () => {
         ...defaults,
         name: "  Soup  ",
         tags: ["easy"],
-        ingredients: [
+        ingredientSections: [ingredientSection([
           { item: " water ", amount: 1, unit: " Cups ", modifier: "  chilled " },
           { item: " onion ", amount: 1, unit: "" },
           { item: "", amount: null, unit: "" },
-        ],
+        ])],
         instructionGroups: [{ steps: [" Boil ", "", " Serve "] }],
       })
     ).toMatchObject({
@@ -409,9 +421,9 @@ describe("recipe dialog defaults helpers", () => {
         cookTimeMinutes: null,
         totalTimeMinutes: null,
         tags: [],
-        ingredients: [
-          { item: "butter", amount: 1, unit: "Tablespoons", groupLabel: " Pan Sauce " },
-        ],
+        ingredientSections: [ingredientSection([
+          { item: "butter", amount: 1, unit: "Tablespoons" },
+        ], " Pan Sauce ")],
         instructionGroups: [{ steps: ["Cook"] }],
         notes: "",
         imageUrl: null,
@@ -444,7 +456,9 @@ describe("recipe dialog defaults helpers", () => {
         cookTimeMinutes: null,
         totalTimeMinutes: null,
         tags: [],
-        ingredients: [{ item: "water", amount: 1, unit: "cup" }],
+        ingredientSections: [
+          ingredientSection([{ item: "water", amount: 1, unit: "cup" }]),
+        ],
         instructionGroups: [
           { label: "  ", steps: ["  Boil water  ", "   "] },
           { label: " Sauce ", steps: [" ", "Finish with butter"] },
@@ -482,7 +496,9 @@ describe("recipe dialog defaults helpers", () => {
           cookTimeMinutes: null,
           totalTimeMinutes: null,
           tags: [],
-          ingredients: [{ item: "Eggs", amount: 2, unit: "" }],
+          ingredientSections: [
+            ingredientSection([{ item: "Eggs", amount: 2, unit: "" }]),
+          ],
           instructionGroups: [{ steps: ["Cook"] }],
           notes: "",
           imageUrl: null,
@@ -502,7 +518,9 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: null,
       totalTimeMinutes: null,
       tags: [],
-      ingredients: [{ item: "Bread", amount: "1", unit: "slice" }],
+      ingredientSections: [ingredientSection([
+        { item: "Bread", amount: "1", unit: "slice" },
+      ])],
       instructionGroups: [{ steps: ["Cook"] }],
       notes: "",
       imageUrl: null,
@@ -583,9 +601,11 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: 25,
       totalTimeMinutes: 45,
     })
-    expect(applied.ingredients).toHaveLength(7)
-    expect(applied.ingredients[0].groupLabel).toBe("Chicken")
-    expect(applied.ingredients[3].groupLabel).toBe("Sesame Sauce")
+    expect(flattenedFormIngredients(applied)).toHaveLength(7)
+    expect(applied.ingredientSections.map(({ label }) => label)).toEqual([
+      "Chicken",
+      "Sesame Sauce",
+    ])
     expect(applied.instructionGroups[0]?.steps).toHaveLength(16)
     expect(applied.notes).toContain("350°F")
     expect(submission.instruction_sections![0].steps).toHaveLength(16)
@@ -616,7 +636,7 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: 10,
       totalTimeMinutes: 25,
     })
-    expect(created.ingredients).toHaveLength(30)
+    expect(flattenedFormIngredients(created)).toHaveLength(30)
     expect(created.instructionGroups[0]?.steps).toHaveLength(11)
     expect(created.notes.split("\n")).toHaveLength(4)
 
@@ -635,7 +655,7 @@ describe("recipe dialog defaults helpers", () => {
       tags: ["preserve-me"],
       imageUrl: "https://example.com/preserved.jpg",
     })
-    expect(replaced.ingredients).toEqual(created.ingredients)
+    expect(replaced.ingredientSections).toEqual(created.ingredientSections)
     expect(replaced.instructionGroups).toEqual(created.instructionGroups)
     expect(replaced.notes).toBe(created.notes)
   })
@@ -687,7 +707,9 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: 10,
       totalTimeMinutes: 15,
       tags: ["preserved"],
-      ingredients: [{ item: "old ingredient", amount: 1, unit: "cup" }],
+      ingredientSections: [ingredientSection([
+        { item: "old ingredient", amount: 1, unit: "cup" },
+      ])],
       instructionGroups: [{ steps: ["Old step"] }],
       notes: "Old note",
       imageUrl: "https://example.com/preserved.jpg",
@@ -710,8 +732,10 @@ describe("recipe dialog defaults helpers", () => {
       tags: ["preserved"],
       imageUrl: "https://example.com/preserved.jpg",
     })
-    expect(applied.ingredients).toHaveLength(7)
-    expect(applied.ingredients.map((ingredient) => ingredient.groupLabel)).toEqual([
+    expect(flattenedFormIngredients(applied)).toHaveLength(7)
+    expect(applied.ingredientSections.flatMap((section) =>
+      section.ingredients.map(() => section.label)
+    )).toEqual([
       "Chicken",
       "Chicken",
       "Chicken",
@@ -736,7 +760,9 @@ describe("recipe dialog defaults helpers", () => {
       cookTimeMinutes: null,
       totalTimeMinutes: null,
       tags: ["family"],
-      ingredients: [{ item: "old noodles", amount: 1, unit: "cup" }],
+      ingredientSections: [ingredientSection([
+        { item: "old noodles", amount: 1, unit: "cup" },
+      ])],
       instructionGroups: [{ steps: ["Old step"] }],
       notes: "Keep this note",
       imageUrl: "https://example.com/mac.jpg",
@@ -766,7 +792,7 @@ Instructions:
     expect(applied.imageUrl).toBe("https://example.com/mac.jpg")
     expect(applied.servings).toBe(6)
     expect(applied.prepTimeMinutes).toBe(10)
-    expect(applied.ingredients).toHaveLength(2)
+    expect(flattenedFormIngredients(applied)).toHaveLength(2)
     expect(applied.instructionGroups[0]?.steps).toEqual([
       "Boil broth.",
       "Stir in noodles.",
@@ -798,14 +824,15 @@ Ingredients
       parsed!
     )
 
-    expect(applied.ingredients).toHaveLength(12)
-    expect(applied.ingredients[5]).toMatchObject({
+    const appliedIngredients = flattenedFormIngredients(applied)
+    expect(appliedIngredients).toHaveLength(12)
+    expect(appliedIngredients[5]).toMatchObject({
       amount: "½–1",
       unit: "tsp",
       item: "lemon zest",
       modifier: undefined,
     })
-    expect(applied.ingredients[3]).toMatchObject({
+    expect(appliedIngredients[3]).toMatchObject({
       amount: "2",
       unit: "tbsp",
       item: "honey",
@@ -836,6 +863,86 @@ Ingredients
     expect(hydrated.notes).toBe("Serve immediately.")
   })
 
+  it("round-trips named, unsectioned, and duplicate same-label ingredient sections", () => {
+    const recipe = canonicalizeRecipeFixture({
+      id: "sectioned-1",
+      user_id: "user-1",
+      name: "Sectioned",
+      category: "dinner",
+      servings: 4,
+      favorite: false,
+      tags: [],
+      ingredientSections: [
+        ingredientSection([{
+          item: "pita",
+          amount: 4,
+          unit: "count",
+        }], "For Serving"),
+        ingredientSection([{
+          item: "feta",
+          amount: 1,
+          unit: "cup",
+        }]),
+        ingredientSection([{
+          item: "cilantro",
+          amount: 1,
+          unit: "cup",
+          alternatives: ["parsley"],
+        }], "For Serving"),
+      ],
+      instructionSections: [{ label: null, steps: ["Serve."] }],
+      notes: [],
+      image_url: null,
+      created_at: "2026-08-18T00:00:00.000Z",
+      updated_at: "2026-08-18T00:00:00.000Z",
+    })
+
+    const hydrated = buildEditingRecipeDialogFormValues(recipe)
+    expect(hydrated.ingredientSections.map(({ label }) => label)).toEqual([
+      "For Serving",
+      null,
+      "For Serving",
+    ])
+    expect(hydrated.ingredientSections[2].ingredients[0].alternatives)
+      .toEqual(["parsley"])
+
+    const saved = buildRecipeSubmissionData(hydrated)
+    expect(saved.ingredient_sections?.map(({ label }) => label)).toEqual([
+      "For Serving",
+      null,
+      "For Serving",
+    ])
+    expect(saved.ingredient_sections?.[2].ingredients[0].alternatives)
+      .toEqual(["parsley"])
+  })
+
+  it("edits structured alternatives and clears stale original text", () => {
+    const original = {
+      item: "cilantro",
+      amount: 1,
+      unit: "cup",
+      alternatives: ["parsley", "mint"],
+      originalText: "1 cup cilantro or parsley or mint",
+    }
+    const edited = updateRecipeIngredientAlternatives(original, [
+      "flat-leaf parsley",
+      "dill",
+    ])
+    expect(edited.alternatives).toEqual(["flat-leaf parsley", "dill"])
+    expect(edited.originalText).toBeUndefined()
+
+    const primaryEdited = updateRecipeIngredientField(
+      original,
+      "item",
+      "mint"
+    )
+    expect(primaryEdited.alternatives).toEqual(["parsley", "mint"])
+    expect(primaryEdited.originalText).toBeUndefined()
+
+    const removed = updateRecipeIngredientAlternatives(edited, [])
+    expect(removed.alternatives).toBeUndefined()
+  })
+
   it("detects dirty state and clamps servings", () => {
     expect(
       isNewRecipeDialogDirty({
@@ -846,7 +953,7 @@ Ingredients
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
-        ingredients: [{ item: "", amount: null, unit: "" }],
+        ingredientSections: [ingredientSection([{ item: "", amount: null, unit: "" }])],
         instructionGroups: [{ steps: [""] }],
         notes: "",
         imageReference: null,
@@ -861,7 +968,7 @@ Ingredients
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
-        ingredients: [{ item: "", amount: null, unit: "" }],
+        ingredientSections: [ingredientSection([{ item: "", amount: null, unit: "" }])],
         instructionGroups: [{ steps: [""] }],
         notes: "",
         imageReference: null,
@@ -876,7 +983,7 @@ Ingredients
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
-        ingredients: [{ item: "Flour", amount: null, unit: "" }],
+        ingredientSections: [ingredientSection([{ item: "Flour", amount: null, unit: "" }])],
         instructionGroups: [{ steps: [""] }],
         notes: "",
         imageReference: null,
@@ -891,7 +998,7 @@ Ingredients
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
-        ingredients: [{ item: "", amount: null, unit: "" }],
+        ingredientSections: [ingredientSection([{ item: "", amount: null, unit: "" }])],
         instructionGroups: [{ steps: [""] }],
         notes: "",
         imageReference: null,
@@ -906,7 +1013,7 @@ Ingredients
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
-        ingredients: [{ item: "", amount: null, unit: "" }],
+        ingredientSections: [ingredientSection([{ item: "", amount: null, unit: "" }])],
         instructionGroups: [{ steps: [""] }],
         notes: "",
         imageReference: null,
@@ -921,7 +1028,7 @@ Ingredients
         prepTimeMinutes: null,
         cookTimeMinutes: null,
         totalTimeMinutes: null,
-        ingredients: [{ item: "", amount: null, unit: "" }],
+        ingredientSections: [ingredientSection([{ item: "", amount: null, unit: "" }])],
         instructionGroups: [{ steps: [""] }],
         notes: "",
         imageReference: "data:image/png;base64,mock",
@@ -937,7 +1044,7 @@ Ingredients
           cookTimeMinutes: null,
           totalTimeMinutes: null,
           tags: ["easy"],
-          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          ingredientSections: [ingredientSection([{ item: "Water", amount: 1, unit: "cup" }])],
           instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",
@@ -950,7 +1057,7 @@ Ingredients
           cookTimeMinutes: null,
           totalTimeMinutes: null,
           tags: ["easy"],
-          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          ingredientSections: [ingredientSection([{ item: "Water", amount: 1, unit: "cup" }])],
           instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",
@@ -968,7 +1075,7 @@ Ingredients
           cookTimeMinutes: null,
           totalTimeMinutes: null,
           tags: ["easy"],
-          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          ingredientSections: [ingredientSection([{ item: "Water", amount: 1, unit: "cup" }])],
           instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",
@@ -981,7 +1088,7 @@ Ingredients
           cookTimeMinutes: null,
           totalTimeMinutes: null,
           tags: ["easy"],
-          ingredients: [{ item: "Water", amount: 1, unit: "cup" }],
+          ingredientSections: [ingredientSection([{ item: "Water", amount: 1, unit: "cup" }])],
           instructionGroups: [{ steps: ["Boil"] }],
           notes: "",
           imageUrl: "https://example.com/soup.jpg",

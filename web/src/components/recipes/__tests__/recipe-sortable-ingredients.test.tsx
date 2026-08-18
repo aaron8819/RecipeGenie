@@ -227,4 +227,91 @@ describe("SortableIngredientList", () => {
       })
     )
   })
+
+  it("always exposes existing structured alternatives and supports editing them", () => {
+    const onIngredientAlternativesChange = vi.fn()
+
+    render(
+      <SortableIngredientList
+        ingredients={[{
+          ...parseIngredientLine("1 cup cilantro or parsley"),
+          alternatives: ["parsley", "mint"],
+        }]}
+        editDocumentLayout
+        onReorderIngredients={() => {}}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={() => {}}
+        onIngredientChange={() => {}}
+        onIngredientAlternativesChange={onIngredientAlternativesChange}
+        onIngredientParsed={() => {}}
+      />
+    )
+
+    expect(screen.getByDisplayValue("parsley")).toBeVisible()
+    expect(screen.getByDisplayValue("mint")).toBeVisible()
+    fireEvent.change(
+      screen.getByLabelText("Alternative 1 for ingredient 1"),
+      { target: { value: "flat-leaf parsley" } }
+    )
+    expect(onIngredientAlternativesChange).toHaveBeenCalledWith(0, [
+      "flat-leaf parsley",
+      "mint",
+    ])
+    fireEvent.click(
+      screen.getByLabelText("Remove alternative 2 from ingredient 1")
+    )
+    expect(onIngredientAlternativesChange).toHaveBeenCalledWith(0, ["parsley"])
+  })
+
+  it("adds an alternative and explicitly moves a row to another section", () => {
+    const onIngredientAlternativesChange = vi.fn()
+    const onMoveIngredient = vi.fn()
+
+    render(
+      <SortableIngredientList
+        ingredients={[{ item: "feta", amount: 1, unit: "cup" }]}
+        editDocumentLayout
+        currentSectionIndex={1}
+        sectionOptions={[
+          { value: 0, label: "For Serving" },
+          { value: 1, label: "Unsectioned" },
+        ]}
+        onMoveIngredient={onMoveIngredient}
+        onReorderIngredients={() => {}}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={() => {}}
+        onIngredientChange={() => {}}
+        onIngredientAlternativesChange={onIngredientAlternativesChange}
+        onIngredientParsed={() => {}}
+      />
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Add alternative" }))
+    expect(onIngredientAlternativesChange).toHaveBeenCalledWith(0, [""])
+
+    fireEvent.change(screen.getByLabelText("Section for ingredient 1"), {
+      target: { value: "0" },
+    })
+    expect(onMoveIngredient).toHaveBeenCalledWith(0, 0)
+  })
+
+  it("allows deleting the final ingredient row", () => {
+    const onRemoveIngredient = vi.fn()
+    render(
+      <SortableIngredientList
+        ingredients={[{ item: "feta", amount: 1, unit: "cup" }]}
+        editDocumentLayout
+        onReorderIngredients={() => {}}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={onRemoveIngredient}
+        onIngredientChange={() => {}}
+        onIngredientParsed={() => {}}
+      />
+    )
+
+    const deleteButtons = screen.getAllByLabelText("Delete ingredient 1: feta")
+    expect(deleteButtons.every((button) => !button.hasAttribute("disabled"))).toBe(true)
+    fireEvent.click(deleteButtons[0])
+    expect(onRemoveIngredient).toHaveBeenCalledWith(0)
+  })
 })

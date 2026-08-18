@@ -12,6 +12,7 @@ import { expect, test } from './fixtures'
 
 const IMPORTED_TITLE = 'Taco Salad'
 const REPLACEMENT_RECIPE_UUID = '90000000-0000-4000-8000-000000000901'
+const EDITOR_FIDELITY_RECIPE_UUID = '90000000-0000-4000-8000-000000000902'
 const REPLACEMENT_CREATED_AT = '2024-01-02T03:04:05.000Z'
 const EXPECTED_PARSED_RECIPE = parseRecipeText(
   MARKDOWN_TACO_SALAD_RECIPE_TEXT
@@ -262,7 +263,7 @@ async function assertImportedDetail(detail: Locator) {
   ).toBeVisible()
   await expect(
     detail.getByText(
-      'chopped romaine, shredded iceberg, arugula, or other greens',
+      'chopped romaine or shredded iceberg or arugula or other greens',
       { exact: true }
     )
   ).toBeVisible()
@@ -524,6 +525,156 @@ test.describe('local recipe import browser verification', () => {
         cleanup: () => deleteRecipes(client, cleanupIds),
         diagnostics,
         label: 'replacement',
+        testInfo,
+      })
+    }
+  })
+
+  test('persists explicit ingredient sections and visible alternative removal', async ({
+    page,
+    setupAuth,
+  }, testInfo) => {
+    expect(E2E_CONFIG.target).toBe('local')
+    const diagnostics = createDiagnostics(page)
+    const { client, userId } = await authenticatedClient()
+    const cleanupIds = new Set([EDITOR_FIDELITY_RECIPE_UUID])
+
+    try {
+      await deleteRecipes(client, cleanupIds)
+      const fixture = {
+        id: EDITOR_FIDELITY_RECIPE_UUID,
+        recipe_uuid: EDITOR_FIDELITY_RECIPE_UUID,
+        user_id: userId,
+        name: 'Recipe Editor Fidelity Fixture',
+        category: 'chicken',
+        servings: 4,
+        favorite: false,
+        tags: ['browser-fixture'],
+        ingredient_sections: [
+          {
+            label: 'For Serving',
+            ingredients: [
+              { item: 'pita bread', amount: 4, unit: 'count' },
+              { item: 'tomato', amount: 1, unit: 'count' },
+            ],
+          },
+          {
+            label: null,
+            ingredients: [
+              { item: 'feta', amount: 1, unit: 'cup' },
+              {
+                item: 'cilantro',
+                amount: 1,
+                unit: 'cup',
+                alternatives: ['parsley'],
+                originalText: '1 cup cilantro or parsley',
+              },
+            ],
+          },
+        ],
+        instruction_sections: [{ label: null, steps: ['Serve.'] }],
+        notes: [],
+        image_url: null,
+      } satisfies Database['public']['Tables']['recipes']['Insert']
+      const { error: fixtureError } = await client.from('recipes').insert(fixture)
+      if (fixtureError) throw fixtureError
+
+      await setupAuth()
+      await page.goto(`/recipes/${EDITOR_FIDELITY_RECIPE_UUID}?from=recipes`)
+      let detail = page.getByTestId('recipe-detail-page')
+      await expect(detail.locator('h1')).toHaveText(fixture.name)
+      await expect(detail.getByText('cilantro or parsley', { exact: true })).toBeVisible()
+      await detail.getByRole('button', { name: /edit recipe/i }).click()
+
+      let editDialog = page.getByRole('dialog').first()
+      await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
+      await expect(editDialog.getByLabel('Ingredient section 1 label'))
+        .toHaveValue('For Serving')
+      await expect(editDialog.getByLabel('Ingredient section 2 label')).toHaveValue('')
+      const unsectioned = editDialog.getByRole('region', {
+        name: 'Ingredient section 2',
+      })
+      await expect(unsectioned.getByLabel('Alternative 1 for ingredient 2'))
+        .toHaveValue('parsley')
+      await unsectioned.getByLabel('Section for ingredient 1').selectOption({
+        label: 'For Serving',
+      })
+
+      let updateResponse = page.waitForResponse((response) =>
+        response.request().method() === 'PATCH' &&
+        response.url().includes('/rest/v1/recipes')
+      )
+      await editDialog.getByRole('button', { name: /^save changes$/i }).click()
+      expect((await updateResponse).ok()).toBe(true)
+      await expect(editDialog).toBeHidden()
+
+      await page.reload()
+      detail = page.getByTestId('recipe-detail-page')
+      const servingGroup = detail.locator('[data-ingredient-group="For Serving"]')
+      await expect(servingGroup.getByText('feta', { exact: true })).toBeVisible()
+      await detail.getByRole('button', { name: /edit recipe/i }).click()
+      editDialog = page.getByRole('dialog').first()
+      await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
+      await expect(
+        editDialog.getByRole('region', { name: 'Ingredient section 1' })
+          .getByPlaceholder('Ingredient')
+          .last()
+      ).toHaveValue('feta')
+
+      const reopenedUnsectioned = editDialog.getByRole('region', {
+        name: 'Ingredient section 2',
+      })
+      await expect(reopenedUnsectioned.getByLabel('Alternative 1 for ingredient 1'))
+        .toHaveValue('parsley')
+      await reopenedUnsectioned.getByLabel(
+        'Remove alternative 1 from ingredient 1'
+      ).click()
+
+      updateResponse = page.waitForResponse((response) =>
+        response.request().method() === 'PATCH' &&
+        response.url().includes('/rest/v1/recipes')
+      )
+      await editDialog.getByRole('button', { name: /^save changes$/i }).click()
+      expect((await updateResponse).ok()).toBe(true)
+      await expect(editDialog).toBeHidden()
+
+      await page.reload()
+      detail = page.getByTestId('recipe-detail-page')
+      await expect(detail.getByText('cilantro', { exact: true })).toBeVisible()
+      await expect(detail.getByText('cilantro or parsley', { exact: true })).toHaveCount(0)
+      await detail.getByRole('button', { name: /edit recipe/i }).click()
+      editDialog = page.getByRole('dialog').first()
+      await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
+      await expect(editDialog.getByLabel('Alternative 1 for ingredient 1'))
+        .toHaveCount(0)
+
+      const { data: row, error } = await client
+        .from('recipes')
+        .select('ingredient_sections')
+        .eq('recipe_uuid', EDITOR_FIDELITY_RECIPE_UUID)
+        .single()
+      if (error) throw error
+      expect(row.ingredient_sections).toMatchObject([
+        {
+          label: 'For Serving',
+          ingredients: [
+            { item: 'pita bread', amount: 4, unit: 'count' },
+            { item: 'tomato', amount: 1, unit: 'count' },
+            { item: 'feta', amount: 1, unit: 'cup' },
+          ],
+        },
+        {
+          label: null,
+          ingredients: [{ item: 'cilantro', amount: 1, unit: 'cup' }],
+        },
+      ])
+      console.log('[recipe-import] editor fidelity assertions: PASS')
+    } finally {
+      await finishScenario({
+        client,
+        cleanup: () => deleteRecipes(client, cleanupIds),
+        diagnostics,
+        label: 'editor-fidelity',
         testInfo,
       })
     }

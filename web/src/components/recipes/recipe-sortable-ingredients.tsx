@@ -23,7 +23,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { GripVertical, Trash2, AlertCircle } from "lucide-react"
+import { AlertCircle, GripVertical, Plus, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, toFraction } from "@/lib/utils"
@@ -73,6 +73,7 @@ function SortableIngredientRow({
   index,
   onRemoveIngredient,
   onIngredientChange,
+  onIngredientAlternativesChange,
   onIngredientParsed,
   ingredients,
   onKeyboardMoveIngredient,
@@ -84,11 +85,16 @@ function SortableIngredientRow({
   isWideViewport,
   onBulkPasteIngredients,
   duplicateWarnings,
+  currentSectionIndex,
+  sectionOptions,
+  includeNewUnsectionedOption,
+  onMoveIngredient,
 }: {
   ingredient: Ingredient
   index: number
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
+  onIngredientAlternativesChange?: (index: number, alternatives: string[]) => void
   onIngredientParsed: (index: number, ingredient: Ingredient) => void
   onBulkPasteIngredients: (index: number, text: string) => void
   onKeyboardMoveIngredient: (fromIndex: number, toIndex: number) => void
@@ -100,6 +106,10 @@ function SortableIngredientRow({
   addRecipeModalLayout?: boolean
   isWideViewport?: boolean
   duplicateWarnings?: string[]
+  currentSectionIndex?: number
+  sectionOptions?: Array<{ value: number; label: string }>
+  includeNewUnsectionedOption?: boolean
+  onMoveIngredient?: (index: number, targetSectionIndex: number | null) => void
 }) {
   const {
     attributes,
@@ -298,12 +308,95 @@ function SortableIngredientRow({
       variant="ghost"
       size="icon"
       onClick={() => onRemoveIngredient(index)}
-      disabled={ingredients.length === 1}
       className={editDocumentLayout ? "h-10 w-10 flex-shrink-0 text-muted-foreground hover:text-destructive" : editModeLayout ? "text-muted-foreground hover:text-destructive flex items-center justify-center h-9 w-9 rounded-lg" : editModeTwoColLayout ? "text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity flex-shrink-0" : addRecipeModalLayout ? cn("text-muted-foreground hover:text-destructive transition-opacity flex-shrink-0 text-lg p-0", isWideViewport ? "opacity-0 group-hover:opacity-100" : "opacity-100") : ""}
       aria-label={`Delete ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
     >
       <Trash2 className="h-4 w-4" />
     </Button>
+  )
+  const semanticControls = (
+    <div className="mt-3 space-y-2 border-t border-stone-100 pt-3 dark:border-zinc-800">
+      {sectionOptions && onMoveIngredient && currentSectionIndex !== undefined ? (
+        <label className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className="font-semibold">Section</span>
+          <select
+            aria-label={`Section for ingredient ${index + 1}`}
+            value={currentSectionIndex}
+            onChange={(event) => {
+              const value = event.target.value
+              onMoveIngredient(
+                index,
+                value === "new-unsectioned" ? null : Number(value)
+              )
+            }}
+            className="min-h-10 min-w-0 max-w-full flex-1 rounded-lg border border-stone-200 bg-background px-3 text-foreground dark:border-zinc-700"
+          >
+            {sectionOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+            {includeNewUnsectionedOption ? (
+              <option value="new-unsectioned">Unsectioned (new)</option>
+            ) : null}
+          </select>
+        </label>
+      ) : null}
+
+      {ingredient.alternatives?.map((alternative, alternativeIndex) => (
+        <label
+          key={alternativeIndex}
+          className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground"
+        >
+          <span className="w-20 shrink-0 font-semibold">Alternative</span>
+          <Input
+            aria-label={`Alternative ${alternativeIndex + 1} for ingredient ${index + 1}`}
+            value={alternative}
+            onChange={(event) => {
+              const nextAlternatives = [...(ingredient.alternatives || [])]
+              nextAlternatives[alternativeIndex] = event.target.value
+              onIngredientAlternativesChange?.(index, nextAlternatives)
+            }}
+            className="min-w-0 flex-1"
+          />
+          {onIngredientAlternativesChange ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                onIngredientAlternativesChange(
+                  index,
+                  (ingredient.alternatives || []).filter(
+                    (_, currentIndex) => currentIndex !== alternativeIndex
+                  )
+                )
+              }
+              aria-label={`Remove alternative ${alternativeIndex + 1} from ingredient ${index + 1}`}
+              className="shrink-0 text-muted-foreground hover:text-destructive"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </label>
+      ))}
+
+      {onIngredientAlternativesChange ? (
+        <button
+          type="button"
+          onClick={() =>
+            onIngredientAlternativesChange(index, [
+              ...(ingredient.alternatives || []),
+              "",
+            ])
+          }
+          className="inline-flex min-h-10 items-center gap-1 text-xs font-semibold text-primary transition-opacity hover:opacity-80"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add alternative
+        </button>
+      ) : null}
+    </div>
   )
 
   if (addRecipeModalLayout) {
@@ -352,6 +445,7 @@ function SortableIngredientRow({
             </div>
           </div>
         )}
+        {semanticControls}
         {rowWarnings.length > 0 ? (
           <p className="px-2 pt-1 text-[11px] text-amber-700 dark:text-amber-400">
             {rowWarnings.join(" • ")}
@@ -407,6 +501,7 @@ function SortableIngredientRow({
           </div>
           <div className="hidden lg:block">{deleteButton}</div>
         </div>
+        {semanticControls}
         {rowWarnings.length > 0 ? (
           <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-100/80 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
@@ -525,9 +620,14 @@ export interface SortableIngredientListProps {
   onReorderIngredients: (event: DragEndEvent) => void
   onRemoveIngredient: (index: number) => void
   onIngredientChange: (index: number, field: keyof Ingredient, value: string | number | null) => void
+  onIngredientAlternativesChange?: (index: number, alternatives: string[]) => void
   onIngredientParsed: (index: number, ingredient: Ingredient) => void
   onBulkPasteIngredients: (index: number, text: string) => void
   duplicateWarningsByRow?: Record<number, string[]>
+  currentSectionIndex?: number
+  sectionOptions?: Array<{ value: number; label: string }>
+  includeNewUnsectionedOption?: boolean
+  onMoveIngredient?: (index: number, targetSectionIndex: number | null) => void
 }
 
 export function SortableIngredientList({
@@ -539,9 +639,14 @@ export function SortableIngredientList({
   onReorderIngredients,
   onRemoveIngredient,
   onIngredientChange,
+  onIngredientAlternativesChange,
   onIngredientParsed,
   onBulkPasteIngredients,
   duplicateWarningsByRow,
+  currentSectionIndex,
+  sectionOptions,
+  includeNewUnsectionedOption,
+  onMoveIngredient,
 }: SortableIngredientListProps) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
@@ -599,6 +704,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onIngredientAlternativesChange={onIngredientAlternativesChange}
                 onIngredientParsed={onIngredientParsed}
                 onBulkPasteIngredients={onBulkPasteIngredients}
                 onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
@@ -607,6 +713,10 @@ export function SortableIngredientList({
                 isEditing={true}
                 addRecipeModalLayout
                 isWideViewport={isWideViewport}
+                currentSectionIndex={currentSectionIndex}
+                sectionOptions={sectionOptions}
+                includeNewUnsectionedOption={includeNewUnsectionedOption}
+                onMoveIngredient={onMoveIngredient}
               />
             ))}
           </div>
@@ -627,6 +737,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onIngredientAlternativesChange={onIngredientAlternativesChange}
                 onIngredientParsed={onIngredientParsed}
                 onBulkPasteIngredients={onBulkPasteIngredients}
                 onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
@@ -634,6 +745,10 @@ export function SortableIngredientList({
                 ingredients={ingredients}
                 isEditing={true}
                 editDocumentLayout
+                currentSectionIndex={currentSectionIndex}
+                sectionOptions={sectionOptions}
+                includeNewUnsectionedOption={includeNewUnsectionedOption}
+                onMoveIngredient={onMoveIngredient}
               />
             ))}
           </div>
@@ -646,6 +761,7 @@ export function SortableIngredientList({
                 index={index}
                 onRemoveIngredient={onRemoveIngredient}
                 onIngredientChange={onIngredientChange}
+                onIngredientAlternativesChange={onIngredientAlternativesChange}
                 onIngredientParsed={onIngredientParsed}
                 onBulkPasteIngredients={onBulkPasteIngredients}
                 onKeyboardMoveIngredient={handleKeyboardMoveIngredient}
@@ -653,6 +769,10 @@ export function SortableIngredientList({
                 ingredients={ingredients}
                 isEditing={true}
                 editModeTwoColLayout
+                currentSectionIndex={currentSectionIndex}
+                sectionOptions={sectionOptions}
+                includeNewUnsectionedOption={includeNewUnsectionedOption}
+                onMoveIngredient={onMoveIngredient}
               />
             ))}
           </div>

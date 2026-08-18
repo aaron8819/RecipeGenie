@@ -2,12 +2,16 @@ import {
   hasIngredientAmount,
   type ParsedRecipe,
 } from "@/lib/recipe-parser"
-import type { Ingredient, Recipe, RecipeInsert, RecipeInstructionGroup } from "@/types/database"
+import type {
+  Ingredient,
+  IngredientSection,
+  Recipe,
+  RecipeInsert,
+  RecipeInstructionGroup,
+} from "@/types/database"
 import {
   createEmptyInstructionGroup,
   editorGroupsToInstructionSections,
-  editorIngredientsToIngredientSections,
-  ingredientSectionsToEditorIngredients,
   instructionSectionsToEditorGroups,
   normalizeInstructionGroupsForEditor,
   normalizeRecipeInstructionGroups,
@@ -39,6 +43,11 @@ export const EMPTY_RECIPE_INGREDIENT: Ingredient = {
   item: "",
   amount: null,
   unit: "",
+}
+
+export const EMPTY_RECIPE_INGREDIENT_SECTION: IngredientSection = {
+  label: null,
+  ingredients: [{ ...EMPTY_RECIPE_INGREDIENT }],
 }
 
 const UNIT_NORMALIZATION_MAP: Record<string, string> = {
@@ -87,7 +96,7 @@ export interface RecipeDialogFormValues {
   cookTimeMinutes: number | null
   totalTimeMinutes: number | null
   tags: string[]
-  ingredients: Ingredient[]
+  ingredientSections: IngredientSection[]
   instructionGroups: RecipeInstructionGroup[]
   notes: string
   imageUrl: string | null
@@ -110,8 +119,8 @@ export function buildEditingRecipeDialogFormValues(
     cookTimeMinutes: recipe.cook_time_minutes ?? null,
     totalTimeMinutes: recipe.total_time_minutes ?? null,
     tags: recipe.tags || [],
-    ingredients: normalizeRecipeIngredientsForEditing(
-      ingredientSectionsToEditorIngredients(recipe.ingredientSections)
+    ingredientSections: normalizeIngredientSectionsForEditing(
+      recipe.ingredientSections
     ),
     instructionGroups: normalizeInstructionGroupsForEditor(
       instructionSectionsToEditorGroups(recipe.instructionSections)
@@ -133,7 +142,7 @@ export function buildNewRecipeDialogFormValues(
     cookTimeMinutes: null,
     totalTimeMinutes: null,
     tags: [],
-    ingredients: [{ ...EMPTY_RECIPE_INGREDIENT }],
+    ingredientSections: [cloneEmptyIngredientSection()],
     instructionGroups: [createEmptyInstructionGroup()],
     notes: "",
     imageUrl: null,
@@ -164,12 +173,10 @@ export function applyParsedRecipeToFormValues(
     prepTimeMinutes: parsedRecipe.metadata?.prepTimeMinutes ?? values.prepTimeMinutes,
     cookTimeMinutes: parsedRecipe.metadata?.cookTimeMinutes ?? values.cookTimeMinutes,
     totalTimeMinutes: parsedRecipe.metadata?.totalTimeMinutes ?? values.totalTimeMinutes,
-    ingredients:
+    ingredientSections:
       parsedRecipe.ingredientSections.length > 0
-        ? normalizeRecipeIngredientsForEditing(
-            ingredientSectionsToEditorIngredients(parsedRecipe.ingredientSections)
-          )
-        : values.ingredients,
+        ? normalizeIngredientSectionsForEditing(parsedRecipe.ingredientSections)
+        : values.ingredientSections,
     instructionGroups:
       parsedRecipe.instructionSections.length > 0
         ? normalizeInstructionGroupsForEditor(
@@ -208,8 +215,8 @@ export function buildRecipeSubmissionData(
     cook_time_minutes: values.cookTimeMinutes,
     total_time_minutes: values.totalTimeMinutes,
     tags: values.tags || [],
-    ingredient_sections: editorIngredientsToIngredientSections(
-      normalizeRecipeIngredientsForSubmission(values.ingredients)
+    ingredient_sections: normalizeIngredientSectionsForSubmission(
+      values.ingredientSections
     ),
     instruction_sections: editorGroupsToInstructionSections(instructionGroups),
     notes,
@@ -217,8 +224,12 @@ export function buildRecipeSubmissionData(
   }
 }
 
-export function hasValidRecipeIngredients(ingredients: Ingredient[]): boolean {
-  return ingredients.some((ingredient) => ingredient.item.trim())
+export function hasValidRecipeIngredients(
+  ingredientSections: IngredientSection[]
+): boolean {
+  return ingredientSections.some((section) =>
+    section.ingredients.some((ingredient) => ingredient.item.trim())
+  )
 }
 
 export function isNewRecipeDialogDirty(values: {
@@ -230,7 +241,7 @@ export function isNewRecipeDialogDirty(values: {
   prepTimeMinutes: number | null
   cookTimeMinutes: number | null
   totalTimeMinutes: number | null
-  ingredients: Ingredient[]
+  ingredientSections: IngredientSection[]
   instructionGroups: RecipeInstructionGroup[]
   notes: string
   imageReference: string | null
@@ -244,7 +255,11 @@ export function isNewRecipeDialogDirty(values: {
     values.prepTimeMinutes !== null ||
     values.cookTimeMinutes !== null ||
     values.totalTimeMinutes !== null ||
-    values.ingredients.some((ingredient) => ingredient.item.trim() !== "") ||
+    values.ingredientSections.some(
+      (section) =>
+        section.label?.trim() ||
+        section.ingredients.some((ingredient) => ingredient.item.trim() !== "")
+    ) ||
     normalizeRecipeInstructionGroups(values.instructionGroups).length > 0 ||
     values.notes.trim() !== "" ||
     values.imageReference !== null
@@ -266,7 +281,7 @@ export function isEditingRecipeDialogDirty(
     cookTimeMinutes: initialValues.cookTimeMinutes,
     totalTimeMinutes: initialValues.totalTimeMinutes,
     tags: initialValues.tags,
-    ingredients: initialValues.ingredients,
+    ingredientSections: initialValues.ingredientSections,
     instructionGroups: normalizeRecipeInstructionGroups(initialValues.instructionGroups),
     notes: initialValues.notes,
     imageReference: initialValues.imageUrl,
@@ -281,7 +296,7 @@ export function isEditingRecipeDialogDirty(
     cookTimeMinutes: currentValues.cookTimeMinutes,
     totalTimeMinutes: currentValues.totalTimeMinutes,
     tags: currentValues.tags,
-    ingredients: currentValues.ingredients,
+    ingredientSections: currentValues.ingredientSections,
     instructionGroups: normalizeRecipeInstructionGroups(currentValues.instructionGroups),
     notes: currentValues.notes,
     imageReference: currentValues.imageReference,
@@ -367,6 +382,19 @@ export function normalizeRecipeIngredientsForEditing(
     .map((ingredient) => normalizeRecipeIngredient(ingredient, true))
 }
 
+export function normalizeIngredientSectionsForEditing(
+  sections: IngredientSection[]
+): IngredientSection[] {
+  if (sections.length === 0) {
+    return [cloneEmptyIngredientSection()]
+  }
+
+  return sections.map((section) => ({
+    label: section.label,
+    ingredients: normalizeRecipeIngredientsForEditing(section.ingredients),
+  }))
+}
+
 export function updateRecipeIngredientField(
   current: Ingredient,
   field: keyof Ingredient,
@@ -418,6 +446,17 @@ export function updateRecipeIngredientField(
   return ingredient
 }
 
+export function updateRecipeIngredientAlternatives(
+  current: Ingredient,
+  alternatives: string[]
+): Ingredient {
+  return {
+    ...current,
+    alternatives: alternatives.length > 0 ? [...alternatives] : undefined,
+    originalText: undefined,
+  }
+}
+
 export function normalizeRecipeIngredientsForSubmission(
   ingredients: Ingredient[]
 ): Ingredient[] {
@@ -427,4 +466,26 @@ export function normalizeRecipeIngredientsForSubmission(
   )
   return requireIngredientsForPersistence(populatedIngredients)
     .map((ingredient) => normalizeRecipeIngredient(ingredient))
+}
+
+export function normalizeIngredientSectionsForSubmission(
+  sections: IngredientSection[]
+): IngredientSection[] {
+  return sections
+    .map((section) => ({
+      label: section.label?.trim() || null,
+      ingredients: normalizeRecipeIngredientsForSubmission(
+        section.ingredients
+      ).map(({ groupLabel: _groupLabel, ...ingredient }) => ingredient),
+    }))
+    .filter((section) => section.ingredients.length > 0)
+}
+
+function cloneEmptyIngredientSection(
+  label: string | null = null
+): IngredientSection {
+  return {
+    label,
+    ingredients: [{ ...EMPTY_RECIPE_INGREDIENT }],
+  }
 }
