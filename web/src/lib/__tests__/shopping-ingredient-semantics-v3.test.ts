@@ -331,6 +331,85 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     })
   })
 
+  it.each([
+    ['garlic, divided, chopped', 'garlic, divided, chopped',
+      'garlic divided chopped'],
+    ['garlic, chopped, for serving', 'garlic, chopped, for serving',
+      'garlic chopped for serving'],
+    ['garlic, chopped, minced, divided', 'garlic, chopped, minced, divided',
+      'garlic chopped minced divided'],
+    ['garlic, finely chopped, divided', 'garlic, finely chopped, divided',
+      'garlic finely chopped divided'],
+    ['garlic, minced, to taste', 'garlic, minced, to taste',
+      'garlic minced to taste'],
+    ['garlic, chopped,, minced', 'garlic, chopped,, minced',
+      'garlic chopped minced'],
+    ['garlic， chopped， minced', 'garlic, chopped, minced',
+      'garlic chopped minced'],
+    ['garlic, chopped， minced', 'garlic, chopped, minced',
+      'garlic chopped minced'],
+  ])('keeps qualifier and delimiter compound %s atomic', (
+    line,
+    parserItem,
+    purchaseKey
+  ) => {
+    const parsed = parseIngredientLine(line)
+    expect(parsed.item).toBe(parserItem)
+    expect(parsed.modifier).toBeUndefined()
+
+    const resolved = resolveShoppingIngredient({
+      ingredient: parsed,
+      recipeId: 'recipe-atomic-suffix',
+    })
+    expect(resolved.purchaseKey).toBe(purchaseKey)
+    expect(resolved.preparation).toEqual([])
+
+    expect(semantics(line)).toMatchObject({
+      purchaseKey,
+      preparation: [],
+    })
+  })
+
+  it.each([
+    ['divided', ['divided']],
+    ['to taste', ['to taste']],
+    ['plus more', ['plus more']],
+    ['for garnish', ['for garnish']],
+    ['for serving', ['for serving']],
+    ['for topping', ['for topping']],
+    ['optional', []],
+  ])('uses the central qualifier registry for garlic, %s', (
+    modifier,
+    preparation
+  ) => {
+    const line = `garlic, ${modifier}`
+    expect(parseIngredientLine(line)).toMatchObject({
+      item: 'garlic',
+      modifier,
+    })
+    expect(resolvedLine(line)).toMatchObject({
+      purchaseKey: 'garlic',
+      preparation,
+    })
+  })
+
+  it('prevents parser and resolver from sharing an unsupported comma suffix', () => {
+    const parsed = parseIngredientLine('garlic, chopped, for serving')
+    expect(parsed).toMatchObject({
+      item: 'garlic, chopped, for serving',
+      modifier: undefined,
+    })
+
+    const resolved = resolveShoppingIngredient({
+      ingredient: parsed,
+      recipeId: 'recipe-cross-layer-atomicity',
+    })
+    expect(resolved).toMatchObject({
+      purchaseKey: 'garlic chopped for serving',
+      preparation: [],
+    })
+  })
+
   it('retains composite citrus preparation without adding it to identity', () => {
     expect(semantics('lime', 'count', 'juice and zest')).toMatchObject({
       purchaseKey: 'lime',
@@ -971,13 +1050,13 @@ describe('ShoppingDocumentV3 frozen semantic validation', () => {
     })
   })
 
-  it('freezes a corrected multi-comma contribution without reinterpretation', () => {
+  it('freezes a corrected qualifier compound through mutation and reload', () => {
     const document = createEmptyShoppingDocument()
-    const ingredient = persistedLine('1 garlic, chopped, minced')
+    const ingredient = persistedLine('1 garlic, chopped, for serving')
     const frozenIngredient = JSON.parse(JSON.stringify(ingredient))
     document.recipeEntries['recipe-frozen'] = {
       recipeId: 'recipe-frozen',
-      recipeName: 'Frozen multi-comma garlic',
+      recipeName: 'Frozen qualifier-compound garlic',
       selectedServings: 1,
       scaleV1: { numerator: '1', denominator: '1' },
       ingredients: [ingredient],
@@ -993,7 +1072,36 @@ describe('ShoppingDocumentV3 frozen semantic validation', () => {
     expect(validated.document.recipeEntries['recipe-frozen'].ingredients[0])
       .toEqual(frozenIngredient)
     expect(projectShoppingDocument(validated.document).items[0]).toMatchObject({
-      orderingKey: 'garlic chopped minced',
+      orderingKey: 'garlic chopped for serving',
+      quantity: { amount: 1, unit: 'count' },
+      sources: [expect.objectContaining({
+        preparationModifiers: undefined,
+      })],
+    })
+
+    const next = applyShoppingDocumentMutation({
+      document: validated.document,
+      contentRevision: validated.contentRevision!,
+    }, {
+      type: 'setChecked',
+      rowRef: `derived:${ingredient.aggregateKey}`,
+      checked: true,
+    })
+    expect(next.document.recipeEntries['recipe-frozen'].ingredients[0])
+      .toEqual(frozenIngredient)
+
+    const serialized = JSON.stringify(next.document)
+    const reloaded = validateShoppingDocumentStateV3({
+      document: JSON.parse(serialized),
+      contentRevision: next.contentRevision,
+    })
+    expect(reloaded.ok).toBe(true)
+    if (!reloaded.ok) return
+    expect(reloaded.document.recipeEntries['recipe-frozen'].ingredients[0])
+      .toEqual(frozenIngredient)
+    expect(projectShoppingDocument(reloaded.document).items[0]).toMatchObject({
+      orderingKey: 'garlic chopped for serving',
+      checked: true,
       quantity: { amount: 1, unit: 'count' },
       sources: [expect.objectContaining({
         preparationModifiers: undefined,

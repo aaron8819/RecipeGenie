@@ -1,3 +1,10 @@
+import {
+  classifyIngredientCommaSuffix,
+  ingredientModifierDefinition,
+  ingredientModifierPhrasesAt,
+  normalizeIngredientModifierText,
+} from './ingredient-modifier-classification'
+
 export type ShoppingQuantityKind =
   | 'continuous'
   | 'discrete'
@@ -127,147 +134,13 @@ const CONTROLLED_PHRASE_ALIASES: Record<string, string> = {
   evoo: 'extra virgin olive oil',
 }
 
-type PreparationDefinition = {
-  evidence: readonly string[]
-  structured?: true
-  leading?: true
-  trailing?: true
-  trailingBeforeAlternative?: true
-}
-
-function preparation(
-  evidence: readonly string[],
-  positions: Omit<PreparationDefinition, 'evidence'>
-): PreparationDefinition {
-  return { evidence, ...positions }
-}
-
-const PREPARATION_DEFINITIONS = new Map<string, PreparationDefinition>([
-  ...[
-    'chopped',
-    'crushed',
-    'cubed',
-    'diced',
-    'grated',
-    'halved',
-    'juiced',
-    'mashed',
-    'minced',
-    'peeled',
-    'quartered',
-    'shredded',
-    'sliced',
-    'zested',
-  ].map((phrase): [string, PreparationDefinition] => [
-    phrase,
-    preparation([phrase], { structured: true, leading: true, trailing: true }),
-  ]),
-  ['as needed', preparation(['as needed'], {
-    structured: true,
-    leading: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['divided', preparation(['divided'], {
-    structured: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['drained', preparation(['drained'], { structured: true })],
-  ['finely chopped', preparation(['finely chopped'], {
-    structured: true,
-    trailing: true,
-  })],
-  ['finely diced', preparation(['finely diced'], {
-    structured: true,
-    trailing: true,
-  })],
-  ['finely grated', preparation(['finely grated'], {
-    structured: true,
-    leading: true,
-    trailing: true,
-  })],
-  ['finely minced', preparation(['finely minced'], {
-    structured: true,
-    leading: true,
-    trailing: true,
-  })],
-  ['for garnish', preparation(['for garnish'], {
-    structured: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['for serving', preparation(['for serving'], {
-    structured: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['for topping', preparation(['for topping'], {
-    structured: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['juice and zest', preparation(['juiced', 'zested'], { structured: true })],
-  ['juiced and zested', preparation(['juiced', 'zested'], {
-    structured: true,
-  })],
-  ['optional', preparation([], {
-    structured: true,
-    leading: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['or to taste', preparation(['to taste'], {
-    structured: true,
-    leading: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['plus more', preparation(['plus more'], {
-    structured: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-  ['rinsed', preparation(['rinsed'], { structured: true })],
-  ['roughly chopped', preparation(['roughly chopped'], {
-    structured: true,
-    trailing: true,
-  })],
-  ['sliced or diced', preparation(['diced', 'sliced'], {
-    structured: true,
-    leading: true,
-  })],
-  ['zest and juice', preparation(['juiced', 'zested'], { structured: true })],
-  ['zested and juiced', preparation(['juiced', 'zested'], {
-    structured: true,
-  })],
-  ['softened', preparation(['softened'], { structured: true })],
-  ['thinly sliced', preparation(['thinly sliced'], {
-    structured: true,
-    leading: true,
-    trailing: true,
-  })],
-  ['to taste', preparation(['to taste'], {
-    structured: true,
-    trailing: true,
-    trailingBeforeAlternative: true,
-  })],
-])
-
-function preparationPhrasesAt(position: 'leading' | 'trailing'): string[] {
-  return [...PREPARATION_DEFINITIONS]
-    .filter(([, definition]) => definition[position])
-    .map(([phrase]) => phrase)
-    .sort((left, right) => right.length - left.length)
-}
-
-const LEADING_PREPARATION_PHRASES = preparationPhrasesAt('leading')
-const TRAILING_QUALIFIER_PHRASES = preparationPhrasesAt('trailing')
+const LEADING_PREPARATION_PHRASES = ingredientModifierPhrasesAt('leading')
+const TRAILING_QUALIFIER_PHRASES = ingredientModifierPhrasesAt('trailing')
   .filter((phrase) =>
-    PREPARATION_DEFINITIONS.get(phrase)?.trailingBeforeAlternative)
-const TRAILING_PREPARATION_PHRASES = preparationPhrasesAt('trailing')
+    ingredientModifierDefinition(phrase)?.trailingBeforeAlternative)
+const TRAILING_PREPARATION_PHRASES = ingredientModifierPhrasesAt('trailing')
   .filter((phrase) =>
-    !PREPARATION_DEFINITIONS.get(phrase)?.trailingBeforeAlternative)
+    !ingredientModifierDefinition(phrase)?.trailingBeforeAlternative)
 
 const ONION_PURCHASE_ALIASES = new Map<string, string>([
   ['onion', 'onion'],
@@ -377,14 +250,8 @@ const RICE_PURCHASE_KEYS = new Set([
 ])
 
 function normalizeText(value: string): string {
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u2010-\u2015]/g, '-')
-    .replace(/([a-z])-([a-z])/g, '$1 $2')
+  return normalizeIngredientModifierText(value)
     .replace(/[;,]+/g, ' ')
-    .replace(/^[\s.:]+|[\s.:]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -441,7 +308,7 @@ function collectStructuredPreparationEvidence(
   if (!modifier) return []
   const identityModifiers: string[] = []
   for (const part of modifier.split(',').map(normalizeText).filter(Boolean)) {
-    const definition = PREPARATION_DEFINITIONS.get(part)
+    const definition = ingredientModifierDefinition(part)
     if (definition?.structured) {
       addPreparation(preparation, ...definition.evidence)
     } else {
@@ -468,7 +335,7 @@ function stripFreeTextPreparationEvidence(
         remaining = remaining.slice(phrase.length).trim()
         addPreparation(
           preparation,
-          ...(PREPARATION_DEFINITIONS.get(phrase)?.evidence || [])
+          ...(ingredientModifierDefinition(phrase)?.evidence || [])
         )
         changed = true
         break
@@ -476,18 +343,20 @@ function stripFreeTextPreparationEvidence(
     }
   }
 
-  changed = true
-  while (changed) {
-    changed = false
-    for (const phrase of TRAILING_QUALIFIER_PHRASES) {
-      if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
-        remaining = remaining.slice(0, -phrase.length).trim()
-        addPreparation(
-          preparation,
-          ...(PREPARATION_DEFINITIONS.get(phrase)?.evidence || [])
-        )
-        changed = true
-        break
+  if (allowTrailingPreparation) {
+    changed = true
+    while (changed) {
+      changed = false
+      for (const phrase of TRAILING_QUALIFIER_PHRASES) {
+        if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
+          remaining = remaining.slice(0, -phrase.length).trim()
+          addPreparation(
+            preparation,
+            ...(ingredientModifierDefinition(phrase)?.evidence || [])
+          )
+          changed = true
+          break
+        }
       }
     }
   }
@@ -500,24 +369,13 @@ function stripFreeTextPreparationEvidence(
         remaining = remaining.slice(0, -phrase.length).trim()
         addPreparation(
           preparation,
-          ...(PREPARATION_DEFINITIONS.get(phrase)?.evidence || [])
+          ...(ingredientModifierDefinition(phrase)?.evidence || [])
         )
         break
       }
     }
   }
   return remaining
-}
-
-function trailingModifierCandidate(value: string): {
-  item: string
-  modifier: string
-} | null {
-  const commaIndex = value.indexOf(',')
-  if (commaIndex < 0) return null
-  const item = value.slice(0, commaIndex).trim()
-  const modifier = normalizeText(value.slice(commaIndex + 1))
-  return item && modifier ? { item, modifier } : null
 }
 
 function stripOnionSizePreparation(
@@ -549,8 +407,11 @@ function stripOnionSizePreparation(
   }
 
   for (const phrase of removed) {
-    const definition = PREPARATION_DEFINITIONS.get(phrase)
-    addPreparation(preparation, ...(definition?.evidence || [phrase]))
+    const definition = ingredientModifierDefinition(phrase)
+    addPreparation(
+      preparation,
+      ...(definition?.evidence.length ? definition.evidence : [phrase])
+    )
   }
   return remaining
 }
@@ -576,18 +437,13 @@ export function resolveShoppingIngredientSemantics(
   input: ShoppingIngredientSemanticsInput
 ): ShoppingIngredientSemantics {
   const preparation = new Set<string>()
-  const trailingCandidate = input.modifier
-    ? null
-    : trailingModifierCandidate(input.item)
-  const trailingDefinition = trailingCandidate
-    ? PREPARATION_DEFINITIONS.get(trailingCandidate.modifier)
-    : undefined
+  const trailingCandidate = classifyIngredientCommaSuffix(input.item)
   const supportedTrailingCandidate = Boolean(
-    trailingDefinition?.structured
+    !input.modifier && trailingCandidate?.semanticSupported
   )
   const identityModifiers = collectStructuredPreparationEvidence(
     input.modifier || (supportedTrailingCandidate
-      ? trailingCandidate?.modifier
+      ? trailingCandidate?.expression
       : undefined),
     preparation
   )

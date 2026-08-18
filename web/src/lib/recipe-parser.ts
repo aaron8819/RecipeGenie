@@ -16,6 +16,14 @@ import {
   quantityToLegacyAmount,
 } from "@/lib/recipe-quantity"
 import type { YieldMetadataV1 } from "@/types/database"
+import {
+  classifyIngredientCommaSuffix,
+  ingredientModifierAllowsMissingAmount,
+  ingredientModifierSharesAlternativeNoun,
+  isIngredientModifierLike,
+  normalizeIngredientCommaDelimiters,
+  startsWithIngredientModifier,
+} from '@/lib/ingredient-modifier-classification'
 
 type SectionKind = "ingredients" | "instructions" | "notes"
 
@@ -918,16 +926,11 @@ function shouldWarnMissingIngredientAmount(
     return false
   }
 
-  const modifier = ingredient.modifier?.toLowerCase().trim()
-  if (modifier && /^(?:to taste|as needed)$/.test(modifier)) {
-    return false
-  }
-
-  if (
-    allowOptionalWithoutAmount &&
-    modifier &&
-    /^(?:optional|for serving|for garnish)$/.test(modifier)
-  ) {
+  const modifier = ingredient.modifier?.trim()
+  if (modifier && ingredientModifierAllowsMissingAmount(
+    modifier,
+    allowOptionalWithoutAmount
+  )) {
     return false
   }
 
@@ -1422,8 +1425,22 @@ function extractModifier(item: string): { item: string; modifier: string | null 
     return { item: "", modifier: null }
   }
 
-  let baseItem = item
+  let baseItem = normalizeIngredientCommaDelimiters(item)
   const modifiers: string[] = []
+  let deferredCommaModifier: string | null = null
+
+  const commaSuffix = classifyIngredientCommaSuffix(baseItem)
+  if (commaSuffix && commaSuffix.segmentCount > 1) {
+    return { item: commaSuffix.normalizedValue, modifier: null }
+  }
+  if (commaSuffix?.exactRecognized) {
+    baseItem = commaSuffix.item
+    if (/^for\s+/i.test(commaSuffix.expression)) {
+      modifiers.push(commaSuffix.expression)
+    } else {
+      deferredCommaModifier = commaSuffix.expression
+    }
+  }
 
   const forPattern = /,?\s*\bfor\s+[a-z\s]+$/i
   const forMatch = baseItem.match(forPattern)
@@ -1447,24 +1464,10 @@ function extractModifier(item: string): { item: string; modifier: string | null 
     })
   }
 
-  const modifierKeywordSource =
-    'optional|softened|melted|browned|chopped|minced|diced|sliced|' +
-    'peeled|grated|shredded|crushed|mashed|drained|dried|toasted|' +
-    'roasted|fresh|frozen|thawed|cooked|uncooked|raw|whole|halved|' +
-    'quartered|cubed|medium|large|small|extra\\s+large|to\\s+be|' +
-    'as\\s+needed|or\\s+to\\s+taste|peeled\\s+or|or\\s+unpeeled'
-  const modifierKeywords = new RegExp(
-    `^(?:${modifierKeywordSource})(?:\\s|$)`,
-    'i'
-  )
-  const modifierEndingKeywords = new RegExp(
-    `(?:^|\\s)(?:${modifierKeywordSource})$`,
-    'i'
-  )
-
   for (const parenMatch of parenMatches.reverse()) {
     const innerText = parenMatch.text
-    const isModifier = innerText.length <= 30 && modifierKeywords.test(innerText)
+    const isModifier = innerText.length <= 30 &&
+      startsWithIngredientModifier(innerText)
 
     if (isModifier) {
       modifiers.unshift(innerText)
@@ -1485,18 +1488,12 @@ function extractModifier(item: string): { item: string; modifier: string | null 
     }
   }
 
-  const lastCommaIndex = topLevelCommaIndexes.at(-1) ?? -1
-  const previousCommaIndex = topLevelCommaIndexes.at(-2) ?? -1
-  const precedingCommaSegment = previousCommaIndex >= 0
-    ? baseItem.substring(previousCommaIndex + 1, lastCommaIndex).trim()
-    : ''
-  const hasUnresolvedTrailingCompound = Boolean(
-    precedingCommaSegment && modifierEndingKeywords.test(precedingCommaSegment)
-  )
+  if (deferredCommaModifier) {
+    modifiers.unshift(deferredCommaModifier)
+  }
 
-  // Preparation-looking segments before the final comma form one unresolved
-  // trailing expression. Leave them intact for downstream classification.
-  if (lastCommaIndex !== -1 && !hasUnresolvedTrailingCompound) {
+  const lastCommaIndex = topLevelCommaIndexes.at(-1) ?? -1
+  if (lastCommaIndex !== -1) {
     const potentialModifier = baseItem.substring(lastCommaIndex + 1).trim()
     const beforeComma = baseItem.substring(0, lastCommaIndex).trim()
     const isCommaDelimitedChoice = /^or\s+/i.test(potentialModifier) &&
@@ -1508,7 +1505,7 @@ function extractModifier(item: string): { item: string; modifier: string | null 
       potentialModifier.length < 60 &&
       !/^\d+/.test(potentialModifier) &&
       beforeComma.length > 0 &&
-      (potentialModifier.length < 25 || modifierKeywords.test(potentialModifier))
+      potentialModifier.length < 25
 
     if (isLikelyModifier) {
       modifiers.unshift(potentialModifier)
@@ -1522,11 +1519,16 @@ function extractModifier(item: string): { item: string; modifier: string | null 
 }
 
 function extractAlternatives(item: string): { item: string; alternatives?: string[] } {
+  const commaSuffix = classifyIngredientCommaSuffix(item)
+  if (commaSuffix && commaSuffix.segmentCount > 1) {
+    return { item }
+  }
+
+  if (isIngredientModifierLike(item)) {
+    return { item }
+  }
+
   const modifierContextPatterns = [
-    /to taste/i,
-    /as needed/i,
-    /or unpeeled/i,
-    /or peeled/i,
     /more or less/i,
     /or more/i,
     /or less/i,
@@ -1567,8 +1569,9 @@ function extractAlternatives(item: string): { item: string; alternatives?: strin
   const primaryLast = primaryWords.at(-1)?.toLowerCase() || ''
   const sharedNoun = alternativeWords.at(-1) || ''
   const sharedNounQualifier = primaryLast === 'red' ||
-    primaryLast === 'white' || primaryLast === 'sliced' ||
-    primaryLast === 'diced' || primaryLast.endsWith('-blend')
+    primaryLast === 'white' ||
+    ingredientModifierSharesAlternativeNoun(primaryLast) ||
+    primaryLast.endsWith('-blend')
   if (sharedNounQualifier && sharedNoun &&
       primaryLast !== sharedNoun.toLowerCase()) {
     primary = `${primary} ${sharedNoun}`
