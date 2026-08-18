@@ -401,6 +401,7 @@ describe("RecipeIngredientsSection", () => {
     const onAutoFix = vi.fn()
     const onRemoveExactDuplicates = vi.fn()
     const onAddIngredient = vi.fn()
+    const onAddSection = vi.fn()
 
     render(
       <RecipeIngredientsSection
@@ -411,6 +412,7 @@ describe("RecipeIngredientsSection", () => {
         nearDuplicateCount={1}
         onRemoveExactDuplicates={onRemoveExactDuplicates}
         onAddIngredient={onAddIngredient}
+        onAddSection={onAddSection}
       >
         <div>ingredient-list</div>
       </RecipeIngredientsSection>
@@ -419,11 +421,13 @@ describe("RecipeIngredientsSection", () => {
     expect(screen.getByText("Ingredient Validation Issues")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Attempt Auto-Fix" }))
     fireEvent.click(screen.getByRole("button", { name: "Remove Exact Duplicates" }))
-    fireEvent.click(screen.getByRole("button", { name: "ADD INGREDIENT" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add unsectioned ingredient" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add section" }))
 
     expect(onAutoFix).toHaveBeenCalledTimes(1)
     expect(onRemoveExactDuplicates).toHaveBeenCalledTimes(1)
     expect(onAddIngredient).toHaveBeenCalledTimes(1)
+    expect(onAddSection).toHaveBeenCalledTimes(1)
   })
 
   it("renders add-mode paste guidance and validation summary", () => {
@@ -439,6 +443,7 @@ describe("RecipeIngredientsSection", () => {
         onAutoFix={onAutoFix}
         onRemoveExactDuplicates={onRemoveExactDuplicates}
         onAddIngredient={() => {}}
+        onAddSection={() => {}}
       >
         <div>ingredient-list</div>
       </RecipeIngredientsSection>

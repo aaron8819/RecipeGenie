@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import dynamic from "next/dynamic"
-import { FileText, PenTool, X } from "lucide-react"
+import { FileText, PenTool, Plus, Trash2, X } from "lucide-react"
 import type { DragEndEvent } from "@dnd-kit/core"
 import {
   Dialog,
@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Tabs,
   TabsList,
@@ -35,7 +36,12 @@ import { useDebouncedCallback } from "@/hooks/use-debounce"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
 import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
-import type { Recipe, Ingredient, RecipeInstructionGroup } from "@/types/database"
+import type {
+  Recipe,
+  Ingredient,
+  IngredientSection,
+  RecipeInstructionGroup,
+} from "@/types/database"
 import { createRecipeUuid } from "@/lib/recipe-identity"
 import {
   RecipeDialogActions,
@@ -55,8 +61,21 @@ import {
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
   normalizeRecipeIngredientsForEditing,
+  updateRecipeIngredientAlternatives,
   updateRecipeIngredientField,
 } from "./recipe-dialog.defaults"
+import { ingredientSectionsToEditorIngredients } from "@/lib/recipe-structure"
+import {
+  addIngredientSection,
+  addIngredientToSection,
+  addUnsectionedIngredient,
+  isIngredientSectionEmpty,
+  moveIngredientToSection,
+  removeEmptyIngredientSection,
+  removeIngredientFromSection,
+  renameIngredientSection,
+  reorderIngredientsWithinSection,
+} from "@/lib/recipe-ingredient-editor"
 import {
   getImportErrorMessage,
   IMPORT_URL_FAILURE_ERROR,
@@ -69,7 +88,6 @@ import {
   autoFixIngredients,
   countBlockingIngredientIssues,
   countIngredientsWithIssues,
-  removeExactDuplicateIngredients,
 } from "./recipe-dialog.validation"
 import {
   canReviewImportedRecipe,
@@ -126,7 +144,9 @@ export function RecipeDialog({
   const [cookTimeMinutes, setCookTimeMinutes] = useState<number | null>(null)
   const [totalTimeMinutes, setTotalTimeMinutes] = useState<number | null>(null)
   const [tags, setTags] = useState<string[]>([])
-  const [ingredients, setIngredients] = useState<Ingredient[]>([])
+  const [ingredientSections, setIngredientSections] = useState<
+    IngredientSection[]
+  >([])
   const [instructionGroups, setInstructionGroups] = useState<RecipeInstructionGroup[]>([])
   const [notes, setNotes] = useState("")
   
@@ -177,7 +197,7 @@ export function RecipeDialog({
     setCookTimeMinutes(formValues.cookTimeMinutes)
     setTotalTimeMinutes(formValues.totalTimeMinutes)
     setTags(formValues.tags)
-    setIngredients(formValues.ingredients)
+    setIngredientSections(formValues.ingredientSections)
     setInstructionGroups(formValues.instructionGroups)
     setNotes(formValues.notes)
     setImageUrl(formValues.imageUrl)
@@ -242,7 +262,7 @@ export function RecipeDialog({
           prepTimeMinutes,
           cookTimeMinutes,
           totalTimeMinutes,
-          ingredients,
+          ingredientSections,
           instructionGroups,
           notes,
           imageReference: imagePreview ?? imageUrl,
@@ -268,69 +288,126 @@ export function RecipeDialog({
     prepTimeMinutes,
     cookTimeMinutes,
     totalTimeMinutes,
-    ingredients,
+    ingredientSections,
     instructionGroups,
     notes,
     imagePreview,
     imageUrl,
   ])
 
-  const handleAddIngredient = () => {
-    setIngredients([...ingredients, { item: "", amount: null, unit: "" }])
+  const ingredients = ingredientSectionsToEditorIngredients(ingredientSections)
+
+  const updateIngredientSection = useCallback((
+    sectionIndex: number,
+    updater: (section: IngredientSection) => IngredientSection
+  ) => {
+    setIngredientSections((current) =>
+      current.map((section, index) =>
+        index === sectionIndex ? updater(section) : section
+      )
+    )
+  }, [])
+
+  const handleAddIngredient = (sectionIndex: number) => {
+    setIngredientSections((current) =>
+      addIngredientToSection(current, sectionIndex)
+    )
   }
 
-  const handleRemoveIngredient = (index: number) => {
-    setIngredients(ingredients.filter((_, i) => i !== index))
+  const handleAddUnsectionedIngredient = () => {
+    setIngredientSections(addUnsectionedIngredient)
+  }
+
+  const handleAddIngredientSection = () => {
+    setIngredientSections(addIngredientSection)
+  }
+
+  const handleRemoveIngredient = (sectionIndex: number, index: number) => {
+    setIngredientSections((current) =>
+      removeIngredientFromSection(current, sectionIndex, index)
+    )
   }
 
   const handleIngredientChange = (
+    sectionIndex: number,
     index: number,
     field: keyof Ingredient,
     value: string | number | null
   ) => {
-    setIngredients((current) => {
-      const next = [...current]
-      next[index] = updateRecipeIngredientField(next[index], field, value)
-      return next
-    })
+    updateIngredientSection(sectionIndex, (section) => ({
+      ...section,
+      ingredients: section.ingredients.map((ingredient, itemIndex) =>
+        itemIndex === index
+          ? updateRecipeIngredientField(ingredient, field, value)
+          : ingredient
+      ),
+    }))
+  }
+
+  const handleIngredientAlternativesChange = (
+    sectionIndex: number,
+    index: number,
+    alternatives: string[]
+  ) => {
+    updateIngredientSection(sectionIndex, (section) => ({
+      ...section,
+      ingredients: section.ingredients.map((ingredient, itemIndex) =>
+        itemIndex === index
+          ? updateRecipeIngredientAlternatives(ingredient, alternatives)
+          : ingredient
+      ),
+    }))
   }
 
   const handleIngredientParsed = useCallback((
+    sectionIndex: number,
     index: number,
     parsed: Ingredient
   ) => {
-    setIngredients((current) => {
-      const next = [...current]
-      const existing = next[index]
-      const [normalized] = normalizeRecipeIngredientsForEditing([{
-        ...parsed,
-        ...(existing?.groupLabel
-          ? { groupLabel: existing.groupLabel }
-          : {}),
-      }])
-      if (normalized) next[index] = normalized
-      return next
+    updateIngredientSection(sectionIndex, (section) => {
+      const [normalized] = normalizeRecipeIngredientsForEditing([parsed])
+      return {
+        ...section,
+        ingredients: section.ingredients.map((ingredient, itemIndex) =>
+          itemIndex === index && normalized ? normalized : ingredient
+        ),
+      }
     })
-  }, [])
+  }, [updateIngredientSection])
 
-  const handleReorderIngredients = useCallback((event: DragEndEvent) => {
+  const handleReorderIngredients = useCallback((
+    sectionIndex: number,
+    event: DragEndEvent
+  ) => {
     const { active, over } = event
 
     if (over && active.id !== over.id) {
-      setIngredients((items) => {
-        const oldIndex = items.findIndex((_, i) => i.toString() === active.id)
-        const newIndex = items.findIndex((_, i) => i.toString() === over.id)
+      setIngredientSections((current) => {
+        const section = current[sectionIndex]
+        if (!section) return current
+        const oldIndex = section.ingredients.findIndex(
+          (_, index) => index.toString() === active.id
+        )
+        const newIndex = section.ingredients.findIndex(
+          (_, index) => index.toString() === over.id
+        )
+        if (oldIndex < 0 || newIndex < 0) return current
 
-        const newItems = [...items]
-        const [removed] = newItems.splice(oldIndex, 1)
-        newItems.splice(newIndex, 0, removed)
-
-        return newItems
+        return reorderIngredientsWithinSection(
+          current,
+          sectionIndex,
+          oldIndex,
+          newIndex
+        )
       })
     }
   }, [])
 
-  const handleBulkPasteIngredients = useCallback((startIndex: number, text: string) => {
+  const handleBulkPasteIngredients = useCallback((
+    sectionIndex: number,
+    startIndex: number,
+    text: string
+  ) => {
     const parsedLines = text
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -342,8 +419,8 @@ export function RecipeDialog({
       return
     }
 
-    setIngredients((currentIngredients) => {
-      const nextIngredients = [...currentIngredients]
+    updateIngredientSection(sectionIndex, (section) => {
+      const nextIngredients = [...section.ingredients]
 
       while (nextIngredients.length < startIndex + parsedLines.length) {
         nextIngredients.push({ item: "", amount: null, unit: "" })
@@ -356,9 +433,51 @@ export function RecipeDialog({
         }
       })
 
-      return normalizeRecipeIngredientsForEditing(nextIngredients)
+      return {
+        ...section,
+        ingredients: normalizeRecipeIngredientsForEditing(nextIngredients),
+      }
     })
-  }, [])
+  }, [updateIngredientSection])
+
+  const handleIngredientSectionLabelChange = (
+    sectionIndex: number,
+    label: string
+  ) => {
+    setIngredientSections((current) =>
+      renameIngredientSection(current, sectionIndex, label)
+    )
+  }
+
+  const handleRemoveIngredientSection = (sectionIndex: number) => {
+    const section = ingredientSections[sectionIndex]
+    if (section && !isIngredientSectionEmpty(section)) {
+      undoToast.show({
+        message: "Move or delete this section's ingredients first.",
+        duration: 4000,
+      })
+      return
+    }
+
+    setIngredientSections((current) =>
+      removeEmptyIngredientSection(current, sectionIndex)
+    )
+  }
+
+  const handleMoveIngredient = (
+    sourceSectionIndex: number,
+    ingredientIndex: number,
+    targetSectionIndex: number | null
+  ) => {
+    setIngredientSections((current) =>
+      moveIngredientToSection(
+        current,
+        sourceSectionIndex,
+        ingredientIndex,
+        targetSectionIndex
+      )
+    )
+  }
 
   // Debounced live preview parser
   const debouncedParse = useDebouncedCallback(((text: string) => {
@@ -410,7 +529,7 @@ export function RecipeDialog({
         cookTimeMinutes,
         totalTimeMinutes,
         tags,
-        ingredients,
+        ingredientSections,
         instructionGroups,
         notes,
         imageUrl,
@@ -426,7 +545,7 @@ export function RecipeDialog({
     setPrepTimeMinutes(formValues.prepTimeMinutes)
     setCookTimeMinutes(formValues.cookTimeMinutes)
     setTotalTimeMinutes(formValues.totalTimeMinutes)
-    setIngredients(formValues.ingredients)
+    setIngredientSections(formValues.ingredientSections)
     setInstructionGroups(formValues.instructionGroups)
     setNotes(formValues.notes)
     return formValues
@@ -439,7 +558,7 @@ export function RecipeDialog({
     cookTimeMinutes,
     totalTimeMinutes,
     tags,
-    ingredients,
+    ingredientSections,
     instructionGroups,
     notes,
     imageUrl,
@@ -456,7 +575,7 @@ export function RecipeDialog({
     cookTimeMinutes,
     totalTimeMinutes,
     tags,
-    ingredients,
+    ingredientSections,
     instructionGroups,
     notes,
     imageUrl,
@@ -529,8 +648,17 @@ export function RecipeDialog({
   // Handle auto-fix for validation issues
   const handleAutoFix = useCallback(() => {
     const result = autoFixIngredients(ingredients)
-
-    setIngredients(result.ingredients)
+    let offset = 0
+    setIngredientSections((current) =>
+      current.map((section) => {
+        const nextIngredients = result.ingredients.slice(
+          offset,
+          offset + section.ingredients.length
+        )
+        offset += section.ingredients.length
+        return { ...section, ingredients: nextIngredients }
+      })
+    )
 
     if (result.fixedCount > 0) {
       undoToast.show({
@@ -538,18 +666,31 @@ export function RecipeDialog({
         duration: 3000
       })
     }
-  }, [ingredients, setIngredients, undoToast])
+  }, [ingredients, undoToast])
 
   const handleRemoveExactDuplicates = useCallback(() => {
-    const result = removeExactDuplicateIngredients(ingredients)
-
-    if (result.removedCount === 0) {
+    const duplicateIndexes = new Set(
+      analyzeIngredientDuplicates(ingredients).exactGroups.flatMap((group) =>
+        group.rowIndexes.slice(1)
+      )
+    )
+    if (duplicateIndexes.size === 0) {
       return
     }
 
-    setIngredients(result.ingredients)
+    let globalIndex = 0
+    setIngredientSections((current) =>
+      current.map((section) => ({
+        ...section,
+        ingredients: section.ingredients.filter(() => {
+          const shouldKeep = !duplicateIndexes.has(globalIndex)
+          globalIndex += 1
+          return shouldKeep
+        }),
+      }))
+    )
     undoToast.show({
-      message: `Removed ${result.removedCount} exact duplicate ingredient row(s)`,
+      message: `Removed ${duplicateIndexes.size} exact duplicate ingredient row(s)`,
       duration: 3000,
     })
   }, [ingredients, undoToast])
@@ -665,7 +806,7 @@ export function RecipeDialog({
         cookTimeMinutes,
         totalTimeMinutes,
         tags,
-        ingredients,
+        ingredientSections,
         instructionGroups,
         notes,
         imageUrl: finalImageUrl,
@@ -696,7 +837,7 @@ export function RecipeDialog({
   const isSubmitting = isSubmitLocked || createRecipe.isPending || updateRecipe.isPending || isUploadingImage
 
   // Check if there's at least one valid ingredient
-  const hasValidIngredients = hasValidRecipeIngredients(ingredients)
+  const hasValidIngredients = hasValidRecipeIngredients(ingredientSections)
 
   const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
 
@@ -714,7 +855,7 @@ export function RecipeDialog({
         cookTimeMinutes,
         totalTimeMinutes,
         tags,
-        ingredients,
+        ingredientSections,
         instructionGroups,
         notes,
         imageUrl,
@@ -729,7 +870,7 @@ export function RecipeDialog({
         prepTimeMinutes,
         cookTimeMinutes,
         totalTimeMinutes,
-        ingredients,
+        ingredientSections,
         instructionGroups,
         notes,
         imageReference: imagePreview ?? imageUrl,
@@ -976,15 +1117,21 @@ export function RecipeDialog({
                 setTags={setTags}
                 allTags={allTags}
                 tagCounts={tagCounts}
-                ingredients={ingredients}
+                ingredientSections={ingredientSections}
                 instructionGroups={instructionGroups}
                 setInstructionGroups={setInstructionGroups}
                 notes={notes}
                 setNotes={setNotes}
                 categories={categories}
                 onAddIngredient={handleAddIngredient}
+                onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                onAddIngredientSection={handleAddIngredientSection}
+                onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
+                onRemoveIngredientSection={handleRemoveIngredientSection}
+                onMoveIngredient={handleMoveIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
                 onIngredientChange={handleIngredientChange}
+                onIngredientAlternativesChange={handleIngredientAlternativesChange}
                 onIngredientParsed={handleIngredientParsed}
                 isEditing={false}
                 onReorderIngredients={handleReorderIngredients}
@@ -1053,15 +1200,21 @@ export function RecipeDialog({
                 setTags={setTags}
                 allTags={allTags}
                 tagCounts={tagCounts}
-                ingredients={ingredients}
+                ingredientSections={ingredientSections}
                 instructionGroups={instructionGroups}
                 setInstructionGroups={setInstructionGroups}
                 notes={notes}
                 setNotes={setNotes}
                 categories={categories}
                 onAddIngredient={handleAddIngredient}
+                onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                onAddIngredientSection={handleAddIngredientSection}
+                onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
+                onRemoveIngredientSection={handleRemoveIngredientSection}
+                onMoveIngredient={handleMoveIngredient}
                 onRemoveIngredient={handleRemoveIngredient}
                 onIngredientChange={handleIngredientChange}
+                onIngredientAlternativesChange={handleIngredientAlternativesChange}
                 onIngredientParsed={handleIngredientParsed}
                 isEditing={true}
                 onReorderIngredients={handleReorderIngredients}
@@ -1123,15 +1276,21 @@ export function RecipeDialog({
                   setTags={setTags}
                   allTags={allTags}
                   tagCounts={tagCounts}
-                  ingredients={ingredients}
+                  ingredientSections={ingredientSections}
                   instructionGroups={instructionGroups}
                   setInstructionGroups={setInstructionGroups}
                   notes={notes}
                   setNotes={setNotes}
                   categories={categories}
                   onAddIngredient={handleAddIngredient}
+                  onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                  onAddIngredientSection={handleAddIngredientSection}
+                  onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
+                  onRemoveIngredientSection={handleRemoveIngredientSection}
+                  onMoveIngredient={handleMoveIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientAlternativesChange={handleIngredientAlternativesChange}
                   onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
@@ -1167,15 +1326,21 @@ export function RecipeDialog({
                   setTags={setTags}
                   allTags={allTags}
                   tagCounts={tagCounts}
-                  ingredients={ingredients}
+                  ingredientSections={ingredientSections}
                   instructionGroups={instructionGroups}
                   setInstructionGroups={setInstructionGroups}
                   notes={notes}
                   setNotes={setNotes}
                   categories={categories}
                   onAddIngredient={handleAddIngredient}
+                  onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                  onAddIngredientSection={handleAddIngredientSection}
+                  onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
+                  onRemoveIngredientSection={handleRemoveIngredientSection}
+                  onMoveIngredient={handleMoveIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientAlternativesChange={handleIngredientAlternativesChange}
                   onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
@@ -1211,15 +1376,21 @@ export function RecipeDialog({
                   setTags={setTags}
                   allTags={allTags}
                   tagCounts={tagCounts}
-                  ingredients={ingredients}
+                  ingredientSections={ingredientSections}
                   instructionGroups={instructionGroups}
                   setInstructionGroups={setInstructionGroups}
                   notes={notes}
                   setNotes={setNotes}
                   categories={categories}
                   onAddIngredient={handleAddIngredient}
+                  onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                  onAddIngredientSection={handleAddIngredientSection}
+                  onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
+                  onRemoveIngredientSection={handleRemoveIngredientSection}
+                  onMoveIngredient={handleMoveIngredient}
                   onRemoveIngredient={handleRemoveIngredient}
                   onIngredientChange={handleIngredientChange}
+                  onIngredientAlternativesChange={handleIngredientAlternativesChange}
                   onIngredientParsed={handleIngredientParsed}
                   isEditing={true}
                   onReorderIngredients={handleReorderIngredients}
@@ -1355,23 +1526,46 @@ interface RecipeFormContentProps {
   setTags: (tags: string[]) => void
   allTags: string[]
   tagCounts?: Array<{ tag: string; count: number }>
-  ingredients: Ingredient[]
+  ingredientSections: IngredientSection[]
   instructionGroups: RecipeInstructionGroup[]
   setInstructionGroups: (instructionGroups: RecipeInstructionGroup[]) => void
   notes: string
   setNotes: (notes: string) => void
   categories: string[]
-  onAddIngredient: () => void
-  onRemoveIngredient: (index: number) => void
+  onAddIngredient: (sectionIndex: number) => void
+  onAddUnsectionedIngredient: () => void
+  onAddIngredientSection: () => void
+  onIngredientSectionLabelChange: (sectionIndex: number, label: string) => void
+  onRemoveIngredientSection: (sectionIndex: number) => void
+  onMoveIngredient: (
+    sourceSectionIndex: number,
+    ingredientIndex: number,
+    targetSectionIndex: number | null
+  ) => void
+  onRemoveIngredient: (sectionIndex: number, index: number) => void
   onIngredientChange: (
+    sectionIndex: number,
     index: number,
     field: keyof Ingredient,
     value: string | number | null
   ) => void
-  onIngredientParsed: (index: number, ingredient: Ingredient) => void
+  onIngredientAlternativesChange: (
+    sectionIndex: number,
+    index: number,
+    alternatives: string[]
+  ) => void
+  onIngredientParsed: (
+    sectionIndex: number,
+    index: number,
+    ingredient: Ingredient
+  ) => void
   isEditing: boolean
-  onReorderIngredients: (event: DragEndEvent) => void
-  onBulkPasteIngredients: (index: number, text: string) => void
+  onReorderIngredients: (sectionIndex: number, event: DragEndEvent) => void
+  onBulkPasteIngredients: (
+    sectionIndex: number,
+    index: number,
+    text: string
+  ) => void
   handleAutoFix: () => void
   onRemoveExactDuplicates: () => void
   isWideViewport: boolean
@@ -1408,15 +1602,21 @@ function RecipeFormContent({
   setTags,
   allTags,
   tagCounts,
-  ingredients,
+  ingredientSections,
   instructionGroups,
   setInstructionGroups,
   notes,
   setNotes,
   categories,
   onAddIngredient,
+  onAddUnsectionedIngredient,
+  onAddIngredientSection,
+  onIngredientSectionLabelChange,
+  onRemoveIngredientSection,
+  onMoveIngredient,
   onRemoveIngredient,
   onIngredientChange,
+  onIngredientAlternativesChange,
   onIngredientParsed,
   isEditing,
   onReorderIngredients,
@@ -1431,6 +1631,7 @@ function RecipeFormContent({
   onRemoveExactDuplicates,
   editSection,
 }: RecipeFormContentPropsWithImage) {
+  const ingredients = ingredientSectionsToEditorIngredients(ingredientSections)
   const ingredientIssueCount = countIngredientsWithIssues(ingredients)
   const duplicateAnalysis = analyzeIngredientDuplicates(ingredients)
   const exactDuplicateCount = duplicateAnalysis.exactGroups.reduce(
@@ -1442,6 +1643,123 @@ function RecipeFormContent({
     0
   )
   const activeEditSection = editSection ?? "details"
+  const ingredientSectionOptions = ingredientSections.map((section, index) => ({
+    value: index,
+    label: getIngredientSectionOptionLabel(ingredientSections, index),
+  }))
+  const hasUnsectionedSection = ingredientSections.some(
+    (section) => section.label === null
+  )
+  const ingredientEditor = (
+    <div className="space-y-5" data-testid="ingredient-sections-editor">
+      {ingredientSections.map((section, sectionIndex) => {
+        const ingredientOffset = ingredientSections
+          .slice(0, sectionIndex)
+          .reduce((total, current) => total + current.ingredients.length, 0)
+        const duplicateWarningsByRow = Object.fromEntries(
+          Object.entries(duplicateAnalysis.rowWarnings)
+            .map(([globalIndex, warnings]) => [Number(globalIndex), warnings] as const)
+            .filter(([globalIndex]) =>
+              globalIndex >= ingredientOffset &&
+              globalIndex < ingredientOffset + section.ingredients.length
+            )
+            .map(([globalIndex, warnings]) => [
+              globalIndex - ingredientOffset,
+              warnings,
+            ])
+        )
+
+        return (
+          <section
+            key={`ingredient-section-${sectionIndex}`}
+            className="rounded-2xl border border-stone-200 bg-muted/20 p-3 dark:border-zinc-800 sm:p-4"
+            aria-label={`Ingredient section ${sectionIndex + 1}`}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <Input
+                aria-label={`Ingredient section ${sectionIndex + 1} label`}
+                value={section.label ?? ""}
+                onChange={(event) =>
+                  onIngredientSectionLabelChange(
+                    sectionIndex,
+                    event.target.value
+                  )
+                }
+                placeholder="Unsectioned"
+                className="min-w-0 flex-1 font-semibold"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => onRemoveIngredientSection(sectionIndex)}
+                aria-label={`Delete ingredient section ${sectionIndex + 1}`}
+                title="Delete this section when it is empty"
+                className="shrink-0 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {section.ingredients.length > 0 ? (
+              <SortableIngredientList
+                ingredients={section.ingredients}
+                editDocumentLayout={isEditing}
+                addRecipeModalLayout={!isEditing}
+                isWideViewport={isWideViewport}
+                onReorderIngredients={(event) =>
+                  onReorderIngredients(sectionIndex, event)
+                }
+                onBulkPasteIngredients={(index, text) =>
+                  onBulkPasteIngredients(sectionIndex, index, text)
+                }
+                duplicateWarningsByRow={duplicateWarningsByRow}
+                onRemoveIngredient={(index) =>
+                  onRemoveIngredient(sectionIndex, index)
+                }
+                onIngredientChange={(index, field, value) =>
+                  onIngredientChange(sectionIndex, index, field, value)
+                }
+                onIngredientAlternativesChange={(index, alternatives) =>
+                  onIngredientAlternativesChange(
+                    sectionIndex,
+                    index,
+                    alternatives
+                  )
+                }
+                onIngredientParsed={(index, ingredient) =>
+                  onIngredientParsed(sectionIndex, index, ingredient)
+                }
+                currentSectionIndex={sectionIndex}
+                sectionOptions={ingredientSectionOptions}
+                includeNewUnsectionedOption={!hasUnsectionedSection}
+                onMoveIngredient={(index, targetSectionIndex) =>
+                  onMoveIngredient(
+                    sectionIndex,
+                    index,
+                    targetSectionIndex
+                  )
+                }
+              />
+            ) : (
+              <p className="py-3 text-center text-xs text-muted-foreground">
+                No ingredients in this section.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onAddIngredient(sectionIndex)}
+              className="mt-3 inline-flex min-h-10 items-center gap-1 text-xs font-semibold text-primary transition-opacity hover:opacity-80"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add ingredient
+            </button>
+          </section>
+        )
+      })}
+    </div>
+  )
 
   if (isEditing) {
     if (activeEditSection === "details") {
@@ -1502,18 +1820,10 @@ function RecipeFormContent({
             nearDuplicateCount={nearDuplicateCount}
             onAutoFix={handleAutoFix}
             onRemoveExactDuplicates={onRemoveExactDuplicates}
-            onAddIngredient={onAddIngredient}
+            onAddIngredient={onAddUnsectionedIngredient}
+            onAddSection={onAddIngredientSection}
           >
-            <SortableIngredientList
-              ingredients={ingredients}
-              editDocumentLayout
-              onReorderIngredients={onReorderIngredients}
-              onBulkPasteIngredients={onBulkPasteIngredients}
-              duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
-              onRemoveIngredient={onRemoveIngredient}
-              onIngredientChange={onIngredientChange}
-              onIngredientParsed={onIngredientParsed}
-            />
+            {ingredientEditor}
           </RecipeIngredientsSection>
         </div>
       )
@@ -1582,19 +1892,10 @@ function RecipeFormContent({
           nearDuplicateCount={nearDuplicateCount}
           onAutoFix={handleAutoFix}
           onRemoveExactDuplicates={onRemoveExactDuplicates}
-          onAddIngredient={onAddIngredient}
+          onAddIngredient={onAddUnsectionedIngredient}
+          onAddSection={onAddIngredientSection}
         >
-          <SortableIngredientList
-            ingredients={ingredients}
-            addRecipeModalLayout
-            isWideViewport={isWideViewport}
-            onReorderIngredients={onReorderIngredients}
-            onBulkPasteIngredients={onBulkPasteIngredients}
-            duplicateWarningsByRow={duplicateAnalysis.rowWarnings}
-            onRemoveIngredient={onRemoveIngredient}
-            onIngredientChange={onIngredientChange}
-            onIngredientParsed={onIngredientParsed}
-          />
+          {ingredientEditor}
         </RecipeIngredientsSection>
 
         <RecipeInstructionsSection
@@ -1610,4 +1911,21 @@ function RecipeFormContent({
       </div>
     </div>
   )
+}
+
+function getIngredientSectionOptionLabel(
+  sections: IngredientSection[],
+  sectionIndex: number
+): string {
+  const baseLabel = sections[sectionIndex].label?.trim() || "Unsectioned"
+  const matchingIndexes = sections
+    .map((section, index) => ({
+      index,
+      label: section.label?.trim() || "Unsectioned",
+    }))
+    .filter(({ label }) => label === baseLabel)
+    .map(({ index }) => index)
+
+  if (matchingIndexes.length === 1) return baseLabel
+  return `${baseLabel} (${matchingIndexes.indexOf(sectionIndex) + 1})`
 }
