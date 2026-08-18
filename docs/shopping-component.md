@@ -102,6 +102,51 @@ green, pearl, and pickled onion forms remain distinct. Exact recipe quantities
 and semantic preparation metadata remain available to source detail even when
 the primary row uses the cleaned purchase name.
 
+One exact preparation vocabulary in the dependency-neutral ingredient modifier
+classifier classifies supported forms for both the recipe parser and Shopping
+semantics; the parser has no separate phrase list. Evidence strength remains
+contextual. A structured modifier or parser-recognized trailing modifier is
+strong evidence; leading free text keeps only the established
+legacy canonicalizations and does not automatically strip newly recognized
+multi-word phrases. The established leading rules still canonicalize forms
+such as `sliced bread`, `shredded cheese`, `grated parmesan`, and `crushed
+tomatoes`; extending or correcting that older contract is outside this Tier 1
+change. A comma-delimited trailing candidate is normalized only when the whole
+candidate is supported. Unsupported compounds such as `very finely chopped`
+remain literal and are never partially stripped.
+The recipe parser and Shopping resolver normalize ASCII/full-width comma
+boundaries, retain repeated empty boundaries, and classify the same complete
+trailing expression before extracting any preparation or qualifier. Unsupported
+multi-segment expressions stay in the item without partial evidence. Ordinary
+commas inside the ingredient identity remain compatible with a separate final
+modifier. Legacy multi-descriptor behavior such as `cheese, shredded, low-fat`
+remains deferred outside Tier 1.
+
+Exact whole-fruit grammar such as `juice and zest of 1 lime` becomes one lime
+with `juiced` and `zested` preparation evidence. Measured or packaged component
+forms such as `2 tbsp lime juice` and `1 bottle lime juice` retain the `lime
+juice` purchase identity. Malformed component data such as `lime juice` with a
+count unit is not converted to whole fruit. Composite preparation evidence is
+stored in the existing preparation array, so one composite contribution counts
+one fruit. Independent juice-only or zest-only contributions remain separate
+requirements; a composite plus either one requires two fruits, and independent
+juice-only plus zest-only contributions also require two.
+
+Resolver changes affect only newly generated recipe contributions. A persisted
+V3 recipe contribution retains its stored purchase identity, aggregate key, and
+resolved semantic fields—including `quantityKind`—during validation,
+projection, and unrelated Shopping mutations. Discrete rounding is applied
+after contributions with the same persisted quantity semantics aggregate; a
+frozen continuous count remains continuous even when the current resolver would
+classify that unit as discrete. Updating an old contribution requires explicit
+recipe regeneration or a supported migration; ordinary reads do not silently
+reinterpret it.
+
+Manual rows preserve the user's trimmed surface text for display while deriving
+duplicate, Pantry, and ordering identity from the same canonical semantics as
+recipe ingredients. A merged recipe row uses a hard primary requirement for
+display when another source offers that ingredient only as an alternative.
+
 ## Verification
 
 Run from `web/`:
@@ -112,4 +157,4 @@ npm run test -- --run src/lib/__tests__/shopping-document.test.ts src/lib/__test
 supabase test db --local --workdir ..
 ```
 
-Last updated: 2026-08-10
+Last updated: 2026-08-17

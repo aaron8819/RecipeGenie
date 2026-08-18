@@ -280,17 +280,16 @@ describe('normalizeShoppingPurchase', () => {
     })
   })
 
-  it('maps measured citrus juice to an estimated whole fruit purchase', () => {
+  it('keeps measured citrus juice as a purchasable component', () => {
     expect(normalizeShoppingPurchase({ item: 'lemon juice', amount: 4, unit: 'tbsp' })).toMatchObject({
-      purchaseName: 'lemon',
-      purchaseUnit: 'count',
-      purchaseQuantity: 4 / 3,
-      prepIntent: 'juiced',
-      confidence: 'medium',
+      purchaseName: 'lemon juice',
+      purchaseUnit: 'tbsp',
+      purchaseQuantity: 4,
+      semantics: { purchaseKey: 'lemon juice' },
     })
   })
 
-  it('maps explicit and measured citrus zest to whole fruit purchases', () => {
+  it('maps explicit citrus zest to whole fruit but keeps measured zest', () => {
     expect(normalizeShoppingPurchase({ item: 'zest of 0.5 lemon', amount: null, unit: '' })).toMatchObject({
       purchaseName: 'lemon',
       purchaseUnit: 'count',
@@ -299,11 +298,103 @@ describe('normalizeShoppingPurchase', () => {
     })
 
     expect(normalizeShoppingPurchase({ item: 'lime zest', amount: 2, unit: 'tsp' })).toMatchObject({
+      purchaseName: 'lime zest',
+      purchaseUnit: 'tsp',
+      purchaseQuantity: 2,
+      semantics: { purchaseKey: 'lime zest' },
+    })
+  })
+
+  it.each(['lime', 'lemon'])(
+    'maps exact free-text juice-and-zest grammar to one whole %s',
+    (fruit) => {
+      expect(normalizeShoppingPurchase({
+        item: `juice and zest of 1 ${fruit}`,
+        amount: null,
+        unit: '',
+      })).toMatchObject({
+        purchaseName: fruit,
+        purchaseUnit: 'count',
+        purchaseQuantity: 1,
+        prepIntent: 'juiced, zested',
+        semantics: {
+          purchaseKey: fruit,
+          preparation: ['juiced', 'zested'],
+        },
+      })
+    }
+  )
+
+  it.each([
+    ['lime juice', 2, 'tbsp'],
+    ['lime juice', 1, 'bottle'],
+    ['orange juice', 1, 'bottle'],
+    ['lemon zest', 1, 'tbsp'],
+  ])('does not rewrite measured or packaged citrus product %s / %s %s', (
+    item,
+    amount,
+    unit
+  ) => {
+    expect(normalizeShoppingPurchase({ item, amount, unit })).toMatchObject({
+      purchaseName: item,
+      purchaseUnit: unit,
+      purchaseQuantity: amount,
+      semantics: { purchaseKey: item },
+    })
+  })
+
+  it('retains composite citrus preparation for safely identified whole fruit', () => {
+    expect(normalizeShoppingPurchase({
+      item: 'lime',
+      amount: 1,
+      unit: 'count',
+      modifier: 'juice and zest',
+    })).toMatchObject({
       purchaseName: 'lime',
       purchaseUnit: 'count',
+      prepIntent: 'juiced, zested',
+      semantics: {
+        purchaseKey: 'lime',
+        preparation: ['juiced', 'zested'],
+      },
+    })
+  })
+
+  it.each([
+    ['1 lime, juiced and zested', 'lime'],
+    ['1 lemon, juiced and zested', 'lemon'],
+    ['1 lime, zested and juiced', 'lime'],
+  ])('normalizes structured whole-citrus composite %s', (item, fruit) => {
+    expect(normalizeShoppingPurchase({
+      item,
+      amount: null,
+      unit: '',
+    })).toMatchObject({
+      purchaseName: fruit,
+      purchaseUnit: 'count',
       purchaseQuantity: 1,
-      prepIntent: 'zested',
-      confidence: 'medium',
+      prepIntent: 'juiced, zested',
+      semantics: {
+        purchaseKey: fruit,
+        preparation: ['juiced', 'zested'],
+      },
+    })
+  })
+
+  it('does not over-normalize malformed citrus component data', () => {
+    expect(normalizeShoppingPurchase({
+      item: 'lime juice',
+      amount: 1,
+      unit: 'count',
+      modifier: 'juice and zest',
+    })).toMatchObject({
+      purchaseName: 'lime juice',
+      purchaseUnit: 'count',
+      purchaseQuantity: 1,
+      semantics: {
+        purchaseKey: 'lime juice',
+        preparation: ['juiced', 'zested'],
+      },
     })
   })
 

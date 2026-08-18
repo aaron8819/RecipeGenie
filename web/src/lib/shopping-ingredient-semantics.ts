@@ -1,3 +1,10 @@
+import {
+  classifyIngredientCommaSuffix,
+  ingredientModifierDefinition,
+  ingredientModifierPhrasesAt,
+  normalizeIngredientModifierText,
+} from './ingredient-modifier-classification'
+
 export type ShoppingQuantityKind =
   | 'continuous'
   | 'discrete'
@@ -127,64 +134,13 @@ const CONTROLLED_PHRASE_ALIASES: Record<string, string> = {
   evoo: 'extra virgin olive oil',
 }
 
-const PREPARATION_WORDS = new Set([
-  'chopped',
-  'crushed',
-  'cubed',
-  'diced',
-  'grated',
-  'halved',
-  'juiced',
-  'mashed',
-  'minced',
-  'peeled',
-  'quartered',
-  'shredded',
-  'sliced',
-  'zested',
-])
-
-const STRUCTURED_PREPARATION_MODIFIERS = new Set([
-  ...PREPARATION_WORDS,
-  'as needed',
-  'divided',
-  'drained',
-  'finely grated',
-  'finely minced',
-  'for garnish',
-  'for serving',
-  'for topping',
-  'or to taste',
-  'plus more',
-  'rinsed',
-  'softened',
-  'thinly sliced',
-  'to taste',
-])
-
-const ITEM_PREPARATION_PREFIXES = [
-  'finely grated',
-  'finely minced',
-  'sliced or diced',
-  'thinly sliced',
-]
-
-const ITEM_QUALIFIER_PREFIXES = [
-  'as needed',
-  'or to taste',
-]
-
-const ITEM_QUALIFIER_SUFFIXES = [
-  'as needed',
-  'divided',
-  'for garnish',
-  'for serving',
-  'for topping',
-  'optional',
-  'or to taste',
-  'plus more',
-  'to taste',
-]
+const LEADING_PREPARATION_PHRASES = ingredientModifierPhrasesAt('leading')
+const TRAILING_QUALIFIER_PHRASES = ingredientModifierPhrasesAt('trailing')
+  .filter((phrase) =>
+    ingredientModifierDefinition(phrase)?.trailingBeforeAlternative)
+const TRAILING_PREPARATION_PHRASES = ingredientModifierPhrasesAt('trailing')
+  .filter((phrase) =>
+    !ingredientModifierDefinition(phrase)?.trailingBeforeAlternative)
 
 const ONION_PURCHASE_ALIASES = new Map<string, string>([
   ['onion', 'onion'],
@@ -294,14 +250,8 @@ const RICE_PURCHASE_KEYS = new Set([
 ])
 
 function normalizeText(value: string): string {
-  return value
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u2010-\u2015]/g, '-')
-    .replace(/([a-z])-([a-z])/g, '$1 $2')
+  return normalizeIngredientModifierText(value)
     .replace(/[;,]+/g, ' ')
-    .replace(/^[\s.:]+|[\s.:]+$/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -348,16 +298,19 @@ export function normalizeShoppingLiteralIdentity(value: string): string {
   return canonicalizeControlledNoun(normalizeText(value))
 }
 
-function collectModifierPreparation(
+// The modifier field is structural evidence supplied by a recipe form or by
+// the parser after it recognizes a trailing modifier. It is intentionally
+// stronger than preparation-looking words embedded in the item name.
+function collectStructuredPreparationEvidence(
   modifier: string | null | undefined,
   preparation: Set<string>
 ): string[] {
   if (!modifier) return []
   const identityModifiers: string[] = []
   for (const part of modifier.split(',').map(normalizeText).filter(Boolean)) {
-    if (part === 'optional') continue
-    if (STRUCTURED_PREPARATION_MODIFIERS.has(part)) {
-      preparation.add(part)
+    const definition = ingredientModifierDefinition(part)
+    if (definition?.structured) {
+      addPreparation(preparation, ...definition.evidence)
     } else {
       identityModifiers.push(part)
     }
@@ -365,54 +318,64 @@ function collectModifierPreparation(
   return identityModifiers
 }
 
-function stripGenericPreparation(
+// Free-text item handling retains the pre-V3 leading vocabulary, but newly
+// supported multi-word phrases are not stripped from the front of product
+// names without structural evidence. Trailing matches use longest-first order.
+function stripFreeTextPreparationEvidence(
   value: string,
-  preparation: Set<string>
+  preparation: Set<string>,
+  allowTrailingPreparation = true
 ): string {
   let remaining = value
   let changed = true
   while (changed) {
     changed = false
-    for (const phrase of [
-      ...ITEM_QUALIFIER_PREFIXES,
-      ...ITEM_PREPARATION_PREFIXES,
-    ]) {
+    for (const phrase of LEADING_PREPARATION_PHRASES) {
       if (remaining === phrase || remaining.startsWith(`${phrase} `)) {
         remaining = remaining.slice(phrase.length).trim()
-        preparation.add(phrase)
+        addPreparation(
+          preparation,
+          ...(ingredientModifierDefinition(phrase)?.evidence || [])
+        )
         changed = true
         break
       }
     }
   }
 
-  changed = true
-  while (changed) {
-    changed = false
-    for (const phrase of ITEM_QUALIFIER_SUFFIXES) {
-      if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
-        remaining = remaining.slice(0, -phrase.length).trim()
-        preparation.add(phrase === 'or to taste' ? 'to taste' : phrase)
-        changed = true
-        break
+  if (allowTrailingPreparation) {
+    changed = true
+    while (changed) {
+      changed = false
+      for (const phrase of TRAILING_QUALIFIER_PHRASES) {
+        if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
+          remaining = remaining.slice(0, -phrase.length).trim()
+          addPreparation(
+            preparation,
+            ...(ingredientModifierDefinition(phrase)?.evidence || [])
+          )
+          changed = true
+          break
+        }
       }
     }
   }
 
   if (/\bor\b/.test(remaining)) return remaining
 
-  const words = remaining.split(' ').filter(Boolean)
-  while (words.length > 0 &&
-    (PREPARATION_WORDS.has(words[0]) || words[0] === 'optional')) {
-    const word = words.shift()!
-    if (word !== 'optional') preparation.add(word)
+  if (allowTrailingPreparation) {
+    for (const phrase of TRAILING_PREPARATION_PHRASES) {
+      if (remaining === phrase || remaining.endsWith(` ${phrase}`)) {
+        remaining = remaining.slice(0, -phrase.length).trim()
+        addPreparation(
+          preparation,
+          ...(ingredientModifierDefinition(phrase)?.evidence || [])
+        )
+        break
+      }
+    }
   }
-  while (words.length > 0 &&
-    (PREPARATION_WORDS.has(words.at(-1)!) || words.at(-1) === 'optional')) {
-    const word = words.pop()!
-    if (word !== 'optional') preparation.add(word)
-  }
-  return words.join(' ')
+  return remaining
 }
 
 function stripOnionSizePreparation(
@@ -425,7 +388,7 @@ function stripOnionSizePreparation(
 
   while (changed) {
     changed = false
-    for (const phrase of [...ONION_SIZE_PREPARATIONS, ...PREPARATION_WORDS]
+    for (const phrase of [...ONION_SIZE_PREPARATIONS, ...LEADING_PREPARATION_PHRASES]
       .sort((left, right) => right.length - left.length)) {
       if (remaining.startsWith(`${phrase} `)) {
         removed.push(phrase)
@@ -443,7 +406,13 @@ function stripOnionSizePreparation(
     return value
   }
 
-  addPreparation(preparation, ...removed)
+  for (const phrase of removed) {
+    const definition = ingredientModifierDefinition(phrase)
+    addPreparation(
+      preparation,
+      ...(definition?.evidence.length ? definition.evidence : [phrase])
+    )
+  }
   return remaining
 }
 
@@ -468,15 +437,24 @@ export function resolveShoppingIngredientSemantics(
   input: ShoppingIngredientSemanticsInput
 ): ShoppingIngredientSemantics {
   const preparation = new Set<string>()
-  const identityModifiers = collectModifierPreparation(
-    input.modifier,
+  const trailingCandidate = classifyIngredientCommaSuffix(input.item)
+  const supportedTrailingCandidate = Boolean(
+    !input.modifier && trailingCandidate?.semanticSupported
+  )
+  const identityModifiers = collectStructuredPreparationEvidence(
+    input.modifier || (supportedTrailingCandidate
+      ? trailingCandidate?.expression
+      : undefined),
     preparation
   )
 
   let purchaseUnit = normalizeShoppingUnit(input.unit || '')
-  let purchaseName = stripGenericPreparation(
-    normalizeShoppingLiteralIdentity(input.item),
-    preparation
+  let purchaseName = stripFreeTextPreparationEvidence(
+    normalizeShoppingLiteralIdentity(
+      supportedTrailingCandidate ? trailingCandidate!.item : input.item
+    ),
+    preparation,
+    !trailingCandidate || supportedTrailingCandidate
   )
 
   const remainingIdentityModifiers = identityModifiers.filter((modifier) => {

@@ -239,11 +239,15 @@ export function resolveShoppingIngredient({
     purchaseUnit
   )
   const exclusionFamily = matchIngredientExclusionFamily(ingredient)
+  const citrusPreparations = semantics.preparation.filter(
+    (preparation): preparation is 'juiced' | 'zested' =>
+      preparation === 'juiced' || preparation === 'zested'
+  )
   const citrusPrep =
     (purchase.purchaseName === "lemon" || purchase.purchaseName === "lime") &&
     purchaseUnit === "count" &&
-    (purchase.prepIntent === "juiced" || purchase.prepIntent === "zested")
-      ? purchase.prepIntent
+    citrusPreparations.length === 1
+      ? citrusPreparations[0]
       : undefined
 
   return {

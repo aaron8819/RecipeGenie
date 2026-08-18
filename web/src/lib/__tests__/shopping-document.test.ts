@@ -232,7 +232,7 @@ describe("Shopping document projection", () => {
     expect(document.manualItems[0].id).toBe('manual-apple')
   })
 
-  it("does not double-count one recipe's overlapping citrus prep", () => {
+  it("keeps independent citrus prep contributions conservative", () => {
     const document = createEmptyShoppingDocument()
     const citrus = (item: string) => {
       const resolved = resolveShoppingIngredient({
@@ -262,7 +262,7 @@ describe("Shopping document projection", () => {
       scaleV1: { numerator: "1", denominator: "1" },
       ingredients: [citrus("lemon, juiced"), citrus("lemon, zested")],
     }
-    expect(projectShoppingDocument(document).rows[0].quantity?.amount).toBe(1)
+    expect(projectShoppingDocument(document).rows[0].quantity?.amount).toBe(2)
   })
 
   it("reprojects replacement recipe quantities at a new scale", () => {

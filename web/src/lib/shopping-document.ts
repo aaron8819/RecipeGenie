@@ -715,18 +715,6 @@ function legacyAggregateDiscriminator(aggregateKey: string): readonly unknown[] 
   }
 }
 
-function currentAggregateDiscriminator(aggregateKey: string): readonly unknown[] | null {
-  try {
-    const parsed = JSON.parse(aggregateKey)
-    return Array.isArray(parsed) && parsed[0] === 'shopping-aggregate' &&
-      parsed[1] === 2 && parsed.length > 3 && Array.isArray(parsed[3])
-      ? parsed[3]
-      : null
-  } catch {
-    return null
-  }
-}
-
 function legacyQuantityKind(
   ingredient: ShoppingRecipeIngredientV1
 ): ShoppingQuantityKind | undefined {
@@ -975,146 +963,6 @@ export function upgradeShoppingDocumentV1(
   return v2.ok ? upgradeShoppingDocumentV2(v2.document) : v2
 }
 
-function reconcileShoppingDocumentV3(
-  document: ShoppingDocumentV3
-): ShoppingDocumentValidationResult {
-  const preferencePurchaseKeys = legacyPreferencePurchaseKeys(
-    document.preferences
-  )
-  const remapPreferenceKey = (persistedKey: string): PurchaseKey => {
-    const literalKey = normalizeShoppingLiteralIdentity(persistedKey)
-    return preferencePurchaseKeys.get(literalKey) ||
-      resolveShoppingIngredientSemantics({ item: persistedKey }).purchaseKey
-  }
-
-  const purchaseKeyByAggregate = new Map<string, PurchaseKey>()
-  const candidateAggregateByPersisted = new Map<string, string>()
-  for (const entry of Object.values(document.recipeEntries)) {
-    for (const ingredient of entry.ingredients) {
-      if (purchaseKeyByAggregate.has(ingredient.aggregateKey)) continue
-      const currentIdentity = resolveShoppingIngredientSemantics({
-        item: ingredient.purchaseKey,
-      })
-      const purchaseKey = preferencePurchaseKeys.get(
-        normalizeShoppingLiteralIdentity(ingredient.purchaseKey)
-      ) || currentIdentity.purchaseKey
-      purchaseKeyByAggregate.set(ingredient.aggregateKey, purchaseKey)
-      candidateAggregateByPersisted.set(
-        ingredient.aggregateKey,
-        createShoppingAggregateKey(
-          purchaseKey,
-          currentAggregateDiscriminator(ingredient.aggregateKey)
-        )
-      )
-    }
-  }
-
-  const persistedKeysByCandidate = new Map<string, string[]>()
-  for (const [persistedKey, candidate] of candidateAggregateByPersisted) {
-    persistedKeysByCandidate.set(candidate, [
-      ...(persistedKeysByCandidate.get(candidate) || []),
-      persistedKey,
-    ])
-  }
-  const aggregateByPersisted = new Map(candidateAggregateByPersisted)
-  for (const persistedKeys of persistedKeysByCandidate.values()) {
-    const overrideSignatures = new Set(persistedKeys.map((persistedKey) =>
-      stableJsonSignature(document.itemOverrides[persistedKey] || {})))
-    if (overrideSignatures.size <= 1) continue
-    for (const persistedKey of persistedKeys) {
-      aggregateByPersisted.set(
-        persistedKey,
-        createShoppingAggregateKey(
-          purchaseKeyByAggregate.get(persistedKey)!,
-          ['semantic-conflict', persistedKey]
-        )
-      )
-    }
-  }
-
-  const recipeEntries = Object.fromEntries(Object.entries(document.recipeEntries)
-    .map(([recipeId, entry]) => [recipeId, {
-      ...entry,
-      ingredients: entry.ingredients.map((ingredient): ShoppingRecipeIngredientV2 => {
-        const occurrenceIdentity = resolveShoppingIngredientSemantics({
-          item: ingredient.purchaseKey,
-        })
-        const purchaseKey = purchaseKeyByAggregate.get(ingredient.aggregateKey)!
-        return {
-          ...ingredient,
-          purchaseKey,
-          aggregateKey: aggregateByPersisted.get(ingredient.aggregateKey)!,
-          displayName: purchaseKey === occurrenceIdentity.purchaseKey
-            ? ingredient.purchaseKey === occurrenceIdentity.purchaseKey
-              ? ingredient.displayName
-              : occurrenceIdentity.purchaseName
-            : primaryLegacyDisplayName(ingredient.displayName),
-          familyKey: occurrenceIdentity.familyKey,
-          preparation: [...new Set([
-            ...ingredient.preparation,
-            ...occurrenceIdentity.preparation,
-          ])].sort(),
-          pantryMatchKeys: uniqueRemappedKeys([
-            purchaseKey,
-            ...occurrenceIdentity.pantryMatchKeys,
-            ...ingredient.pantryMatchKeys,
-          ], (key) => key === ingredient.purchaseKey
-            ? purchaseKey
-            : resolveShoppingIngredientSemantics({ item: key }).purchaseKey),
-          familyMatchPolicy: occurrenceIdentity.familyMatchPolicy,
-          exclusionFamily: shoppingExclusionFamily(occurrenceIdentity) || undefined,
-        }
-      }),
-    }]))
-
-  const itemOverrides: Record<AggregateKey, ShoppingItemOverrideV2> = {}
-  for (const [persistedKey, override] of Object.entries(document.itemOverrides)) {
-    const aggregateKey = aggregateByPersisted.get(persistedKey) || persistedKey
-    if (Object.keys(override).length === 0) continue
-    if (!itemOverrides[aggregateKey]) itemOverrides[aggregateKey] = override
-  }
-
-  const categoryByIngredient: Record<PurchaseKey, string> = {}
-  for (const [persistedKey, categoryKey] of Object.entries(
-    document.preferences.categoryByIngredient
-  )) {
-    const purchaseKey = remapPreferenceKey(persistedKey)
-    if (purchaseKey && categoryByIngredient[purchaseKey] === undefined) {
-      categoryByIngredient[purchaseKey] = categoryKey
-    }
-  }
-
-  const ingredientOrderByCategory: IngredientOrderByCategory = {}
-  const seenOrderingKeys = new Set<PurchaseKey>()
-  for (const [categoryKey, order] of Object.entries(
-    document.preferences.ingredientOrderByCategory
-  )) {
-    for (const purchaseKey of uniqueRemappedKeys(order, remapPreferenceKey)) {
-      if (seenOrderingKeys.has(purchaseKey)) continue
-      seenOrderingKeys.add(purchaseKey)
-      ingredientOrderByCategory[categoryKey] = [
-        ...(ingredientOrderByCategory[categoryKey] || []),
-        purchaseKey,
-      ]
-    }
-  }
-
-  return validateShoppingDocumentV3({
-    ...document,
-    recipeEntries,
-    itemOverrides,
-    preferences: {
-      ...document.preferences,
-      categoryByIngredient,
-      ingredientOrderByCategory,
-      excludedIngredientKeys: uniqueRemappedKeys(
-        document.preferences.excludedIngredientKeys,
-        remapPreferenceKey
-      ),
-    },
-  })
-}
-
 export function validateShoppingDocumentStateV3(
   value: unknown
 ): ShoppingDocumentValidationResult & { contentRevision?: number } {
@@ -1123,10 +971,9 @@ export function validateShoppingDocumentStateV3(
     return { ok: false, issues: [{ path: "contentRevision", message: "Expected a non-negative safe integer revision" }] }
   }
   const validation = validateShoppingDocumentV3(value.document)
-  const reconciled = validation.ok
-    ? reconcileShoppingDocumentV3(validation.document)
-    : validation
-  const v2 = validation.ok ? reconciled : upgradeShoppingDocumentV2(value.document)
+  // V3 recipe contributions are frozen semantic snapshots. Validation checks
+  // their persisted shape; only explicit V1/V2 upgrades regenerate semantics.
+  const v2 = validation.ok ? validation : upgradeShoppingDocumentV2(value.document)
   const compatible = v2.ok ? v2 : upgradeShoppingDocumentV1(value.document)
   return { ...compatible, contentRevision: value.contentRevision as number }
 }
@@ -1291,37 +1138,18 @@ function mergeQuantity(
 
 function finalizeProjectedQuantity(
   quantity: ShoppingQuantity | null,
-  purchaseKey: PurchaseKey
+  quantityKind: ShoppingQuantityKind
 ): ShoppingQuantity | null {
   if (!quantity || quantity.amount === null ||
       quantity.exactPackageV1 || quantity.exactQuantityV1?.kind === 'range') {
     return quantity
   }
-  const quantityKind = resolveShoppingIngredientSemantics({
-    item: purchaseKey,
-    unit: quantity.unit,
-  }).quantityKind
   return {
     ...quantity,
     amount: quantityKind === 'discrete'
       ? Math.ceil(quantity.amount)
       : quantity.amount,
   }
-}
-
-type CitrusPrepNeeds = { juiced: number; zested: number }
-
-function citrusAmountToMerge(
-  prepByRecipe: Map<string, CitrusPrepNeeds>,
-  recipeId: string,
-  prep: "juiced" | "zested",
-  amount: number
-): number {
-  const previous = prepByRecipe.get(recipeId) || { juiced: 0, zested: 0 }
-  const previousApplied = Math.max(previous.juiced, previous.zested)
-  const next = { ...previous, [prep]: previous[prep] + amount }
-  prepByRecipe.set(recipeId, next)
-  return Math.max(next.juiced, next.zested) - previousApplied
 }
 
 function derivedClassification(
@@ -1398,26 +1226,40 @@ export function projectShoppingDocument(
   for (const [aggregateKey, occurrences] of groups) {
     const override = document.itemOverrides[aggregateKey]
     if (override?.suppressed) continue
+    const quantitiesByKind = new Map<ShoppingQuantityKind, {
+      primary: ShoppingQuantity | null
+      additional: ShoppingQuantity[]
+    }>()
+    for (const occurrence of occurrences) {
+      const current = quantitiesByKind.get(occurrence.quantityKind) || {
+        primary: null,
+        additional: [],
+      }
+      quantitiesByKind.set(
+        occurrence.quantityKind,
+        mergeQuantity(
+          current.primary,
+          current.additional,
+          occurrence.quantity
+        )
+      )
+    }
     let quantity: ShoppingQuantity | null = null
     let additionalQuantities: ShoppingQuantity[] = []
-    const citrusPrepByRecipe = new Map<string, CitrusPrepNeeds>()
-    for (const occurrence of occurrences) {
-      const occurrenceQuantity = occurrence.citrusPrep &&
-          occurrence.quantity?.amount != null &&
-          occurrence.quantity.unit === "count"
-        ? {
-            ...occurrence.quantity,
-            amount: citrusAmountToMerge(
-              citrusPrepByRecipe,
-              occurrence.recipeId,
-              occurrence.citrusPrep,
-              occurrence.quantity.amount
-            ),
-          }
-        : occurrence.quantity
-      const merged = mergeQuantity(quantity, additionalQuantities, occurrenceQuantity)
-      quantity = merged.primary
-      additionalQuantities = merged.additional
+    for (const [quantityKind, quantities] of quantitiesByKind) {
+      for (const candidate of [
+        quantities.primary,
+        ...quantities.additional,
+      ]) {
+        const finalized = finalizeProjectedQuantity(candidate, quantityKind)
+        const merged = mergeQuantity(
+          quantity,
+          additionalQuantities,
+          finalized
+        )
+        quantity = merged.primary
+        additionalQuantities = merged.additional
+      }
     }
     const classification = derivedClassification(
       occurrences,
@@ -1429,23 +1271,21 @@ export function projectShoppingDocument(
     const categoryKey = derivedCategory(document, occurrences)
     const projectedQuantity = override && 'quantity' in override
       ? override.quantity ?? null
-      : finalizeProjectedQuantity(quantity, orderingKey)
+      : quantity
     const projectedAdditional: ShoppingQuantity[] = override &&
         'quantity' in override
       ? []
       : additionalQuantities
-          .map((additional) => finalizeProjectedQuantity(
-            additional,
-            orderingKey
-          ))
-          .filter((additional): additional is ShoppingQuantity =>
-            additional !== null)
     rows.push({
       rowRef: `derived:${aggregateKey}`,
       aggregateKey,
       orderingKey,
       purchaseKeys: [...new Set(occurrences.map((item) => item.purchaseKey))],
-      displayName: override?.displayName || occurrences[0].displayName,
+      displayName: override?.displayName ||
+        occurrences.find((occurrence) =>
+          occurrence.displayName === occurrence.purchaseKey
+        )?.displayName ||
+        occurrences[0].displayName,
       quantity: projectedQuantity,
       additionalQuantities: projectedAdditional.length > 0
         ? projectedAdditional
