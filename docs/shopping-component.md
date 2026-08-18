@@ -112,6 +112,11 @@ tomatoes`; extending or correcting that older contract is outside this Tier 1
 change. A comma-delimited trailing candidate is normalized only when the whole
 candidate is supported. Unsupported compounds such as `very finely chopped`
 remain literal and are never partially stripped.
+The recipe parser preserves a multi-comma trailing preparation expression in
+the item rather than extracting only its final segment. The Shopping semantic
+resolver then classifies that complete candidate atomically instead of peeling
+individual fragments. Ordinary commas inside the ingredient identity remain
+compatible with a separate final modifier.
 
 Exact whole-fruit grammar such as `juice and zest of 1 lime` becomes one lime
 with `juiced` and `zested` preparation evidence. Measured or packaged component

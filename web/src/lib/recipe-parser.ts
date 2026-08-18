@@ -1447,8 +1447,20 @@ function extractModifier(item: string): { item: string; modifier: string | null 
     })
   }
 
-  const modifierKeywords =
-    /^(optional|softened|melted|browned|chopped|minced|diced|sliced|peeled|grated|shredded|crushed|mashed|drained|dried|toasted|roasted|fresh|frozen|thawed|cooked|uncooked|raw|whole|halved|quartered|cubed|medium|large|small|extra\s+large|to\s+be|as\s+needed|or\s+to\s+taste|peeled\s+or|or\s+unpeeled)(\s|$)/i
+  const modifierKeywordSource =
+    'optional|softened|melted|browned|chopped|minced|diced|sliced|' +
+    'peeled|grated|shredded|crushed|mashed|drained|dried|toasted|' +
+    'roasted|fresh|frozen|thawed|cooked|uncooked|raw|whole|halved|' +
+    'quartered|cubed|medium|large|small|extra\\s+large|to\\s+be|' +
+    'as\\s+needed|or\\s+to\\s+taste|peeled\\s+or|or\\s+unpeeled'
+  const modifierKeywords = new RegExp(
+    `^(?:${modifierKeywordSource})(?:\\s|$)`,
+    'i'
+  )
+  const modifierEndingKeywords = new RegExp(
+    `(?:^|\\s)(?:${modifierKeywordSource})$`,
+    'i'
+  )
 
   for (const parenMatch of parenMatches.reverse()) {
     const innerText = parenMatch.text
@@ -1462,19 +1474,29 @@ function extractModifier(item: string): { item: string; modifier: string | null 
     }
   }
 
-  let lastCommaIndex = -1
+  const topLevelCommaIndexes: number[] = []
   let parenDepth = 0
 
-  for (let index = baseItem.length - 1; index >= 0; index -= 1) {
-    if (baseItem[index] === ")") parenDepth += 1
-    else if (baseItem[index] === "(") parenDepth -= 1
+  for (let index = 0; index < baseItem.length; index += 1) {
+    if (baseItem[index] === "(") parenDepth += 1
+    else if (baseItem[index] === ")") parenDepth -= 1
     else if (baseItem[index] === "," && parenDepth === 0) {
-      lastCommaIndex = index
-      break
+      topLevelCommaIndexes.push(index)
     }
   }
 
-  if (lastCommaIndex !== -1) {
+  const lastCommaIndex = topLevelCommaIndexes.at(-1) ?? -1
+  const previousCommaIndex = topLevelCommaIndexes.at(-2) ?? -1
+  const precedingCommaSegment = previousCommaIndex >= 0
+    ? baseItem.substring(previousCommaIndex + 1, lastCommaIndex).trim()
+    : ''
+  const hasUnresolvedTrailingCompound = Boolean(
+    precedingCommaSegment && modifierEndingKeywords.test(precedingCommaSegment)
+  )
+
+  // Preparation-looking segments before the final comma form one unresolved
+  // trailing expression. Leave them intact for downstream classification.
+  if (lastCommaIndex !== -1 && !hasUnresolvedTrailingCompound) {
     const potentialModifier = baseItem.substring(lastCommaIndex + 1).trim()
     const beforeComma = baseItem.substring(0, lastCommaIndex).trim()
     const isCommaDelimitedChoice = /^or\s+/i.test(potentialModifier) &&

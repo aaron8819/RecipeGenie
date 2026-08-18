@@ -240,6 +240,8 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     ['garlic, very finely chopped', 'garlic very finely chopped'],
     ['garlic, chopped and minced', 'garlic chopped and minced'],
     ['garlic, finely chopped and minced', 'garlic finely chopped and minced'],
+    ['garlic, finely roughly chopped', 'garlic finely roughly chopped'],
+    ['garlic, chopped or minced', 'garlic chopped or minced'],
     ['cilantro, thoroughly roughly chopped', 'cilantro thoroughly roughly chopped'],
   ])('keeps unsupported trailing compound %s literal', (line, purchaseKey) => {
     expect(semantics(line)).toMatchObject({
@@ -262,6 +264,18 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
       'chopped and minced garlic',
     ],
     [
+      'garlic, finely roughly chopped',
+      'garlic',
+      'finely roughly chopped',
+      'finely roughly chopped garlic',
+    ],
+    [
+      'garlic, chopped or minced',
+      'garlic',
+      'chopped or minced',
+      'chopped or minced garlic',
+    ],
+    [
       'garlic, finely chopped and minced',
       'garlic, finely chopped and minced',
       undefined,
@@ -280,6 +294,37 @@ describe('Shopping ingredient semantics V3 regression contract', () => {
     purchaseKey
   ) => {
     expect(parseIngredientLine(line)).toMatchObject({ item, modifier })
+    expect(resolvedLine(line)).toMatchObject({
+      purchaseKey,
+      preparation: [],
+    })
+  })
+
+  it.each([
+    [
+      'garlic, chopped, minced',
+      'garlic chopped minced',
+    ],
+    [
+      'garlic, very finely chopped, minced',
+      'garlic very finely chopped minced',
+    ],
+    [
+      'garlic, finely chopped, minced',
+      'garlic finely chopped minced',
+    ],
+  ])('keeps the complete multi-comma suffix atomic in %s', (
+    line,
+    purchaseKey
+  ) => {
+    expect(parseIngredientLine(line)).toMatchObject({
+      item: line,
+      modifier: undefined,
+    })
+    expect(semantics(line)).toMatchObject({
+      purchaseKey,
+      preparation: [],
+    })
     expect(resolvedLine(line)).toMatchObject({
       purchaseKey,
       preparation: [],
@@ -923,6 +968,36 @@ describe('ShoppingDocumentV3 frozen semantic validation', () => {
     expect(projectShoppingDocument(reloaded.document).items[0]).toMatchObject({
       orderingKey: 'finely chopped cilantro',
       checked: true,
+    })
+  })
+
+  it('freezes a corrected multi-comma contribution without reinterpretation', () => {
+    const document = createEmptyShoppingDocument()
+    const ingredient = persistedLine('1 garlic, chopped, minced')
+    const frozenIngredient = JSON.parse(JSON.stringify(ingredient))
+    document.recipeEntries['recipe-frozen'] = {
+      recipeId: 'recipe-frozen',
+      recipeName: 'Frozen multi-comma garlic',
+      selectedServings: 1,
+      scaleV1: { numerator: '1', denominator: '1' },
+      ingredients: [ingredient],
+    }
+
+    const validated = validateShoppingDocumentStateV3({
+      document: JSON.parse(JSON.stringify(document)),
+      contentRevision: 5,
+    })
+    expect(validated.ok).toBe(true)
+    if (!validated.ok) return
+
+    expect(validated.document.recipeEntries['recipe-frozen'].ingredients[0])
+      .toEqual(frozenIngredient)
+    expect(projectShoppingDocument(validated.document).items[0]).toMatchObject({
+      orderingKey: 'garlic chopped minced',
+      quantity: { amount: 1, unit: 'count' },
+      sources: [expect.objectContaining({
+        preparationModifiers: undefined,
+      })],
     })
   })
 
