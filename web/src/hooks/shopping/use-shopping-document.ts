@@ -360,12 +360,25 @@ export function useUpdateShoppingItem() {
       unit: input.updates.unit,
     })
     const displayName = input.updates.itemName.trim()
-    const projection = projectShoppingDocument(state.document)
-    if (projection.rows.some((row) =>
-      row.rowRef !== rowRef &&
-      row.orderingKey === itemSemantics.purchaseKey)) {
-      throw new Error('Item already in shopping list')
+    const validateIdentityChange = (current: ShoppingDocumentStateV3) => {
+      const manual = current.document.manualItems.find((item) =>
+        `manual:${item.id}` === rowRef)
+      if (!manual) throw new Error('Manual item no longer exists')
+      const currentSemantics = resolveShoppingIngredientSemantics({
+        item: manual.displayName,
+        unit: manual.quantity?.unit,
+      })
+      // Quantified manual rows intentionally coexist with recipe requirements.
+      // Only a change of canonical purchase identity can introduce a collision.
+      if (currentSemantics.purchaseKey === itemSemantics.purchaseKey) return
+      const projection = projectShoppingDocument(current.document)
+      if (projection.rows.some((row) =>
+        row.rowRef !== rowRef &&
+        row.orderingKey === itemSemantics.purchaseKey)) {
+        throw new Error('Item already in shopping list')
+      }
     }
+    validateIdentityChange(state)
     const quantity = input.updates.amount == null && !input.updates.unit
       ? null
       : {
@@ -379,6 +392,7 @@ export function useUpdateShoppingItem() {
         changes: { displayName, quantity },
       },
       value: { item: input.item, updates: input.updates },
+      validateReplay: validateIdentityChange,
     }
   }, { duplicateFeedbackOwner: 'caller' })
 }

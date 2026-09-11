@@ -337,7 +337,7 @@ test.describe('Shopping List Mobile @extended', () => {
     }
 
     await categorySection('pantry')
-      .getByRole('button', { name: 'Collapse category', exact: true })
+      .getByRole('button', { name: /^Collapse .* category$/ })
       .click()
     await expect(categoryHeader('pantry')).toHaveAttribute('aria-expanded', 'false')
 

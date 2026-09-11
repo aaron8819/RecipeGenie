@@ -171,14 +171,14 @@ function expectCategoryExpanded(categoryKey: string, expanded: boolean) {
 function toggleCategory(categoryKey: string) {
   const section = screen.getByTestId(`shopping-category-${categoryKey}`)
   const label = section.querySelector('[role="button"][aria-expanded="true"]')
-    ? "Collapse category"
-    : "Expand category"
+    ? /^Collapse .* category$/
+    : /^Expand .* category$/
   fireEvent.click(within(section).getByRole("button", { name: label }))
 }
 
 function chooseRowAction(name: string, rowIndex = 0) {
   fireEvent.pointerDown(
-    screen.getAllByRole("button", { name: "Item actions" })[rowIndex]
+    screen.getAllByRole("button", { name: /^Actions for / })[rowIndex]
   )
   fireEvent.click(screen.getByRole("menuitem", { name }))
 }
@@ -187,7 +187,7 @@ function getItemCheckbox(itemName: string) {
   const row = screen.getByText(itemName).closest('[data-testid="shopping-item-row"]')
   if (!row) throw new Error(`Shopping row not found for ${itemName}`)
   return within(row as HTMLElement).getByRole("button", {
-    name: /^(Check off|Uncheck) item$/,
+    name: `Check off ${itemName}`,
   })
 }
 
@@ -915,7 +915,7 @@ describe("ShoppingListView orchestration", () => {
     })
 
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Quick add to pantry" }))
+      fireEvent.click(screen.getByRole("button", { name: /^Add .* to pantry$/ }))
     })
 
     expect(addToPantryAndRemoveMutate).toHaveBeenCalledWith(
@@ -935,7 +935,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Reorder / })).not.toBeInTheDocument()
     expect(screen.queryByText("Manage Mode")).not.toBeInTheDocument()
 
     act(() => {
@@ -946,14 +946,14 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(screen.getByText("Manage Mode")).toBeInTheDocument()
-    expect(screen.getAllByRole("button", { name: "Drag to reorder" }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole("button", { name: /^Reorder / }).length).toBeGreaterThan(0)
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Done" }))
     })
 
     expect(screen.queryByText("Manage Mode")).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Reorder / })).not.toBeInTheDocument()
   })
 
   it("routes mouse, touch, and keyboard drops through one reusable reorder intent", async () => {
@@ -1115,7 +1115,7 @@ describe("ShoppingListView orchestration", () => {
       value: scrollIntoView,
     })
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Collapse category" })[1])
+    fireEvent.click(screen.getAllByRole("button", { name: /^Collapse .* category$/ })[1])
     expect(screen.queryByText("rice")).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
@@ -1133,7 +1133,7 @@ describe("ShoppingListView orchestration", () => {
 
     fireEvent.click(getItemCheckbox("apples"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
     expect(getItemCheckbox("apples")).not.toBeDisabled()
     expect(checkOffMutateAsync).toHaveBeenCalledWith({
@@ -1152,7 +1152,7 @@ describe("ShoppingListView orchestration", () => {
 
     fireEvent.click(getItemCheckbox("apples"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
     expect(checkOffMutateAsync).toHaveBeenCalledWith({
       rowRef: "manual:apples",
@@ -1170,9 +1170,9 @@ describe("ShoppingListView orchestration", () => {
     fireEvent.click(getItemCheckbox("bananas"))
     fireEvent.click(getItemCheckbox("carrots"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
-    expect(getItemCheckbox("bananas")).toHaveAccessibleName("Uncheck item")
-    expect(getItemCheckbox("carrots")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
+    expect(getItemCheckbox("bananas")).toHaveAttribute("aria-pressed", "true")
+    expect(getItemCheckbox("carrots")).toHaveAttribute("aria-pressed", "true")
     expect(pendingCheckMutations).toHaveLength(3)
 
     await resolveNextCheckMutation()
@@ -1181,7 +1181,7 @@ describe("ShoppingListView orchestration", () => {
     toggleCategory("produce")
 
     for (const itemName of ["apples", "bananas", "carrots"]) {
-      expect(getItemCheckbox(itemName)).toHaveAccessibleName("Uncheck item")
+      expect(getItemCheckbox(itemName)).toHaveAttribute("aria-pressed", "true")
       expect(getItemCheckbox(itemName)).not.toHaveAttribute("aria-busy")
     }
   })
@@ -1199,12 +1199,12 @@ describe("ShoppingListView orchestration", () => {
       const checkbox = getItemCheckbox(`benchmark item ${index}`)
       const startedAt = nodePerformance.now()
       fireEvent.click(checkbox)
-      expect(checkbox).toHaveAccessibleName("Uncheck item")
+      expect(checkbox).toHaveAttribute("aria-pressed", "true")
       return nodePerformance.now() - startedAt
     })
 
     expect(pendingCheckMutations).toHaveLength(12)
-    expect(screen.getAllByRole("button", { name: "Uncheck item" })).toHaveLength(12)
+    expect(screen.getAllByRole("button", { name: /^Check off /, pressed: true })).toHaveLength(12)
 
     if (process.env.RG_PERF_LOG === "1") {
       const sorted = [...durations].sort((left, right) => left - right)
@@ -1229,16 +1229,16 @@ describe("ShoppingListView orchestration", () => {
 
     expect(checkOffMutateAsync.mock.calls.map(([intent]) => intent.checked))
       .toEqual([true, false])
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
 
     await resolveNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
 
     await resolveNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
   })
 
@@ -1251,12 +1251,12 @@ describe("ShoppingListView orchestration", () => {
 
     await rejectNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
 
     await resolveNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
   })
 
@@ -1265,16 +1265,16 @@ describe("ShoppingListView orchestration", () => {
     renderShoppingList()
 
     fireEvent.click(getItemCheckbox("apples"))
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
 
     await rejectNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
 
     fireEvent.click(getItemCheckbox("apples"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
     expect(checkOffMutateAsync).toHaveBeenCalledTimes(2)
   })
 
@@ -1294,7 +1294,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByRole("button", { name: "Complete Shopping" })).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByLabelText("0 left")).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByRole("button", { name: "Hide 2 done" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Expand .* category$/ })).toBeInTheDocument()
 
     resolveNextBulkMutation()
 
@@ -1302,7 +1302,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByText("All items checked!")).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByLabelText("0 left")).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByRole("button", { name: "Hide 2 done" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Expand .* category$/ })).toBeInTheDocument()
   })
 
   it("hides an item immediately, then restores it in the same category when undo is clicked", async () => {
@@ -1675,7 +1675,7 @@ describe("ShoppingListView orchestration", () => {
     const editor = screen.getByText("Edit manual item").closest("form")
     expect(editor).not.toBeNull()
     expect(within(editor as HTMLFormElement).getByRole("alert")).toHaveTextContent(
-      '"milk" is already on the shopping list.'
+      '"milk" is already on the shopping list. Choose a different ingredient name or cancel this edit.'
     )
     expect(screen.getByText("Edit manual item")).toBeInTheDocument()
     expect(screen.getByText("garlic")).toBeInTheDocument()

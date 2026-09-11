@@ -399,7 +399,7 @@ function SwipeableItem({
           }}
           disabled={isAddingToPantry}
           className="h-11 w-11 rounded-full bg-sage-500/90 flex items-center justify-center text-white disabled:opacity-50"
-          aria-label="Quick add to pantry"
+          aria-label={`Add ${item.item} to pantry`}
         >
           <Package className="h-5 w-5" />
         </button>
@@ -408,7 +408,7 @@ function SwipeableItem({
           onClick={handleDeleteClick}
           disabled={isRemoving}
           className="h-11 w-11 rounded-full bg-destructive/90 flex items-center justify-center text-white disabled:opacity-50"
-          aria-label="Quick remove item"
+          aria-label={`Remove ${item.item} from list`}
         >
           <Trash2 className="h-5 w-5" />
         </button>
@@ -975,7 +975,7 @@ export function ShoppingListView() {
       })
     } catch (error) {
       if (isAlreadyInShoppingListError(error)) {
-        setManualEditError(`"${trimmedName}" is already on the shopping list.`)
+        setManualEditError(`"${trimmedName}" is already on the shopping list. Choose a different ingredient name or cancel this edit.`)
         return
       }
 

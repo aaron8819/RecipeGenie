@@ -96,13 +96,14 @@ export function RecipeImageField({
   fileInputRef,
   mobileCollapsible = false,
 }: RecipeImageFieldProps) {
+  const imageInputId = React.useId()
   const hasImage = !!(imagePreview || imageUrl)
   const imageSrc = imagePreview || imageUrl || ""
   const unoptimized = imageUrl ? !imageUrl.includes("supabase.co") : false
 
   const imageContent = variant === "edit" ? (
     <div className="relative">
-      <Label className="mb-2 block text-sm font-semibold text-primary">
+      <Label htmlFor={imageInputId} className="mb-2 block text-sm font-semibold text-primary">
         Recipe Image
       </Label>
       {hasImage ? (
@@ -142,6 +143,7 @@ export function RecipeImageField({
       ) : null}
       {fileInputRef && onImageSelect ? (
         <input
+          id={imageInputId}
           ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/jpg,image/png,image/webp"
@@ -719,7 +721,7 @@ Instructions:
       </div>
 
       <div className="space-y-4">
-        <Label className="text-sm font-semibold">Live Preview</Label>
+        <h3 className="text-sm font-semibold leading-none">Live Preview</h3>
 
         {livePreview ? (
           <div className="h-full space-y-6 rounded-xl border border-border bg-muted/30 p-6">
@@ -974,6 +976,8 @@ export function RecipeMetadataSection({
   const addLabelClass =
     "text-[10px] font-bold uppercase tracking-widest text-primary dark:text-accent"
   const nameInputId = variant === "edit" ? "name-edit" : "name-add"
+  const categoryInputId = React.useId()
+  const tagsInputId = React.useId()
   const servingsInputId = variant === "edit" ? "servings-edit" : "servings-add"
   const renderTimeInput = (
     id: string,
@@ -1039,11 +1043,11 @@ export function RecipeMetadataSection({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label className="block text-sm font-semibold text-primary mb-2">
+            <Label htmlFor={categoryInputId} className="block text-sm font-semibold text-primary mb-2">
               Category
             </Label>
             <Select value={category} onValueChange={onCategoryChange}>
-              <SelectTrigger className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3">
+              <SelectTrigger id={categoryInputId} className="w-full bg-background border-stone-200 dark:border-zinc-800 rounded-xl focus:ring-primary py-3">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
@@ -1104,10 +1108,11 @@ export function RecipeMetadataSection({
         </div>
         {showTags ? (
           <div>
-            <Label className="block text-sm font-semibold text-primary mb-2">
+            <Label htmlFor={tagsInputId} className="block text-sm font-semibold text-primary mb-2">
               Tags
             </Label>
             <TagInput
+              id={tagsInputId}
               value={tags}
               onChange={onTagsChange}
               suggestions={allTags}
@@ -1124,7 +1129,7 @@ export function RecipeMetadataSection({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label className={addLabelClass}>Recipe Name</label>
+        <label htmlFor={nameInputId} className={addLabelClass}>Recipe Name</label>
         <Input
           id={nameInputId}
           value={name}
@@ -1136,9 +1141,9 @@ export function RecipeMetadataSection({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <label className={addLabelClass}>Category</label>
+          <label htmlFor={categoryInputId} className={addLabelClass}>Category</label>
           <Select value={category} onValueChange={onCategoryChange}>
-            <SelectTrigger className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm">
+            <SelectTrigger id={categoryInputId} className="w-full bg-background border-stone-100 dark:border-zinc-800 rounded-xl px-4 py-2.5 text-sm">
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>
@@ -1243,8 +1248,9 @@ export function RecipeMetadataSection({
         </div>
       </div>
       <div className="space-y-2">
-        <label className={addLabelClass}>Tags</label>
+        <label htmlFor={tagsInputId} className={addLabelClass}>Tags</label>
         <TagInput
+          id={tagsInputId}
           value={tags}
           onChange={onTagsChange}
           suggestions={allTags}
@@ -1274,13 +1280,15 @@ export function RecipeTagsSection({
   tagCounts,
   mobileCollapsible = false,
 }: RecipeTagsSectionProps) {
+  const tagsInputId = React.useId()
   const summary = tags.length === 0 ? "No tags" : `${tags.length} tag${tags.length === 1 ? "" : "s"}: ${tags.slice(0, 2).join(", ")}${tags.length > 2 ? "..." : ""}`
   const content = (
     <div>
-      <Label className="mb-2 block text-sm font-semibold text-primary">
+      <Label htmlFor={tagsInputId} className="mb-2 block text-sm font-semibold text-primary">
         Tags
       </Label>
       <TagInput
+        id={tagsInputId}
         value={tags}
         onChange={onTagsChange}
         suggestions={allTags}
@@ -1403,9 +1411,9 @@ export function RecipeIngredientsSection({
   if (variant === "edit") {
     return (
       <div>
-        <Label className="text-sm font-semibold text-primary mb-4 block">
+        <h3 className="text-sm font-semibold leading-none text-primary mb-4 block">
           Ingredients
-        </Label>
+        </h3>
 
         {ingredientIssueCount > 0 ? (
           <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
@@ -1656,13 +1664,13 @@ export function RecipeInstructionsSection({
   return (
     <div className={variant === "edit" ? "flex-1 flex flex-col min-h-0" : "space-y-4"}>
       {variant === "edit" ? (
-        <Label className="block text-sm font-semibold text-primary mb-2">
+        <h3 className="block text-sm font-semibold leading-none text-primary mb-2">
           Instructions
-        </Label>
+        </h3>
       ) : (
-        <label className={`${addLabelClass} block`}>
+        <h3 className={`${addLabelClass} block`}>
           Instructions
-        </label>
+        </h3>
       )}
       <p className={variant === "edit" ? "mb-4 text-xs text-muted-foreground" : "text-xs text-muted-foreground"}>
         Keep notes separate. Leave the main method unlabeled, or add labels for subsections like sauces or toppings.

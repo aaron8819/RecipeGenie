@@ -65,6 +65,10 @@ the shared authenticated shell.
   accessible checkboxes and are persisted in `ShoppingDocumentV3.preferences`.
 - Settings immediately affect the deterministic Shopping projection; no
   contribution regeneration is required.
+- Pantry additions/removals and ingredient exclusions also reclassify current
+  recipe-derived rows. Explicit Shopping bucket overrides win over these live
+  inputs; manual rows retain their chosen bucket. The UI explains these
+  exceptions and does not instruct users to clear or regenerate Shopping.
 - Ingredient exclusions remain a separate section and count; changing a family
   setting does not change `excluded_keywords`.
 

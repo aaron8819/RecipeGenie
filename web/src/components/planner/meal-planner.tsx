@@ -1799,9 +1799,6 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                 style={{ width: `${progress.percentage}%` }}
               />
             </div>
-            <p className="text-xs text-slate-400">
-              You&apos;re on track to hit your nutrition goals!
-            </p>
           </div>
         </PlannerSectionShell>
 

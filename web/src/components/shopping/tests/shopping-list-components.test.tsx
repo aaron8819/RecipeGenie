@@ -30,7 +30,7 @@ function item(overrides: Partial<ShoppingItem> = {}): ShoppingItem {
 }
 
 function chooseItemAction(name: string) {
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Item actions" }))
+  fireEvent.pointerDown(screen.getByRole("button", { name: /^Actions for / }))
   fireEvent.click(screen.getByRole("menuitem", { name }))
 }
 
@@ -66,12 +66,12 @@ describe("ShoppingCategorySection", () => {
     expect(screen.getByText("1 done")).toBeInTheDocument()
     expect(screen.getByText("Spinach row")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Check all items in Produce" }).className).toContain("min-w-[44px]")
-    expect(screen.getByRole("button", { name: "Collapse category" }).className).toContain("h-9")
+    expect(screen.getByRole("button", { name: /^Collapse .* category$/ }).className).toContain("h-9")
 
     fireEvent.click(screen.getByRole("button", { name: "Check all items in Produce" }))
     expect(onBulkCheckOff).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse category" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Collapse .* category$/ }))
     expect(onToggleCategory).toHaveBeenCalledTimes(1)
   })
 
@@ -98,7 +98,7 @@ describe("ShoppingCategorySection", () => {
     )
 
     expect(screen.queryByText("Hidden child")).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Expand .* category$/ })).toBeInTheDocument()
   })
 })
 
@@ -155,7 +155,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Reorder apples" })).not.toBeInTheDocument()
   })
 
   it("renders desktop row actions, dedupes sources, and forwards callbacks", () => {
@@ -188,10 +188,10 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByText("2 lb")).toBeInTheDocument()
     expect(screen.getByText("apples")).toBeInTheDocument()
     expect(screen.getAllByText("Autumn Soup")).toHaveLength(1)
-    expect(screen.getByRole("button", { name: "Drag to reorder" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Item actions" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Reorder apples" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Actions for / })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Check off item" }))
+    fireEvent.click(screen.getByRole("button", { name: "Check off apples", pressed: false }))
     chooseItemAction("Edit item")
     chooseItemAction("Add to pantry")
     chooseItemAction("Remove from list")
@@ -201,7 +201,7 @@ describe("ShoppingItemRow", () => {
     expect(onAddToPantry).toHaveBeenCalledTimes(1)
     expect(onRemove).toHaveBeenCalledTimes(1)
 
-    expect(screen.getByRole("button", { name: "Item actions" }).className).not.toContain("hidden")
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).not.toContain("hidden")
   })
 
   it("keeps mobile action trigger centered and leaves a busy check-off actionable", () => {
@@ -222,11 +222,11 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.getByTestId("shopping-item-row").className).toContain("items-center")
     expect(screen.getByText("Swipe left to delete")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Uncheck item" })).toHaveAttribute("aria-busy", "true")
-    expect(screen.getByRole("button", { name: "Uncheck item" })).not.toBeDisabled()
-    expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("h-11")
-    expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("w-11")
-    expect(screen.getByRole("button", { name: "Item actions" }).className).not.toContain("hidden")
+    expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).toHaveAttribute("aria-busy", "true")
+    expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).not.toBeDisabled()
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).toContain("h-11")
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).toContain("w-11")
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).not.toContain("hidden")
   })
 
   it("renders compact provenance summaries in shopping mode", () => {
@@ -472,7 +472,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByRole("button", { name: "Item actions" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Actions for / })).toBeInTheDocument()
     chooseItemAction("Edit item")
 
     expect(onEdit).toHaveBeenCalledTimes(1)

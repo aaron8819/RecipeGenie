@@ -127,8 +127,8 @@ function PantryPanel({
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Items you already have at home. These will be excluded from shopping
-          lists.
+          Pantry changes apply to matching recipe ingredients in your current
+          shopping list. Manual items and explicit row choices stay as set.
         </p>
       </CardHeader>
       <CardContent>
@@ -292,8 +292,8 @@ function ExcludedIngredientsPanel({
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Keep common staples and exact ingredient names out of newly generated
-          shopping lists.
+          Keep common staples and matching recipe ingredients out of your
+          current shopping list.
         </p>
       </CardHeader>
       <CardContent>
@@ -306,8 +306,8 @@ function ExcludedIngredientsPanel({
               Always exclude
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Clear/reset the shopping list, then regenerate it to reliably
-              rebuild with current settings.
+              Changes apply to your current shopping list. Manual items and
+              explicit row choices stay as set; no clearing or regeneration is needed.
             </p>
           </div>
           {familySettingsLoading ? (

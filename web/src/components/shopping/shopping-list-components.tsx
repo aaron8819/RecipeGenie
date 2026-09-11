@@ -415,8 +415,8 @@ export function ShoppingItemRow({
             data-drag-handle="true"
             className="flex min-h-11 min-w-11 touch-none items-center justify-center p-1 text-muted-foreground hover:text-foreground md:min-h-0 md:min-w-0"
             style={{ touchAction: "none" }}
-            aria-label="Drag to reorder"
             {...dragHandleProps}
+            aria-label={`Reorder ${displayItemName}`}
           >
             <GripVertical className="h-4 w-4" />
           </button>
@@ -428,7 +428,8 @@ export function ShoppingItemRow({
           onClick={onCheckOff}
           aria-busy={isCheckingOff || undefined}
           className="my-0 flex min-h-[52px] min-w-[52px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:min-h-[48px] md:min-w-[48px]"
-          aria-label={isChecked ? "Uncheck item" : "Check off item"}
+          aria-label={`Check off ${displayItemName}`}
+          aria-pressed={isChecked}
         >
           <span
             className={cn(
@@ -512,7 +513,7 @@ export function ShoppingItemRow({
           <button
             type="button"
             className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Item actions"
+            aria-label={`Actions for ${displayItemName}`}
           >
             <MoreVertical className="h-5 w-5" />
           </button>
@@ -946,7 +947,8 @@ export function ShoppingCategorySection({
             type="button"
             onClick={handleCollapseClick}
             className="flex h-11 w-11 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary md:h-9 md:w-9"
-            aria-label={isCollapsed ? "Expand category" : "Collapse category"}
+            aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${categoryData.name} category`}
+            aria-expanded={!isCollapsed}
           >
             {isCollapsed ? (
               <ChevronDown className="h-5 w-5" />
@@ -1030,6 +1032,7 @@ export function ShoppingStateSection({
           onClick={handleCollapseClick}
           className="flex h-11 w-11 items-center justify-center rounded-lg text-stone-400 transition-colors hover:bg-white hover:text-primary md:h-9 md:w-9"
           aria-label={isCollapsed ? expandLabel : collapseLabel}
+          aria-expanded={!isCollapsed}
         >
           {isCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </button>

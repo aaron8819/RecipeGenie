@@ -187,7 +187,8 @@ describe("PantryList", () => {
     expect(screen.getByRole("heading", { name: "Always exclude" })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Excluded ingredients' }))
       .toBeInTheDocument()
-    expect(screen.getByText(/clear\/reset the shopping list, then regenerate/i)).toBeInTheDocument()
+    expect(screen.getByText(/no clearing or regeneration is needed/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/manual items and explicit row choices stay as set/i)).toHaveLength(2)
     expect(screen.getByText(/never uses substring matching/i)).toBeInTheDocument()
   })
 

@@ -350,7 +350,8 @@ describe("RecipeMetadataSection", () => {
       />
     )
 
-    fireEvent.change(screen.getByPlaceholderText("e.g. Grandma's Roast Chicken"), {
+    expect(screen.getByRole('combobox', { name: 'Category' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Recipe Name' }), {
       target: { value: "Pasta" },
     })
     fireEvent.change(screen.getByLabelText("Scaling basis"), {

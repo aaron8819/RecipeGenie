@@ -147,6 +147,14 @@ duplicate, Pantry, and ordering identity from the same canonical semantics as
 recipe ingredients. A merged recipe row uses a hard primary requirement for
 display when another source offers that ingredient only as an alternative.
 
+Quantified manual rows may coexist with recipe-derived rows of the same
+purchase identity. Editing an existing manual row preserves that coexistence
+when its canonical purchase identity is unchanged; it never merges quantities
+or changes recipe contributions. Identity-changing edits still reject collisions
+with other projected rows, including Pantry/excluded rows. Both initial edits
+and conflict replays compare against the current persisted manual identity and
+revalidate collisions before writing. A missing manual target fails the edit.
+
 ## Verification
 
 Run from `web/`:
