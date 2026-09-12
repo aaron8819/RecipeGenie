@@ -526,7 +526,8 @@ export function PantryList() {
   const handleIngredientExclusionChange = useCallback(
     (setting: IngredientExclusionSetting, enabled: boolean) => {
       updateIngredientExclusion.mutate({ setting, enabled }, {
-        onSuccess: () => setFailedFamilyChange(null),
+        onSuccess: () => setFailedFamilyChange((pending) =>
+          pending?.setting === setting ? null : pending),
         // The mutation owns the conflict toast. Retain the requested choice.
         onError: () => setFailedFamilyChange({ setting, enabled }),
       })
@@ -631,10 +632,12 @@ export function PantryList() {
   const handleAddKeyword = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!newKeyword.trim()) return
+    const submittedInput = newKeyword
 
     try {
-      const result = await addKeywords.mutateAsync(newKeyword)
-      setNewKeyword(result.unresolvedInput)
+      const result = await addKeywords.mutateAsync(submittedInput)
+      setNewKeyword((current) =>
+        current === submittedInput ? result.unresolvedInput : current)
       const message = summarizeOutcomes("Excluded keywords", result.outcomes)
       setKeywordFeedback(message ? { message, tone: "neutral" } : null)
     } catch (error) {

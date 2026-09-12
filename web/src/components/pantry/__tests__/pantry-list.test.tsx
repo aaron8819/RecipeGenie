@@ -148,6 +148,27 @@ describe("PantryList", () => {
     expect(screen.getByText(/Pantry items: Added: garlic\. Already existed: pepper\. Needs retry: salt\./i)).toBeInTheDocument()
   })
 
+  it("preserves text edited while an exclusion save is pending", async () => {
+    let settle!: (result: { outcomes: []; unresolvedInput: string }) => void
+    addKeywordsMutateAsync.mockReturnValueOnce(new Promise((resolve) => { settle = resolve }))
+    render(<PantryList />)
+    const input = screen.getByPlaceholderText(/add excluded keyword/i)
+    fireEvent.change(input, { target: { value: "pepper" } })
+    fireEvent.submit(input.closest("form")!)
+    fireEvent.change(input, { target: { value: "cumin" } })
+    await act(async () => { settle({ outcomes: [], unresolvedInput: "pepper" }) })
+    expect(input).toHaveValue("cumin")
+  })
+
+  it("an unrelated family save does not discard a failed choice", () => {
+    render(<PantryList />)
+    fireEvent.click(screen.getByRole("checkbox", { name: "Salt variants" }))
+    act(() => updateIngredientExclusionMutate.mock.calls[0][1].onError())
+    fireEvent.click(screen.getByRole("checkbox", { name: "Black pepper variants" }))
+    act(() => updateIngredientExclusionMutate.mock.calls[1][1].onSuccess())
+    expect(screen.getByRole("alert")).toHaveTextContent("Salt variants could not be turned on.")
+  })
+
   it("shows a Pantry header with current counts", () => {
     pantryItemsState.data = [
       { id: "pantry-1", item: "garlic" },
