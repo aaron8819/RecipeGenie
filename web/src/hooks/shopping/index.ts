@@ -18,6 +18,7 @@ export {
   useAddToShoppingList,
   useClearShoppingList,
   useRestoreShoppingContent,
+  SHOPPING_CLEAR_UNDO_UNAVAILABLE,
   useUpdateExcludedKeywords,
   useUpdateIngredientExclusionSetting,
   shoppingDocumentToList,

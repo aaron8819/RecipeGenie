@@ -27,6 +27,7 @@ const removeRecipeItemsMutate = vi.fn<
   (recipe: { recipeId?: string; recipeName: string }) => void
 >()
 const clearListMutate = vi.fn()
+const restoreContentMutate = vi.fn()
 let removedRecipeRows: ShoppingItem[] = []
 let clearedList: ShoppingList | null = null
 const moveToListMutate = vi.fn<
@@ -330,6 +331,7 @@ vi.mock("@/hooks/use-recipes", () => ({
 }))
 
 vi.mock("@/hooks/use-shopping", () => ({
+  SHOPPING_CLEAR_UNDO_UNAVAILABLE: 'Undo is currently unavailable for lists containing recipe items.',
   useShoppingList: () => ({
     data: useSyncExternalStore(subscribeShoppingList, () => currentShoppingList),
     isLoading: false,
@@ -378,7 +380,7 @@ vi.mock("@/hooks/use-shopping", () => ({
     isPending: false,
   }),
   useRestoreShoppingContent: () => ({
-    mutate: () => { if (clearedList) setShoppingList(clearedList) },
+    mutate: restoreContentMutate,
     isPending: false,
   }),
   useCheckOffItem: () => ({
@@ -653,7 +655,8 @@ vi.mock("@/hooks/use-shopping", () => ({
     options?.onSuccess?.({ entry: {} })
   })
 
-  clearListMutate.mockImplementation((_value?: unknown, options?: { onSuccess?: (value: object) => void }) => {
+  restoreContentMutate.mockImplementation(() => { if (clearedList) setShoppingList(clearedList) })
+  clearListMutate.mockImplementation((_value?: unknown, options?: { onSuccess?: (value: object | null) => void }) => {
     clearedList = cloneList(currentShoppingList)
     updateShoppingList((prev) => ({
       ...prev,
@@ -665,7 +668,11 @@ vi.mock("@/hooks/use-shopping", () => ({
       total_servings: 0,
       custom_order: false,
     }))
-    options?.onSuccess?.({})
+    options?.onSuccess?.({
+      ownerUserId: 'user-1',
+      postClearRevision: 8,
+      content: { recipeEntries: Object.fromEntries((clearedList.source_recipes || []).map((id) => [id, {}])) },
+    })
   })
 
   moveToListMutate.mockImplementation((item: ShoppingItem, options) => {
@@ -1439,7 +1446,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getAllByText("Stew").length).toBeGreaterThan(0)
   })
 
-  it("clears the list optimistically and restores the full snapshot on undo", async () => {
+  it("clears immediately and passes the committed manual-only result unchanged to Undo", async () => {
     currentShoppingList = makeList({
       items: [makeItem("garlic")],
       already_have: [makeItem("rice")],
@@ -1463,10 +1470,67 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(clearListMutate).toHaveBeenCalledTimes(1)
+    expect(restoreContentMutate).toHaveBeenCalledWith({
+      ownerUserId: 'user-1', postClearRevision: 8, content: { recipeEntries: {} },
+    })
     expect(screen.getByText("garlic")).toBeInTheDocument()
     expectCategoryExpanded("produce", true)
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
+  })
+
+  it('explains temporary recipe-list Undo unavailability without offering a manual subset', () => {
+    currentShoppingList = makeList({ items: [makeItem('garlic')], source_recipes: ['recipe-soup'] })
+    const preferences = structuredClone(currentConfig)
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is currently unavailable')
+    expect(clearListMutate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear list' }))
+    expect(screen.getByText('Shopping list cleared. Undo is currently unavailable for lists containing recipe items.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(currentShoppingList.items).toEqual([])
+    expect(currentShoppingList.source_recipes).toEqual([])
+    expect(currentConfig).toEqual(preferences)
+    expect(restoreContentMutate).not.toHaveBeenCalled()
+  })
+
+  it('reports an already-empty Clear without an Undo action', () => {
+    currentShoppingList = makeList({ items: [makeItem('garlic')] })
+    clearListMutate.mockImplementation((_value, options) => {
+      setShoppingList(makeList())
+      options.onSuccess(null)
+    })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByText('Shopping list is already clear')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(currentShoppingList.items).toEqual([])
+    expect(restoreContentMutate).not.toHaveBeenCalled()
+  })
+
+  it('withholds Undo if the successful Clear acquired recipes after the manual-only render', () => {
+    currentShoppingList = makeList({ items: [makeItem('garlic')] })
+    clearListMutate.mockImplementation((_value, options) => {
+      setShoppingList(makeList())
+      options.onSuccess({ ownerUserId: 'user-1', postClearRevision: 9,
+        content: { recipeEntries: { hidden: {} } } })
+    })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByText('Shopping list cleared. Undo is currently unavailable for lists containing recipe items.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(restoreContentMutate).not.toHaveBeenCalled()
+  })
+
+  it('can cancel a Clear containing only hidden recipe selections', () => {
+    currentShoppingList = makeList({ source_recipes: ['hidden-recipe'] })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is currently unavailable')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(clearListMutate).not.toHaveBeenCalled()
+    expect(currentShoppingList.source_recipes).toEqual(['hidden-recipe'])
   })
 
   it("moves an excluded item back into its category immediately without duplicate rendering", async () => {

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthContext } from '@/lib/auth-context'
+import { getActivePrincipalId } from '@/lib/principal-session'
 import { useUndoToast } from '@/hooks/use-undo-toast'
 import { usePantryItems } from '@/hooks/use-pantry'
 import { mapRecipeRows } from '@/lib/recipe-identity'
@@ -57,7 +58,30 @@ type ShoppingDocumentRow = {
 type MutationPlan<TResult> = {
   mutation: ShoppingDocumentMutation
   value: TResult
+  committedValue?: (
+    before: ShoppingDocumentStateV3,
+    committed: ShoppingDocumentStateV3
+  ) => TResult
   validateReplay?: ShoppingDocumentReplayValidator
+  forceWrite?: boolean
+}
+
+export const SHOPPING_CLEAR_UNDO_UNAVAILABLE =
+  'Undo is currently unavailable for lists containing recipe items.'
+
+export class ShoppingClearUndoConflictError extends ShoppingDocumentConflictError {
+  constructor(message = 'Shopping changed after Clear; Undo was not applied.') {
+    super()
+    this.message = message
+    this.name = 'ShoppingClearUndoConflictError'
+  }
+}
+
+export interface ShoppingClearResult {
+  readonly ownerUserId: string
+  readonly postClearRevision: number
+  readonly content: Pick<ShoppingDocumentV3,
+    'recipeEntries' | 'manualItems' | 'itemOverrides'>
 }
 
 type DuplicateFeedbackOwner = 'mutation' | 'caller'
@@ -76,19 +100,21 @@ function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentSta
   }
 }
 
-async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV3> {
+async function fetchShoppingDocumentState(ownerUserId?: string): Promise<ShoppingDocumentStateV3> {
   const supabase = getSupabase()
   const request = supabase.from('shopping_list') as unknown as {
     select: (columns: string) => {
+      eq: (column: string, value: string) => ReturnType<typeof request.select>
       single: () => Promise<{
         data: ShoppingDocumentRow | null
         error: { message: string } | null
       }>
     }
   }
-  const { data, error } = await request
-    .select('document,content_revision')
-    .single()
+  const selection = request.select('document,content_revision')
+  const { data, error } = await (ownerUserId
+    ? selection.eq('user_id', ownerUserId)
+    : selection).single()
   if (error) throw error
   if (!data) throw new Error('Shopping document not found')
   return parseShoppingDocumentRow(data)
@@ -195,7 +221,7 @@ export function useShoppingDocumentState() {
   const { user, loading } = useAuthContext()
   return useQuery({
     queryKey: shoppingKeys.detail(principalId(user?.id)),
-    queryFn: fetchShoppingDocumentState,
+    queryFn: () => fetchShoppingDocumentState(),
     placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000,
     enabled: !loading && Boolean(user),
@@ -225,7 +251,10 @@ function useShoppingMutation<TVariables, TResult>(
     state: ShoppingDocumentStateV3,
     variables: TVariables
   ) => Promise<MutationPlan<TResult>> | MutationPlan<TResult>,
-  options: { duplicateFeedbackOwner?: DuplicateFeedbackOwner } = {}
+  options: {
+    duplicateFeedbackOwner?: DuplicateFeedbackOwner
+    fenceOwner?: boolean
+  } = {}
 ) {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
@@ -234,21 +263,58 @@ function useShoppingMutation<TVariables, TResult>(
   const undoToast = useUndoToast()
 
   return useMutation({
+    // A queued Clear must not acquire the next owner's mutation function.
+    mutationKey: options.fenceOwner ? ['shopping-clear-undo', ownerUserId] : undefined,
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (variables: TVariables) => {
+      const assertOwner = () => {
+        if (options.fenceOwner && (!user || getActivePrincipalId() !== ownerUserId)) {
+          throw new ShoppingClearUndoConflictError(
+            'Shopping account changed; Clear/Undo was not completed for this account.'
+          )
+        }
+      }
+      const refetch = async () => {
+        assertOwner()
+        const fresh = await fetchShoppingDocumentState(options.fenceOwner ? ownerUserId : undefined)
+        assertOwner()
+        return fresh
+      }
+      const cacheState = (next: ShoppingDocumentStateV3) => {
+        assertOwner()
+        queryClient.setQueryData<ShoppingDocumentStateV3>(shoppingKey, (cached) =>
+          cached && cached.contentRevision > next.contentRevision ? cached : next)
+      }
+      assertOwner()
       const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
-        await fetchShoppingDocumentState()
+        await refetch()
       const plan = await createPlan(initial, variables)
+      assertOwner()
+      let value = plan.value
       const state = await persistShoppingMutationWithReplay({
         initial,
         mutation: plan.mutation,
-        write: (current, next) => writeShoppingDocumentCas(user!.id, current, next),
-        refetch: fetchShoppingDocumentState,
-        onRefetched: (fresh) => queryClient.setQueryData(shoppingKey, fresh),
+        write: async (current, next) => {
+          assertOwner()
+          const committed = await writeShoppingDocumentCas(ownerUserId, current, next)
+          assertOwner()
+          if (committed && plan.committedValue) value = plan.committedValue(current, committed)
+          return committed
+        },
+        refetch,
+        onRefetched: cacheState,
         validateReplay: plan.validateReplay,
+        forceWrite: plan.forceWrite,
       })
-      queryClient.setQueryData(shoppingKey, state)
-      return plan.value
+      assertOwner()
+      const cached = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey)
+      if (options.fenceOwner && cached && cached.contentRevision > state.contentRevision) {
+        throw new ShoppingClearUndoConflictError(
+          'Shopping changed before the response arrived. Review the latest list; Clear Undo is unavailable.'
+        )
+      }
+      cacheState(state)
+      return value
     },
     onError: (error) => {
       if (isAlreadyInShoppingListError(error) &&
@@ -563,24 +629,47 @@ export function useAddToShoppingList() {
 }
 
 export function useClearShoppingList() {
-  return useShoppingMutation((state, _variables: void) => ({
+  const { user } = useAuthContext()
+  return useShoppingMutation<void, ShoppingClearResult | null>(() => ({
     mutation: { type: 'complete' },
-    value: {
-      recipeEntries: state.document.recipeEntries,
-      manualItems: state.document.manualItems,
-      itemOverrides: state.document.itemOverrides,
-    },
-  }))
+    value: null,
+    committedValue: (before, committed) => ({
+      ownerUserId: user!.id,
+      postClearRevision: committed.contentRevision,
+      content: {
+        recipeEntries: before.document.recipeEntries,
+        manualItems: before.document.manualItems,
+        itemOverrides: before.document.itemOverrides,
+      },
+    }),
+  }), { fenceOwner: true })
 }
 
 export function useRestoreShoppingContent() {
-  return useShoppingMutation((_state, content: Pick<
-    ShoppingDocumentV3,
-    'recipeEntries' | 'manualItems' | 'itemOverrides'
-  >) => ({
-    mutation: { type: 'restoreContent', content },
-    value: content,
-  }))
+  const { user } = useAuthContext()
+  return useShoppingMutation((state, result: ShoppingClearResult) => {
+    const validate = (current: ShoppingDocumentStateV3) => {
+      if (!result || result.ownerUserId !== user?.id ||
+          current.contentRevision !== result.postClearRevision) {
+        throw new ShoppingClearUndoConflictError()
+      }
+      if (Object.keys(result.content.recipeEntries).length > 0) {
+        throw new ShoppingClearUndoConflictError(SHOPPING_CLEAR_UNDO_UNAVAILABLE)
+      }
+      if (result.content.manualItems.length === 0 &&
+          Object.keys(result.content.itemOverrides).length === 0) {
+        throw new ShoppingClearUndoConflictError()
+      }
+    }
+    validate(state)
+    return {
+      mutation: { type: 'restoreContent', content: result.content },
+      value: undefined,
+      validateReplay: validate,
+      // Even cache equality must be acknowledged by the fixed-revision CAS.
+      forceWrite: true,
+    }
+  }, { fenceOwner: true })
 }
 
 export function useShoppingConfig() {

@@ -28,6 +28,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -43,6 +47,7 @@ import {
   useRestoreRecipeItems,
   useClearShoppingList,
   useRestoreShoppingContent,
+  SHOPPING_CLEAR_UNDO_UNAVAILABLE,
   useCheckOffItem,
   useBulkCheckOff,
   useMoveToShoppingList,
@@ -672,6 +677,7 @@ export function ShoppingListView() {
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false)
   const [shoppingMode, setShoppingMode] = useState<ShoppingMode>("shop")
   const [categoryIntents, setCategoryIntents] = useState<CategoryIntentByKey>(new Map())
   const [editingItemRowId, setEditingItemRowId] = useState<string | null>(null)
@@ -787,14 +793,30 @@ export function ShoppingListView() {
 
   const handleClearListWithUndo = useCallback(() => {
     clearList.mutate(undefined, {
-      onSuccess: (content) => {
+      onSuccess: (result) => {
+        if (!result) {
+          undoToast.show({ message: 'Shopping list is already clear' })
+          return
+        }
+        const hasRecipes = Object.keys(result.content.recipeEntries).length > 0
         undoToast.show({
-          message: 'Shopping list cleared',
-          onUndo: () => restoreShoppingContent.mutate(content),
+          message: hasRecipes
+            ? `Shopping list cleared. ${SHOPPING_CLEAR_UNDO_UNAVAILABLE}`
+            : 'Shopping list cleared',
+          onUndo: hasRecipes ? undefined : () => restoreShoppingContent.mutate(result),
         })
       },
     })
   }, [clearList, restoreShoppingContent, undoToast])
+
+  const handleRequestClear = useCallback(() => {
+    // source_recipes includes selections whose ingredients are all hidden.
+    if (shoppingList?.source_recipes?.length) {
+      setShowClearConfirmation(true)
+    } else {
+      handleClearListWithUndo()
+    }
+  }, [shoppingList?.source_recipes, handleClearListWithUndo])
 
   // Handle bulk check-off (check all items in a category)
   const handleBulkCheckOff = useCallback((items: ShoppingItem[]) => {
@@ -1549,7 +1571,7 @@ export function ShoppingListView() {
           )}
           <button
             type="button"
-            onClick={handleClearListWithUndo}
+            onClick={handleRequestClear}
             className="flex h-11 w-11 items-center justify-center rounded-full text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
             aria-label="Clear list"
           >
@@ -1578,7 +1600,7 @@ export function ShoppingListView() {
             </Button>
             <Button
               variant="outline"
-              onClick={handleClearListWithUndo}
+              onClick={handleRequestClear}
               className="flex h-10 items-center gap-2 rounded-xl border-red-100 bg-red-50 px-4 text-sm font-medium text-red-600 hover:bg-red-100 hover:text-red-700"
             >
               <Trash2 className="h-4 w-4" />
@@ -1787,7 +1809,7 @@ export function ShoppingListView() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={handleClearListWithUndo}
+                    onClick={handleRequestClear}
                     className="mt-1"
                   >
                     Complete Shopping
@@ -1909,6 +1931,21 @@ export function ShoppingListView() {
         </div>
 
       {/* Shopping Settings Modal */}
+      <AlertDialog open={showClearConfirmation} onOpenChange={setShowClearConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear shopping list?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {SHOPPING_CLEAR_UNDO_UNAVAILABLE} This clears the whole list,
+              including manual items. Your saved recipes and organization stay saved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearListWithUndo}>Clear list</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <ShoppingSettingsModal
         open={showSettings}
         onOpenChange={setShowSettings}

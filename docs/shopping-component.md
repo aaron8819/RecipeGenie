@@ -54,6 +54,43 @@ and reusable Shopping preferences. Rendered `items`, `already_have`, and
 - Delete, clear, and recipe removal happen immediately. Undo is a new inverse
   document mutation; there is no delayed commit queue.
 
+### Conditional Clear Undo (G02/H03, Slice 1)
+
+Clear returns `null` for a reducer no-op and no result on failure. After a
+successful CAS it returns the authenticated owner, the content preimage of
+that successful attempt, and the actual returned post-Clear revision. The
+mutation plan's optional `committedValue` callback runs only after a write
+succeeds, so a rebased Clear captures the fresh preimage rather than the
+original cache. This is local result plumbing, not a persisted retry receipt.
+
+Whole-clear Undo binds permanently to that owner and revision. Initial and
+fresh-replay validation must both match it; the restore CAS uses that same
+revision. Even a restore reducer no-op must pass CAS. Later additions, edits,
+removals, and add-then-delete sequences therefore refuse with
+“Shopping changed after Clear; Undo was not applied.” Restore replaces only
+content and retains preferences. Clear/Undo fence active-owner changes around
+asynchronous reads/writes and reject stale responses without replacing a
+newer cache or exposing a late inverse.
+
+Temporary limits in this V3-only repair:
+
+- Organization/preferences share `contentRevision`, so any intervening document
+  write can safely refuse Undo, including organization-only changes. Slice 8's
+  content epochs separate this from organization writes.
+- A recipe-bearing Clear succeeds but offers no Undo, with explicit temporary
+  unavailability disclosed before confirmation (including hidden selections).
+  Final eligibility comes from the successful Clear attempt, so recipe content
+  acquired during a retry also withholds Undo and explains why afterward.
+  `delete_recipe` advances Shopping revision only when
+  the selection is present; source deletion after Clear can leave that revision
+  unchanged. A client existence read cannot close the race. The whole inverse
+  is unavailable; the manual subset is never silently restored. Atomic source
+  validation and safe recipe-bearing restoration wait for Slice 8.
+- Undo remains local to the existing toast/session. There are no new trip IDs,
+  epochs, schema, receipts, selective restoration UI, or lost-response retry
+  guarantees. Reload loses the Undo action; a completed restore persists.
+  This repair does not establish full Shopping foundation readiness.
+
 ## Projection and Pantry
 
 Projection combines the document with live Pantry rows. Classification order
@@ -162,7 +199,20 @@ Run from `web/`:
 ```bash
 npm run typecheck
 npm run test -- --run src/lib/__tests__/shopping-document.test.ts src/lib/__tests__/shopping-document-persistence.test.ts
+npm run test -- --run src/hooks/__tests__/use-shopping-clear-undo.test.tsx src/components/shopping/__tests__/shopping-list-orchestration.test.tsx
 supabase test db --local --workdir ..
 ```
 
-Last updated: 2026-08-17
+The Clear/Undo hook tests use a deterministic owner/revision-filtered CAS mock
+and assert persisted content plus feedback across races. They do not verify
+live database grants, browser timing, or production state.
+
+For real persistence/browser evidence, run `npx playwright test
+tests/shopping-clear-undo.spec.ts --project=chromium` against the established
+local runtime. It requires already-running loopback Supabase and local E2E
+configuration, creates disposable owners, and never resets shared fixtures.
+It covers 1440 x 900 and 390 x 844, two browser sessions, controlled real CAS
+interleavings, reload persistence, recipe eligibility, and F02 editing.
+Authentication traces/video are disabled and screenshots mask account text.
+
+Last updated: 2026-09-12
