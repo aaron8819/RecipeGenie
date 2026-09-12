@@ -318,3 +318,5 @@ test.describe('My Feature', () => {
 - Check if element is in viewport
 - Verify selectors are correct
 - Consider using more specific locators
+
+Shopping Slice 6 has an isolated-stack test configuration: `node node_modules/@playwright/test/cli.js test --config playwright.shopping-protocol.config.ts`. It requires task-owned app port 3116 and Supabase ports 56321/56322; it does not bootstrap or reset shared fixtures. See `docs/shopping-slice6.md` for evidence boundaries.

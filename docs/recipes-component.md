@@ -1,5 +1,7 @@
 # Recipes Domain Reference
 
+> Slice 6 supersedes legacy Shopping write paths described below. See [Shopping command boundary](../docs/shopping-slice6.md) for the current service-only commit, receipts, writer fence and rollout constraints. Historical sections retain their original migration context.
+
 Use this doc when working on recipe CRUD, recipe detail, the recipe form
 dialog, text or URL import, recipe images, tags/categories, or recipe sharing.
 

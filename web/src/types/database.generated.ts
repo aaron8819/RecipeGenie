@@ -382,6 +382,40 @@ export type Database = {
         Args: { p_legacy_id?: string; p_recipe_uuid?: string }
         Returns: string
       }
+      shopping_admit: {
+        Args: {
+          p_hash: string
+          p_operation: string
+          p_owner: string
+          p_recover: boolean
+        }
+        Returns: Json
+      }
+      shopping_command_context: {
+        Args: {
+          p_hash: string
+          p_operation: string
+          p_owner: string
+          p_sequence: number
+        }
+        Returns: Json
+      }
+      shopping_commit: {
+        Args: {
+          p_action: string
+          p_dependency: number
+          p_document: Json
+          p_hash: string
+          p_operation: string
+          p_outcome: string
+          p_owner: string
+          p_pantry_item?: string
+          p_recipe?: string
+          p_revision: number
+          p_sequence: number
+        }
+        Returns: Json
+      }
       toggle_weekly_recipe_made: {
         Args: {
           p_made: boolean
@@ -529,3 +563,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

@@ -6,7 +6,7 @@ import type { Recipe, RecipeInsert, RecipeUpdate } from "@/types/database"
 import { useAuthContext } from "@/lib/auth-context"
 import { useCategories, useUpdateUserConfig } from "@/hooks/shared/user-config"
 import { getSupabase } from "@/lib/supabase/client"
-import { deleteRecipeByUuid } from "@/lib/recipe-deletion"
+import { executeShoppingCommand } from "@/lib/shopping-command-client"
 import {
   createRecipeUuid,
   mapRecipeRow,
@@ -464,7 +464,7 @@ export function useDeleteRecipe() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      await deleteRecipeByUuid(getSupabase(), id, user!.id)
+      await executeShoppingCommand(user!.id, { protocol: 1, observedRevision: 0, mutation: { type: 'deleteRecipe', recipeId: id } })
       return id
     },
     // Optimistic update
@@ -779,4 +779,3 @@ export function useDeleteTag() {
     },
   })
 }
-

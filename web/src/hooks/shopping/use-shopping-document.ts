@@ -1,5 +1,6 @@
 'use client'
 
+import { executeShoppingCommand } from '@/lib/shopping-command-client'
 import { shoppingRecipeSelections } from '@/lib/shopping-sources'
 import { readShoppingCompatibility } from '@/lib/shopping-compatibility'
 
@@ -31,7 +32,6 @@ import {
   type ShoppingRecipeEntryV2,
 } from '@/lib/shopping-document'
 import {
-  persistShoppingMutationWithReplay,
   ShoppingDocumentConflictError,
   type ShoppingDocumentReplayValidator,
 } from '@/lib/shopping-document-persistence'
@@ -42,7 +42,6 @@ import {
   normalizeScaleRatioV1,
   parseRationalLexeme,
 } from '@/lib/recipe-quantity'
-import { normalizePantryItemName } from '@/lib/pantry'
 import { isAlreadyInShoppingListError } from '@/lib/shopping-feedback'
 import { getSupabase } from '@/lib/supabase/client'
 import { requireShoppingRowRef } from '@/lib/shopping-row-reference'
@@ -66,11 +65,12 @@ type MutationPlan<TResult> = {
   value: TResult
   committedValue?: (
     before: ShoppingDocumentStateV3,
-    committed: ShoppingDocumentStateV3
+    committed: ShoppingDocumentStateV3,
+    receipt?: { undoAvailable?: boolean | null; historical?: boolean }
   ) => TResult
   validateReplay?: ShoppingDocumentReplayValidator
   forceWrite?: boolean
-  resolvedValue?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3) => TResult
+  resolvedValue?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3, outcome?: string) => TResult
 }
 
 export const SHOPPING_CLEAR_UNDO_UNAVAILABLE =
@@ -87,6 +87,8 @@ export class ShoppingClearUndoConflictError extends ShoppingDocumentConflictErro
 export interface ShoppingClearResult {
   readonly ownerUserId: string
   readonly postClearRevision: number
+  readonly undoAvailable?: boolean
+  readonly historical?: boolean
   readonly content: Pick<ShoppingDocumentV3,
     'recipeEntries' | 'manualItems' | 'itemOverrides'>
 }
@@ -117,7 +119,7 @@ async function fetchShoppingDocumentState(ownerUserId?: string): Promise<Shoppin
   const request = supabase.from('shopping_list') as unknown as {
     select: (columns: string) => {
       eq: (column: string, value: string) => ReturnType<typeof request.select>
-      single: () => Promise<{
+      maybeSingle: () => Promise<{
         data: ShoppingDocumentRow | null
         error: { message: string } | null
       }>
@@ -126,43 +128,10 @@ async function fetchShoppingDocumentState(ownerUserId?: string): Promise<Shoppin
   const selection = request.select('document,content_revision')
   const { data, error } = await (ownerUserId
     ? selection.eq('user_id', ownerUserId)
-    : selection).single()
+    : selection).maybeSingle()
   if (error) throw error
-  if (!data) throw new Error('Shopping document not found')
+  if (!data) return { document: createEmptyShoppingDocument(), contentRevision: 0 }
   return parseShoppingDocumentRow(data)
-}
-
-async function writeShoppingDocumentCas(
-  userId: string,
-  current: ShoppingDocumentStateV3,
-  next: ShoppingDocumentStateV3
-): Promise<ShoppingDocumentStateV3 | null> {
-  const supabase = getSupabase()
-  const request = supabase.from('shopping_list') as unknown as {
-    update: (values: { document: unknown; content_revision: number }) => {
-      eq: (column: string, value: string | number) => {
-        eq: (column: string, value: string | number) => {
-          select: (columns: string) => {
-            maybeSingle: () => Promise<{
-              data: ShoppingDocumentRow | null
-              error: { message: string } | null
-            }>
-          }
-        }
-      }
-    }
-  }
-  const { data, error } = await request
-    .update({
-      document: next.document,
-      content_revision: current.contentRevision + 1,
-    })
-    .eq('user_id', userId)
-    .eq('content_revision', current.contentRevision)
-    .select('document,content_revision')
-    .maybeSingle()
-  if (error) throw error
-  return data ? parseShoppingDocumentRow(data) : null
 }
 
 export function useShoppingDocumentState() {
@@ -225,7 +194,7 @@ function useShoppingMutation<TVariables, TResult>(
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (variables: TVariables) => {
       const assertOwner = () => {
-        if (options.fenceOwner && (!user || getActivePrincipalId() !== ownerUserId)) {
+        if (!user || getActivePrincipalId() !== ownerUserId) {
           throw new ShoppingClearUndoConflictError(
             options.settings
               ? 'Your account changed. The settings change was not completed.'
@@ -252,25 +221,55 @@ function useShoppingMutation<TVariables, TResult>(
       const plan = await createPlan(initial, variables)
       assertOwner()
       let value = plan.value
-      const state = await persistShoppingMutationWithReplay({
-        initial,
+      const command = {
+        protocol: 1 as const,
+        observedRevision: initial.contentRevision,
         mutation: plan.mutation,
-        write: async (current, next) => {
-          assertOwner()
-          assertShoppingReadable(queryClient, shoppingKey)
-          const committed = await writeShoppingDocumentCas(ownerUserId, current, next)
-          assertOwner()
-          if (committed && plan.committedValue) value = plan.committedValue(current, committed)
-          return committed
-        },
-        refetch,
-        onRefetched: cacheState,
-        validateReplay: plan.validateReplay,
-        forceWrite: plan.forceWrite,
-        onResolved: plan.resolvedValue ? (before, after) => {
-          value = plan.resolvedValue!(before, after)
-        } : undefined,
-      })
+        ...(plan.mutation.type === 'editManualItem' ? {
+          observedManual: initial.document.manualItems.find((item) =>
+            plan.mutation.type === 'editManualItem' && item.id === plan.mutation.id),
+        } : {}),
+        ...((plan.mutation.type === 'setExclusion' || plan.mutation.type === 'setFamilySetting')
+          ? { observedSetting: settingValue(initial, plan.mutation) } : {}),
+      }
+      let result
+      try {
+        result = await executeShoppingCommand(ownerUserId, command)
+      } catch (error) {
+        cacheState(await refetch())
+        if (plan.mutation.type === 'restoreContent' && error instanceof ShoppingDocumentConflictError) {
+          throw new ShoppingClearUndoConflictError()
+        }
+        throw error
+      }
+      let state: ShoppingDocumentStateV3
+      try { state = await refetch() } catch {
+        assertOwner()
+        // Execution is known committed. A subsequent read failure must not
+        // turn it into a failed input submission that invites another write.
+        undoToast.show({ message: 'Shopping change confirmed. Could not refresh the list; try loading it again.' })
+        void queryClient.invalidateQueries({ queryKey: shoppingKey })
+        if (plan.committedValue && result.receipt?.outcome === 'Applied') {
+          return plan.committedValue(result.before || initial,
+            { ...initial, contentRevision: result.receipt.revision },
+            { undoAvailable: false, historical: result.status === 'AlreadyApplied' })
+        }
+        return plan.value
+      }
+      if (plan.mutation.type === 'complete' && result.receipt && state.contentRevision > result.receipt.revision) {
+        cacheState(state)
+        throw new ShoppingClearUndoConflictError('Shopping changed before the response arrived. Review the latest list; Clear Undo is unavailable.')
+      }
+      if (result.before && result.receipt?.outcome === 'Applied') {
+        const committed = { document: state.document, contentRevision: result.receipt.revision }
+        if (plan.committedValue) value = plan.committedValue(result.before, committed, result.receipt)
+        if (plan.resolvedValue) value = plan.resolvedValue(result.before, committed, result.receipt.outcome)
+      } else if (plan.committedValue && result.receipt?.outcome === 'Applied') {
+        value = plan.committedValue({ document: createEmptyShoppingDocument(), contentRevision: 0 },
+          { ...state, contentRevision: result.receipt.revision }, { undoAvailable: false, historical: true })
+      } else if (plan.resolvedValue) {
+        value = plan.resolvedValue(state, state, result.receipt?.outcome)
+      }
       assertOwner()
       const cached = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey)
       if (options.fenceOwner && cached && cached.contentRevision > state.contentRevision) {
@@ -578,9 +577,11 @@ export function useClearShoppingList() {
   return useShoppingMutation<void, ShoppingClearResult | null>(() => ({
     mutation: { type: 'complete' },
     value: null,
-    committedValue: (before, committed) => ({
+    committedValue: (before, committed, receipt) => ({
       ownerUserId: user!.id,
       postClearRevision: committed.contentRevision,
+      undoAvailable: receipt?.undoAvailable !== false,
+      historical: receipt?.historical === true,
       content: {
         recipeEntries: before.document.recipeEntries,
         manualItems: before.document.manualItems,
@@ -710,7 +711,11 @@ function useShoppingSettingMutation() {
     validateReplay(state)
     const result = (before: ShoppingDocumentStateV3) =>
       settingValue(before, input.intent) === input.intent.enabled ? 'unchanged' as const : 'applied' as const
-    return { mutation: input.intent, value: result(state), validateReplay, resolvedValue: result }
+    return {
+      mutation: input.intent, value: result(state), validateReplay,
+      resolvedValue: (before: ShoppingDocumentStateV3, _after: ShoppingDocumentStateV3, outcome?: string) =>
+        outcome === 'Applied' ? 'applied' as const : outcome === 'Unchanged' ? 'unchanged' as const : result(before),
+    }
   }, { fenceOwner: true, settings: true })
   return {
     ...update,
@@ -752,44 +757,6 @@ export function useUpdateIngredientExclusionSetting() {
   }
 }
 
-type PantryMoveRow = ShoppingDocumentRow & {
-  pantry_item: PantryItem | null
-  pantry_was_inserted: boolean
-}
-
-async function moveToPantryCas(
-  current: ShoppingDocumentStateV3,
-  next: ShoppingDocumentStateV3,
-  item: ShoppingItem
-): Promise<{ state: ShoppingDocumentStateV3; pantryItem: PantryItem | null; wasAdded: boolean } | null> {
-  const supabase = getSupabase()
-  const rpc = supabase as unknown as {
-    rpc: (name: 'move_shopping_document_item_to_pantry', args: {
-      p_expected_revision: number
-      p_document: unknown
-      p_item: string
-      p_pantry_qty: number | null
-      p_pantry_unit: string
-    }) => Promise<{ data: PantryMoveRow[] | null; error: { code?: string; message: string } | null }>
-  }
-  const { data, error } = await rpc.rpc('move_shopping_document_item_to_pantry', {
-    p_expected_revision: current.contentRevision,
-    p_document: next.document,
-    p_item: normalizePantryItemName(item.item),
-    p_pantry_qty: item.amount,
-    p_pantry_unit: item.unit || '',
-  })
-  if (error?.code === '40001') return null
-  if (error) throw error
-  const row = data?.[0]
-  if (!row) return null
-  return {
-    state: parseShoppingDocumentRow(row),
-    pantryItem: row.pantry_item,
-    wasAdded: row.pantry_was_inserted,
-  }
-}
-
 export function useAddToPantryAndRemove() {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
@@ -804,43 +771,30 @@ export function useAddToPantryAndRemove() {
       const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
         await fetchShoppingDocumentState()
       const rowRef = requireShoppingRowRef(item)
-      const mutation: ShoppingDocumentMutation = rowRef.startsWith('derived:')
-        ? {
-            type: 'setBucketOverride',
-            aggregateKey: rowRef.slice('derived:'.length),
-            bucket: undefined,
-          }
-        : {
-            type: 'editManualItem',
-            id: rowRef.slice('manual:'.length),
-            changes: { bucket: 'already_have' },
-          }
-      let pantryResult: Awaited<ReturnType<typeof moveToPantryCas>> = null
-      const state = await persistShoppingMutationWithReplay({
-        initial,
-        mutation,
-        write: async (current, next) => {
-          assertShoppingReadable(queryClient, shoppingKey)
-          pantryResult = await moveToPantryCas(current, next, item)
-          return pantryResult?.state || null
-        },
-        refetch: fetchShoppingDocumentState,
-        onRefetched: (fresh) => queryClient.setQueryData(shoppingKey, fresh),
-        forceWrite: true,
+      const result = await executeShoppingCommand(ownerUserId, {
+        protocol: 1, observedRevision: initial.contentRevision,
+        mutation: { type: 'pantry', rowRef },
       })
-      const completedPantryResult = pantryResult as Exclude<
-        Awaited<ReturnType<typeof moveToPantryCas>>,
-        null
-      > | null
+      let state: ShoppingDocumentStateV3 | null = null
+      try { state = await fetchShoppingDocumentState(ownerUserId) } catch {
+        if (getActivePrincipalId() !== ownerUserId) throw new ShoppingDocumentConflictError()
+        undoToast.show({ message: 'Pantry move confirmed. Could not refresh Shopping; try loading it again.' })
+        void queryClient.invalidateQueries({ queryKey: shoppingKey })
+      }
+      if (getActivePrincipalId() !== ownerUserId) throw new ShoppingDocumentConflictError()
       return {
-        state,
-        item,
-        pantryItem: completedPantryResult?.pantryItem || null,
-        wasAdded: completedPantryResult?.wasAdded || false,
+        state, item,
+        pantryItem: result.receipt?.pantryId ? {
+          id: result.receipt.pantryId, user_id: ownerUserId,
+          item: item.item, created_at: '',
+        } as PantryItem : null,
+        wasAdded: result.receipt?.pantryWasAdded || false,
       }
     },
     onSuccess: (result) => {
-      queryClient.setQueryData(shoppingKey, result.state)
+      const state = result.state
+      if (state) queryClient.setQueryData<ShoppingDocumentStateV3>(shoppingKey, (cached) =>
+        cached && cached.contentRevision > state.contentRevision ? cached : state)
       // A bridge result is one row, never an authoritative Pantry snapshot.
       void queryClient.invalidateQueries({ queryKey: pantryKeys.list(ownerUserId) })
     },

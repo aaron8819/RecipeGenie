@@ -804,10 +804,14 @@ export function ShoppingListView() {
         }
         const hasRecipes = Object.keys(result.content.recipeEntries).length > 0
         undoToast.show({
-          message: hasRecipes
+          message: result.historical
+            ? 'The earlier Clear was confirmed. Showing the current list.'
+            : hasRecipes
             ? `Shopping list cleared. ${SHOPPING_CLEAR_UNDO_UNAVAILABLE}`
+            : result.undoAvailable === false
+            ? 'Shopping list cleared. Undo is unavailable for this Clear.'
             : 'Shopping list cleared',
-          onUndo: hasRecipes ? undefined : () => restoreShoppingContent.mutate(result),
+          onUndo: hasRecipes || result.undoAvailable === false ? undefined : () => restoreShoppingContent.mutate(result),
         })
       },
     })

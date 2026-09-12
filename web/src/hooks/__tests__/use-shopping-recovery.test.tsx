@@ -1,3 +1,7 @@
+import { setActivePrincipalId } from '@/lib/principal-session'
+import { runHookCommand } from '@/test/shopping-hook-command-mock'
+import type { ShoppingCommand } from '@/lib/shopping-command'
+import type { ShoppingDocumentV3 } from '@/lib/shopping-document'
 import type { ReactNode } from 'react'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -10,6 +14,24 @@ import { pantryKeys, shoppingKeys } from '@/lib/query-keys'
 const db = vi.hoisted(() => ({ document: null as unknown, revision: 0,
   shoppingError: false, pantryError: false, reads: 0, pantryReads: 0,
   writes: vi.fn(), bridge: vi.fn() }))
+vi.mock('@/lib/shopping-command-client', () => ({
+  executeShoppingCommand: async (_owner: string, command: ShoppingCommand) => {
+    if (command.mutation.type === 'pantry') {
+      const result = await db.bridge()
+      if (result.error) throw result.error
+      const row = result.data[0]
+      db.document = row.document; db.revision = row.content_revision
+      return { status: 'Applied', receipt: { outcome: 'Applied', revision: db.revision,
+        pantryId: row.pantry_item.id, pantryWasAdded: row.pantry_was_inserted } }
+    }
+    return runHookCommand(command, () => ({ document: db.document as ShoppingDocumentV3,
+      contentRevision: db.revision }), async (_before, next) => {
+      db.writes({ document: next.document, content_revision: next.contentRevision })
+      db.document = next.document; db.revision = next.contentRevision
+      return true
+    })
+  },
+}))
 vi.mock('@/lib/auth-context', () => ({ useAuthContext: () => ({ user: { id: 'owner' }, loading: false }) }))
 vi.mock('@/hooks/use-undo-toast', () => ({ useUndoToast: () => ({ show: vi.fn() }) }))
 vi.mock('@/lib/supabase/client', () => ({ getSupabase: () => ({
@@ -20,7 +42,7 @@ vi.mock('@/lib/supabase/client', () => ({ getSupabase: () => ({
       return db.pantryError ? { data: null, error: new Error('offline') } :
         { data: [{ id: 'rice', user_id: 'owner', item: 'rice' }], error: null }
     } }) }
-    const read = { eq: () => read, single: async () => {
+    const read = { eq: () => read, maybeSingle: async () => {
       db.reads++
       return db.shoppingError ? { data: null, error: new Error('offline') } :
         { data: { document: db.document, content_revision: db.revision }, error: null }
@@ -43,6 +65,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 const selectionId = '10000000-0000-4000-8000-000000000001'
 beforeEach(() => {
+  setActivePrincipalId('owner')
   client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } })
   db.document = createEmptyShoppingDocument()
   db.revision = 0
@@ -53,6 +76,26 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear() })
 
 describe('Shopping dependency recovery', () => {
+  it('keeps a confirmed Pantry move successful when the following Shopping read fails', async () => {
+    client.setQueryData(shoppingKeys.detail('owner'), {
+      document: createEmptyShoppingDocument(), contentRevision: 0,
+    })
+    db.bridge.mockImplementationOnce(async () => {
+      db.shoppingError = true
+      return { data: [{ document: createEmptyShoppingDocument(), content_revision: 1,
+        pantry_item: { id: 'milk' }, pantry_was_inserted: true }], error: null }
+    })
+    const { result } = renderHook(useAddToPantryAndRemove, { wrapper })
+    await act(async () => {
+      const saved = await result.current.mutateAsync({ rowId: 'manual:milk', item: 'milk',
+        amount: null, unit: '', categoryKey: 'dairy', categoryOrder: 1 })
+      expect(saved.pantryItem?.id).toBe('milk')
+      expect(saved.state).toBeNull()
+    })
+    expect(db.bridge).toHaveBeenCalledTimes(1)
+    expect(client.getQueryData(shoppingKeys.detail('owner'))).toMatchObject({ contentRevision: 0 })
+  })
+
   it('distinguishes initial loading from a successfully loaded empty document without writing', async () => {
     const { result } = renderHook(useShoppingList, { wrapper })
     expect(result.current.isLoading).toBe(true)

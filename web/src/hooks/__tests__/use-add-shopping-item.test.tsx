@@ -1,3 +1,6 @@
+import { setActivePrincipalId } from '@/lib/principal-session'
+import { runHookCommand } from '@/test/shopping-hook-command-mock'
+import type { ShoppingCommand } from '@/lib/shopping-command'
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -40,6 +43,21 @@ const database = vi.hoisted(() => ({
   updateCalls: vi.fn(),
 }))
 
+vi.mock('@/lib/shopping-command-client', () => ({
+  executeShoppingCommand: async (_owner: string, command: ShoppingCommand) =>
+    runHookCommand(command, () => ({ document: database.shoppingRow!.document as ShoppingDocumentV3,
+      contentRevision: database.shoppingRow!.content_revision }), async (_before, next) => {
+      database.updateCalls({ document: next.document, content_revision: next.contentRevision })
+      if (database.updateError) throw database.updateError
+      if (database.conflictState) {
+        database.shoppingRow = { document: database.conflictState.document, content_revision: database.conflictState.contentRevision }
+        database.conflictState = null
+        return false
+      }
+      database.shoppingRow = { document: next.document, content_revision: next.contentRevision }
+      return true
+    }, database.pantryRows as PantryItem[]),
+}))
 vi.mock('@/lib/auth-context', () => ({
   useAuthContext: () => ({ user: { id: USER_ID }, loading: false }),
 }))
@@ -68,7 +86,7 @@ vi.mock('@/lib/supabase/client', () => ({
 
       return {
         select: () => ({
-          single: async () => {
+          maybeSingle: async () => {
             database.shoppingSelectCalls()
             return database.shoppingRow
               ? { data: database.shoppingRow, error: null }
@@ -180,7 +198,7 @@ function setup(
     document: initial.document,
     content_revision: initial.contentRevision,
   }
-  if (pantryItems) queryClient.setQueryData(PANTRY_KEY, pantryItems)
+  if (pantryItems) { queryClient.setQueryData(PANTRY_KEY, pantryItems); database.pantryRows = pantryItems }
 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -243,6 +261,7 @@ async function updateManualItem(
 
 describe('useAddShoppingItem active-list duplicate behavior', () => {
   beforeEach(() => {
+  setActivePrincipalId(USER_ID)
     vi.clearAllMocks()
     database.pantryRows = []
     database.pantryResponse = null
@@ -447,7 +466,8 @@ describe('useAddShoppingItem active-list duplicate behavior', () => {
     })
     expect(database.updateCalls).not.toHaveBeenCalled()
 
-    resolvePantry({ data: [pantry('olive oil')], error: null })
+    database.pantryRows = [pantry('olive oil')]
+    resolvePantry({ data: database.pantryRows, error: null })
     await act(async () => {
       await pending
     })

@@ -1,3 +1,5 @@
+import { runHookCommand } from '@/test/shopping-hook-command-mock'
+import type { ShoppingCommand } from '@/lib/shopping-command'
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -30,6 +32,19 @@ const db = vi.hoisted(() => ({
   writes: [] as { owner: string; revision: number; applied: boolean }[],
 }))
 
+vi.mock('@/lib/shopping-command-client', () => ({
+  executeShoppingCommand: async (owner: string, command: ShoppingCommand) =>
+    runHookCommand(command, () => db.states.get(owner)!, async (before, next) => {
+      db.beforeWrite?.()
+      const applied = !db.failWrite && auth.id === owner && db.states.get(owner)!.contentRevision === before.contentRevision
+      db.writes.push({ owner, revision: before.contentRevision, applied })
+      if (db.failWrite) throw new Error('Write failed')
+      if (!applied) return false
+      db.states.set(owner, structuredClone(next))
+      await db.afterWrite?.()
+      return true
+    }),
+}))
 vi.mock('@/lib/auth-context', () => ({
   useAuthContext: () => ({ user: auth.id ? { id: auth.id } : null, loading: false }),
 }))
@@ -43,7 +58,7 @@ vi.mock('@/lib/supabase/client', () => ({
           let owner = auth.id!
           const read = {
             eq: (_column: string, value: string) => { owner = value; return read },
-            single: async () => {
+            maybeSingle: async () => {
               const snapshot = structuredClone(db.states.get(owner)!)
               await db.beforeRead?.()
               return { data: { document: snapshot.document, content_revision: snapshot.contentRevision }, error: null }
