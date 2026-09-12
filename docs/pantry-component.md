@@ -57,6 +57,10 @@ the shared authenticated shell.
   semantic registry also permits only explicitly safe common forms, such as
   cumin to ground cumin and oregano to dried oregano.
 - Matching never uses substrings or family equality by itself.
+- Each addition/removal submits the existing canonical purchase key, not a
+  replacement array. Concurrent different-key changes survive. Repeated
+  transitions are authoritative no-ops; ambiguous stale opposite intent
+  conflicts. Failed additions retain their input for retry.
 
 ### Always-excluded families
 
@@ -71,6 +75,10 @@ the shared authenticated shell.
   exceptions and does not instruct users to clear or regenerate Shopping.
 - Ingredient exclusions remain a separate section and count; changing a family
   setting does not change `excluded_keywords`.
+- Family controls update only their targeted setting, retain a failed choice
+  for explicit retry, and show authoritative saved values after conflict.
+  Independent settings survive concurrent writes. See the Shopping reference
+  for the precise temporary value/revision and ABA limitations.
 
 ### What Can I Make
 
@@ -83,4 +91,4 @@ rather than introduce a separate matcher.
 - See [`shopping-component.md`](./shopping-component.md) for the downstream shopping behavior that consumes pantry data.
 - See [`./project_overview.md`](./project_overview.md) for the broader architecture map.
 
-Last updated: 2026-08-07
+Last updated: 2026-09-12

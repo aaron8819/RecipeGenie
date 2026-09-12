@@ -255,7 +255,7 @@ describe("PantryList", () => {
     expect(excluded).toHaveAttribute("aria-pressed", "true")
   })
 
-  it("saves one family setting and shows a failure toast", () => {
+  it("retains a failed family choice for retry while the hook reports the error", () => {
     render(<PantryList />)
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Salt variants" }))
@@ -266,10 +266,11 @@ describe("PantryList", () => {
     )
     const options = updateIngredientExclusionMutate.mock.calls[0][1]
     act(() => options.onError())
-    expect(undoToastShow).toHaveBeenCalledWith({
-      message: "Could not save the shopping exclusion setting. Try again.",
-      duration: 4000,
-    })
+    expect(screen.getByRole("alert")).toHaveTextContent("Salt variants could not be turned on.")
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    expect(updateIngredientExclusionMutate.mock.calls[1][0]).toEqual(
+      { setting: "exclude_salt_variants", enabled: true }
+    )
   })
 
   it("disables family settings while their serialized write is pending", () => {

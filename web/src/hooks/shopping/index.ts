@@ -19,7 +19,7 @@ export {
   useClearShoppingList,
   useRestoreShoppingContent,
   SHOPPING_CLEAR_UNDO_UNAVAILABLE,
-  useUpdateExcludedKeywords,
+  useSetShoppingExclusion,
   useUpdateIngredientExclusionSetting,
   shoppingDocumentToList,
   shoppingDocumentToConfig,

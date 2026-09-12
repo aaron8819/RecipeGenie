@@ -28,6 +28,7 @@ export async function persistShoppingMutationWithReplay({
   onRefetched,
   validateReplay,
   forceWrite = false,
+  onResolved,
 }: {
   initial: ShoppingDocumentStateV3
   mutation: ShoppingDocumentMutation
@@ -36,21 +37,26 @@ export async function persistShoppingMutationWithReplay({
   onRefetched?: (state: ShoppingDocumentStateV3) => void
   validateReplay?: ShoppingDocumentReplayValidator
   forceWrite?: boolean
+  onResolved?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3) => void
 }): Promise<ShoppingDocumentStateV3> {
+  const resolved = (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3) => {
+    onResolved?.(before, after)
+    return after
+  }
   const firstNext = applyShoppingDocumentMutation(initial, mutation)
-  if (firstNext === initial && !forceWrite) return initial
+  if (firstNext === initial && !forceWrite) return resolved(initial, initial)
 
   const firstWrite = await write(initial, firstNext)
-  if (firstWrite) return firstWrite
+  if (firstWrite) return resolved(initial, firstWrite)
 
   const fresh = await refetch()
   onRefetched?.(fresh)
   await validateReplay?.(fresh)
   const replayed = applyShoppingDocumentMutation(fresh, mutation)
-  if (replayed === fresh && !forceWrite) return fresh
+  if (replayed === fresh && !forceWrite) return resolved(fresh, fresh)
 
   const retry = await write(fresh, replayed)
-  if (retry) return retry
+  if (retry) return resolved(fresh, retry)
 
   throw new ShoppingDocumentConflictError()
 }

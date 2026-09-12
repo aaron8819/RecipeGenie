@@ -91,6 +91,46 @@ Temporary limits in this V3-only repair:
   guarantees. Reload loses the Undo action; a completed restore persists.
   This repair does not establish full Shopping foundation readiness.
 
+### Concurrent exclusion and family settings (G03/H07, Slice 2)
+
+Pantry additions/removals submit one canonical exclusion key through
+`useSetShoppingExclusion`. Salt and Black pepper controls submit one explicit
+family value. Small pure validation helpers live in `shopping-settings.ts`.
+Each submission captures its observed state and owner, reads authoritative
+state before planning, and validates again after a failed CAS. The reducer
+changes only that key or family setting; content and organization stay intact.
+
+- Different-key additions/removals and different-family edits survive.
+- Repeated exclusion transitions converge: adding a newly added key or removing
+  an already removed key returns unchanged after an authoritative read.
+- An already-satisfied intent from a stale revision is conservatively refused:
+  it could otherwise reverse an opposite action. A same-family value changed
+  since observation also refuses, even if it now matches the requested value.
+- No-op results come from authoritative state, never cached equality; no-op
+  reads do not increment the revision. Outcomes reflect the successful attempt,
+  including replay. Conflict refreshes the cache monotonically within its owner.
+- Failed exclusion input remains in the form. Failed family choices remain
+  available through an explicit retry control; checkboxes show saved values.
+  Queued operations and old batch closures cannot acquire a different owner.
+- The former whole-array exclusion hook is removed. The generic config adapter
+  remains for Shopping category settings; any replacement that includes
+  exclusions/families (including mixed full-config updates and intentional bulk
+  resets) requires the exact observed document revision, initially and on replay.
+  No current UI offers bulk exclusion/family reset. Category-only replacement
+  callers remain deferred; they do not replace exclusions or family fields.
+
+V3 has no persistent field/key versions. A value that changes and returns to
+its observed value (ABA) cannot be distinguished from an unrelated write;
+independent transitions may therefore pass value-based validation after ABA.
+This is not a persistent field-version guarantee. Slice 6 introduces the
+authoritative boundary and writer fence; Slice 9 completes field-version
+organization behavior. Older clients/direct document writers remain outside
+this application repair until Slice 6. Slice 1 Undo still refuses every
+intervening document write, including settings.
+
+The shared toast provider now cancels obsolete hide transitions, so a quick
+asynchronous conflict response cannot be removed by the prior Undo timer.
+
 ## Projection and Pantry
 
 Projection combines the document with live Pantry rows. Classification order

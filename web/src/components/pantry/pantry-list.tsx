@@ -519,22 +519,19 @@ export function PantryList() {
   const undoToast = useUndoToast()
   const userConfig = useShoppingConfig()
   const updateIngredientExclusion = useUpdateIngredientExclusionSetting()
+  const [failedFamilyChange, setFailedFamilyChange] = useState<{
+    setting: IngredientExclusionSetting; enabled: boolean
+  } | null>(null)
 
   const handleIngredientExclusionChange = useCallback(
     (setting: IngredientExclusionSetting, enabled: boolean) => {
-      updateIngredientExclusion.mutate(
-        { setting, enabled },
-        {
-          onError: () => {
-            undoToast.show({
-              message: "Could not save the shopping exclusion setting. Try again.",
-              duration: 4000,
-            })
-          },
-        }
-      )
+      updateIngredientExclusion.mutate({ setting, enabled }, {
+        onSuccess: () => setFailedFamilyChange(null),
+        // The mutation owns the conflict toast. Retain the requested choice.
+        onError: () => setFailedFamilyChange({ setting, enabled }),
+      })
     },
-    [undoToast, updateIngredientExclusion]
+    [updateIngredientExclusion]
   )
 
   const handleRemovePantryItem = useCallback(
@@ -654,6 +651,16 @@ export function PantryList() {
 
   return (
     <div className="space-y-6">
+      {failedFamilyChange && (
+        <div role="alert" className="rounded-lg border p-3 text-sm">
+          {failedFamilyChange.setting === "exclude_salt_variants" ? "Salt variants" : "Black pepper variants"}
+          {" could not be turned "}{failedFamilyChange.enabled ? "on" : "off"}{". "}
+          <Button variant="outline" size="sm" disabled={updateIngredientExclusion.isPending}
+            onClick={() => handleIngredientExclusionChange(failedFamilyChange.setting, failedFamilyChange.enabled)}>
+            Try again
+          </Button>
+        </div>
+      )}
       <div className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>

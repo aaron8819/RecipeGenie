@@ -1,6 +1,11 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  settingValue, validateSettingIntent, validateSettingsReplacement,
+  ShoppingSettingsConflictError,
+  type ShoppingSettingIntent,
+} from '@/lib/shopping-settings'
 import { useAuthContext } from '@/lib/auth-context'
 import { getActivePrincipalId } from '@/lib/principal-session'
 import { useUndoToast } from '@/hooks/use-undo-toast'
@@ -64,6 +69,7 @@ type MutationPlan<TResult> = {
   ) => TResult
   validateReplay?: ShoppingDocumentReplayValidator
   forceWrite?: boolean
+  resolvedValue?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3) => TResult
 }
 
 export const SHOPPING_CLEAR_UNDO_UNAVAILABLE =
@@ -254,6 +260,7 @@ function useShoppingMutation<TVariables, TResult>(
   options: {
     duplicateFeedbackOwner?: DuplicateFeedbackOwner
     fenceOwner?: boolean
+    settings?: boolean
   } = {}
 ) {
   const queryClient = useQueryClient()
@@ -264,13 +271,15 @@ function useShoppingMutation<TVariables, TResult>(
 
   return useMutation({
     // A queued Clear must not acquire the next owner's mutation function.
-    mutationKey: options.fenceOwner ? ['shopping-clear-undo', ownerUserId] : undefined,
+    mutationKey: options.fenceOwner ? [options.settings ? 'shopping-settings' : 'shopping-clear-undo', ownerUserId] : undefined,
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (variables: TVariables) => {
       const assertOwner = () => {
         if (options.fenceOwner && (!user || getActivePrincipalId() !== ownerUserId)) {
           throw new ShoppingClearUndoConflictError(
-            'Shopping account changed; Clear/Undo was not completed for this account.'
+            options.settings
+              ? 'Your account changed. The settings change was not completed.'
+              : 'Shopping account changed; Clear/Undo was not completed for this account.'
           )
         }
       }
@@ -286,8 +295,9 @@ function useShoppingMutation<TVariables, TResult>(
           cached && cached.contentRevision > next.contentRevision ? cached : next)
       }
       assertOwner()
-      const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
-        await refetch()
+      const initial = options.settings ? await refetch() :
+        queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) || await refetch()
+      if (options.settings) cacheState(initial)
       const plan = await createPlan(initial, variables)
       assertOwner()
       let value = plan.value
@@ -305,12 +315,17 @@ function useShoppingMutation<TVariables, TResult>(
         onRefetched: cacheState,
         validateReplay: plan.validateReplay,
         forceWrite: plan.forceWrite,
+        onResolved: plan.resolvedValue ? (before, after) => {
+          value = plan.resolvedValue!(before, after)
+        } : undefined,
       })
       assertOwner()
       const cached = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey)
       if (options.fenceOwner && cached && cached.contentRevision > state.contentRevision) {
         throw new ShoppingClearUndoConflictError(
-          'Shopping changed before the response arrived. Review the latest list; Clear Undo is unavailable.'
+          options.settings
+            ? 'Shopping changed before the response arrived. Review the latest settings.'
+            : 'Shopping changed before the response arrived. Review the latest list; Clear Undo is unavailable.'
         )
       }
       cacheState(state)
@@ -720,22 +735,71 @@ export function createShoppingConfigUpdateMutation(
 }
 
 export function useUpdateShoppingConfig() {
-  return useShoppingMutation((_state, updates: Partial<ShoppingConfig>) => {
+  const { user } = useAuthContext()
+  const owner = user?.id
+  const query = useShoppingDocumentState()
+  const update = useShoppingMutation((state, input: {
+    updates: Partial<ShoppingConfig>; observed: ShoppingDocumentStateV3 | undefined; owner: string | undefined
+  }) => {
+    if (!input.owner || input.owner !== getActivePrincipalId()) throw new ShoppingSettingsConflictError()
+    const { updates, observed } = input
+    const affectsSettings = updates.excluded_keywords !== undefined ||
+      updates.exclude_salt_variants !== undefined ||
+      updates.exclude_black_pepper_variants !== undefined
+    const validateReplay = affectsSettings
+      ? (fresh: ShoppingDocumentStateV3) => validateSettingsReplacement(observed, fresh)
+      : undefined
+    validateReplay?.(state)
     return {
       mutation: createShoppingConfigUpdateMutation(updates),
-      value: updates,
+      value: shoppingDocumentToConfig(state),
+      resolvedValue: (_before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3) =>
+        shoppingDocumentToConfig(after),
+      validateReplay,
     }
-  })
-}
-
-export function useUpdateExcludedKeywords() {
-  const update = useUpdateShoppingConfig()
+  }, { fenceOwner: true, settings: true })
   return {
     ...update,
-    mutate: (keywords: string[], options?: Parameters<typeof update.mutate>[1]) =>
-      update.mutate({ excluded_keywords: keywords }, options),
-    mutateAsync: (keywords: string[]) =>
-      update.mutateAsync({ excluded_keywords: keywords }),
+    mutate: (updates: Partial<ShoppingConfig>, options?: Parameters<typeof update.mutate>[1]) =>
+      update.mutate({ updates, observed: query.data, owner }, options),
+    mutateAsync: (updates: Partial<ShoppingConfig>) =>
+      update.mutateAsync({ updates, observed: query.data, owner }),
+  }
+}
+
+function useShoppingSettingMutation() {
+  const { user } = useAuthContext()
+  const owner = user?.id
+  const query = useShoppingDocumentState()
+  const update = useShoppingMutation((state, input: {
+    intent: ShoppingSettingIntent; observed: ShoppingDocumentStateV3 | undefined; owner: string | undefined
+  }) => {
+    if (!input.owner || input.owner !== getActivePrincipalId()) throw new ShoppingSettingsConflictError()
+    const validateReplay = (fresh: ShoppingDocumentStateV3) =>
+      validateSettingIntent(input.observed, fresh, input.intent)
+    validateReplay(state)
+    const result = (before: ShoppingDocumentStateV3) =>
+      settingValue(before, input.intent) === input.intent.enabled ? 'unchanged' as const : 'applied' as const
+    return { mutation: input.intent, value: result(state), validateReplay, resolvedValue: result }
+  }, { fenceOwner: true, settings: true })
+  return {
+    ...update,
+    mutate: (intent: ShoppingSettingIntent, options?: Parameters<typeof update.mutate>[1]) =>
+      update.mutate({ intent, observed: query.data, owner }, options),
+    mutateAsync: (intent: ShoppingSettingIntent) =>
+      update.mutateAsync({ intent, observed: query.data, owner }),
+  }
+}
+
+export function useSetShoppingExclusion() {
+  const update = useShoppingSettingMutation()
+  return {
+    ...update,
+    mutateAsync: (input: { keyword: string; enabled: boolean }) => {
+      const key = createShoppingPurchaseKey(input.keyword)
+      if (!key) return Promise.reject(new Error('Enter an ingredient to exclude.'))
+      return update.mutateAsync({ type: 'setExclusion', key, enabled: input.enabled })
+    },
   }
 }
 
@@ -744,13 +808,17 @@ export type IngredientExclusionSetting =
   | 'exclude_black_pepper_variants'
 
 export function useUpdateIngredientExclusionSetting() {
-  const update = useUpdateShoppingConfig()
+  const update = useShoppingSettingMutation()
   return {
     ...update,
     mutate: (
       input: { setting: IngredientExclusionSetting; enabled: boolean },
       options?: Parameters<typeof update.mutate>[1]
-    ) => update.mutate({ [input.setting]: input.enabled }, options),
+    ) => update.mutate({
+      type: 'setFamilySetting',
+      setting: input.setting === 'exclude_salt_variants' ? 'excludeSaltVariants' : 'excludeBlackPepperVariants',
+      enabled: input.enabled,
+    }, options),
   }
 }
 

@@ -1369,6 +1369,8 @@ export function projectShoppingDocument(
 }
 
 export type ShoppingDocumentMutation =
+  | { type: 'setExclusion'; key: string; enabled: boolean }
+  | { type: 'setFamilySetting'; setting: 'excludeSaltVariants' | 'excludeBlackPepperVariants'; enabled: boolean }
   | { type: 'upsertRecipe'; entry: ShoppingRecipeEntryV2 }
   | { type: 'upsertRecipes'; entries: ShoppingRecipeEntryV2[] }
   | { type: 'rescaleRecipe'; entry: ShoppingRecipeEntryV2 }
@@ -1654,6 +1656,25 @@ function reduceDocument(
       }
       return reconcileCategoryPreferences(document, { categoryByIngredient })
     }
+    case 'setExclusion': {
+      const keys = document.preferences.excludedIngredientKeys;
+      if (keys.includes(mutation.key) === mutation.enabled) return document;
+      return {
+        ...document,
+        preferences: {
+          ...document.preferences,
+          excludedIngredientKeys: mutation.enabled
+            ? [...keys, mutation.key]
+            : keys.filter((key) => key !== mutation.key),
+        },
+      };
+    }
+    case 'setFamilySetting':
+      if (document.preferences[mutation.setting] === mutation.enabled) return document;
+      return {
+        ...document,
+        preferences: { ...document.preferences, [mutation.setting]: mutation.enabled },
+      };
     case "updatePreferences":
       return {
         ...document,
