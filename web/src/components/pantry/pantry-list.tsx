@@ -79,6 +79,9 @@ interface PantryPanelProps {
   items: PantryItem[]
   isLoading: boolean
   isFetching: boolean
+  readError?: boolean
+  hasData?: boolean
+  onRetry?: () => void
   newItem: string
   query: string
   feedback: InlineFeedback | null
@@ -97,6 +100,9 @@ function PantryPanel({
   isLoading,
   isFetching,
   newItem,
+  readError,
+  hasData,
+  onRetry,
   query,
   feedback,
   isAdding,
@@ -123,7 +129,7 @@ function PantryPanel({
           <Package className="h-5 w-5" />
           Pantry Items
           <span className="rounded-full bg-sage-100 px-2 py-0.5 text-xs font-medium text-sage-700">
-            {items.length}
+            {hasData === false ? "—" : items.length}
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -181,7 +187,13 @@ function PantryPanel({
           </p>
         ) : null}
 
-        {showLoading ? (
+        {readError ? (
+          <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p>{hasData ? 'Couldn’t refresh pantry items. Showing the last loaded items.' : 'Couldn’t load pantry items. Try again.'}</p>
+            <Button variant="outline" onClick={onRetry} disabled={isFetching}>Try again</Button>
+          </div>
+        ) : null}
+        {readError && !hasData ? null : showLoading ? (
           <p className="py-4 text-center text-muted-foreground">
             Loading pantry items...
           </p>
@@ -504,6 +516,8 @@ export function PantryList() {
     data: pantryItems,
     isLoading: pantryLoading,
     isFetching: pantryFetching,
+    isError: pantryReadError,
+    refetch: retryPantry,
   } = usePantryItems()
   const {
     data: excludedKeywords,
@@ -649,7 +663,7 @@ export function PantryList() {
     }
   }
 
-  const pantryCount = displayedPantryItems.length
+  const pantryCount = pantryItems === undefined ? "—" : displayedPantryItems.length
   const keywordCount = displayedKeywords.length
 
   return (
@@ -726,6 +740,9 @@ export function PantryList() {
           items={displayedPantryItems}
           isLoading={pantryLoading}
           isFetching={pantryFetching}
+          readError={pantryReadError}
+          hasData={pantryItems !== undefined}
+          onRetry={() => void retryPantry()}
           newItem={newItem}
           query={pantryQuery}
           feedback={pantryFeedback}

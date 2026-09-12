@@ -96,9 +96,16 @@ export function buildCategoryViewModel(
   groupedItems: Record<string, ShoppingItem[]>,
   orderedCategories: ShoppingCategoryMeta[]
 ): ShoppingCategoryViewModel[] {
-  return orderedCategories
+  const known = new Set(orderedCategories.map((category) => category.key))
+  const unknownItems = Object.entries(groupedItems)
+    .filter(([key]) => !known.has(key)).flatMap(([, items]) => items)
+  const categories = unknownItems.length ? [...orderedCategories, {
+    key: '__unknown_category__', name: 'Other items — category unavailable',
+    order: Number.MAX_SAFE_INTEGER, isCustom: false,
+  }] : orderedCategories
+  return categories
     .map((category) => {
-      const items = groupedItems[category.key] || []
+      const items = category.key === '__unknown_category__' ? unknownItems : groupedItems[category.key] || []
       const partition = deriveCheckedPartition(items)
       return {
         ...category,
@@ -113,19 +120,4 @@ export function buildCategoryViewModel(
 
 export function deriveSortableItemIds(items: ShoppingItem[]): string[] {
   return items.map((item, index) => item.rowId || `missing-row-${index}`)
-}
-
-export function deriveUniqueRecipeNames(items: ShoppingItem[]): string[] {
-  if (items.length === 0) return []
-
-  const recipeSet = new Set<string>()
-  for (const item of items) {
-    if (!item.sources) continue
-    for (const source of item.sources) {
-      if (source.recipeName !== "Manual") {
-        recipeSet.add(source.recipeName)
-      }
-    }
-  }
-  return Array.from(recipeSet).sort()
 }

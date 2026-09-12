@@ -1,3 +1,4 @@
+import { shoppingSourceControls as dedupeSources, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
 import { formatShoppingItemAmount, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
 export { formatShoppingItemAmount, formatAmountPart, formatEncodedRangeAmount, formatAdditionalAmountParts } from '@/lib/shopping-quantity-display'
 import React from "react"
@@ -29,7 +30,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn, toFraction } from "@/lib/utils"
 import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import type { ShoppingItem } from "@/types/database"
@@ -59,17 +59,6 @@ export function getRecipeColorIndex(str: string): number {
 
 export function getRecipeColor(index: number) {
   return RECIPE_COLORS[index % RECIPE_COLORS.length]
-}
-
-function dedupeSources(item: ShoppingItem) {
-  if (!item.sources) return []
-
-  const seen = new Set<string>()
-  return item.sources.filter((source) => {
-    if (seen.has(source.recipeName)) return false
-    seen.add(source.recipeName)
-    return true
-  })
 }
 
 function getDisplayItemName(item: ShoppingItem): string {
@@ -162,35 +151,36 @@ function buildSourceDetailLabel(item: ShoppingItem): string | null {
 }
 
 function buildSourceSummary(sources: ReturnType<typeof dedupeSources>): string | null {
-  const nonManualSources = sources.filter((source) => source.recipeName !== "Manual")
+  const nonManualSources = sources.filter((source) => !source.manualId)
 
   if (nonManualSources.length === 0) {
-    return sources.some((source) => source.recipeName === "Manual") ? "Added manually" : null
+    return sources.some((source) => !!source.manualId) ? "Added manually" : null
   }
 
   if (nonManualSources.length === 1) {
-    return `From ${nonManualSources[0].recipeName}`
+    return `From ${shoppingSourceLabel(nonManualSources[0])}`
   }
 
   if (nonManualSources.length === 2) {
-    return `From ${nonManualSources[0].recipeName} and ${nonManualSources[1].recipeName}`
+    return `From ${shoppingSourceLabel(nonManualSources[0])} and ${shoppingSourceLabel(nonManualSources[1])}`
   }
 
-  return `From ${nonManualSources[0].recipeName} + ${nonManualSources.length - 1} more`
+  return `From ${shoppingSourceLabel(nonManualSources[0])} + ${nonManualSources.length - 1} more`
 }
 
 export function SourceTag({
   recipeName,
+  isManual = false,
   colorIndex,
   onClick,
   className,
 }: {
   recipeName: string
+  isManual?: boolean
   colorIndex?: number
   onClick?: () => void
   className?: string
 }) {
-  const isManual = recipeName === "Manual"
 
   if (isManual) {
     return (
@@ -208,52 +198,13 @@ export function SourceTag({
   const index =
     colorIndex !== undefined ? colorIndex : getRecipeColorIndex(recipeName)
   const colors = getRecipeColor(index)
-  const isTruncated = recipeName.length > 20
-  const displayName = isTruncated ? `${recipeName.slice(0, 18)}...` : recipeName
-  const baseClasses = `inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium ${colors.bg} ${colors.text} ${colors.border}`
-  const clickableClasses = onClick
-    ? "cursor-pointer transition-opacity hover:opacity-80 active:opacity-70"
-    : "cursor-default"
+  const classes = cn('inline-flex max-w-full items-center rounded border px-2 py-0.5 text-[10px] font-medium break-words text-left', colors.bg, colors.text, colors.border, className)
+  return onClick ? (
+    <button type="button" className={classes} onClick={onClick} title={recipeName}>
+      {recipeName}
+    </button>
+  ) : <span className={classes}>{recipeName}</span>
 
-  const tagContent = (
-    <span
-      className={cn(baseClasses, clickableClasses, className)}
-      onClick={onClick}
-      title={onClick ? `Click to view ${recipeName}` : recipeName}
-    >
-      {displayName}
-    </span>
-  )
-
-  if (!isTruncated) {
-    return tagContent
-  }
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <span className={cn(baseClasses, "cursor-pointer", className)} title={recipeName}>
-          {displayName}
-        </span>
-      </PopoverTrigger>
-      <PopoverContent side="top" className="w-auto max-w-[200px] p-2 text-sm">
-        <div className="flex items-center gap-2">
-          <span>{recipeName}</span>
-          {onClick ? (
-            <button
-              onClick={(event) => {
-                event.stopPropagation()
-                onClick()
-              }}
-              className="text-xs text-primary hover:underline"
-            >
-              View recipe
-            </button>
-          ) : null}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
 }
 
 export function ShoppingItemRow({
@@ -262,6 +213,7 @@ export function ShoppingItemRow({
   showDragHandle = false,
   sourceDisplay = "tags",
   isCheckingOff,
+  readOnly = false,
   isRemoving,
   isAddingToPantry,
   recipeColorMap,
@@ -279,6 +231,7 @@ export function ShoppingItemRow({
   isDesktop: boolean
   showDragHandle?: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  readOnly?: boolean
   isCheckingOff: boolean
   isRemoving: boolean
   isAddingToPantry: boolean
@@ -296,8 +249,8 @@ export function ShoppingItemRow({
   const isChecked = item.checked || false
   const amountLabel = formatShoppingItemAmount(item)
   const uniqueSources = dedupeSources(item)
-  const nonManualSources = uniqueSources.filter((source) => source.recipeName !== "Manual")
-  const sourceSummary = buildSourceSummary(uniqueSources)
+  const nonManualSources = isManualShoppingItem(item) ? [] : uniqueSources.filter((source) => !source.manualId)
+  const sourceSummary = isManualShoppingItem(item) ? "Added manually" : buildSourceSummary(uniqueSources)
   const sourceDetailLabel = buildSourceDetailLabel(item)
   const singleRecipeSource = nonManualSources.length === 1 ? nonManualSources[0] : null
   const displayItemName = getDisplayItemName(item)
@@ -334,6 +287,7 @@ export function ShoppingItemRow({
             className="flex min-h-11 min-w-11 touch-none items-center justify-center p-1 text-muted-foreground hover:text-foreground md:min-h-0 md:min-w-0"
             style={{ touchAction: "none" }}
             {...dragHandleProps}
+            disabled={readOnly}
             aria-label={`Reorder ${displayItemName}`}
           >
             <GripVertical className="h-4 w-4" />
@@ -343,6 +297,7 @@ export function ShoppingItemRow({
         <button
           type="button"
           data-checkbox="true"
+          disabled={readOnly}
           onClick={onCheckOff}
           aria-busy={isCheckingOff || undefined}
           className="my-0 flex min-h-[52px] min-w-[52px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:min-h-[48px] md:min-w-[48px]"
@@ -386,11 +341,12 @@ export function ShoppingItemRow({
             <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
               {uniqueSources.map((source, index) => (
                 <SourceTag
-                  key={`${source.recipeName}-${index}`}
-                  recipeName={source.recipeName}
-                  colorIndex={recipeColorMap.get(source.recipeName)}
+                  key={source.recipeId ?? source.manualId ?? `unknown-source-${index}`}
+                  recipeName={shoppingSourceLabel(source)}
+                  isManual={!!source.manualId || isManualShoppingItem(item)}
+                  colorIndex={recipeColorMap.get(source.recipeId ?? "")}
                   onClick={
-                    source.recipeName !== "Manual" && onViewRecipe
+                    !source.manualId && onViewRecipe
                       ? () => onViewRecipe(source.recipeId, source.recipeName)
                       : undefined
                   }
@@ -432,6 +388,7 @@ export function ShoppingItemRow({
             type="button"
             className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={`Actions for ${displayItemName}`}
+            disabled={readOnly}
           >
             <MoreVertical className="h-5 w-5" />
           </button>
@@ -567,7 +524,7 @@ export function ShoppingRestoreChip({
   compact?: boolean
 }) {
   const amountLabel = formatShoppingItemAmount(item)
-  const sources = dedupeSources(item).filter((source) => source.recipeName !== "Manual")
+  const sources = isManualShoppingItem(item) ? [] : dedupeSources(item).filter((source) => !source.manualId)
   const toneClasses = tone === "excluded"
     ? {
         shell: "border-rose-200 bg-rose-50 text-rose-900 hover:bg-rose-100 active:bg-rose-100",
@@ -608,9 +565,10 @@ export function ShoppingRestoreChip({
             </span>
             {sources.map((source, index) => (
               <SourceTag
-                key={`${source.recipeName}-${index}`}
-                recipeName={source.recipeName}
-                colorIndex={recipeColorMap.get(source.recipeName)}
+                key={source.recipeId ?? source.manualId ?? `unknown-source-${index}`}
+                recipeName={shoppingSourceLabel(source)}
+                isManual={!!source.manualId || isManualShoppingItem(item)}
+                colorIndex={recipeColorMap.get(source.recipeId ?? "")}
                 className={compact ? "text-[9px]" : "text-[10px]"}
               />
             ))}
@@ -824,7 +782,8 @@ export function ShoppingCategorySection({
             <CategoryIcon className={cn(compact ? "h-4 w-4" : "h-5 w-5")} />
           </span>
           <CardTitle className={cn(
-            "min-w-0 truncate font-display font-semibold text-foreground",
+            "min-w-0 font-display font-semibold text-foreground",
+            categoryData.key === "__unknown_category__" ? "whitespace-normal break-words" : "truncate",
             compact ? "text-lg md:text-xl" : "text-lg md:text-xl"
           )}>
             {categoryData.name}

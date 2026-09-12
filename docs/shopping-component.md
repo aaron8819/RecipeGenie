@@ -256,6 +256,44 @@ with other projected rows, including Pantry/excluded rows. Both initial edits
 and conflict replays compare against the current persisted manual identity and
 revalidate collisions before writing. A missing manual target fails the edit.
 
+## Source controls, categories, and recovery
+
+`shopping-sources.ts` supplies selection labels and source controls. The recipe
+panel reads every persisted `recipeEntries` entry, including empty, suppressed,
+Pantry, excluded, and completed selections. Recipe UUIDs own navigation,
+removal, metadata lookup, colors and React keys. Matching snapshot titles get
+numbered labels in stable UUID order; these are display distinctions, not new
+selection or historical occurrence IDs. A recipe named Manual is an ordinary
+recipe. Manual sources carry `manualId`; manual editing uses `manual:` row IDs.
+Source controls coalesce repeated recipe UUIDs, while quantity details retain
+every stored occurrence. Missing IDs are never resolved by title. The existing
+recipe detail route reports unavailable recipes and returns to Shopping, where
+the saved selection remains independently removable.
+
+Unknown category references appear once in `Other items — category unavailable`
+after known categories, including the completed partition and clipboard output.
+Grouping retains original rows/references and performs no repair writes. The
+existing Manage-mode move to a valid row/category remains the explicit edit;
+shared placement and organization redesign remain later-slice work. Pantry and
+excluded chips render their complete buckets without category filtering.
+
+Shopping projection requires a successfully loaded Pantry snapshot. Initial
+Pantry failure shows recovery and selections without claiming ingredient
+availability; cached Pantry data can remain visible with a refresh warning.
+Manual add requires that dependency and refetches/rejects failed cached reads.
+Selection removal, settings, and Clear do not depend on Pantry. Existing
+boolean checks and explicit row actions can use labeled last-known rows; this
+does not implement future obtained-basis coverage or dependency versioning.
+
+Shopping read failures never produce an editable empty list. Unsupported or
+malformed documents have a non-destructive recovery message; cached supported
+data may remain visible, with writes disabled and source navigation available.
+Both the document mutation helper and Pantry bridge refuse an errored Shopping
+query before planning/writing. Retry refetches the failed dependency without
+resetting data. A successful bridge invalidates Pantry rather than presenting
+its single returned item as an authoritative Pantry snapshot. No new schema,
+legacy conversion, all-writer fencing, or automatic recovery write is added.
+
 ## Verification
 
 Run from `web/`:
@@ -279,4 +317,14 @@ It covers 1440 x 900 and 390 x 844, two browser sessions, controlled real CAS
 interleavings, reload persistence, recipe eligibility, and F02 editing.
 Authentication traces/video are disabled and screenshots mask account text.
 
+Slice 4 tests: `shopping-sources.test.ts`, `use-shopping-recovery.test.tsx`,
+Shopping orchestration/components, and Pantry read/cache tests. Run
+`npx playwright test tests/shopping-operability.spec.ts --project=chromium`
+against existing loopback Supabase for 1440×900 and 390×844 persisted-source,
+hidden removal, unknown category, keyboard, and reload checks. Read errors and
+unsupported/malformed responses use browser-only interception; the latter are
+not claimed as legal persisted database fixtures. The tests assert recovery
+does not write, and clean up only their disposable owners.
+
 Last updated: 2026-09-12
+`meal-planner.tsx` also reads authoritative Shopping selections for its “In shopping” badges, so a missing Pantry projection does not erase known selection membership.

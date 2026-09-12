@@ -37,6 +37,15 @@ function reconcile(
 }
 
 describe("shopping category expansion intent", () => {
+  it("keeps a completed fallback section expanded without changing stored categories", () => {
+    const rows = [item("a", "missing-a", true), item("b", "missing-b", true)]
+    const content = deriveCategoryContent(rows, () => "__unknown_category__")
+    const intents = new Map([["__unknown_category__", "expanded"]]) as CategoryIntentByKey
+    expect(reconcileCategoryIntents(intents, content, content)).toEqual(intents)
+    expect(content.get("__unknown_category__")?.checkedRowIds.size).toBe(2)
+    expect(rows.map((row) => row.categoryKey)).toEqual(["missing-a", "missing-b"])
+  })
+
   it("derives initial defaults from content without storing them", () => {
     expect(isCategoryExpanded(undefined, 1)).toBe(true)
     expect(isCategoryExpanded(undefined, 0)).toBe(false)

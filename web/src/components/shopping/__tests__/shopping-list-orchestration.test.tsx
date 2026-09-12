@@ -66,6 +66,8 @@ vi.mock("next/navigation", () => ({
   }),
 }))
 
+let currentSelections: { recipeId: string; recipeName: string; label: string; selectedServings: number }[] = []
+let currentReadState: Record<string, unknown> = {}
 let currentShoppingList: ShoppingList
 let currentConfig: ShoppingConfig
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>
@@ -334,6 +336,8 @@ vi.mock("@/hooks/use-shopping", () => ({
   SHOPPING_CLEAR_UNDO_UNAVAILABLE: 'Undo is currently unavailable for lists containing recipe items.',
   useShoppingList: () => ({
     data: useSyncExternalStore(subscribeShoppingList, () => currentShoppingList),
+    selections: currentSelections,
+    ...currentReadState,
     isLoading: false,
     isFetching: false,
   }),
@@ -603,6 +607,8 @@ vi.mock("@/hooks/use-shopping", () => ({
   pendingCheckMutations.length = 0
   moveExcludedResolvers.length = 0
   dndOnDragEnd = null
+  currentSelections = []
+  currentReadState = {}
   currentConfig = makeConfig()
   currentShoppingList = makeList()
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((message, ...args) => {
@@ -636,20 +642,20 @@ vi.mock("@/hooks/use-shopping", () => ({
   })
 
   removeRecipeItemsMutate.mockImplementation((recipe, options?: { onSuccess?: (value: { entry: object }) => void }) => {
-    const recipeName = recipe.recipeName
+    const recipeId = recipe.recipeId
     removedRecipeRows = currentShoppingList.items.filter(
-      (item) => (item.sources || []).some((source) => source.recipeName === recipeName)
+      (item) => (item.sources || []).some((source) => source.recipeId === recipeId)
     )
     updateShoppingList((prev) => ({
       ...prev,
       items: prev.items.filter(
-        (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
+        (item) => !(item.sources || []).some((source) => source.recipeId === recipeId)
       ),
       already_have: prev.already_have.filter(
-        (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
+        (item) => !(item.sources || []).some((source) => source.recipeId === recipeId)
       ),
       excluded: prev.excluded.filter(
-        (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
+        (item) => !(item.sources || []).some((source) => source.recipeId === recipeId)
       ),
     }))
     options?.onSuccess?.({ entry: {} })
@@ -1006,6 +1012,7 @@ describe("ShoppingListView orchestration", () => {
       ],
     })
 
+    currentSelections = [{ recipeId: '11111111-1111-4111-8111-111111111111', recipeName: 'Stew', label: 'Stew', selectedServings: 4 }]
     renderShoppingList()
 
     const recipeContext = screen.getByTestId("shopping-recipe-context")
@@ -1030,6 +1037,7 @@ describe("ShoppingListView orchestration", () => {
       items: [makeItem("apples", { sources: [{ recipeName: "Stew" }] })],
     })
 
+    currentSelections = [{ recipeId: '11111111-1111-4111-8111-111111111111', recipeName: 'Stew', label: 'Stew', selectedServings: 4 }]
     renderShoppingList()
 
     expect(screen.getByTestId("shopping-recipe-context")).toBeInTheDocument()
@@ -1427,6 +1435,7 @@ describe("ShoppingListView orchestration", () => {
       ],
     })
 
+    currentSelections = [{ recipeId: '11111111-1111-4111-8111-111111111111', recipeName: 'Stew', label: 'Stew', selectedServings: 4 }]
     renderShoppingList()
 
     act(() => {
@@ -1744,4 +1753,52 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByText("Edit manual item")).toBeInTheDocument()
     expect(screen.getByText("garlic")).toBeInTheDocument()
   })
+  it('targets duplicate Soup selections and a recipe named Manual by UUID even without rows', () => {
+    currentSelections = [
+      { recipeId: 'soup-a', recipeName: 'Soup', label: 'Soup (1)', selectedServings: 4 },
+      { recipeId: 'soup-b', recipeName: 'Soup', label: 'Soup (2)', selectedServings: 4 },
+      { recipeId: 'manual-recipe', recipeName: 'Manual', label: 'Manual', selectedServings: 4 },
+    ]
+    currentShoppingList = makeList({ source_recipes: currentSelections.map(entry => entry.recipeId) })
+    renderShoppingList()
+    const panel = within(screen.getByTestId('shopping-recipe-context'))
+    expect(screen.getByText(/Nothing left to buy/)).toBeVisible()
+    fireEvent.click(panel.getByRole('button', { name: 'View Soup (2)' }))
+    expect(routerPush).toHaveBeenLastCalledWith('/recipes/soup-b?from=shopping')
+    fireEvent.click(panel.getByRole('button', { name: 'View Manual' }))
+    expect(routerPush).toHaveBeenLastCalledWith('/recipes/manual-recipe?from=shopping')
+    fireEvent.click(panel.getByRole('button', { name: 'Remove all items from Soup (2)' }))
+    expect(removeRecipeItemsMutate).toHaveBeenCalledWith({ recipeId: 'soup-b', recipeName: 'Soup (2)' }, expect.anything())
+  })
+
+  it.each(['shopping', 'pantry'])('shows %s read recovery instead of empty success', (dependency) => {
+    const retry = vi.fn()
+    currentReadState = dependency === 'shopping'
+      ? { data: undefined, hasDocument: false, documentError: new Error('offline'), retryDocument: retry }
+      : { data: undefined, hasDocument: true, hasPantry: false, pantryError: new Error('offline'), retryPantry: retry }
+    renderShoppingList()
+    expect(screen.queryByText('Your shopping list is clear')).not.toBeInTheDocument()
+    expect(screen.getByText(dependency === 'shopping' ? 'Couldn’t load your shopping list. Try again.' : 'Couldn’t load pantry items. Try again.')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(retry).toHaveBeenCalledTimes(1)
+    for (const add of screen.queryAllByRole('button', { name: 'Add item' })) expect(add).toBeDisabled()
+  })
+
+  it('labels cached Pantry availability and keeps unrelated selection removal available', () => {
+    currentSelections = [{ recipeId: 'hidden', recipeName: 'Hidden', label: 'Hidden', selectedServings: 4 }]
+    currentReadState = { hasDocument: true, hasPantry: true, pantryError: new Error('offline'), retryPantry: vi.fn() }
+    renderShoppingList()
+    expect(screen.getByText(/Showing the last loaded availability/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Remove all items from Hidden' })).toBeEnabled()
+  })
+
+  it('keeps recipe-bearing Clear confirmation when Pantry cannot be loaded', () => {
+    currentSelections = [{ recipeId: 'hidden', recipeName: 'Hidden', label: 'Hidden', selectedServings: 4 }]
+    currentReadState = { data: undefined, hasDocument: true, hasPantry: false, pantryError: new Error('offline'), retryPantry: vi.fn() }
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is currently unavailable')
+    expect(clearListMutate).not.toHaveBeenCalled()
+  })
+
 })

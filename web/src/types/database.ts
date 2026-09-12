@@ -148,6 +148,8 @@ export type ShoppingItem = {
   categoryOrder: number
   sources?: {
     recipeId?: string
+    manualId?: string
+    label?: string
     legacyRecipeId?: string
     recipeName: string
     originalItem?: string

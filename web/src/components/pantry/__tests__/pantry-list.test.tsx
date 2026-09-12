@@ -41,7 +41,9 @@ const removeKeywordMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
 const updateIngredientExclusionMutate = vi.fn()
 const pantryItemsState = {
-  data: [] as Array<{ id: string; item: string; user_id?: string; created_at?: string }>,
+  data: [] as Array<{ id: string; item: string; user_id?: string; created_at?: string }> | undefined,
+  isError: false,
+  refetch: vi.fn(),
   isLoading: false,
   isFetching: false,
 }
@@ -111,6 +113,7 @@ describe("PantryList", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     pantryItemsState.data = []
+    pantryItemsState.isError = false
     pantryItemsState.isLoading = false
     pantryItemsState.isFetching = false
     excludedKeywordsState.data = []
@@ -396,4 +399,15 @@ describe("PantryList", () => {
     expect(screen.getByRole("button", { name: "Actions for garlic" })).toBeDisabled()
     expect(screen.getByRole("button", { name: "Actions for tomato" })).toBeEnabled()
   })
+})
+
+
+it.each([false, true])('shows truthful Pantry read recovery (cached: %s)', (cached) => {
+  pantryItemsState.data = cached ? [{ id: 'rice', item: 'rice' }] : undefined
+  pantryItemsState.isError = true
+  render(<PantryList />)
+  expect(screen.queryByText('No pantry items yet')).not.toBeInTheDocument()
+  expect(screen.getByText(cached ? 'Couldn’t refresh pantry items. Showing the last loaded items.' : 'Couldn’t load pantry items. Try again.')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+  expect(pantryItemsState.refetch).toHaveBeenCalled()
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { shoppingRecipeSelections } from '@/lib/shopping-sources'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   settingValue, validateSettingIntent, validateSettingsReplacement,
@@ -92,13 +93,26 @@ export interface ShoppingClearResult {
 
 type DuplicateFeedbackOwner = 'mutation' | 'caller'
 
+export class ShoppingDocumentReadError extends Error {
+  constructor() {
+    super('This shopping list could not be opened. Your saved list has not been changed.')
+    this.name = 'ShoppingDocumentReadError'
+  }
+}
+
+function assertShoppingReadable(queryClient: ReturnType<typeof useQueryClient>, key: readonly string[]) {
+  if (queryClient.getQueryState(key)?.status === 'error') {
+    throw new Error('Could not load the shopping list. Try again.')
+  }
+}
+
 function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV3 {
   const validation = validateShoppingDocumentStateV3({
     document: row.document,
     contentRevision: Number(row.content_revision),
   })
   if (!validation.ok || validation.contentRevision === undefined) {
-    throw new Error('Stored Shopping document is invalid')
+    throw new ShoppingDocumentReadError()
   }
   return {
     document: validation.document,
@@ -164,6 +178,8 @@ export function shoppingDocumentToList(
   state: ShoppingDocumentStateV3,
   pantryItems: PantryItem[] = []
 ): ShoppingList {
+  const selections = shoppingRecipeSelections(state.document.recipeEntries)
+  const labels = new Map(selections.map((entry) => [entry.recipeId, entry.label]))
   const projection = projectShoppingDocument(state.document, pantryItems)
   const mapRow = (row: (typeof projection.rows)[number]): ShoppingItem => ({
     rowId: row.rowRef,
@@ -174,9 +190,10 @@ export function shoppingDocumentToList(
     categoryKey: row.categoryKey,
     categoryOrder: row.categoryOrder,
     sources: row.manualId
-      ? [{ recipeName: 'Manual' }]
+      ? [{ manualId: row.manualId, recipeName: 'Manual' }]
       : row.sources.map((source) => ({
           ...source,
+          label: labels.get(source.recipeId),
         })),
     quantityParts: [
       row.quantity ?? { amount: null, unit: '' },
@@ -223,7 +240,7 @@ export function useShoppingDocumentState() {
   return useQuery({
     queryKey: shoppingKeys.detail(principalId(user?.id)),
     queryFn: () => fetchShoppingDocumentState(),
-    placeholderData: (previousData) => previousData,
+    retry: (count, error) => !(error instanceof ShoppingDocumentReadError) && count < 2,
     staleTime: 30 * 1000,
     enabled: !loading && Boolean(user),
   })
@@ -235,13 +252,21 @@ export function useShoppingList() {
   const pantryQuery = usePantryItems()
   return {
     ...documentQuery,
-    data: documentQuery.data
+    data: documentQuery.data && pantryQuery.data !== undefined
       ? shoppingDocumentToList(
           principalId(user?.id),
           documentQuery.data,
-          pantryQuery.data || []
+          pantryQuery.data
         )
       : undefined,
+    selections: documentQuery.data ? shoppingRecipeSelections(documentQuery.data.document.recipeEntries) : [],
+    documentError: documentQuery.error,
+    pantryError: pantryQuery.error,
+    hasDocument: documentQuery.data !== undefined,
+    hasPantry: pantryQuery.data !== undefined,
+    canAddItem: documentQuery.isSuccess && pantryQuery.isSuccess,
+    retryDocument: () => documentQuery.refetch(),
+    retryPantry: () => pantryQuery.refetch(),
     isLoading: documentQuery.isLoading || pantryQuery.isLoading,
     isFetching: documentQuery.isFetching || pantryQuery.isFetching,
   }
@@ -290,6 +315,7 @@ function useShoppingMutation<TVariables, TResult>(
           cached && cached.contentRevision > next.contentRevision ? cached : next)
       }
       assertOwner()
+      assertShoppingReadable(queryClient, shoppingKey)
       const initial = options.settings ? await refetch() :
         queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) || await refetch()
       if (options.settings) cacheState(initial)
@@ -301,6 +327,7 @@ function useShoppingMutation<TVariables, TResult>(
         mutation: plan.mutation,
         write: async (current, next) => {
           assertOwner()
+          assertShoppingReadable(queryClient, shoppingKey)
           const committed = await writeShoppingDocumentCas(ownerUserId, current, next)
           assertOwner()
           if (committed && plan.committedValue) value = plan.committedValue(current, committed)
@@ -384,7 +411,7 @@ export function useAddShoppingItem() {
     })
     const displayName = input.itemName.trim()
     let pantryItems = pantryQuery.data
-    if (!pantryItems) {
+    if (!pantryItems || pantryQuery.isError) {
       pantryItems = (await pantryQuery.refetch({ throwOnError: true })).data
     }
     if (!pantryItems) throw new Error('Could not load Pantry items')
@@ -860,12 +887,12 @@ export function useAddToPantryAndRemove() {
   const { user } = useAuthContext()
   const ownerUserId = principalId(user?.id)
   const shoppingKey = shoppingKeys.detail(ownerUserId)
-  const pantryQuery = usePantryItems()
   const undoToast = useUndoToast()
 
   return useMutation({
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (item: ShoppingItem) => {
+      assertShoppingReadable(queryClient, shoppingKey)
       const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
         await fetchShoppingDocumentState()
       const rowRef = requireShoppingRowRef(item)
@@ -885,6 +912,7 @@ export function useAddToPantryAndRemove() {
         initial,
         mutation,
         write: async (current, next) => {
+          assertShoppingReadable(queryClient, shoppingKey)
           pantryResult = await moveToPantryCas(current, next, item)
           return pantryResult?.state || null
         },
@@ -905,12 +933,8 @@ export function useAddToPantryAndRemove() {
     },
     onSuccess: (result) => {
       queryClient.setQueryData(shoppingKey, result.state)
-      if (result.pantryItem) {
-        const next = [...(pantryQuery.data || []).filter((item) =>
-          item.id !== result.pantryItem!.id), result.pantryItem]
-          .sort((left, right) => left.item.localeCompare(right.item))
-        queryClient.setQueryData(pantryKeys.list(ownerUserId), next)
-      }
+      // A bridge result is one row, never an authoritative Pantry snapshot.
+      void queryClient.invalidateQueries({ queryKey: pantryKeys.list(ownerUserId) })
     },
     onError: (error) => {
       undoToast.show({

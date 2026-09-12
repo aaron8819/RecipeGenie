@@ -45,6 +45,12 @@ the shared authenticated shell.
   action menu while preserving the existing optimistic mutation and Undo flow.
 - Pantry presence is joined live during Shopping projection and classifies
   matching ingredients as `already_have`.
+- Failed reads show Retry instead of the empty-state message. Cached rows may
+  remain with an explicit refresh warning; absent data has no authoritative
+  zero count. Successful standalone Pantry inserts/removals remain safe by
+  database uniqueness and row ID, but their partial results never establish a
+  full successful snapshot or clear a read error. Only a successful refetch
+  restores authoritative availability for Shopping.
 - Satisfaction uses resolver-produced exact/alternative candidates, bounded
   lemon/lime whole-fruit candidates for explicit juice or zest usage, and the
   shared Salt/Black pepper family evidence.

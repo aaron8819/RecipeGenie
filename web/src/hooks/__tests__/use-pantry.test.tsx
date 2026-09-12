@@ -153,3 +153,19 @@ describe("Pantry id-based mutations", () => {
     })
   })
 })
+
+
+describe('Pantry writes during read failure', () => {
+  it.each([false, true])('does not promote partial results to authoritative data (cached: %s)', async (cached) => {
+    const { wrapper, queryClient } = createWrapper()
+    const known: PantryItem = { id: 'known', user_id: 'user-1', item: 'rice', created_at: '' }
+    if (cached) queryClient.setQueryData(PANTRY_KEY, [known])
+    await queryClient.fetchQuery({ queryKey: PANTRY_KEY, queryFn: async () => { throw new Error('offline') } }).catch(() => {})
+    const { result } = renderHook(() => ({ add: useAddPantryItems(), restore: useRestorePantryItem(), remove: useRemovePantryItem() }), { wrapper })
+    await result.current.add.mutateAsync('beans')
+    await result.current.restore.mutateAsync({ ...known, id: 'restored', item: 'corn' })
+    await result.current.remove.mutateAsync(known)
+    expect(queryClient.getQueryState(PANTRY_KEY)?.status).toBe('error')
+    expect(queryClient.getQueryData(PANTRY_KEY)).toEqual(cached ? [known] : undefined)
+  })
+})

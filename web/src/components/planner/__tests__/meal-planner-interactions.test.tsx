@@ -158,9 +158,9 @@ vi.mock("@/hooks/use-shopping", () => ({
     isPending: false,
   }),
   useShoppingList: () => ({
-    data: {
-      source_recipes: currentShoppingSourceRecipes,
-    },
+    // Pantry projection can be unavailable while Shopping selections are known.
+    data: undefined,
+    selections: currentShoppingSourceRecipes.map((recipeId) => ({ recipeId })),
   }),
 }))
 

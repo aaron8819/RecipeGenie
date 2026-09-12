@@ -168,8 +168,8 @@ describe("ShoppingItemRow", () => {
       <ShoppingItemRow
         item={item({
           sources: [
-            { recipeName: "Autumn Soup" },
-            { recipeName: "Autumn Soup" },
+            { recipeId: "soup-id", recipeName: "Autumn Soup" },
+            { recipeId: "soup-id", recipeName: "Autumn Soup" },
           ],
         })}
         isDesktop={true}
@@ -314,9 +314,9 @@ describe("ShoppingItemRow", () => {
           amount: 4,
           unit: "count",
           sources: [
-            { recipeName: "Pollo Asado Tacos", originalItem: "juice of 2 limes" },
-            { recipeName: "Shredded Chipotle Beef", originalItem: "lime" },
-            { recipeName: "Pollo Asado Tacos", originalItem: "lime wedges" },
+            { recipeId: "tacos-id", recipeName: "Pollo Asado Tacos", originalItem: "juice of 2 limes" },
+            { recipeId: "beef-id", recipeName: "Shredded Chipotle Beef", originalItem: "lime" },
+            { recipeId: "tacos-id", recipeName: "Pollo Asado Tacos", originalItem: "lime wedges" },
           ],
         })}
         isDesktop={false}
@@ -692,4 +692,22 @@ describe("ManualShoppingItemEditor", () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onSave).toHaveBeenCalledTimes(1)
   })
+})
+
+
+it('keeps UUID source buttons distinct, including a recipe titled Manual', () => {
+  const onViewRecipe = vi.fn()
+  render(<ShoppingItemRow item={item({ rowId: 'derived:carrot', sources: [
+    { recipeId: 'soup-a', recipeName: 'Soup', label: 'Soup (1)' },
+    { recipeId: 'soup-a', recipeName: 'Soup', label: 'Soup (1)' },
+    { recipeId: 'soup-b', recipeName: 'Soup', label: 'Soup (2)' },
+    { recipeId: 'manual-recipe', recipeName: 'Manual' },
+  ] })} isDesktop={false} sourceDisplay="tags" isCheckingOff={false}
+    isRemoving={false} isAddingToPantry={false} recipeColorMap={new Map()}
+    onViewRecipe={onViewRecipe} onCheckOff={vi.fn()} onAddToPantry={vi.fn()} onRemove={vi.fn()} />)
+  expect(screen.getAllByRole('button', { name: 'Soup (1)' })).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Soup (2)' }))
+  expect(onViewRecipe).toHaveBeenLastCalledWith('soup-b', 'Soup')
+  fireEvent.click(screen.getByRole('button', { name: 'Manual' }))
+  expect(onViewRecipe).toHaveBeenLastCalledWith('manual-recipe', 'Manual')
 })
