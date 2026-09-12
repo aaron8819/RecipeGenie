@@ -1,6 +1,11 @@
 'use client'
 
 import { shoppingRecipeSelections } from '@/lib/shopping-sources'
+import { readShoppingCompatibility } from '@/lib/shopping-compatibility'
+
+import { shoppingDocumentToList, shoppingDocumentToConfig } from '@/lib/shopping-view'
+export { shoppingDocumentToList, shoppingDocumentToConfig } from '@/lib/shopping-view'
+import { manualShoppingQuantity, validateManualPurchaseIntent } from '@/lib/shopping-manual-rules'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   settingValue, validateSettingIntent, validateSettingsReplacement,
@@ -18,7 +23,6 @@ import {
   createEmptyShoppingDocument,
   createShoppingRecipeEntry,
   projectShoppingDocument,
-  validateShoppingDocumentStateV3,
   type RowRef,
   type ShoppingDocumentMutation,
   type ShoppingDocumentStateV3,
@@ -31,10 +35,7 @@ import {
   ShoppingDocumentConflictError,
   type ShoppingDocumentReplayValidator,
 } from '@/lib/shopping-document-persistence'
-import {
-  createShoppingPurchaseKey,
-  normalizeUnit,
-} from '@/lib/shopping-list-normalization'
+import { createShoppingPurchaseKey } from '@/lib/shopping-list-normalization'
 import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics'
 import { categorizeIngredient } from '@/lib/shopping-categories'
 import {
@@ -51,7 +52,6 @@ import type {
   Recipe,
   ShoppingConfig,
   ShoppingItem,
-  ShoppingList,
 } from '@/types/database'
 
 const SHOPPING_DOCUMENT_WRITE_SCOPE = 'shopping-document-write'
@@ -107,17 +107,9 @@ function assertShoppingReadable(queryClient: ReturnType<typeof useQueryClient>, 
 }
 
 function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV3 {
-  const validation = validateShoppingDocumentStateV3({
-    document: row.document,
-    contentRevision: Number(row.content_revision),
-  })
-  if (!validation.ok || validation.contentRevision === undefined) {
-    throw new ShoppingDocumentReadError()
-  }
-  return {
-    document: validation.document,
-    contentRevision: validation.contentRevision,
-  }
+  const result = readShoppingCompatibility(row.document, Number(row.content_revision))
+  if (result.status !== 'Supported') throw new ShoppingDocumentReadError()
+  return result.state
 }
 
 async function fetchShoppingDocumentState(ownerUserId?: string): Promise<ShoppingDocumentStateV3> {
@@ -171,68 +163,6 @@ async function writeShoppingDocumentCas(
     .maybeSingle()
   if (error) throw error
   return data ? parseShoppingDocumentRow(data) : null
-}
-
-export function shoppingDocumentToList(
-  userId: string,
-  state: ShoppingDocumentStateV3,
-  pantryItems: PantryItem[] = []
-): ShoppingList {
-  const selections = shoppingRecipeSelections(state.document.recipeEntries)
-  const labels = new Map(selections.map((entry) => [entry.recipeId, entry.label]))
-  const projection = projectShoppingDocument(state.document, pantryItems)
-  const mapRow = (row: (typeof projection.rows)[number]): ShoppingItem => ({
-    rowId: row.rowRef,
-    orderingKey: row.orderingKey,
-    item: row.displayName,
-    amount: row.quantity?.amount ?? null,
-    unit: row.quantity?.unit || '',
-    categoryKey: row.categoryKey,
-    categoryOrder: row.categoryOrder,
-    sources: row.manualId
-      ? [{ manualId: row.manualId, recipeName: 'Manual' }]
-      : row.sources.map((source) => ({
-          ...source,
-          label: labels.get(source.recipeId),
-        })),
-    quantityParts: [
-      row.quantity ?? { amount: null, unit: '' },
-      ...(row.additionalQuantities ?? []),
-    ],
-    checked: row.checked,
-    excludedBy: row.excludedBy,
-  })
-  const entries = Object.values(state.document.recipeEntries)
-  return {
-    user_id: userId,
-    items: projection.items.map(mapRow),
-    already_have: projection.alreadyHave.map(mapRow),
-    excluded: projection.excluded.map(mapRow),
-    source_recipes: entries.map((entry) => entry.recipeId).sort(),
-    scale: entries.length === 1
-      ? Number(entries[0].scaleV1.numerator) / Number(entries[0].scaleV1.denominator)
-      : 1,
-    total_servings: entries.reduce((total, entry) => total + entry.selectedServings, 0),
-    custom_order: Object.keys(
-      state.document.preferences.ingredientOrderByCategory
-    ).length > 0,
-  }
-}
-
-export function shoppingDocumentToConfig(
-  state: ShoppingDocumentStateV3
-): ShoppingConfig {
-  const preferences = state.document.preferences
-  return {
-    category_overrides: { ...preferences.categoryByIngredient },
-    custom_categories: [...preferences.customCategories],
-    category_order: preferences.categoryOrder.length > 0
-      ? [...preferences.categoryOrder]
-      : null,
-    excluded_keywords: [...preferences.excludedIngredientKeys],
-    exclude_salt_variants: preferences.excludeSaltVariants,
-    exclude_black_pepper_variants: preferences.excludeBlackPepperVariants,
-  }
 }
 
 export function useShoppingDocumentState() {
@@ -419,15 +349,11 @@ export function useAddShoppingItem() {
     const resolvedPantryItems = [...pantryItems]
     const manualRowRef = `manual:${input.rowId}`
     const validateDuplicate = (current: ShoppingDocumentStateV3) => {
-      const projection = projectShoppingDocument(
-        current.document,
-        resolvedPantryItems
-      )
-      if (projection.items.some((row) =>
-        row.rowRef !== manualRowRef &&
-        row.orderingKey === itemSemantics.purchaseKey)) {
-        throw new Error('Item already in shopping list')
-      }
+      const outcome = validateManualPurchaseIntent(current.document, {
+        type: 'add', rowRef: manualRowRef, purchaseKey: itemSemantics.purchaseKey,
+        pantryItems: resolvedPantryItems,
+      })
+      if (outcome === 'Conflict') throw new Error('Item already in shopping list')
     }
     validateDuplicate(state)
     const purchaseKey = itemSemantics.purchaseKey
@@ -435,9 +361,7 @@ export function useAddShoppingItem() {
     const item: ShoppingManualItemV1 = {
       id: input.rowId,
       displayName,
-      quantity: input.amount == null && !input.unit
-        ? null
-        : { amount: input.amount ?? null, unit: normalizeUnit(input.unit || '') },
+      quantity: manualShoppingQuantity(input.amount, input.unit),
       categoryKey: state.document.preferences.categoryByIngredient[purchaseKey] ||
         defaultCategory,
       bucket: 'items',
@@ -464,30 +388,14 @@ export function useUpdateShoppingItem() {
     })
     const displayName = input.updates.itemName.trim()
     const validateIdentityChange = (current: ShoppingDocumentStateV3) => {
-      const manual = current.document.manualItems.find((item) =>
-        `manual:${item.id}` === rowRef)
-      if (!manual) throw new Error('Manual item no longer exists')
-      const currentSemantics = resolveShoppingIngredientSemantics({
-        item: manual.displayName,
-        unit: manual.quantity?.unit,
+      const outcome = validateManualPurchaseIntent(current.document, {
+        type: 'edit', rowRef, purchaseKey: itemSemantics.purchaseKey,
       })
-      // Quantified manual rows intentionally coexist with recipe requirements.
-      // Only a change of canonical purchase identity can introduce a collision.
-      if (currentSemantics.purchaseKey === itemSemantics.purchaseKey) return
-      const projection = projectShoppingDocument(current.document)
-      if (projection.rows.some((row) =>
-        row.rowRef !== rowRef &&
-        row.orderingKey === itemSemantics.purchaseKey)) {
-        throw new Error('Item already in shopping list')
-      }
+      if (outcome === 'TargetGone') throw new Error('Manual item no longer exists')
+      if (outcome === 'Conflict') throw new Error('Item already in shopping list')
     }
     validateIdentityChange(state)
-    const quantity = input.updates.amount == null && !input.updates.unit
-      ? null
-      : {
-          amount: input.updates.amount ?? null,
-          unit: normalizeUnit(input.updates.unit || ''),
-        }
+    const quantity = manualShoppingQuantity(input.updates.amount, input.updates.unit)
     return {
       mutation: {
         type: 'editManualItem',

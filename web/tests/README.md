@@ -43,6 +43,15 @@ test.describe('My unauthenticated tests', () => {
 
 ## Running Tests
 
+Shopping Slice 5: `node node_modules/@playwright/test/cli.js test
+tests/shopping-rules.spec.ts tests/shopping-operability.spec.ts --project=chromium`
+uses an already verified loopback Supabase and app at port 3107. Both files
+create disposable owners and clean up only their fixtures; do not run bootstrap
+or a shared-fixture reset for these checks. The rules test stores real V3 data
+and checks manual edits, unchanged frozen sources/order, and no read writes at
+1440×900 and 390×844. The operability test additionally intercepts read failures
+and invalid responses; those responses are not persisted database fixtures.
+
 ### Run the core CI project
 ```bash
 npm run test:e2e:core

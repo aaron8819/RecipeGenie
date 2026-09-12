@@ -14,7 +14,10 @@ and reusable Shopping preferences. Rendered `items`, `already_have`, and
 | `web/src/lib/shopping-ordering.ts` | The single category and within-category ordering authority. |
 | `web/src/lib/shopping-ingredient-semantics.ts` | Central purchase, family, preparation, quantity, category, Pantry, and exclusion semantics. |
 | `web/src/lib/shopping-ingredient-resolution.ts` | Resolves recipe structure through the central semantic authority. |
-| `web/src/hooks/shopping/use-shopping-document.ts` | The only runtime Shopping read/write seam; CAS, replay, Pantry bridge, and UI adapters. |
+| `web/src/hooks/shopping/use-shopping-document.ts` | Runtime Shopping read/write seam; CAS, replay, Pantry bridge, cache and feedback boundaries. |
+| `web/src/lib/shopping-view.ts` | Pure lossless list/config adapters used by the runtime hook. |
+| `web/src/lib/shopping-manual-rules.ts` | Shared V3 add/edit collision policy and manual quantity construction. |
+| `web/src/lib/shopping-compatibility.ts` | Explicit supported/malformed/unsupported read outcomes; no persistence writes. |
 | `web/src/components/shopping/shopping-list.tsx` | Shopping UI orchestration, per-row optimistic check-off state, and immediate inverse-write Undo UX. |
 | `supabase/migrations/018_shopping_document_cutover.sql` | Atomic legacy conversion and physical schema cutover. |
 | `supabase/migrations/019_personalized_shopping_order.sql` | V1-to-V2 conversion and strict personalized-order persistence. |
@@ -295,6 +298,11 @@ its single returned item as an authoritative Pantry snapshot. No new schema,
 legacy conversion, all-writer fencing, or automatic recovery write is added.
 
 ## Verification
+
+Slice 5 rule ownership, compatibility classes, target-only specifications and
+scenario deferrals are recorded in [Shopping Slice 5](shopping-slice5.md).
+Candidate V4 content fixtures are not accepted by runtime writers. V3 ordering,
+source evidence, Slice 1 Undo restrictions and Slice 2 conflicts remain intact.
 
 Run from `web/`:
 
