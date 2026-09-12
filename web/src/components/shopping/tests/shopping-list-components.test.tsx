@@ -279,7 +279,7 @@ describe("ShoppingItemRow", () => {
     expect(screen.getByText("From Weeknight Pasta + 2 more")).toBeInTheDocument()
   })
 
-  it("moves additional amounts into a secondary line for easier scanning", () => {
+  it("shows additional amounts in the main quantity display", () => {
     render(
       <ShoppingItemRow
         item={item({
@@ -301,9 +301,8 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("3 cloves")).toBeInTheDocument()
-    expect(screen.queryByText("3 cloves + 1 head")).not.toBeInTheDocument()
-    expect(screen.getByText("Also: 1 head")).toBeInTheDocument()
+    expect(screen.getByText("3 cloves + 1 head")).toBeInTheDocument()
+    expect(screen.queryByText("Also: 1 head")).not.toBeInTheDocument()
     expect(screen.getByText("From Roast Chicken")).toBeInTheDocument()
   })
 

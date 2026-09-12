@@ -180,6 +180,7 @@ npm run test:e2e:codegen
 | `shopping-list.spec.ts` | List generation, check off items, auto-collapse, add to pantry |
 | `shopping-clear-undo.spec.ts` | Local-only disposable owners; desktop/mobile Clear Undo, real CAS races, preserved manual edits, and recipe-list disclosure. Run with `--project=chromium`; requires running loopback Supabase and local E2E configuration, never resets shared fixtures. |
 | `shopping-settings.spec.ts` | G03/H07 real CAS interleavings, independent exclusions/family settings, stale reset refusal, retained conflict input, reload, and Slice 1 Undo at 1440×900 and 390×844. Uses disposable owners and two authenticated contexts; requires existing loopback Supabase and local E2E config, never resets shared fixtures. |
+| `shopping-quantities.spec.ts` | Slice 3 lossless quantities through saved recipes, UI add, reload, check/uncheck, desktop clipboard, and Pantry/excluded buckets at 1440×900 and 390×844. Verifies saved recipe sections and frozen Shopping inputs remain unchanged. Disposable local owners only; no shared reset, auth artifacts, traces or video. Run with `--project=chromium` and existing loopback Supabase. |
 | `shopping-list-mobile.spec.ts` | Mobile-specific shopping list flows (viewport 375px) |
 | `design-corrections.spec.ts` | Local-only manual-before-recipe editing, live Pantry/exclusions, labels and control semantics at 1440×900 and 390×844; restores the original Shopping document and removes disposable data |
 | `pantry.spec.ts` | Add/delete items, excluded keywords, clear all |

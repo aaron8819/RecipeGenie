@@ -1207,6 +1207,10 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "for garnish",
+          "kind": "unparsed",
+        },
         "excludedBy": undefined,
         "item": "fresh herbs",
         "sources": [
@@ -1241,6 +1245,10 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "to taste",
+          "kind": "qualitative",
+        },
         "excludedBy": undefined,
         "item": "salt",
         "sources": [

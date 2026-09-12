@@ -1,3 +1,5 @@
+import { formatShoppingItemAmount, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
+export { formatShoppingItemAmount, formatAmountPart, formatEncodedRangeAmount, formatAdditionalAmountParts } from '@/lib/shopping-quantity-display'
 import React from "react"
 import type {
   ButtonHTMLAttributes,
@@ -59,97 +61,6 @@ export function getRecipeColor(index: number) {
   return RECIPE_COLORS[index % RECIPE_COLORS.length]
 }
 
-const DISPLAY_UNIT_PLURALS: Record<string, string> = {
-  piece: "pieces",
-  clove: "cloves",
-  slice: "slices",
-  can: "cans",
-  bunch: "bunches",
-  head: "heads",
-  stalk: "stalks",
-  sprig: "sprigs",
-  package: "packages",
-  bag: "bags",
-  box: "boxes",
-  jar: "jars",
-  bottle: "bottles",
-}
-
-function formatDisplayUnit(amount: number, unit: string): string {
-  const trimmedUnit = getIngredientDisplayUnit(unit)
-  if (!trimmedUnit) return ""
-
-  const sizedPackageMatch = trimmedUnit.match(/^([a-z]+)\s+\((.+)\)$/)
-  if (sizedPackageMatch) {
-    const singularUnit = sizedPackageMatch[1]
-    const packageSize = sizedPackageMatch[2]
-    const displayUnit =
-      Math.abs(amount) === 1 ? singularUnit : (DISPLAY_UNIT_PLURALS[singularUnit] ?? singularUnit)
-    return `${displayUnit} (${packageSize})`
-  }
-
-  if (Math.abs(amount) === 1) {
-    return trimmedUnit
-  }
-
-  return DISPLAY_UNIT_PLURALS[trimmedUnit] ?? trimmedUnit
-}
-
-export function formatAmountPart(amount: number | null | undefined, unit: string): string {
-  if (!amount) return ""
-
-  const rangeAmount = formatEncodedRangeAmount(amount, unit)
-  if (rangeAmount) return rangeAmount
-
-  const displayAmount = toFraction(amount)
-  const displayUnit = formatDisplayUnit(amount, unit)
-  return `${displayAmount}${displayUnit ? ` ${displayUnit}` : ""}`
-}
-
-export function formatEncodedRangeAmount(
-  amount: number | null | undefined,
-  unit: string
-): string | null {
-  if (!amount) return null
-
-  const match = unit.trim().match(/^(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)(?:\s+(.+))?$/)
-  if (!match || Number(match[1]) !== amount) return null
-
-  const displayUnit = getIngredientDisplayUnit(match[3] || "")
-  return `${match[1]}–${match[2]}${displayUnit ? ` ${displayUnit}` : ""}`
-}
-
-export function formatAdditionalAmountParts(
-  additionalAmounts: ShoppingItem["additionalAmounts"]
-): string[] {
-  if (!additionalAmounts || additionalAmounts.length === 0) return []
-
-  return additionalAmounts
-    .filter((additional) => Boolean(additional.amount))
-    .map((additional) => formatAmountPart(additional.amount, additional.unit))
-    .filter(Boolean)
-}
-
-export function formatShoppingItemAmount(item: ShoppingItem): string {
-  const structured = formatStructuredRecipeQuantity(
-    item.exactQuantityV1,
-    item.exactAuthoredUnit ?? item.unit,
-    item.exactPackageV1
-  )
-  if (structured) return structured.text
-
-  const parts: string[] = []
-
-  const primaryAmount = formatAmountPart(item.amount, item.unit)
-  if (primaryAmount) {
-    parts.push(primaryAmount)
-  }
-
-  parts.push(...formatAdditionalAmountParts(item.additionalAmounts))
-
-  return parts.join(" + ")
-}
-
 function dedupeSources(item: ShoppingItem) {
   if (!item.sources) return []
 
@@ -208,7 +119,14 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
     source.exactPackageV1
   )
   if (structured) {
-    return `${structured.text} ${qualifiedItem}`
+    const quantity = formatShoppingQuantityPart({
+      amount: source.originalAmount ?? null,
+      unit: displayUnit,
+      exactQuantityV1: source.exactQuantityV1,
+      exactPackageV1: source.exactPackageV1,
+      exactAuthoredUnit: itemUnitSuffix ? '' : source.exactAuthoredUnit ?? source.originalUnit ?? '',
+    })
+    return `${quantity} ${qualifiedItem}`
   }
 
   const rangeAmount = formatEncodedRangeAmount(
@@ -219,7 +137,11 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
     return `${rangeAmount} ${qualifiedItem}`
   }
 
-  const amount = source.originalAmount ? toFraction(source.originalAmount) : ""
+  if (source.originalAmount === null && !asNeeded && suffixes.length === 0) {
+    return `${formatShoppingQuantityPart({ amount: null, unit: displayUnit })} ${qualifiedItem}`
+  }
+
+  const amount = source.originalAmount != null ? toFraction(source.originalAmount) : ""
   const prefix = amount ? `${amount}${displayUnit ? ` ${displayUnit}` : ""} ` : ""
   return `${prefix}${qualifiedItem}`.trim()
 }
@@ -227,11 +149,10 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
 function buildSourceDetailLabel(item: ShoppingItem): string | null {
   if (!item.sources?.length) return null
 
-  const uniqueDetails = item.sources
+  const sourceDetails = item.sources
     .map(formatSourceIngredientLabel)
     .filter((label): label is string => Boolean(label))
-    .filter((label, index, labels) => labels.indexOf(label) === index)
-  const details = uniqueDetails.filter(
+  const details = sourceDetails.filter(
     (label) => label.toLowerCase() !== item.item.toLowerCase()
   )
 
@@ -373,17 +294,14 @@ export function ShoppingItemRow({
   onRemove: () => void
 }) {
   const isChecked = item.checked || false
-  const amountLabel = formatAmountPart(item.amount, item.unit)
-  const additionalAmountLabels = formatAdditionalAmountParts(item.additionalAmounts)
+  const amountLabel = formatShoppingItemAmount(item)
   const uniqueSources = dedupeSources(item)
   const nonManualSources = uniqueSources.filter((source) => source.recipeName !== "Manual")
   const sourceSummary = buildSourceSummary(uniqueSources)
   const sourceDetailLabel = buildSourceDetailLabel(item)
   const singleRecipeSource = nonManualSources.length === 1 ? nonManualSources[0] : null
   const displayItemName = getDisplayItemName(item)
-  const secondaryMetaLabel = additionalAmountLabels.length > 0
-    ? `Also: ${additionalAmountLabels.join(", ")}`
-    : sourceDetailLabel
+  const secondaryMetaLabel = sourceDetailLabel
 
   return (
     <div
@@ -444,11 +362,11 @@ export function ShoppingItemRow({
         </button>
 
         <div className={cn("flex min-h-[48px] min-w-0 flex-1 flex-col justify-center", isChecked && "opacity-60")}>
-          <div className="flex min-w-0 items-baseline gap-2">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             {amountLabel ? (
               <span
                 className={cn(
-                  "shrink-0 text-[17px] font-bold leading-6 text-foreground md:text-lg",
+                  "min-w-0 break-words text-[17px] font-bold leading-6 text-foreground md:text-lg",
                   isChecked && "text-gray-500 line-through"
                 )}
               >
@@ -457,7 +375,7 @@ export function ShoppingItemRow({
             ) : null}
             <span
               className={cn(
-                "min-w-0 truncate text-[17px] font-medium leading-6 text-slate-700 md:text-lg md:text-slate-700",
+                "min-w-0 break-words text-[17px] font-medium leading-6 text-slate-700 md:text-lg md:text-slate-700",
                 isChecked && "text-gray-500 line-through"
               )}
             >
@@ -484,7 +402,7 @@ export function ShoppingItemRow({
           {sourceDisplay === "summary" && sourceSummary ? (
             <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-5 text-stone-500">
               {secondaryMetaLabel ? (
-                <span className="max-w-full truncate font-medium text-slate-500">
+                <span className="max-w-full break-words font-medium text-slate-500">
                   {secondaryMetaLabel}
                 </span>
               ) : null}
@@ -501,7 +419,7 @@ export function ShoppingItemRow({
               )}
             </div>
           ) : secondaryMetaLabel ? (
-            <p className="mt-1 truncate text-[11px] font-medium text-slate-500">
+            <p className="mt-1 break-words text-[11px] font-medium text-slate-500">
               {secondaryMetaLabel}
             </p>
           ) : null}

@@ -123,7 +123,18 @@ export type RecipeInstructionGroup = {
   steps: string[]
 }
 
+export type ShoppingQuantity = {
+  amount: number | null
+  unit: string
+  exactQuantityV1?: QuantityV1
+  exactPackageV1?: PackageV1
+  exactAuthoredUnit?: string
+}
+
 export type ShoppingItem = {
+  // Complete ordered display requirements. When present, includes the primary
+  // exactly once and supersedes the legacy quantity fields below.
+  quantityParts?: ShoppingQuantity[]
   rowId?: string
   orderingKey?: string
   item: string

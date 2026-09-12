@@ -15,6 +15,7 @@ import {
   normalizePackageV1,
   normalizeQuantityV1,
   normalizeRationalV1,
+  parseQuantityV1,
 } from "./recipe-quantity"
 import {
   exclusionSemanticsMatch,
@@ -1111,14 +1112,45 @@ function derivedCategory(document: ShoppingDocumentV3, occurrences: Occurrence[]
     left[0].localeCompare(right[0]))[0][0]
 }
 
+// Only plain numeric operands can use the existing approximate aggregation.
+// Packages, ranges and unknowns are independent requirements, even when equal.
+function mergeableScalar(
+  quantity: ShoppingQuantity,
+  preserveFractions: boolean
+): quantity is ShoppingQuantity & { amount: number } {
+  return quantity.amount !== null && !quantity.exactPackageV1 &&
+    (!quantity.exactQuantityV1 ||
+      (quantity.exactQuantityV1.kind === 'exact' && !quantity.exactQuantityV1.qualifier &&
+        (!preserveFractions || quantity.exactQuantityV1.value.denominator === '1')))
+}
+
+function unknownQuantityWording(preparation: string[]): Pick<ShoppingQuantity, 'exactQuantityV1'> {
+  const wording = preparation.filter((value) =>
+    ['as needed', 'to taste', 'for garnish', 'for serving', 'for topping', 'plus more'].includes(value)
+  ).join(', ')
+  return wording ? { exactQuantityV1: parseQuantityV1(wording, 'original-text') } : {}
+}
+
 function mergeQuantity(
   primary: ShoppingQuantity | null,
   additional: ShoppingQuantity[],
-  incoming: ShoppingQuantity | null
+  incoming: ShoppingQuantity | null,
+  preserveFractions = true
 ): { primary: ShoppingQuantity | null; additional: ShoppingQuantity[] } {
   if (!incoming) return { primary, additional }
   if (!primary) return { primary: incoming, additional }
-  const merged = mergeAmounts(primary.amount, primary.unit, incoming.amount, incoming.unit)
+  const merge = (left: ShoppingQuantity, right: ShoppingQuantity) => {
+    if (!mergeableScalar(left, preserveFractions) ||
+        !mergeableScalar(right, preserveFractions)) return null
+    // The legacy helper treats zero as missing before checking dimensions.
+    if (left.amount === 0 || right.amount === 0) {
+      return left.unit === right.unit
+        ? { amount: left.amount + right.amount, unit: left.unit }
+        : null
+    }
+    return mergeAmounts(left.amount, left.unit, right.amount, right.unit)
+  }
+  const merged = merge(primary, incoming)
   if (merged) {
     return {
       primary: { amount: merged.amount, unit: merged.unit },
@@ -1127,7 +1159,7 @@ function mergeQuantity(
   }
   const next = [...additional]
   for (let index = 0; index < next.length; index++) {
-    const candidate = mergeAmounts(next[index].amount, next[index].unit, incoming.amount, incoming.unit)
+    const candidate = merge(next[index], incoming)
     if (candidate) {
       next[index] = { amount: candidate.amount, unit: candidate.unit }
       return { primary, additional: next }
@@ -1149,6 +1181,10 @@ function finalizeProjectedQuantity(
     amount: quantityKind === 'discrete'
       ? Math.ceil(quantity.amount)
       : quantity.amount,
+    // The structured scalar is source evidence, not the rounded purchase total.
+    ...(quantityKind === 'discrete' && Math.ceil(quantity.amount) !== quantity.amount
+      ? { exactQuantityV1: undefined, exactAuthoredUnit: undefined }
+      : {}),
   }
 }
 
@@ -1240,7 +1276,12 @@ export function projectShoppingDocument(
         mergeQuantity(
           current.primary,
           current.additional,
-          occurrence.quantity
+          occurrence.quantity ?? {
+            amount: null,
+            unit: occurrence.purchaseUnit,
+            ...unknownQuantityWording(occurrence.preparation),
+          },
+          occurrence.quantityKind !== 'discrete'
         )
       )
     }

@@ -59,7 +59,7 @@ import {
 } from "@/hooks/use-shopping"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { Recipe, ShoppingItem } from "@/types/database"
-import { cn, toFraction } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
@@ -86,7 +86,6 @@ import {
   sortItemsWithinGroups,
 } from "./shopping-list.selectors"
 import {
-  formatEncodedRangeAmount,
   formatShoppingItemAmount,
   getRecipeColorIndex,
   ManualShoppingItemEditor,
@@ -526,6 +525,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     prevProps.item.rowId === nextProps.item.rowId &&
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
+    formatShoppingItemAmount(prevProps.item) === formatShoppingItemAmount(nextProps.item) &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
@@ -600,6 +600,7 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
     prevProps.item.rowId === nextProps.item.rowId &&
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
+    formatShoppingItemAmount(prevProps.item) === formatShoppingItemAmount(nextProps.item) &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
@@ -1286,14 +1287,8 @@ export function ShoppingListView() {
 
         lines.push(`${categoryData.name}:`)
         items.forEach((item) => {
-          const rangeAmount = formatEncodedRangeAmount(item.amount, item.unit || "")
-          const amount = item.amount ? toFraction(item.amount) : ""
-          const unit = item.unit || ""
-          const prefix = rangeAmount
-            ? `${rangeAmount} `
-            : amount
-              ? `${amount}${unit ? " " + unit : ""} `
-              : ""
+          const amount = formatShoppingItemAmount(item)
+          const prefix = amount ? amount + ' ' : ''
           lines.push(`  - ${prefix}${item.item}`)
         })
         lines.push("")

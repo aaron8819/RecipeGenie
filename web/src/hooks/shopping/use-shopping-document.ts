@@ -171,9 +171,6 @@ export function shoppingDocumentToList(
     item: row.displayName,
     amount: row.quantity?.amount ?? null,
     unit: row.quantity?.unit || '',
-    exactQuantityV1: row.quantity?.exactQuantityV1,
-    exactPackageV1: row.quantity?.exactPackageV1,
-    exactAuthoredUnit: row.quantity?.exactAuthoredUnit,
     categoryKey: row.categoryKey,
     categoryOrder: row.categoryOrder,
     sources: row.manualId
@@ -181,12 +178,10 @@ export function shoppingDocumentToList(
       : row.sources.map((source) => ({
           ...source,
         })),
-    additionalAmounts: row.additionalQuantities
-      ?.filter((quantity) => quantity.amount !== null)
-      .map((quantity) => ({
-        amount: quantity.amount as number,
-        unit: quantity.unit,
-      })),
+    quantityParts: [
+      row.quantity ?? { amount: null, unit: '' },
+      ...(row.additionalQuantities ?? []),
+    ],
     checked: row.checked,
     excludedBy: row.excludedBy,
   })

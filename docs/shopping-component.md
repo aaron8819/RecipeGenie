@@ -172,6 +172,30 @@ contributions aggregate. Structured ranges, packages, and source quantities
 remain exact. An unchecked, unquantified manual row may be hidden while a safe
 same-purchase derived row is visible; the persisted manual row is unchanged.
 
+Shopping display uses ordered `ShoppingItem.quantityParts`, including the
+primary exactly once. `shopping-quantity-display.ts` is the shared formatter for
+active/completed rows, source quantity details, Pantry/excluded chips, drag
+previews, and clipboard copy (there is no separate Shopping print/export path).
+Main quantity text wraps and includes every additional requirement. Repeated
+ranges/packages and source detail lines are not deduplicated by formatted text.
+Recipe references remain attached to the complete source list.
+
+Projection retains unknown operands, distinguishing `amount unspecified` from
+source wording such as `as needed`. Existing preparation wording can explain a
+frozen null quantity; absent wording is never invented. Newly captured Shopping
+contributions retain supported qualitative/unparsed quantity metadata. Reads,
+rendering and check-off never rewrite saved recipes or frozen contributions.
+
+Continuous exact fractional operands stay separate when the existing numeric
+aggregator cannot supply a provably exact total: `1/3 cup + 1/3 cup`, rather than
+claiming exact aggregate arithmetic. Existing numeric compatible-unit conversion
+and aggregate discrete purchase rounding remain; rounded purchase scalars do not
+retain contradictory fractional display metadata. Exact source detail remains
+unrounded. Numeric legacy operands and cross-unit aggregate arithmetic still use
+the existing approximate engine; exact target grouping belongs to foundation
+Slice 7. The legacy Shopping-item normalizer retains its historical numeric
+shape; runtime document adapters emit full quantity parts instead.
+
 Shopping purchase identity removes only explicitly recognized preparation and
 use qualifiers from recipe wording. Unknown adjectives remain literal.
 Generic, white, and yellow onion share the `onion` purchase identity; red,
