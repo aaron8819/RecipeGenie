@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "022_shopping_authoritative_commands"
+export const EXPECTED_LATEST_MIGRATION = "023_shopping_slice6_corrections"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

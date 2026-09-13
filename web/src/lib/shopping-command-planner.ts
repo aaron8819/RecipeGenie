@@ -10,10 +10,11 @@ import { mapRecipeRows } from './recipe-identity';
 import { canonicalShoppingPayload, type ShoppingCommand } from './shopping-command';
 import { settingValue } from './shopping-settings';
 import type { PantryItem } from '@/types/database';
+import { canUndoShoppingClear } from './shopping-clear';
 
 export interface ShoppingCommandContext {
   status: string;
-  row: { document: unknown; content_revision: number } | null;
+  row: { document: unknown; content_revision: number; shopping_clear_undo_available?: boolean } | null;
   dependencyRevision: string;
   pantry: PantryItem[];
   recipes: unknown[];
@@ -30,6 +31,11 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
   if (read && read.status !== 'Supported') return result('UnsupportedDocument');
   const intent = command.mutation;
   const sameRevision = command.observedRevision === before.contentRevision;
+  if (intent.type === 'complete' && command.clearUndoRequired !== undefined &&
+    (!sameRevision || (command.clearUndoRequired &&
+      !(context.row?.shopping_clear_undo_available ?? canUndoShoppingClear(before.document))))) {
+    return result('Conflict');
+  }
   // Only explicitly independent settings intents may rebase in V3. Target
   // field versions and the final organization command family arrive in Slice 9.
   if (!sameRevision && intent.type !== 'deleteRecipe' && intent.type !== 'complete') {
@@ -59,7 +65,9 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
       ? { type: 'editManualItem', id: row.rowRef.slice(7), changes: { bucket: 'already_have' } }
       : { type: 'setBucketOverride', aggregateKey: row.rowRef.slice(8) };
   }
-  const mutation = bridgeMutation ?? intent;
+  const mutation = intent.type === 'undoClear'
+    ? { type: 'restoreContent' as const, content: context.inverse! }
+    : bridgeMutation ?? intent;
   if (mutation.type === 'pantry') return result('InvalidInput');
   try {
     if (mutation.type === 'restoreContent') {

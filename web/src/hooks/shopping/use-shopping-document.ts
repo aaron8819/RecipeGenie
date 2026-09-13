@@ -1,6 +1,8 @@
 'use client'
 
 import { executeShoppingCommand } from '@/lib/shopping-command-client'
+import { reconcileShoppingState, type ShoppingCachedState } from '@/lib/shopping-cache'
+import { canUndoShoppingClear } from '@/lib/shopping-clear'
 import { shoppingRecipeSelections } from '@/lib/shopping-sources'
 import { readShoppingCompatibility } from '@/lib/shopping-compatibility'
 
@@ -58,9 +60,11 @@ const SHOPPING_DOCUMENT_WRITE_SCOPE = 'shopping-document-write'
 type ShoppingDocumentRow = {
   document: unknown
   content_revision: number
+  shopping_clear_undo_available?: boolean
 }
 
 type MutationPlan<TResult> = {
+  clearConfirmation?: { revision: number; undoRequired: boolean }
   mutation: ShoppingDocumentMutation
   value: TResult
   committedValue?: (
@@ -108,13 +112,13 @@ function assertShoppingReadable(queryClient: ReturnType<typeof useQueryClient>, 
   }
 }
 
-function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV3 {
+function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingCachedState {
   const result = readShoppingCompatibility(row.document, Number(row.content_revision))
   if (result.status !== 'Supported') throw new ShoppingDocumentReadError()
-  return result.state
+  return { ...result.state, clearUndoAvailable: row.shopping_clear_undo_available }
 }
 
-async function fetchShoppingDocumentState(ownerUserId?: string): Promise<ShoppingDocumentStateV3> {
+async function fetchShoppingDocumentState(ownerUserId?: string): Promise<ShoppingCachedState> {
   const supabase = getSupabase()
   const request = supabase.from('shopping_list') as unknown as {
     select: (columns: string) => {
@@ -125,7 +129,7 @@ async function fetchShoppingDocumentState(ownerUserId?: string): Promise<Shoppin
       }>
     }
   }
-  const selection = request.select('document,content_revision')
+  const selection = request.select('document,content_revision,shopping_clear_undo_available')
   const { data, error } = await (ownerUserId
     ? selection.eq('user_id', ownerUserId)
     : selection).maybeSingle()
@@ -138,7 +142,17 @@ export function useShoppingDocumentState() {
   const { user, loading } = useAuthContext()
   return useQuery({
     queryKey: shoppingKeys.detail(principalId(user?.id)),
-    queryFn: () => fetchShoppingDocumentState(),
+    // Consume the signal so removal/unmount cancels even a transport that
+    // ignores abort. Reconciliation runs at Query's actual commit boundary.
+    queryFn: async ({ signal }) => {
+      const state = await fetchShoppingDocumentState(user!.id)
+      signal.throwIfAborted()
+      return state
+    },
+    structuralSharing: (current, incoming) => reconcileShoppingState(
+      current as ShoppingDocumentStateV3 | undefined,
+      incoming as ShoppingDocumentStateV3,
+    ),
     retry: (count, error) => !(error instanceof ShoppingDocumentReadError) && count < 2,
     staleTime: 30 * 1000,
     enabled: !loading && Boolean(user),
@@ -159,6 +173,10 @@ export function useShoppingList() {
         )
       : undefined,
     selections: documentQuery.data ? shoppingRecipeSelections(documentQuery.data.document.recipeEntries) : [],
+    clearConfirmation: documentQuery.data ? {
+      revision: documentQuery.data.contentRevision,
+      undoRequired: documentQuery.data.clearUndoAvailable ?? canUndoShoppingClear(documentQuery.data.document),
+    } : undefined,
     documentError: documentQuery.error,
     pantryError: pantryQuery.error,
     hasDocument: documentQuery.data !== undefined,
@@ -211,7 +229,7 @@ function useShoppingMutation<TVariables, TResult>(
       const cacheState = (next: ShoppingDocumentStateV3) => {
         assertOwner()
         queryClient.setQueryData<ShoppingDocumentStateV3>(shoppingKey, (cached) =>
-          cached && cached.contentRevision > next.contentRevision ? cached : next)
+          reconcileShoppingState(cached, next))
       }
       assertOwner()
       assertShoppingReadable(queryClient, shoppingKey)
@@ -223,7 +241,8 @@ function useShoppingMutation<TVariables, TResult>(
       let value = plan.value
       const command = {
         protocol: 1 as const,
-        observedRevision: initial.contentRevision,
+        observedRevision: plan.clearConfirmation?.revision ?? initial.contentRevision,
+        ...(plan.clearConfirmation ? { clearUndoRequired: plan.clearConfirmation.undoRequired } : {}),
         mutation: plan.mutation,
         ...(plan.mutation.type === 'editManualItem' ? {
           observedManual: initial.document.manualItems.find((item) =>
@@ -237,7 +256,14 @@ function useShoppingMutation<TVariables, TResult>(
         result = await executeShoppingCommand(ownerUserId, command)
       } catch (error) {
         cacheState(await refetch())
-        if (plan.mutation.type === 'restoreContent' && error instanceof ShoppingDocumentConflictError) {
+        // Unknown delivery can include a committed write. Only terminal
+        // conflict receipts justify saying that Clear/Undo was not applied.
+        const knownConflict = error instanceof ShoppingDocumentConflictError &&
+          (!('status' in error) || error.status === 'Conflict' || error.status === 'UndoUnavailable')
+        if (plan.mutation.type === 'complete' && knownConflict) {
+          throw new ShoppingClearUndoConflictError('Shopping changed or Undo is unavailable. Review the current list and confirm Clear again; nothing was cleared.')
+        }
+        if (plan.mutation.type === 'restoreContent' && knownConflict) {
           throw new ShoppingClearUndoConflictError()
         }
         throw error
@@ -574,13 +600,16 @@ export function useAddToShoppingList() {
 
 export function useClearShoppingList() {
   const { user } = useAuthContext()
-  return useShoppingMutation<void, ShoppingClearResult | null>(() => ({
+  return useShoppingMutation<void | { revision: number; undoRequired: boolean }, ShoppingClearResult | null>((state, confirmation) => ({
     mutation: { type: 'complete' },
+    clearConfirmation: confirmation || {
+      revision: state.contentRevision, undoRequired: canUndoShoppingClear(state.document),
+    },
     value: null,
     committedValue: (before, committed, receipt) => ({
       ownerUserId: user!.id,
       postClearRevision: committed.contentRevision,
-      undoAvailable: receipt?.undoAvailable !== false,
+      undoAvailable: receipt?.undoAvailable === true,
       historical: receipt?.historical === true,
       content: {
         recipeEntries: before.document.recipeEntries,
@@ -794,7 +823,7 @@ export function useAddToPantryAndRemove() {
     onSuccess: (result) => {
       const state = result.state
       if (state) queryClient.setQueryData<ShoppingDocumentStateV3>(shoppingKey, (cached) =>
-        cached && cached.contentRevision > state.contentRevision ? cached : state)
+        reconcileShoppingState(cached, state))
       // A bridge result is one row, never an authoritative Pantry snapshot.
       void queryClient.invalidateQueries({ queryKey: pantryKeys.list(ownerUserId) })
     },

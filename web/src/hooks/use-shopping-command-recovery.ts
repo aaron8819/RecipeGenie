@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useSyncExternalStore } from 'react';
+import { reconcileShoppingState, type ShoppingCachedState } from '@/lib/shopping-cache';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthContext } from '@/lib/auth-context';
 import { getActivePrincipalId } from '@/lib/principal-session';
@@ -27,12 +28,16 @@ export function useShoppingCommandRecovery() {
   const unknown = ['RetryExpired', 'UnknownAdmission', 'OutcomeUnknown'].includes(attempt.failure);
   const refresh = async () => {
     const { data, error } = await getSupabase().from('shopping_list')
-      .select('document,content_revision').eq('user_id', owner).maybeSingle();
+      .select('document,content_revision,shopping_clear_undo_available').eq('user_id', owner).maybeSingle()
+      // PostgREST computed fields are not columns in generated table types.
+      .overrideTypes<{ document: unknown; content_revision: number; shopping_clear_undo_available: boolean } | null, { merge: false }>();
     if (error || getActivePrincipalId() !== owner) throw new Error('Could not verify the saved list. Try again.');
     const result = readShoppingCompatibility(data?.document ?? createEmptyShoppingDocument(), data?.content_revision ?? 0);
     if (result.status !== 'Supported') throw new Error(shoppingOutcomeMessage('UnsupportedDocument'));
+    const next: ShoppingCachedState = { ...result.state,
+      clearUndoAvailable: data?.shopping_clear_undo_available };
     client.setQueryData<ShoppingDocumentStateV3>(shoppingKeys.detail(owner), (current) =>
-      current && current.contentRevision > result.state.contentRevision ? current : result.state);
+      reconcileShoppingState(current, next));
     await client.invalidateQueries({ queryKey: pantryKeys.list(owner) });
   };
   const act = async (action: 'retry' | 'review' | 'acknowledge') => {

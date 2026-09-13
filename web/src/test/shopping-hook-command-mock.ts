@@ -4,6 +4,7 @@ import { validateManualPurchaseIntent } from '@/lib/shopping-manual-rules';
 import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics';
 import { ShoppingDocumentConflictError } from '@/lib/shopping-document-persistence';
 import type { ShoppingCommand } from '@/lib/shopping-command';
+import { canUndoShoppingClear } from '@/lib/shopping-clear';
 
 /** Hook-only transport fixture. Database atomicity is tested in
  * scripts/test-shopping-protocol.ts, not claimed by this in-memory adapter. */
@@ -13,11 +14,13 @@ export async function runHookCommand(
   write: (before: ShoppingDocumentStateV3, next: ShoppingDocumentStateV3) => Promise<boolean>,
   pantryItems: import('@/types/database').PantryItem[] = [],
 ) {
-  if (command.mutation.type === 'pantry' || command.mutation.type === 'deleteRecipe') throw new Error('Unexpected command');
+  if (command.mutation.type === 'pantry' || command.mutation.type === 'deleteRecipe' || command.mutation.type === 'undoClear') throw new Error('Unexpected command');
   const mutation = command.mutation;
   const observed = structuredClone(read());
   for (let i = 0; i < 2; i++) {
     const before = structuredClone(read());
+    if (mutation.type === 'complete' && command.clearUndoRequired !== undefined &&
+      before.contentRevision !== command.observedRevision) throw new ShoppingDocumentConflictError();
     if ((mutation.type === 'updatePreferences' || mutation.type === 'updateCategoryPreferences') && before.contentRevision !== command.observedRevision) throw new ShoppingSettingsConflictError();
     if (mutation.type === 'addManualItem' || mutation.type === 'editManualItem') {
       const item = mutation.type === 'addManualItem' ? mutation.item : {
@@ -37,7 +40,8 @@ export async function runHookCommand(
     };
     if (await write(before, next)) return {
       status: 'Applied', before,
-      receipt: { outcome: 'Applied', revision: next.contentRevision },
+      receipt: { outcome: 'Applied', revision: next.contentRevision,
+        undoAvailable: mutation.type === 'complete' && canUndoShoppingClear(before.document) },
     };
   }
   throw new ShoppingDocumentConflictError();

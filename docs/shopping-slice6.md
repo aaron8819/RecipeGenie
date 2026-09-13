@@ -97,6 +97,43 @@ replay give explicit unavailable/history feedback. Any intervening document
 write still refuses Undo; content epochs, fresh trip generation, organization-
 only Undo and source-safe recipe-bearing Undo remain Slice 8.
 
+### Slice 6 review corrections (F1–F3)
+
+Migration 023 revokes recipes TRUNCATE from PUBLIC, anon, authenticated and
+service_role, then checks effective privileges including inheritance. This
+closes the demonstrated SQL-role bypass of coordinated deletion; the review
+did not demonstrate an exposed REST TRUNCATE exploit. Supported recipe reads,
+creation, edits and coordinated deletion keep their existing authority.
+
+Shopping query completion and imperative mutation/recovery writes reconcile
+committed revisions within the owner/document query key. A lower revision
+cannot replace a higher cached revision. Query removal discards that history;
+the query consumes cancellation and filters reads by the captured owner.
+Optimistic checked-row intents remain component state, without invented
+committed revisions or whole-cache rollback snapshots.
+
+New Undo requests send `undoClear` and the observed post-Clear revision, not
+the inverse content. The trusted planner obtains the existing owner-bound
+inverse; the same SQL commit validates revision, expiry and exact content and
+consumes it atomically. The 1 MiB HTTP and existing structural limits are
+unchanged. The full compact envelope, including UUID and sequence, stays below
+256 UTF-8 bytes at maximum supported numeric widths. Retained pre-correction
+attempts keep their original command/hash on retry.
+
+Before Clear, the RLS-filtered query includes the computed
+`shopping_clear_undo_available` field. It counts UTF-8 bytes in the actual
+PostgreSQL JSONB text inverse (including separator spaces, escaped strings and
+numeric scale, which JavaScript parsing loses). The owner-locked command
+snapshot supplies the same metadata to the planner. Recipe-bearing or greater-than-1-MiB inverses
+require confirmation explicitly disclosing unavailable Undo. Each current
+client Clear carries that confirmation's revision and Undo requirement; the
+server rechecks both against the actual successful preimage. Eligibility also
+requires that the full restored document fits the existing 4 MiB commit limit;
+the stored inverse and atomic receipt use that same database predicate. A concurrent
+change refuses Clear and asks for current-list review and confirmation again.
+Exactly 1 MiB remains supported; one byte more cannot advertise Undo. A
+historical receipt cannot reconstruct or offer a current inverse.
+
 No command regenerates source evidence during unrelated edits. Existing
 organization sequences, including hidden/dormant purchases, are retained by
 the boundary. Existing V3 ordering algorithms are unchanged; Slice 5's target

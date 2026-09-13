@@ -681,6 +681,7 @@ export function ShoppingListView() {
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
+  const clearConfirmation = useRef<{ revision: number; undoRequired: boolean } | undefined>(undefined)
   const [shoppingMode, setShoppingMode] = useState<ShoppingMode>("shop")
   const [categoryIntents, setCategoryIntents] = useState<CategoryIntentByKey>(new Map())
   const [editingItemRowId, setEditingItemRowId] = useState<string | null>(null)
@@ -796,7 +797,7 @@ export function ShoppingListView() {
   }, [removeRecipeItems, restoreRecipeItems, undoToast])
 
   const handleClearListWithUndo = useCallback(() => {
-    clearList.mutate(undefined, {
+    clearList.mutate(clearConfirmation.current, {
       onSuccess: (result) => {
         if (!result) {
           undoToast.show({ message: 'Shopping list is already clear' })
@@ -818,13 +819,15 @@ export function ShoppingListView() {
   }, [clearList, restoreShoppingContent, undoToast])
 
   const handleRequestClear = useCallback(() => {
+    clearConfirmation.current = shoppingQuery.clearConfirmation
     // Selections remain authoritative even without Pantry projection.
-    if (selections.length > 0 || shoppingList?.source_recipes?.length) {
+    if (shoppingQuery.clearConfirmation?.undoRequired === false ||
+        selections.length > 0 || shoppingList?.source_recipes?.length) {
       setShowClearConfirmation(true)
     } else {
       handleClearListWithUndo()
     }
-  }, [selections.length, shoppingList?.source_recipes, handleClearListWithUndo])
+  }, [shoppingQuery.clearConfirmation, selections.length, shoppingList?.source_recipes, handleClearListWithUndo])
 
   // Handle bulk check-off (check all items in a category)
   const handleBulkCheckOff = useCallback((items: ShoppingItem[]) => {
@@ -1937,7 +1940,9 @@ export function ShoppingListView() {
           <AlertDialogHeader>
             <AlertDialogTitle>Clear shopping list?</AlertDialogTitle>
             <AlertDialogDescription>
-              {SHOPPING_CLEAR_UNDO_UNAVAILABLE} This clears the whole list,
+              {selections.length > 0 || shoppingList?.source_recipes?.length
+                ? SHOPPING_CLEAR_UNDO_UNAVAILABLE
+                : 'This list exceeds the Undo storage limit. Undo will be unavailable.'} This clears the whole list,
               including manual items. Your saved recipes and organization stay saved.
             </AlertDialogDescription>
           </AlertDialogHeader>

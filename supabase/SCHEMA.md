@@ -69,9 +69,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/020_shopping_document_v3.sql`
 - `supabase/migrations/021_fix_shopping_v3_family_policy_validation.sql`
 - `supabase/migrations/022_shopping_authoritative_commands.sql`
+- `supabase/migrations/023_shopping_slice6_corrections.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 22 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 23 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -652,10 +653,12 @@ The repository now uses a baseline-first bootstrap strategy:
 21. **021_fix_shopping_v3_family_policy_validation.sql** - Corrected operator grouping in the V3 family-policy key validator so non-empty V3 documents persist while retaining the approved V2/V3 contract and V2 default.
 22. **022_shopping_authoritative_commands.sql** - Service-only atomic Shopping commits, bounded admission/receipts, dependency epochs, conditional manual Clear inverse, and client writer fencing. No existing document rewrite. See `docs/shopping-slice6.md`.
 
+23. **023_shopping_slice6_corrections.sql** - Revoke recipe TRUNCATE and assert effective privileges; expose read-only, RLS-filtered Clear eligibility and use the same actual inverse/full-document byte limits in owner-locked context and atomic receipts. No data rewrite.
+
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `022`. The archived pre-baseline sequence is not replayed.
+  migration through `023`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -909,7 +912,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 022, and the
+instructions. The current authoritative chain ends at migration 023, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

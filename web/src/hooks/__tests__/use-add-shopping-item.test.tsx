@@ -85,14 +85,18 @@ vi.mock('@/lib/supabase/client', () => ({
       }
 
       return {
-        select: () => ({
-          maybeSingle: async () => {
-            database.shoppingSelectCalls()
-            return database.shoppingRow
-              ? { data: database.shoppingRow, error: null }
-              : { data: null, error: { message: 'Shopping document not found' } }
-          },
-        }),
+        select: () => {
+          const selection = {
+            eq: () => selection,
+            maybeSingle: async () => {
+              database.shoppingSelectCalls()
+              return database.shoppingRow
+                ? { data: database.shoppingRow, error: null }
+                : { data: null, error: { message: 'Shopping document not found' } }
+            },
+          }
+          return selection
+        },
         update: (values: { document: unknown; content_revision: number }) => {
           database.updateCalls(values)
           const chain = {

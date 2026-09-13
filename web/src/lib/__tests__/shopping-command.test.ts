@@ -100,4 +100,26 @@ describe('bounded client retry delivery', () => {
     await expect(executeShoppingCommand('owner', c)).rejects.toThrow();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('F3 serializes large inverses as bounded references on every retry', async () => {
+    const content = { recipeEntries: {}, manualItems: Array.from({ length: 6000 }, (_, i) => ({ ...manual, id: String(i) })), itemOverrides: {} };
+    fetchMock.mockRejectedValueOnce(new Error('lost admission'))
+      .mockResolvedValueOnce(reply({ status: 'Admitted', sequence: '7' }))
+      .mockRejectedValueOnce(new Error('lost execution'))
+      .mockResolvedValueOnce(reply({ status: 'AlreadyApplied', receipt: { outcome: 'Applied', revision: 9 } }));
+    await executeShoppingCommand('owner', command({ type: 'restoreContent', content }, 8));
+    const bodies = fetchMock.mock.calls.map((args) => JSON.parse(args[1].body));
+    expect(bodies.every((body) => body.command.mutation.type === 'undoClear' && !('content' in body.command.mutation))).toBe(true);
+    expect(bodies.every((body) => new TextEncoder().encode(JSON.stringify(body)).byteLength < 256)).toBe(true);
+    expect(bodies[2]).toEqual(bodies[3]);
+    expect(sessionStorage.length).toBe(0);
+  });
+
+  it('F3 retains pre-correction retry payloads rather than changing an issued hash', async () => {
+    const legacy = command({ type: 'restoreContent', content: { recipeEntries: {}, manualItems: [manual], itemOverrides: {} } }, 8);
+    sessionStorage.setItem('shopping-attempt-v1:owner', JSON.stringify({ operationId: 'retained', sequence: '7', command: legacy }));
+    fetchMock.mockResolvedValue(reply({ status: 'AlreadyApplied', receipt: { outcome: 'Applied', revision: 9 } }));
+    await executeShoppingCommand('owner', legacy);
+    expect(JSON.parse(fetchMock.mock.lastCall![1].body).command).toEqual(legacy);
+  });
 });

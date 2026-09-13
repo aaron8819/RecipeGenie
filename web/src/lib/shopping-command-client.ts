@@ -45,6 +45,10 @@ export class ShoppingCommandError extends ShoppingDocumentConflictError {
 }
 
 export async function executeShoppingCommand(owner: string, command: ShoppingCommand): Promise<CommandResponse> {
+  // The server already holds the owner/revision-bound inverse. Never put the
+  // inverse in request/session storage or subject it to command traversal limits.
+  const compact = (value: ShoppingCommand): ShoppingCommand => value.mutation.type === 'restoreContent'
+    ? { ...value, mutation: { type: 'undoClear' } } : value;
   const assertOwner = () => {
     if (getActivePrincipalId() !== owner) throw new ShoppingCommandError('OutcomeUnknown');
   };
@@ -54,7 +58,12 @@ export async function executeShoppingCommand(owner: string, command: ShoppingCom
   // never admit anew. Storage failure prevents dispatch, not deduplication.
   const saved = sessionStorage.getItem(key);
   let attempt: Attempt;
-  try { attempt = saved ? JSON.parse(saved) : { operationId: crypto.randomUUID(), command }; }
+  try {
+    attempt = saved ? JSON.parse(saved) : { operationId: crypto.randomUUID(), command: compact(command) };
+    // A retained pre-correction attempt must keep its original payload/hash.
+    // Compact new attempts and retries of compact attempts only.
+    if (!saved || attempt.command.mutation.type === 'undoClear') command = compact(command);
+  }
   catch { throw new ShoppingCommandError('OutcomeUnknown'); }
   if (canonicalShoppingPayload(attempt.command) !== canonicalShoppingPayload(command)) throw new ShoppingCommandError('OutcomeUnknown');
   storeAttempt(owner, { ...attempt, failure: undefined });

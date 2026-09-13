@@ -226,10 +226,12 @@ describe('conditional Shopping Clear Undo', () => {
     expect(db.states.get(OWNER)!.document.manualItems).toEqual([manual('bread')])
   })
 
-  it('returns the exact successful Clear preimage/revision after rebase, and Undo restores it', async () => {
+  it('F3 refuses a changed confirmation, then returns the successful re-confirmed preimage', async () => {
     const hook = setup()
     commit({ type: 'addManualItem', item: manual('bread') })
     const actualPreimage = structuredClone(db.states.get(OWNER)!)
+    await act(async () => { await expect(hook.result.current.clear.mutateAsync()).rejects.toThrow('confirm Clear again') })
+    expect(db.states.get(OWNER)).toEqual(actualPreimage)
     const token = await clear(hook)
     expect(token!.content.manualItems).toEqual(actualPreimage.document.manualItems)
     expect(token!.postClearRevision).toBe(db.states.get(OWNER)!.contentRevision)
@@ -238,10 +240,11 @@ describe('conditional Shopping Clear Undo', () => {
     expect(db.states.get(OWNER)!.document).toEqual(actualPreimage.document)
   })
 
-  it('returns no inverse for empty Clear, including a rebase to empty', async () => {
+  it('F3 refuses a stale confirmation then returns no inverse for current empty Clear', async () => {
     const hook = setup()
     commit({ type: 'complete' })
     const persisted = structuredClone(db.states.get(OWNER))
+    await act(async () => { await expect(hook.result.current.clear.mutateAsync()).rejects.toThrow('confirm Clear again') })
     expect(await clear(hook)).toBeNull()
     expect(await clear(hook)).toBeNull()
     expect(db.states.get(OWNER)).toEqual(persisted)
@@ -269,7 +272,22 @@ describe('conditional Shopping Clear Undo', () => {
     }))
   })
 
-  it('uses final recipe eligibility when a manual-only Clear retries onto a hidden selection', async () => {
+  it.each(['clear', 'undo'] as const)('F3 preserves unknown delivery feedback after a committed %s', async (operation) => {
+    const hook = setup()
+    const token = operation === 'undo' ? await clear(hook) : null
+    db.afterWrite = () => {
+      throw Object.assign(new ShoppingClearUndoConflictError('The Shopping outcome is unknown. Review the saved list.'), { status: 'OutcomeUnknown' })
+    }
+    await act(async () => {
+      const pending = operation === 'clear' ? hook.result.current.clear.mutateAsync()
+        : hook.result.current.undo.mutateAsync(token!)
+      await expect(pending).rejects.toThrow('outcome is unknown')
+    })
+    expect(show).toHaveBeenLastCalledWith(expect.objectContaining({ message: expect.stringContaining('outcome is unknown') }))
+    expect(db.states.get(OWNER)!.document.manualItems.length).toBe(operation === 'clear' ? 0 : hook.original.document.manualItems.length)
+  })
+
+  it('F3 requires updated confirmation when a hidden recipe invalidates manual-only Undo', async () => {
     const hook = setup()
     const newer = structuredClone(db.states.get(OWNER)!)
     newer.contentRevision++
@@ -278,6 +296,8 @@ describe('conditional Shopping Clear Undo', () => {
       scaleV1: { numerator: '1', denominator: '1' }, ingredients: [],
     }
     db.states.set(OWNER, newer)
+    await act(async () => { await expect(hook.result.current.clear.mutateAsync()).rejects.toThrow('confirm Clear again') })
+    expect(db.states.get(OWNER)).toEqual(newer)
     const token = await clear(hook)
     expect(token!.postClearRevision).toBe(9)
     expect(token!.content.recipeEntries).toEqual(newer.document.recipeEntries)

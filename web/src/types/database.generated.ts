@@ -391,6 +391,10 @@ export type Database = {
         }
         Returns: Json
       }
+      shopping_clear_undo_available: {
+        Args: { p_row: Database["public"]["Tables"]["shopping_list"]["Row"] }
+        Returns: boolean
+      }
       shopping_command_context: {
         Args: {
           p_hash: string
@@ -563,4 +567,3 @@ export const Constants = {
     Enums: {},
   },
 } as const
-
