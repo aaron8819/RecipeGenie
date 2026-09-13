@@ -11,8 +11,8 @@ import { readShoppingCommand, type ShoppingCommand } from '../src/lib/shopping-c
 
 // Disposable correction project only: no ambient production or shared URL.
 const env = parse(readFileSync('.env.local'));
-assert.equal(env.NEXT_PUBLIC_SUPABASE_URL, 'http://127.0.0.1:56321');
-const db = postgres({ host: '127.0.0.1', port: 56322, database: 'postgres',
+assert.equal(env.NEXT_PUBLIC_SUPABASE_URL, (process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 'http://127.0.0.1:57321' : 'http://127.0.0.1:56321'));
+const db = postgres({ host: '127.0.0.1', port: process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 57322 : 56322, database: 'postgres',
   user: 'postgres', password: 'postgres', max: 4, onnotice: () => {} });
 const admin = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false, autoRefreshToken: false } });
@@ -40,8 +40,8 @@ const revision = async (id: string) => Number((await read(id)).content_revision)
 const command = (mutation: ShoppingCommand['mutation'], observedRevision: number, clearUndoRequired?: boolean): ShoppingCommand =>
   ({ protocol: 1, observedRevision, mutation, ...(clearUndoRequired === undefined ? {} : { clearUndoRequired }) });
 async function http(a: Owner, body: unknown) {
-  const response = await fetch('http://127.0.0.1:3116/api/shopping', {
-    method: 'POST', headers: { Origin: 'http://127.0.0.1:3116', Cookie: a.cookie, 'Content-Type': 'application/json' },
+  const response = await fetch((process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 'http://127.0.0.1:3117/api/shopping' : 'http://127.0.0.1:3116/api/shopping'), {
+    method: 'POST', headers: { Origin: (process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 'http://127.0.0.1:3117' : 'http://127.0.0.1:3116'), Cookie: a.cookie, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   return response.json();
@@ -54,7 +54,7 @@ async function send(a: Owner, c: ShoppingCommand) {
   return { result: await http(a, body), body };
 }
 async function seed(a: Owner, document: ShoppingDocumentV3) {
-  await db`update public.shopping_list set document=${db.json(document)},content_revision=content_revision+1 where user_id=${a.id}`;
+  await db`update public.shopping_list set document=${db.json(JSON.parse(JSON.stringify(document)))},content_revision=content_revision+1 where user_id=${a.id}`;
 }
 const manualDocument = (count: number): ShoppingDocumentV3 => ({ ...createEmptyShoppingDocument(),
   manualItems: Array.from({ length: count }, (_, i) => ({ id: `manual-${i}`, displayName: `Item ${i}`,
@@ -102,7 +102,7 @@ async function main() {
     }
     // SQL serialization parity, including exponent expansion, UTF-8 and escapes.
     for (const value of [{ a: [1e-7, 1e21, -1e-20, 1.25, null, true], b: 'é🥕"\\\n' }, shoppingContent(manualDocument(6000))]) {
-      check(shoppingInverseBytes(value), (await db`select octet_length(${db.json(value)}::jsonb::text)::int bytes`)[0].bytes,
+      check(shoppingInverseBytes(value), (await db`select octet_length(${db.json(JSON.parse(JSON.stringify(value)))}::jsonb::text)::int bytes`)[0].bytes,
         'F3 exact PostgreSQL/TypeScript UTF-8 inverse byte parity');
     }
     for (const count of [1, 5100, 6000]) {

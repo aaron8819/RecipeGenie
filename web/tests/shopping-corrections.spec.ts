@@ -9,10 +9,10 @@ import { SHOPPING_INVERSE_BYTES, shoppingContent, shoppingInverseBytes } from '.
 import type { ShoppingCommand } from '../src/lib/shopping-command';
 
 const local = parse(readFileSync('.env.local'));
-if (local.NEXT_PUBLIC_SUPABASE_URL !== 'http://127.0.0.1:56321') throw new Error('Requires isolated correction stack');
+if (local.NEXT_PUBLIC_SUPABASE_URL !== (process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 'http://127.0.0.1:57321' : 'http://127.0.0.1:56321')) throw new Error('Requires isolated correction stack');
 const admin = createClient(local.NEXT_PUBLIC_SUPABASE_URL, local.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false, autoRefreshToken: false } });
-const sql = postgres({ host: '127.0.0.1', port: 56322, database: 'postgres', user: 'postgres', password: 'postgres', max: 1 });
+const sql = postgres({ host: '127.0.0.1', port: process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 57322 : 56322, database: 'postgres', user: 'postgres', password: 'postgres', max: 1 });
 test.afterAll(async () => { await sql.end(); });
 async function send(page: Page, command: ShoppingCommand) {
   return page.evaluate(async (command) => {
@@ -44,7 +44,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       const document = createEmptyShoppingDocument();
       document.manualItems = [{ id: randomUUID(), displayName: 'Before race', quantity: null, categoryKey: 'misc', bucket: 'items', checked: false }];
       for (let i = 0; i < 7; i++) {
-        await sql`update public.shopping_list set document=${sql.json(document)},content_revision=content_revision+1 where user_id=${owner}`;
+        await sql`update public.shopping_list set document=${sql.json(JSON.parse(JSON.stringify(document)))},content_revision=content_revision+1 where user_id=${owner}`;
       }
       await page.goto('/shopping');
       await page.getByLabel('Email', { exact: true }).fill(email);
@@ -105,7 +105,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       const padding = SHOPPING_INVERSE_BYTES + 1 - shoppingInverseBytes(shoppingContent(large));
       large.manualItems[0].id += 'x'.repeat(padding);
       expect(shoppingInverseBytes(shoppingContent(large))).toBeGreaterThan(SHOPPING_INVERSE_BYTES);
-      await sql`update public.shopping_list set document=${sql.json(large)},content_revision=content_revision+1 where user_id=${owner}`;
+      await sql`update public.shopping_list set document=${sql.json(JSON.parse(JSON.stringify(large)))},content_revision=content_revision+1 where user_id=${owner}`;
       await page.reload();
       await clearButton().click();
       await expect(page.getByText('This list exceeds the Undo storage limit.', { exact: false })).toBeVisible();

@@ -44,6 +44,9 @@ import {
   type ShoppingOrderingCategory,
 } from "./shopping-ordering"
 import { mergeAmounts } from "./unit-conversion"
+import type { FrozenManualIdentity, ShoppingInitialization, ShoppingPlacementEvidence } from './shopping-initialization'
+import { initializedCategory } from './shopping-initialization'
+import { sumShoppingRequirements } from './shopping-extra-quantities'
 
 export type ShoppingBucket = "items" | "already_have" | "excluded"
 export type RowRef = `derived:${AggregateKey}` | `manual:${string}`
@@ -86,6 +89,7 @@ export type ShoppingRecipeEntryV1 = {
 
 export type ShoppingRecipeEntryV2 = Omit<ShoppingRecipeEntryV1, 'ingredients'> & {
   ingredients: ShoppingRecipeIngredientV2[]
+  sourceEvidence?: ShoppingInitialization['sources'][string]
 }
 
 export type ShoppingManualItemV1 = {
@@ -95,6 +99,7 @@ export type ShoppingManualItemV1 = {
   categoryKey: string
   bucket: ShoppingBucket
   checked: boolean
+  identity?: FrozenManualIdentity
 }
 
 export type ShoppingItemOverrideV1 = {
@@ -140,11 +145,12 @@ export type ShoppingDocumentV2 = {
 }
 
 export type ShoppingDocumentV3 = {
-  schemaVersion: 3
+  schemaVersion: 3 | 4
   recipeEntries: Record<string, ShoppingRecipeEntryV2>
   manualItems: ShoppingManualItemV1[]
   itemOverrides: Record<AggregateKey, ShoppingItemOverrideV2>
   preferences: ShoppingPreferencesV1 & ShoppingOrderingPreferences
+  placementEvidence?: ShoppingPlacementEvidence
 }
 
 /** content_revision is the row CAS token, not document content. */
@@ -1029,6 +1035,16 @@ export type ProjectedShoppingRow = {
   checked: boolean
   sources: ProjectedShoppingSource[]
   excludedBy?: string
+  requirements?: {
+    manualId?: string
+    recipeId?: string
+    displayName: string
+    quantity: ShoppingQuantity | null
+    bucket: ShoppingBucket
+    occurrenceId?: string
+  }[]
+  legacy?: boolean
+  previousChecked?: boolean
 }
 
 export type ShoppingDocumentProjection = {
@@ -1241,6 +1257,7 @@ export function projectShoppingDocument(
   document: ShoppingDocumentV3,
   pantryItems: PantryItem[] = []
 ): ShoppingDocumentProjection {
+  if (document.schemaVersion === 4) return projectInitializedShoppingDocument(document, pantryItems)
   const pantry = resolvePantrySemanticEvidence(pantryItems)
   const settings: IngredientExclusionSettings = {
     exclude_salt_variants: document.preferences.excludeSaltVariants,
@@ -1409,7 +1426,77 @@ export function projectShoppingDocument(
   }
 }
 
+function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantryItems: PantryItem[]): ShoppingDocumentProjection {
+  const pantry = resolvePantrySemanticEvidence(pantryItems)
+  const exclusions = document.preferences.excludedIngredientKeys.map(key => resolveShoppingIngredientSemantics({ item: key }))
+  const settings = { exclude_salt_variants: document.preferences.excludeSaltVariants,
+    exclude_black_pepper_variants: document.preferences.excludeBlackPepperVariants }
+  const groups = new Map<string, ProjectedShoppingRow>()
+  const rows: ProjectedShoppingRow[] = []
+  const group = (key: string, name: string) => {
+    let row = groups.get(key)
+    if (!row) {
+      row = { rowRef: `derived:${JSON.stringify(['purchase', key])}`, orderingKey: key, purchaseKeys: [key],
+        displayName: name, quantity: null, categoryKey: initializedCategory(document, key),
+        categoryOrder: 0, bucket: 'excluded', checked: false, sources: [], requirements: [] }
+      groups.set(key, row)
+    }
+    return row
+  }
+  for (const entry of Object.values(document.recipeEntries)) {
+    for (const [ordinal, ingredient] of entry.ingredients.entries()) {
+      const occurrence = { ...ingredient, recipeId: entry.recipeId, recipeName: entry.recipeName }
+      const override = document.itemOverrides[ingredient.aggregateKey]
+      const classification = derivedClassification([occurrence], pantry, exclusions, settings)
+      const bucket = override?.suppressed ? 'excluded' : override?.bucket ?? classification.bucket
+      const row = group(ingredient.purchaseKey, ingredient.purchaseKey)
+      row.previousChecked ||= override?.checked === true
+      row.requirements!.push({ recipeId: entry.recipeId, displayName: entry.recipeName,
+        quantity: ingredient.quantity ?? { amount: null, unit: ingredient.purchaseUnit, ...unknownQuantityWording(ingredient.preparation) },
+        bucket, occurrenceId: entry.sourceEvidence?.occurrences[ordinal]?.id })
+      row.sources.push({ recipeId: entry.recipeId, recipeName: entry.recipeName,
+        originalItem: ingredient.displayName, originalAmount: ingredient.quantity?.amount ?? null,
+        originalUnit: ingredient.purchaseUnit, exactQuantityV1: ingredient.quantity?.exactQuantityV1,
+        exactPackageV1: ingredient.quantity?.exactPackageV1, exactAuthoredUnit: ingredient.quantity?.exactAuthoredUnit,
+        preparationModifiers: ingredient.preparation })
+    }
+  }
+  for (const item of document.manualItems) {
+    const identity = item.identity!
+    if (identity.removed) continue
+    if (identity.meaning === 'legacyIndependent') {
+      rows.push({ rowRef: `manual:${item.id}`, manualId: item.id, orderingKey: `legacy:${item.id}`,
+        purchaseKeys: [], displayName: item.displayName, quantity: item.quantity,
+        categoryKey: item.categoryKey, categoryOrder: 0, bucket: item.bucket,
+        checked: false, previousChecked: item.checked, sources: [], legacy: true })
+      continue
+    }
+    const row = group(identity.purchaseKey, identity.purchaseKey)
+    row.previousChecked ||= item.checked
+    row.requirements!.push({ manualId: item.id, displayName: item.displayName, quantity: item.quantity, bucket: item.bucket })
+  }
+  for (const row of groups.values()) {
+    const requirements = row.requirements!
+    row.bucket = requirements.some(part => part.bucket === 'items') ? 'items' :
+      requirements.some(part => part.bucket === 'already_have') ? 'already_have' : 'excluded'
+    const parts = sumShoppingRequirements(requirements.filter(part => part.bucket === row.bucket).map(part => part.quantity))
+    row.quantity = parts[0] ?? null
+    row.additionalQuantities = parts.slice(1)
+    rows.push(row)
+  }
+  const categories = shoppingOrderingCategories(document, [...new Set(rows.map(row => row.categoryKey))])
+  const ordered = orderShoppingRows(rows, categories, document.preferences.categoryOrder,
+    document.preferences.ingredientOrderByCategory)
+  return { rows: ordered, items: ordered.filter(row => row.bucket === 'items'),
+    alreadyHave: ordered.filter(row => row.bucket === 'already_have'), excluded: ordered.filter(row => row.bucket === 'excluded') }
+}
+
 export type ShoppingDocumentMutation =
+  | { type: 'initialize' }
+  | { type: 'resolvePlacement'; purchaseKey: string; categoryKey: string; anchor: string | null }
+  | { type: 'resolveLegacy'; id: string; expectedVersion: number; choice: 'extra' | 'total' | 'reminder'; quantity: ShoppingQuantity | null; purchaseName: string; categoryKey: string; anchor: string | null }
+  | { type: 'restoreManualItem'; id: string; expectedVersion: number }
+  | { type: 'rebindManualItem'; id: string; expectedVersion: number; displayName: string; quantity: ShoppingQuantity | null }
   | { type: 'setExclusion'; key: string; enabled: boolean }
   | { type: 'setFamilySetting'; setting: 'excludeSaltVariants' | 'excludeBlackPepperVariants'; enabled: boolean }
   | { type: 'upsertRecipe'; entry: ShoppingRecipeEntryV2 }
@@ -1610,6 +1697,12 @@ function reduceDocument(
   mutation: ShoppingDocumentMutation
 ): ShoppingDocumentV3 {
   switch (mutation.type) {
+    case 'initialize':
+    case 'resolvePlacement':
+    case 'resolveLegacy':
+    case 'restoreManualItem':
+    case 'rebindManualItem':
+      throw new Error('Initialized Shopping command required')
     case "upsertRecipe":
     case "rescaleRecipe":
       return pruneDocument({

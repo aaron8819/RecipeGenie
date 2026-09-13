@@ -11,6 +11,7 @@ import { canonicalShoppingPayload, type ShoppingCommand } from './shopping-comma
 import { settingValue } from './shopping-settings';
 import type { PantryItem } from '@/types/database';
 import { canUndoShoppingClear } from './shopping-clear';
+import { planInitializedShoppingCommand } from './shopping-initialized-command';
 
 export interface ShoppingCommandContext {
   status: string;
@@ -30,6 +31,9 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
     ({ outcome, document, before, pantryItem });
   if (read && read.status !== 'Supported') return result('UnsupportedDocument');
   const intent = command.mutation;
+  if (intent.type === 'initialize' || before.document.schemaVersion === 4) {
+    return planInitializedShoppingCommand(context, command, before.document);
+  }
   const sameRevision = command.observedRevision === before.contentRevision;
   if (intent.type === 'complete' && command.clearUndoRequired !== undefined &&
     (!sameRevision || (command.clearUndoRequired &&

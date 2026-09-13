@@ -10,6 +10,7 @@ export type ShoppingCommand = {
   clearUndoRequired?: boolean;
   observedSetting?: boolean;
   observedManual?: ShoppingManualItemV1;
+  observedSelections?: Record<string, number | null>;
 };
 
 export function canonicalShoppingPayload(value: unknown): string {
@@ -21,6 +22,9 @@ export function canonicalShoppingPayload(value: unknown): string {
 }
 
 const fields: Record<string, string[]> = {
+  initialize: [], resolveLegacy: ['id', 'expectedVersion', 'choice', 'quantity', 'purchaseName', 'categoryKey', 'anchor'],
+  resolvePlacement: ['purchaseKey', 'categoryKey', 'anchor'],
+  restoreManualItem: ['id', 'expectedVersion'], rebindManualItem: ['id', 'expectedVersion', 'displayName', 'quantity'],
   setExclusion: ['key', 'enabled'], setFamilySetting: ['setting', 'enabled'],
   upsertRecipe: ['entry'], upsertRecipes: ['entries'], rescaleRecipe: ['entry'],
   removeRecipe: ['recipeId'], setChecked: ['rowRef', 'checked'],
@@ -39,7 +43,7 @@ const fields: Record<string, string[]> = {
 export function readShoppingCommand(value: unknown): ShoppingCommand | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const command = value as Record<string, unknown>;
-  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedManual', 'clearUndoRequired'].includes(key)) ||
+  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedManual', 'observedSelections', 'clearUndoRequired'].includes(key)) ||
     command.protocol !== SHOPPING_PROTOCOL || !Number.isSafeInteger(command.observedRevision) ||
     Number(command.observedRevision) < 0 ||
     (command.observedSetting !== undefined && typeof command.observedSetting !== 'boolean') ||
@@ -61,6 +65,15 @@ export function readShoppingCommand(value: unknown): ShoppingCommand | null {
       !['__proto__', 'constructor', 'prototype'].includes(key) && bounded(v, depth + 1));
   };
   if (!bounded(value, 0)) return null;
+  if ('expectedVersion' in mutation && (!Number.isSafeInteger(mutation.expectedVersion) || Number(mutation.expectedVersion) < 0)) return null;
+  if (mutation.type === 'resolveLegacy' && (!['extra', 'total', 'reminder'].includes(String(mutation.choice)) ||
+    typeof mutation.purchaseName !== 'string' || !mutation.purchaseName.trim() || typeof mutation.categoryKey !== 'string' ||
+    (mutation.anchor !== null && typeof mutation.anchor !== 'string'))) return null;
+  if (mutation.type === 'rebindManualItem' && (typeof mutation.displayName !== 'string' || !mutation.displayName.trim())) return null;
+  if (mutation.type === 'resolvePlacement' && (typeof mutation.purchaseKey !== 'string' || !mutation.purchaseKey.trim() ||
+    typeof mutation.categoryKey !== 'string' || !mutation.categoryKey || (mutation.anchor !== null && typeof mutation.anchor !== 'string'))) return null;
+  if (command.observedSelections !== undefined && (!command.observedSelections || typeof command.observedSelections !== 'object' ||
+    Array.isArray(command.observedSelections) || Object.values(command.observedSelections).some(v => v !== null && (!Number.isSafeInteger(v) || Number(v) < 0)))) return null;
   const stringFields = ['key', 'setting', 'recipeId', 'rowRef', 'id', 'aggregateKey',
     'draggedRowRef', 'draggedOrderingKey', 'sourceCategoryKey', 'targetRowRef',
     'targetOrderingKey', 'targetCategoryKey', 'placement'];

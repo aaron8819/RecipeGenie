@@ -21,5 +21,6 @@
   "020_shopping_document_v3.sql": "9b8eb4cb255ece33395fe28480aef6e196c51c28427f8bb29db95b6f52c29e34",
   "021_fix_shopping_v3_family_policy_validation.sql": "bb1b76b939d9e120f67ab4a0f4a089bf89c069181126438dde94299371180cf0",
   "022_shopping_authoritative_commands.sql": "d80e481ac959e2f39138a1e5d343719d086820fab0f11dcfa8b2c4be0c393d41",
-  "023_shopping_slice6_corrections.sql": "9a38fe2926a96753a64d17d4cd231c42a7b87b94127736dba88095dc329620ee"
+  "023_shopping_slice6_corrections.sql": "9a38fe2926a96753a64d17d4cd231c42a7b87b94127736dba88095dc329620ee",
+  "024_shopping_identity_extras.sql": "dd77e93dc2c1a659ae1da2bebd0d549a1fd7595ee5b6d6dcf78a042d445c5aa3"
 }

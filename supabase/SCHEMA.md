@@ -70,9 +70,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/021_fix_shopping_v3_family_policy_validation.sql`
 - `supabase/migrations/022_shopping_authoritative_commands.sql`
 - `supabase/migrations/023_shopping_slice6_corrections.sql`
+- `supabase/migrations/024_shopping_identity_extras.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 23 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 24 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -627,6 +628,8 @@ auth.users (Supabase Auth)
 
 ## Migration History
 
+24. **024_shopping_identity_extras.sql** — Add strict initialized-document validation through the existing service-only commit boundary. Existing rows are unchanged; conversion requires an explicit owner/revision-bound command. See `docs/shopping-slice7.md`.
+
 The repository now uses a baseline-first bootstrap strategy:
 
 1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap through the pantry row-id baseline cut on 2026-03-09.
@@ -658,7 +661,7 @@ The repository now uses a baseline-first bootstrap strategy:
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `023`. The archived pre-baseline sequence is not replayed.
+  migration through `024`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -912,7 +915,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 023, and the
+instructions. The current authoritative chain ends at migration 024, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

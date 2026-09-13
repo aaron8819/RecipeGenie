@@ -132,6 +132,11 @@ export type ShoppingQuantity = {
 }
 
 export type ShoppingItem = {
+  coveragePending?: boolean
+  manualVersion?: number
+  legacyAmount?: boolean
+  previousChecked?: boolean
+  requirementBreakdown?: { label: string; quantity: ShoppingQuantity | null; hidden: boolean }[]
   // Complete ordered display requirements. When present, includes the primary
   // exactly once and supersedes the legacy quantity fields below.
   quantityParts?: ShoppingQuantity[]

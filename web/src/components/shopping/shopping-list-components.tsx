@@ -297,7 +297,7 @@ export function ShoppingItemRow({
         <button
           type="button"
           data-checkbox="true"
-          disabled={readOnly}
+          disabled={readOnly || item.coveragePending}
           onClick={onCheckOff}
           aria-busy={isCheckingOff || undefined}
           className="my-0 flex min-h-[52px] min-w-[52px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:min-h-[48px] md:min-w-[48px]"
@@ -317,6 +317,11 @@ export function ShoppingItemRow({
         </button>
 
         <div className={cn("flex min-h-[48px] min-w-0 flex-1 flex-col justify-center", isChecked && "opacity-60")}>
+          {item.legacyAmount && <p className="text-sm">Legacy amount — meaning not set</p>}
+          {item.previousChecked && <p className="text-sm">Previously checked; confirm current need.</p>}
+          {item.requirementBreakdown && <details className="text-sm"><summary>Recipe and extra breakdown</summary>
+            {item.requirementBreakdown.map((part, index) => <p key={index}>{formatShoppingQuantityPart(part.quantity ?? { amount: null, unit: '' })} — {part.label}{part.hidden ? ' (hidden or in Pantry)' : ''}</p>)}
+          </details>}
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             {amountLabel ? (
               <span
@@ -395,9 +400,9 @@ export function ShoppingItemRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {onEdit ? (
-            <DropdownMenuItem onClick={onEdit}>
+            <DropdownMenuItem onClick={onEdit} disabled={item.coveragePending}>
               <Pencil className="mr-2 h-4 w-4" />
-              Edit item
+              {item.coveragePending ? 'Edit in Extras and legacy amounts' : 'Edit item'}
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onClick={onAddToPantry} disabled={isAddingToPantry}>

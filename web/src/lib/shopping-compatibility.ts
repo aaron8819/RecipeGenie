@@ -1,4 +1,6 @@
 import { validateShoppingDocumentStateV3, type ShoppingDocumentStateV3 } from './shopping-document'
+import { validateShoppingDocumentV3 } from './shopping-document'
+import { readInitializedDocument } from './shopping-initialization'
 
 export type ShoppingReadOutcome =
   | { status: 'Supported'; state: ShoppingDocumentStateV3; sourceVersion: number }
@@ -13,6 +15,11 @@ export function readShoppingCompatibility(document: unknown, contentRevision: nu
   if (typeof version !== 'number' || !Number.isSafeInteger(version) ||
       !Number.isSafeInteger(contentRevision) || contentRevision < 0) {
     return { status: 'Malformed', original: document }
+  }
+  if (version === 4) {
+    const initialized = readInitializedDocument(document, validateShoppingDocumentV3)
+    return initialized ? { status: 'Supported', sourceVersion: 4, state: { document: initialized, contentRevision } }
+      : { status: 'Malformed', original: document }
   }
   if (![1, 2, 3].includes(version)) return { status: 'UnsupportedDocument', original: document }
   const validation = validateShoppingDocumentStateV3({ document, contentRevision })

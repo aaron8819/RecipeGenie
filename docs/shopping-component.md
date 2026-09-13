@@ -1,6 +1,6 @@
 # Shopping Domain Reference
 
-> Slice 6 supersedes legacy Shopping write paths described below. See [Shopping command boundary](../docs/shopping-slice6.md) for the current service-only commit, receipts, writer fence and rollout constraints. Historical sections retain their original migration context.
+> Slice 7 adds explicit identity/extra initialization and durable initial placement through the [Shopping command boundary](shopping-slice6.md). See [Shopping Slice 7](shopping-slice7.md) for the current runtime and later-slice boundaries. Historical sections below retain their original migration context.
 
 Shopping persistence is a single versioned JSON document per user, guarded by
 one `content_revision`. The V3-capable application reads V2 or V3 and writes

@@ -2,6 +2,8 @@
 
 import { shoppingSourceControls, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
 import { ShoppingDocumentReadError } from '@/hooks/shopping/use-shopping-document'
+import { useShoppingDocumentState } from '@/hooks/shopping/use-shopping-document'
+import { ShoppingFoundationControls, ShoppingInitializationNotice } from './shopping-foundation-view'
 
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
 import Image from "next/image"
@@ -670,6 +672,12 @@ function useSwipeHint() {
 }
 
 export function ShoppingListView() {
+  const query = useShoppingDocumentState()
+  return <>{!query.error && query.data?.document.schemaVersion === 4
+    ? <ShoppingFoundationControls state={query.data} /> : <ShoppingInitializationNotice />}<ShoppingListContent /></>
+}
+
+function ShoppingListContent() {
   const router = useRouter()
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === "undefined") return true
@@ -1430,7 +1438,7 @@ export function ShoppingListView() {
               itemCount={items.length}
               isCollapsed={isCollapsed}
               isDragTarget={!!isDragTarget}
-              isBulkCheckOffPending={documentUnavailable || bulkCheckOff.isPending}
+              isBulkCheckOffPending={documentUnavailable || bulkCheckOff.isPending || items.every(item => item.coveragePending)}
               onToggleCategory={() => toggleCategory(categoryData.key, interactiveUncheckedCount)}
               onBulkCheckOff={() => handleBulkCheckOff(items)}
               compact={!isManageMode}

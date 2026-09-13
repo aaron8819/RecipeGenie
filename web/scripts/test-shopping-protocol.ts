@@ -10,7 +10,7 @@ import { createShoppingRecipeEntry, validateShoppingDocumentV3 } from '../src/li
 import { mapRecipeRows } from '../src/lib/recipe-identity';
 
 // Task-owned Supabase stack only. No ambient URL, linked project, or shared port.
-const db = postgres({ host: '127.0.0.1', port: 56322, database: 'postgres',
+const db = postgres({ host: '127.0.0.1', port: process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 57322 : 56322, database: 'postgres',
   user: 'postgres', password: 'postgres', max: 8, onnotice: () => {} });
 const owners: string[] = [];
 let checks = 0;
@@ -65,7 +65,7 @@ try {
     assert.equal(existing.relation, null, 'refuse reapplying protocol over unknown state');
     const id = await owner();
     const representative = shoppingCompatibilityFixture().document;
-    await db`update public.shopping_list set document = ${db.json(representative)}, content_revision = content_revision + 1 where user_id = ${id}`;
+    await db`update public.shopping_list set document = ${db.json(JSON.parse(JSON.stringify(representative)))}, content_revision = content_revision + 1 where user_id = ${id}`;
     const before = await db`select document, content_revision from public.shopping_list where user_id = ${id}`;
     const migrationConnection = await db.reserve();
     try { await migrationConnection.unsafe(readFileSync('../supabase/migrations/022_shopping_authoritative_commands.sql', 'utf8')); } finally { migrationConnection.release(); }
@@ -203,15 +203,16 @@ try {
   // original constraint NOT VALID so all subsequent writes remain checked.
   const invalidOwner = await owner();
   const [validRow] = await db`select document from public.shopping_list where user_id = ${invalidOwner}`;
-  await db.unsafe('alter table public.shopping_list drop constraint shopping_list_document_v3_compatibility_check');
+  const slice7 = process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1';
+  await db.unsafe(slice7 ? 'alter table public.shopping_list drop constraint shopping_list_document_v4_compatibility_check' : 'alter table public.shopping_list drop constraint shopping_list_document_v3_compatibility_check');
   await db`update public.shopping_list set document = ${db.json({ schemaVersion: 99, evidence: 'preserved' })}, content_revision = content_revision + 1 where user_id = ${invalidOwner}`;
-  await db.unsafe('alter table public.shopping_list add constraint shopping_list_document_v3_compatibility_check check (public.is_shopping_document_v2(document) or public.is_shopping_document_v3(document)) not valid');
+  await db.unsafe(slice7 ? 'alter table public.shopping_list add constraint shopping_list_document_v4_compatibility_check check (public.is_shopping_document_v2(document) or public.is_shopping_document_v3(document) or public.is_shopping_document_v4(document)) not valid' : 'alter table public.shopping_list add constraint shopping_list_document_v3_compatibility_check check (public.is_shopping_document_v2(document) or public.is_shopping_document_v3(document)) not valid');
   const invalidCommand = command({ type: 'complete' }, await revision(invalidOwner));
   check((await commit(await admit(invalidOwner, invalidCommand), invalidCommand)).status, 'UnsupportedDocument', 'unsupported persisted document gets terminal refusal');
   const [preserved] = await db`select document from public.shopping_list where user_id = ${invalidOwner}`;
   check(preserved.document, { schemaVersion: 99, evidence: 'preserved' }, 'unsupported document never becomes empty');
   await db`update public.shopping_list set document = ${db.json(validRow.document)}, content_revision = content_revision + 1 where user_id = ${invalidOwner}`;
-  await db.unsafe('alter table public.shopping_list validate constraint shopping_list_document_v3_compatibility_check');
+  await db.unsafe(slice7 ? 'alter table public.shopping_list validate constraint shopping_list_document_v4_compatibility_check' : 'alter table public.shopping_list validate constraint shopping_list_document_v3_compatibility_check');
   // Concurrent initialization: remove only this disposable owner document.
   const absent = await owner();
   await db`delete from public.shopping_list where user_id = ${absent}`;

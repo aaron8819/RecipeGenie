@@ -8,6 +8,14 @@ import type { ShoppingConfig, ShoppingItem, ShoppingList } from "@/types/databas
 
 globalThis.React = React
 
+// This suite exercises the pre-initialization list orchestration; the activated
+// controls are covered through real authenticated Slice 7 browser workflows.
+vi.mock('@/hooks/shopping/use-shopping-document', async importOriginal => ({
+  ...await importOriginal<typeof import('@/hooks/shopping/use-shopping-document')>(),
+  useShoppingDocumentState: () => ({ data: undefined }),
+  useShoppingFoundationCommand: () => ({ isPending: false }),
+}))
+
 type ResolveFn = () => void
 
 type CheckIntent = {

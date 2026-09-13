@@ -8,10 +8,10 @@ import { shoppingCompatibilityFixture } from '../src/test/shopping-compatibility
 import type { ShoppingCommand } from '../src/lib/shopping-command';
 
 const local = parse(readFileSync('.env.local'));
-if (local.NEXT_PUBLIC_SUPABASE_URL !== 'http://127.0.0.1:56321') throw new Error('Requires the isolated Slice 6 stack');
+if (local.NEXT_PUBLIC_SUPABASE_URL !== (process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 'http://127.0.0.1:57321' : 'http://127.0.0.1:56321')) throw new Error('Requires the isolated Slice 6 stack');
 const admin = createClient(local.NEXT_PUBLIC_SUPABASE_URL, local.SUPABASE_SERVICE_ROLE_KEY,
   { auth: { persistSession: false, autoRefreshToken: false } });
-const sql = postgres({ host: '127.0.0.1', port: 56322, database: 'postgres',
+const sql = postgres({ host: '127.0.0.1', port: process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 57322 : 56322, database: 'postgres',
   user: 'postgres', password: 'postgres', max: 1 });
 test.afterAll(async () => { await sql.end(); });
 
@@ -48,14 +48,14 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
       const { document } = shoppingCompatibilityFixture();
       for (const item of document.manualItems) item.id = randomUUID();
       // Administrator fixture setup only in the isolated test database.
-      await sql`update public.shopping_list set document = ${sql.json(document)}, content_revision = content_revision + 1 where user_id = ${owner}`;
+      await sql`update public.shopping_list set document = ${sql.json(JSON.parse(JSON.stringify(document)))}, content_revision = content_revision + 1 where user_id = ${owner}`;
       for (const p of pages) {
-        await p.goto('http://127.0.0.1:3116/shopping');
+        await p.goto((process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 'http://127.0.0.1:3117/shopping' : 'http://127.0.0.1:3116/shopping'));
         await p.getByLabel('Email', { exact: true }).fill(email);
         await p.getByLabel('Password', { exact: true }).fill(password);
         await p.getByRole('button', { name: 'Sign In', exact: true }).click();
         await expect(p.getByRole('link', { name: 'Go to Planner', exact: true })).toBeVisible();
-        await p.goto('http://127.0.0.1:3116/shopping');
+        await p.goto((process.env.RECIPE_GENIE_SLICE7_REHEARSAL === '1' ? 'http://127.0.0.1:3117/shopping' : 'http://127.0.0.1:3116/shopping'));
         await expect(p.getByText('1–2 + 1–2', { exact: true })).toBeVisible();
       }
       const initial = await read();

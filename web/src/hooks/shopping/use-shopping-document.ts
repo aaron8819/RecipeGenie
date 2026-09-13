@@ -64,6 +64,9 @@ type ShoppingDocumentRow = {
 }
 
 type MutationPlan<TResult> = {
+  observedRevision?: number
+  observedManual?: ShoppingManualItemV1
+  observedSelections?: Record<string, number | null>
   clearConfirmation?: { revision: number; undoRequired: boolean }
   mutation: ShoppingDocumentMutation
   value: TResult
@@ -241,11 +244,15 @@ function useShoppingMutation<TVariables, TResult>(
       let value = plan.value
       const command = {
         protocol: 1 as const,
-        observedRevision: plan.clearConfirmation?.revision ?? initial.contentRevision,
+        observedRevision: plan.observedRevision ?? plan.clearConfirmation?.revision ?? initial.contentRevision,
         ...(plan.clearConfirmation ? { clearUndoRequired: plan.clearConfirmation.undoRequired } : {}),
         mutation: plan.mutation,
+        ...(initial.document.schemaVersion === 4 && (plan.mutation.type === 'upsertRecipes' || plan.mutation.type === 'upsertRecipe' || plan.mutation.type === 'rescaleRecipe') ? {
+          observedSelections: plan.observedSelections ?? Object.fromEntries((plan.mutation.type === 'upsertRecipes' ? plan.mutation.entries : [plan.mutation.entry])
+            .map(entry => [entry.recipeId, initial.document.recipeEntries[entry.recipeId]?.sourceEvidence?.version ?? null])),
+        } : {}),
         ...(plan.mutation.type === 'editManualItem' ? {
-          observedManual: initial.document.manualItems.find((item) =>
+          observedManual: plan.observedManual ?? initial.document.manualItems.find((item) =>
             plan.mutation.type === 'editManualItem' && item.id === plan.mutation.id),
         } : {}),
         ...((plan.mutation.type === 'setExclusion' || plan.mutation.type === 'setFamilySetting')
@@ -289,7 +296,7 @@ function useShoppingMutation<TVariables, TResult>(
       if (result.before && result.receipt?.outcome === 'Applied') {
         const committed = { document: state.document, contentRevision: result.receipt.revision }
         if (plan.committedValue) value = plan.committedValue(result.before, committed, result.receipt)
-        if (plan.resolvedValue) value = plan.resolvedValue(result.before, committed, result.receipt.outcome)
+        if (plan.resolvedValue) value = plan.resolvedValue(result.before, state, result.receipt.outcome)
       } else if (plan.committedValue && result.receipt?.outcome === 'Applied') {
         value = plan.committedValue({ document: createEmptyShoppingDocument(), contentRevision: 0 },
           { ...state, contentRevision: result.receipt.revision }, { undoAvailable: false, historical: true })
@@ -400,6 +407,13 @@ export function useAddShoppingItem() {
   })
 }
 
+export function useShoppingFoundationCommand() {
+  return useShoppingMutation((state, input: { mutation: ShoppingDocumentMutation; observedRevision: number; observedManual?: ShoppingManualItemV1; observedSelections?: Record<string, number | null> }) => ({
+    mutation: input.mutation, observedRevision: input.observedRevision, observedManual: input.observedManual, observedSelections: input.observedSelections,
+    value: state, resolvedValue: (_before, after) => after,
+  }), { fenceOwner: true })
+}
+
 export function useUpdateShoppingItem() {
   return useShoppingMutation((state, input: {
     item: ShoppingItem
@@ -445,8 +459,10 @@ export function useRemoveShoppingItem() {
 }
 
 export function useRestoreShoppingItem() {
-  return useShoppingMutation((_state, item: ShoppingItem) => ({
-    mutation: mutationForRow(
+  return useShoppingMutation((state, item: ShoppingItem) => ({
+    mutation: state.document.schemaVersion === 4 && item.rowId?.startsWith('manual:') && item.manualVersion !== undefined
+      ? { type: 'restoreManualItem' as const, id: item.rowId.slice(7), expectedVersion: item.manualVersion + 1 }
+      : mutationForRow(
       item,
       (aggregateKey) => ({ type: 'setSuppressed', aggregateKey, suppressed: false }),
       (id) => ({

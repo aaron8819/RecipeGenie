@@ -23,6 +23,9 @@ export function validateManualPurchaseIntent(
   document: ShoppingDocumentV3,
   intent: ManualPurchaseIntent,
 ): 'Allowed' | 'Conflict' | 'TargetGone' {
+  if (document.schemaVersion === 4) return intent.type === 'edit' &&
+    !document.manualItems.some(item => `manual:${item.id}` === intent.rowRef && !item.identity?.removed)
+    ? 'TargetGone' : 'Allowed'
   if (intent.type === 'edit') {
     const manual = document.manualItems.find(item => `manual:${item.id}` === intent.rowRef)
     if (!manual) return 'TargetGone'

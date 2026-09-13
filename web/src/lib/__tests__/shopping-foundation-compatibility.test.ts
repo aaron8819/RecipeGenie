@@ -9,7 +9,7 @@ import { compareShoppingCoverage, planShoppingAcknowledgement, isShoppingCoverag
 import { appendPurchasePlacements as planAppend, canonicalPurchaseDefault, splicePurchasePlacement, type PurchaseOrganization } from '../shopping-target-order'
 import { replaceTargetSelection, type ShoppingSourceCapture } from '../shopping-target-selection'
 import { editLegacyIndependentNeed } from '../shopping-target-legacy'
-import { readShoppingTargetContent, type ShoppingTargetContentV4 } from '../shopping-target-reader'
+import { initializeShoppingDocument } from '../shopping-initialization'
 
 const rational = (n: number, d = 1) => ({ numerator: String(n), denominator: String(d) })
 const scalar = (n: number, unit = 'count', d = 1): CoveragePart => ({
@@ -204,14 +204,9 @@ describe('target command specifications; no activation in V3', () => {
     expect(edited.need.orderEvidence).toEqual(legacy.orderEvidence)
     expect(edited.need.sourceHistory).toBeNull()
     expect(editLegacyIndependentNeed(edited.need, 3, { previousChecked: false }).status).toBe('Conflict')
-    const content: ShoppingTargetContentV4 = { schemaVersion: 4, tripId: 'trip', contentEpoch: 0,
-      frozenEvidence: shoppingCompatibilityFixture().document,
-      organization: appendPurchasePlacements(organization(), incoming('lemon')),
-      needs: [{ id: 'new-extra', kind: 'extra', basis: basis([scalar(2)]) }], legacyIndependent: [edited.need] }
-    expect(readShoppingTargetContent(deepFreeze(content)).status).toBe('Supported')
-    expect(readShoppingCompatibility(content, 0).status).toBe('UnsupportedDocument')
-    expect(readShoppingTargetContent({ ...content, legacyIndependent: [{ ...legacy, raw: null }] }).status).toBe('Malformed')
-    expect(readShoppingTargetContent({ ...content, needs: [...content.needs, ...content.needs] }).status).toBe('Malformed')
+    const content = initializeShoppingDocument(shoppingCompatibilityFixture().document, [])
+    expect(readShoppingCompatibility(deepFreeze(content), 0).status).toBe('Supported')
+    expect(readShoppingCompatibility({ ...content, placementEvidence: null }, 0).status).toBe('Malformed')
     expect(legacy.quantity).toEqual(legacyIndependentFixture.quantity)
   })
 })

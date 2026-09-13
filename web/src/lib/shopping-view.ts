@@ -11,6 +11,12 @@ export function shoppingDocumentToList(
   const labels = new Map(selections.map((entry) => [entry.recipeId, entry.label]))
   const projection = projectShoppingDocument(state.document, pantryItems)
   const mapRow = (row: (typeof projection.rows)[number]): ShoppingItem => ({
+    ...(state.document.schemaVersion === 4 ? {
+      coveragePending: true, legacyAmount: row.legacy, previousChecked: row.previousChecked,
+      manualVersion: row.manualId ? state.document.manualItems.find(item => item.id === row.manualId)?.identity?.version : undefined,
+      requirementBreakdown: row.requirements?.map(part => ({ label: part.manualId ? `Extra / reminder: ${part.displayName}` : part.displayName,
+        quantity: part.quantity, hidden: part.bucket !== 'items' })),
+    } : {}),
     rowId: row.rowRef,
     orderingKey: row.orderingKey,
     item: row.displayName,
