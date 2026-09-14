@@ -10,6 +10,7 @@ import { splicePurchasePlacement, type PurchaseOrganization } from './shopping-t
 import { SHOPPING_CATEGORIES } from './shopping-categories';
 import { shoppingInverseBytes } from './shopping-clear';
 import type { ShoppingCommandContext } from './shopping-command-planner';
+import { recoverShoppingPlacement } from './shopping-placement-recovery';
 
 /** Runs only inside the admitted command planner. No clock, I/O or cache state. */
 export function planInitializedShoppingCommand(context: ShoppingCommandContext, command: ShoppingCommand, document: ShoppingDocumentV3) {
@@ -20,9 +21,11 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
   const sameRevision = command.observedRevision === revision;
   const isSetting = mutation.type === 'setExclusion' || mutation.type === 'setFamilySetting';
   if (mutation.type === 'initialize') {
-    if (document.schemaVersion === 4) return result('Unchanged');
     if (!sameRevision) return result('Conflict');
-    const initialized = initializeShoppingDocument(document, projectShoppingDocument(document, context.pantry).rows.map(row => row.orderingKey), context.row?.document);
+    const initialized = document.schemaVersion === 4
+      ? recoverShoppingPlacement(document, context.lastWriteWasInitialization === true)
+      : initializeShoppingDocument(document, projectShoppingDocument(document, context.pantry).rows.map(row => row.orderingKey), context.row?.document);
+    if (initialized === document) return result('Unchanged');
     return readInitializedDocument(initialized, validateShoppingDocumentV3) && shoppingInverseBytes(initialized) <= 4194304
       ? result('Applied', initialized) : result('InvalidInput');
   }

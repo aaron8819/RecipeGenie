@@ -1,0 +1,214 @@
+{
+  "legacy": {
+    "schemaVersion": 3,
+    "recipeEntries": {
+      "6ed793b2-8f53-4adf-b5ce-0ed096b03383": {
+        "recipeId": "6ed793b2-8f53-4adf-b5ce-0ed096b03383",
+        "recipeName": "Duplicate title",
+        "selectedServings": 4,
+        "scaleV1": {
+          "numerator": "1",
+          "denominator": "1"
+        },
+        "ingredients": [
+          {
+            "purchaseKey": "lemon",
+            "aggregateKey": "[\"shopping-aggregate\",2,\"lemon\"]",
+            "displayName": "lemon",
+            "quantity": {
+              "amount": 2,
+              "unit": "count",
+              "exactQuantityV1": {
+                "version": 1,
+                "authored": "2",
+                "source": "legacy-synthesized",
+                "kind": "exact",
+                "value": {
+                  "numerator": "2",
+                  "denominator": "1"
+                },
+                "lexeme": "2"
+              },
+              "exactAuthoredUnit": "count"
+            },
+            "purchaseUnit": "count",
+            "familyKey": "lemon",
+            "preparation": [],
+            "quantityKind": "discrete",
+            "defaultCategoryKey": "dairy",
+            "pantryMatchKeys": [
+              "lemon"
+            ],
+            "familyMatchPolicy": {}
+          }
+        ]
+      }
+    },
+    "manualItems": [],
+    "itemOverrides": {},
+    "preferences": {
+      "categoryByIngredient": {},
+      "customCategories": [],
+      "categoryOrder": [],
+      "ingredientOrderByCategory": {},
+      "excludedIngredientKeys": [],
+      "excludeSaltVariants": false,
+      "excludeBlackPepperVariants": false
+    }
+  },
+  "originalV4": {
+    "schemaVersion": 4,
+    "recipeEntries": {
+      "6ed793b2-8f53-4adf-b5ce-0ed096b03383": {
+        "recipeId": "6ed793b2-8f53-4adf-b5ce-0ed096b03383",
+        "recipeName": "Duplicate title",
+        "selectedServings": 4,
+        "scaleV1": {
+          "numerator": "1",
+          "denominator": "1"
+        },
+        "ingredients": [
+          {
+            "purchaseKey": "lemon",
+            "aggregateKey": "[\"shopping-aggregate\",2,\"lemon\"]",
+            "displayName": "lemon",
+            "quantity": {
+              "amount": 2,
+              "unit": "count",
+              "exactQuantityV1": {
+                "version": 1,
+                "authored": "2",
+                "source": "legacy-synthesized",
+                "kind": "exact",
+                "value": {
+                  "numerator": "2",
+                  "denominator": "1"
+                },
+                "lexeme": "2"
+              },
+              "exactAuthoredUnit": "count"
+            },
+            "purchaseUnit": "count",
+            "familyKey": "lemon",
+            "preparation": [],
+            "quantityKind": "discrete",
+            "defaultCategoryKey": "dairy",
+            "pantryMatchKeys": [
+              "lemon"
+            ],
+            "familyMatchPolicy": {}
+          }
+        ],
+        "sourceEvidence": {
+          "version": 0,
+          "history": "reconstructed",
+          "sourceRevision": null,
+          "yieldEvidence": null,
+          "occurrences": [
+            {
+              "id": "reconstructed:6ed793b2-8f53-4adf-b5ce-0ed096b03383:0",
+              "section": null,
+              "ordinal": 0,
+              "raw": {
+                "purchaseKey": "lemon",
+                "aggregateKey": "[\"shopping-aggregate\",2,\"lemon\"]",
+                "displayName": "lemon",
+                "quantity": {
+                  "amount": 2,
+                  "unit": "count",
+                  "exactQuantityV1": {
+                    "version": 1,
+                    "authored": "2",
+                    "source": "legacy-synthesized",
+                    "kind": "exact",
+                    "value": {
+                      "numerator": "2",
+                      "denominator": "1"
+                    },
+                    "lexeme": "2"
+                  },
+                  "exactAuthoredUnit": "count"
+                },
+                "purchaseUnit": "count",
+                "familyKey": "lemon",
+                "preparation": [],
+                "quantityKind": "discrete",
+                "defaultCategoryKey": "dairy",
+                "pantryMatchKeys": [
+                  "lemon"
+                ],
+                "familyMatchPolicy": {}
+              }
+            }
+          ],
+          "originalEntry": {
+            "recipeId": "6ed793b2-8f53-4adf-b5ce-0ed096b03383",
+            "recipeName": "Duplicate title",
+            "selectedServings": 4,
+            "scaleV1": {
+              "numerator": "1",
+              "denominator": "1"
+            },
+            "ingredients": [
+              {
+                "purchaseKey": "lemon",
+                "aggregateKey": "[\"shopping-aggregate\",2,\"lemon\"]",
+                "displayName": "lemon",
+                "quantity": {
+                  "amount": 2,
+                  "unit": "count",
+                  "exactQuantityV1": {
+                    "version": 1,
+                    "authored": "2",
+                    "source": "legacy-synthesized",
+                    "kind": "exact",
+                    "value": {
+                      "numerator": "2",
+                      "denominator": "1"
+                    },
+                    "lexeme": "2"
+                  },
+                  "exactAuthoredUnit": "count"
+                },
+                "purchaseUnit": "count",
+                "familyKey": "lemon",
+                "preparation": [],
+                "quantityKind": "discrete",
+                "defaultCategoryKey": "dairy",
+                "pantryMatchKeys": [
+                  "lemon"
+                ],
+                "familyMatchPolicy": {}
+              }
+            ]
+          }
+        }
+      }
+    },
+    "manualItems": [],
+    "itemOverrides": {},
+    "preferences": {
+      "categoryByIngredient": {},
+      "customCategories": [],
+      "categoryOrder": [],
+      "ingredientOrderByCategory": {
+        "produce": [
+          "lemon"
+        ]
+      },
+      "excludedIngredientKeys": [],
+      "excludeSaltVariants": false,
+      "excludeBlackPepperVariants": false
+    },
+    "placementEvidence": {
+      "resolved": {},
+      "defaults": {
+        "lemon": {
+          "categoryKey": "produce",
+          "policyVersion": "shopping-identity-2026-09-11"
+        }
+      },
+      "unresolved": {}
+    }
+  }
+}

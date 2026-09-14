@@ -14,6 +14,7 @@ import { initializedCategory, pinnedPurchaseDefault } from '@/lib/shopping-initi
 import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics';
 import { SHOPPING_CATEGORIES } from '@/lib/shopping-categories';
 import { shoppingRecipeSelections } from '@/lib/shopping-sources';
+import { shoppingPlacementRecoveryCandidates } from '@/lib/shopping-placement-recovery';
 import { useUndoToast } from '@/hooks/use-undo-toast';
 import type { Recipe, ShoppingQuantity } from '@/types/database';
 
@@ -35,14 +36,16 @@ export function ShoppingInitializationNotice() {
   const query = useShoppingDocumentState();
   const command = useShoppingFoundationCommand();
   const [error, setError] = useState('');
-  if (!query.data || query.data.document.schemaVersion === 4 || query.error) return null;
+  if (!query.data || query.error) return null;
+  const recovery = query.data.document.schemaVersion === 4;
+  if (recovery && !Object.keys(shoppingPlacementRecoveryCandidates(query.data.document)).length) return null;
   return <section className="mb-4 rounded-xl border bg-card p-4" aria-label="Shopping update">
-    <h2 className="font-semibold">Keep recipe amounts and extras together</h2>
-    <p className="my-2 text-sm">Update this list to remember purchase positions and combine new extras. Existing manual amounts stay separate until you choose their meaning. Saved checks remain previous-check evidence.</p>
+    <h2 className="font-semibold">{recovery ? 'Review remembered shopping locations' : 'Keep recipe amounts and extras together'}</h2>
+    <p className="my-2 text-sm">{recovery ? 'Some original locations differ from the saved defaults. Recover verified locations and choose a destination where later changes cannot be distinguished.' : 'Update this list to remember purchase positions and combine new extras. Existing manual amounts stay separate until you choose their meaning. Saved checks remain previous-check evidence.'}</p>
     <Button disabled={command.isPending} onClick={async () => {
       try { await command.mutateAsync({ mutation: { type: 'initialize' }, observedRevision: query.data!.contentRevision }); setError(''); }
       catch (error) { setError(errorText(error)); }
-    }}>Update this shopping list</Button>
+    }}>{recovery ? 'Review retained locations' : 'Update this shopping list'}</Button>
     {error && <p role="alert">{error}</p>}
   </section>;
 }
@@ -189,6 +192,7 @@ export function ShoppingFoundationControls({ state }: { state: ShoppingDocumentS
   const selections = shoppingRecipeSelections(state.document.recipeEntries);
   return <details className="mb-4 rounded-xl border bg-card p-4" open>
     <summary className="cursor-pointer font-semibold">Extras, source quantities and legacy amounts</summary>
+    <ShoppingInitializationNotice />
     <p className="my-3 text-sm">New manual amounts are extra. Saved checks remain previous-check evidence; current-need check-off is not available yet.</p>
     <form className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]" onSubmit={async event => {
       event.preventDefault();

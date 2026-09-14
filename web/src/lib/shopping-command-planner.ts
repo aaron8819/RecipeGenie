@@ -14,6 +14,8 @@ import { canUndoShoppingClear } from './shopping-clear';
 import { planInitializedShoppingCommand } from './shopping-initialized-command';
 
 export interface ShoppingCommandContext {
+  /** Service-only SQL evidence, never accepted from command/client input. */
+  lastWriteWasInitialization?: boolean;
   status: string;
   row: { document: unknown; content_revision: number; shopping_clear_undo_available?: boolean } | null;
   dependencyRevision: string;

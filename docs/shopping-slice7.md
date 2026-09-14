@@ -106,11 +106,66 @@ independent report uses the opposite numbering. F3/F4 match both documents.
   availability hiding. Such transitions may replan a still-valid rebind. This
   is scoped manual protection, not Slice 8 acknowledgement/version semantics.
 
-No schema migration or bulk document rewrite is needed. Original V4 documents
-remain readable without mutation. Where defective initialization retained the
-sequence, corrected projection restores the displayed order. Where historical
-order was never retained, only the supported deterministic fallback is available;
-no lost order is invented and no broad repair is performed.
+Original V4 documents remain readable without mutation. Where defective
+initialization retained the sequence, corrected projection restores its order.
+Migration 025 extends the existing service-only context with read-only receipt
+provenance; it performs no document rewrite and changes no format or default.
+
+### F2 existing-document recovery
+
+The existing explicit `initialize` command also reviews retained V4 locations.
+The screen offers **Review retained locations** when reconstructed source or
+legacy-envelope categories disagree with a pinned initialization default.
+Reads only detect the discrepancy; they never write. The command requires the
+exact observed document revision and uses the existing owner lock/CAS commit.
+
+Automatic recovery requires all of the following:
+
+- A retained Applied receipt at the current content revision whose hash matches
+  the canonical initialize command at revision minus one. This proves there has
+  been no subsequent document write. Missing/pruned receipts, optional command
+  variants, or later writes provide no proof; no history is inferred from defaults.
+- The original identity-policy pin, no explicit category override and no existing
+  unresolved/resolved archive for that purchase. Later explicit overrides win.
+- Complete, consistent reconstructed source evidence: version zero, original
+  entry equal to the retained entry, matching occurrence snapshots, and a single
+  supported category. Source versions alone never prove organization history.
+- A recoverable relative order: one retained source sequence and an empty
+  destination sequence. Hidden and dormant slots count when checking anchors.
+
+Eligible purchases move in their retained sequence order, sharing one placement
+across equivalent needs. The canonical pin stays unchanged. The existing
+`placementEvidence.resolved` archive records both category alternatives and the
+full prior sequence, and prevents reruns from undoing later moves or resets.
+Only organization and that archive change; quantities, manual intent, snapshots,
+selection versions, checks and unrelated settings remain identical.
+
+All genuine ambiguities use the existing `unresolved` envelope and explicit
+destination/anchor controls. Partial/conflicting evidence, unknown interleaving,
+and a missing initialization receipt do not select a winner. Missing historical
+evidence cannot be reconstructed. Original source/envelope data stays intact.
+The exact re-review fixture was installed directly, so it has no initialization
+receipt: it transitions from Produce to a visible Dairy/Produce choice, then to
+Dairy when confirmed. A real old-initializer commit with its matching receipt
+recovers Dairy automatically. A later move and reset can produce the same JSON
+as defective initialization; that history needs explicit confirmation.
+
+Old committed commands return their receipt without executing again. Pending
+stale organization/recovery commands conflict; a prepared plan that loses the
+commit race replans with its original observed revision and conflicts. Existing
+owner-scoped monotone cache handling prevents historical responses from rolling
+back a newer fetched revision. No replacement writer or second order authority
+is added. F1/F3/F4 and later-slice boundaries remain unchanged.
+
+Regression commands: `node --import tsx scripts/test-shopping-placement-recovery.ts`
+and `node --import tsx scripts/test-shopping-placement-recovery-browser.ts`.
+The tracked defective fixture was generated through the actual `21c73d8`
+initializer during the baseline SQL reproduction. The SQL suite rehearses its
+old commit through real admission/commit, verifies receipt provenance and both
+CAS interleavings, and reapplies migration 025 while preserving an affected row.
+The browser suite verifies explicit resolution and persisted/rendered Dairy at
+1440×900 and 390×844. Neither suite accesses hosted services or resets a shared
+database. `shopping-placement-recovery.test.ts` covers the pure recovery rules.
 
 Correction regressions (same verified loopback services described below):
 `node --import tsx scripts/test-shopping-slice7-corrections.ts`, then the same
