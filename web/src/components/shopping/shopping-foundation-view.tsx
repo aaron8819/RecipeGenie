@@ -194,7 +194,7 @@ export function ShoppingFoundationControls({ state }: { state: ShoppingDocumentS
   return <details className="mb-4 rounded-xl border bg-card p-4" open>
     <summary className="cursor-pointer font-semibold">Extras, source quantities and legacy amounts</summary>
     <ShoppingInitializationNotice />
-    <p className="my-3 text-sm">New manual amounts are extra. Saved checks remain previous-check evidence; current-need check-off is not available yet.</p>
+    <p className="my-3 text-sm">New manual amounts are extra. Checking acknowledges the current buyable amount. Larger or changed requirements reopen; saved legacy checks remain previous-check evidence.</p>
     <form className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]" onSubmit={async event => {
       event.preventDefault();
       try {

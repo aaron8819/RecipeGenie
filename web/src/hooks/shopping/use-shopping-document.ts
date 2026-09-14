@@ -1,5 +1,7 @@
 'use client'
 
+import { isShoppingContentCommand } from '@/lib/shopping-lifecycle'
+import type { ShoppingCommand } from '@/lib/shopping-command'
 import { executeShoppingCommand } from '@/lib/shopping-command-client'
 import { reconcileShoppingState, type ShoppingCachedState } from '@/lib/shopping-cache'
 import { canUndoShoppingClear } from '@/lib/shopping-clear'
@@ -60,6 +62,8 @@ const SHOPPING_DOCUMENT_WRITE_SCOPE = 'shopping-document-write'
 type ShoppingDocumentRow = {
   document: unknown
   content_revision: number
+  trip_id?: string
+  content_epoch?: number
   shopping_clear_undo_available?: boolean
 }
 
@@ -67,8 +71,9 @@ type MutationPlan<TResult> = {
   observedRevision?: number
   observedManual?: ShoppingManualItemV1
   observedSelections?: Record<string, number | null>
+  inspectedCoverage?: ShoppingCommand['inspectedCoverage']
   clearConfirmation?: { revision: number; undoRequired: boolean }
-  mutation: ShoppingDocumentMutation
+  mutation: ShoppingCommand['mutation']
   value: TResult
   committedValue?: (
     before: ShoppingDocumentStateV3,
@@ -81,7 +86,7 @@ type MutationPlan<TResult> = {
 }
 
 export const SHOPPING_CLEAR_UNDO_UNAVAILABLE =
-  'Undo is currently unavailable for lists containing recipe items.'
+  'Undo is available for 10 minutes unless Shopping content changes or a saved recipe is deleted.'
 
 export class ShoppingClearUndoConflictError extends ShoppingDocumentConflictError {
   constructor(message = 'Shopping changed after Clear; Undo was not applied.') {
@@ -118,7 +123,7 @@ function assertShoppingReadable(queryClient: ReturnType<typeof useQueryClient>, 
 function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingCachedState {
   const result = readShoppingCompatibility(row.document, Number(row.content_revision))
   if (result.status !== 'Supported') throw new ShoppingDocumentReadError()
-  return { ...result.state, clearUndoAvailable: row.shopping_clear_undo_available }
+  return { ...result.state, tripId: row.trip_id, contentEpoch: row.content_epoch, clearUndoAvailable: row.shopping_clear_undo_available }
 }
 
 async function fetchShoppingDocumentState(ownerUserId?: string): Promise<ShoppingCachedState> {
@@ -132,7 +137,7 @@ async function fetchShoppingDocumentState(ownerUserId?: string): Promise<Shoppin
       }>
     }
   }
-  const selection = request.select('document,content_revision,shopping_clear_undo_available')
+  const selection = request.select('document,content_revision,shopping_clear_undo_available,trip_id,content_epoch')
   const { data, error } = await (ownerUserId
     ? selection.eq('user_id', ownerUserId)
     : selection).maybeSingle()
@@ -247,6 +252,8 @@ function useShoppingMutation<TVariables, TResult>(
         observedRevision: plan.observedRevision ?? plan.clearConfirmation?.revision ?? initial.contentRevision,
         ...(plan.clearConfirmation ? { clearUndoRequired: plan.clearConfirmation.undoRequired } : {}),
         mutation: plan.mutation,
+        ...(isShoppingContentCommand(plan.mutation.type) && initial.tripId ? { tripId: initial.tripId } : {}),
+        ...(plan.inspectedCoverage ? { inspectedCoverage: plan.inspectedCoverage } : {}),
         ...(initial.document.schemaVersion === 4 && (plan.mutation.type === 'removeRecipe' || plan.mutation.type === 'upsertRecipes' || plan.mutation.type === 'upsertRecipe' || plan.mutation.type === 'rescaleRecipe') ? {
           observedSelections: plan.observedSelections ?? Object.fromEntries((plan.mutation.type === 'removeRecipe' ? [{ recipeId: plan.mutation.recipeId }] : plan.mutation.type === 'upsertRecipes' ? plan.mutation.entries : [plan.mutation.entry])
             .map(entry => [entry.recipeId, initial.document.recipeEntries[entry.recipeId]?.sourceEvidence?.version ?? null])),
@@ -270,7 +277,7 @@ function useShoppingMutation<TVariables, TResult>(
         if (plan.mutation.type === 'complete' && knownConflict) {
           throw new ShoppingClearUndoConflictError('Shopping changed or Undo is unavailable. Review the current list and confirm Clear again; nothing was cleared.')
         }
-        if (plan.mutation.type === 'restoreContent' && knownConflict) {
+        if (['restoreContent', 'undoClear'].includes(plan.mutation.type) && knownConflict) {
           throw new ShoppingClearUndoConflictError()
         }
         throw error
@@ -289,13 +296,11 @@ function useShoppingMutation<TVariables, TResult>(
         }
         return plan.value
       }
-      if (plan.mutation.type === 'complete' && result.receipt && state.contentRevision > result.receipt.revision) {
-        cacheState(state)
-        throw new ShoppingClearUndoConflictError('Shopping changed before the response arrived. Review the latest list; Clear Undo is unavailable.')
-      }
       if (result.before && result.receipt?.outcome === 'Applied') {
         const committed = { document: state.document, contentRevision: result.receipt.revision }
-        if (plan.committedValue) value = plan.committedValue(result.before, committed, result.receipt)
+        if (plan.committedValue) value = plan.committedValue(result.before, committed, { ...result.receipt, undoAvailable: result.receipt.undoAvailable === true &&
+          (result.receipt.contentEpoch === undefined ? state.contentRevision === result.receipt.revision :
+            state.contentEpoch === result.receipt.contentEpoch && state.tripId === result.receipt.tripId) })
         if (plan.resolvedValue) value = plan.resolvedValue(result.before, state, result.receipt.outcome, result.receipt.revision)
       } else if (plan.committedValue && result.receipt?.outcome === 'Applied') {
         value = plan.committedValue({ document: createEmptyShoppingDocument(), contentRevision: 0 },
@@ -488,7 +493,10 @@ export function useCheckOffItem() {
   return useShoppingMutation((_state, intent: {
     rowRef: RowRef
     checked: boolean
+    inspectedCoverage?: ShoppingCommand['inspectedCoverage']
+    inspectedRevision?: number
   }) => ({
+    inspectedCoverage: intent.inspectedCoverage, observedRevision: intent.inspectedRevision,
     mutation: {
       type: 'setChecked',
       rowRef: intent.rowRef,
@@ -500,6 +508,8 @@ export function useCheckOffItem() {
 
 export function useBulkCheckOff() {
   return useShoppingMutation((_state, items: ShoppingItem[]) => ({
+    inspectedCoverage: Object.assign({}, ...items.map(item => item.inspectedCoverage)),
+    observedRevision: items[0]?.inspectedRevision,
     mutation: {
       type: 'setCheckedMany',
       rowRefs: items.map((item) => requireShoppingRowRef(item)),
@@ -645,26 +655,10 @@ export function useClearShoppingList() {
 export function useRestoreShoppingContent() {
   const { user } = useAuthContext()
   return useShoppingMutation((state, result: ShoppingClearResult) => {
-    const validate = (current: ShoppingDocumentStateV3) => {
-      if (!result || result.ownerUserId !== user?.id ||
-          current.contentRevision !== result.postClearRevision) {
-        throw new ShoppingClearUndoConflictError()
-      }
-      if (Object.keys(result.content.recipeEntries).length > 0) {
-        throw new ShoppingClearUndoConflictError(SHOPPING_CLEAR_UNDO_UNAVAILABLE)
-      }
-      if (result.content.manualItems.length === 0 &&
-          Object.keys(result.content.itemOverrides).length === 0) {
-        throw new ShoppingClearUndoConflictError()
-      }
-    }
-    validate(state)
+    if (!result || result.ownerUserId !== user?.id || result.undoAvailable === false) throw new ShoppingClearUndoConflictError()
     return {
-      mutation: { type: 'restoreContent', content: result.content },
+      mutation: { type: 'undoClear' }, observedRevision: result.postClearRevision,
       value: undefined,
-      validateReplay: validate,
-      // Even cache equality must be acknowledged by the fixed-revision CAS.
-      forceWrite: true,
     }
   }, { fenceOwner: true })
 }

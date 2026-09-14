@@ -265,8 +265,8 @@ select extensions.is(public.shopping_commit('31000000-0000-4000-8000-00000000000
   '33000000-0000-4000-8000-000000000003',repeat('a',64),0,
   (public.shopping_command_context('31000000-0000-4000-8000-000000000001',1,
     '33000000-0000-4000-8000-000000000003',repeat('a',64))->>'dependencyRevision')::bigint,
-  (select document from shopping_v3_regression_fixture),'Applied','mutation',null,null)->>'status',
-  'Applied','trusted commit accepts the preserved V3 regression shape');
+  (select document from shopping_v3_regression_fixture),'Applied','initialize',null,null)->>'status',
+  'Applied','trusted initialization preserves the V3 regression shape, including historical sources');
 select extensions.is((select content_revision from public.shopping_list where user_id = '31000000-0000-4000-8000-000000000001'),
   1::bigint,'trusted commit advances revision exactly once');
 select extensions.is(public.shopping_command_context('31000000-0000-4000-8000-000000000001',1,

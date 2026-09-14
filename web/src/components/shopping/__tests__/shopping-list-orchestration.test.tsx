@@ -341,7 +341,7 @@ vi.mock("@/hooks/use-recipes", () => ({
 }))
 
 vi.mock("@/hooks/use-shopping", () => ({
-  SHOPPING_CLEAR_UNDO_UNAVAILABLE: 'Undo is currently unavailable for lists containing recipe items.',
+  SHOPPING_CLEAR_UNDO_UNAVAILABLE: 'Undo is available for 10 minutes unless content changes or a source is deleted.',
   useShoppingList: () => ({
     data: useSyncExternalStore(subscribeShoppingList, () => currentShoppingList),
     selections: currentSelections,
@@ -684,7 +684,7 @@ vi.mock("@/hooks/use-shopping", () => ({
     }))
     options?.onSuccess?.({
       ownerUserId: 'user-1',
-      postClearRevision: 8,
+      postClearRevision: 8, undoAvailable: true,
       content: { recipeEntries: Object.fromEntries((clearedList.source_recipes || []).map((id) => [id, {}])) },
     })
   })
@@ -1488,7 +1488,7 @@ describe("ShoppingListView orchestration", () => {
 
     expect(clearListMutate).toHaveBeenCalledTimes(1)
     expect(restoreContentMutate).toHaveBeenCalledWith({
-      ownerUserId: 'user-1', postClearRevision: 8, content: { recipeEntries: {} },
+      ownerUserId: 'user-1', postClearRevision: 8, undoAvailable: true, content: { recipeEntries: {} },
     })
     expect(screen.getByText("garlic")).toBeInTheDocument()
     expectCategoryExpanded("produce", true)
@@ -1496,16 +1496,16 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
   })
 
-  it('explains temporary recipe-list Undo unavailability without offering a manual subset', () => {
+  it('offers recipe-bearing Undo only after the committed capability confirms it', () => {
     currentShoppingList = makeList({ items: [makeItem('garlic')], source_recipes: ['recipe-soup'] })
     const preferences = structuredClone(currentConfig)
     renderShoppingList()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is currently unavailable')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is available for 10 minutes')
     expect(clearListMutate).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Clear list' }))
-    expect(screen.getByText('Shopping list cleared. Undo is currently unavailable for lists containing recipe items.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(screen.getByText('Shopping list cleared')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument()
     expect(currentShoppingList.items).toEqual([])
     expect(currentShoppingList.source_recipes).toEqual([])
     expect(currentConfig).toEqual(preferences)
@@ -1526,16 +1526,16 @@ describe("ShoppingListView orchestration", () => {
     expect(restoreContentMutate).not.toHaveBeenCalled()
   })
 
-  it('withholds Undo if the successful Clear acquired recipes after the manual-only render', () => {
+  it('withholds Undo when the committed Clear reports no capability', () => {
     currentShoppingList = makeList({ items: [makeItem('garlic')] })
     clearListMutate.mockImplementation((_value, options) => {
       setShoppingList(makeList())
-      options.onSuccess({ ownerUserId: 'user-1', postClearRevision: 9,
+      options.onSuccess({ ownerUserId: 'user-1', postClearRevision: 9, undoAvailable: false,
         content: { recipeEntries: { hidden: {} } } })
     })
     renderShoppingList()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(screen.getByText('Shopping list cleared. Undo is currently unavailable for lists containing recipe items.')).toBeInTheDocument()
+    expect(screen.getByText('Shopping list cleared. Undo is unavailable for this Clear.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
     expect(restoreContentMutate).not.toHaveBeenCalled()
   })
@@ -1544,7 +1544,7 @@ describe("ShoppingListView orchestration", () => {
     currentShoppingList = makeList({ source_recipes: ['hidden-recipe'] })
     renderShoppingList()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is currently unavailable')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is available for 10 minutes')
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(clearListMutate).not.toHaveBeenCalled()
     expect(currentShoppingList.source_recipes).toEqual(['hidden-recipe'])
@@ -1805,7 +1805,7 @@ describe("ShoppingListView orchestration", () => {
     currentReadState = { data: undefined, hasDocument: true, hasPantry: false, pantryError: new Error('offline'), retryPantry: vi.fn() }
     renderShoppingList()
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
-    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is currently unavailable')
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is available for 10 minutes')
     expect(clearListMutate).not.toHaveBeenCalled()
   })
 

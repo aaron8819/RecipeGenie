@@ -94,7 +94,7 @@ export async function executeShoppingCommand(owner: string, command: ShoppingCom
     try { result = await send('execute'); } catch { result = await send('execute'); }
     if (result.receipt) {
       if (!Number.isSafeInteger(result.receipt.revision) || result.receipt.revision < 0 ||
-        !['Applied', 'Unchanged', 'Conflict', 'TargetGone', 'InvalidInput', 'UnsupportedDocument', 'UndoUnavailable'].includes(result.receipt.outcome)) {
+        !['Applied', 'Unchanged', 'Conflict', 'TargetGone', 'InvalidInput', 'UnsupportedDocument', 'UndoUnavailable', 'SourceUnavailable', 'TripEnded', 'RequirementChanged'].includes(result.receipt.outcome)) {
         throw new ShoppingCommandError('OutcomeUnknown');
       }
       storeAttempt(owner, null);

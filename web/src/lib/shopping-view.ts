@@ -1,3 +1,4 @@
+import { shoppingRowCoverage } from './shopping-coverage-runtime'
 import { shoppingRecipeSelections } from './shopping-sources'
 import { projectShoppingDocument, type ShoppingDocumentStateV3 } from './shopping-document'
 import type { PantryItem, ShoppingItem, ShoppingList, ShoppingConfig } from '@/types/database'
@@ -12,7 +13,10 @@ export function shoppingDocumentToList(
   const projection = projectShoppingDocument(state.document, pantryItems)
   const mapRow = (row: (typeof projection.rows)[number]): ShoppingItem => ({
     ...(state.document.schemaVersion === 4 ? {
-      coveragePending: true, legacyAmount: row.legacy, previousChecked: row.previousChecked,
+      coveragePending: !!row.legacy,
+      inspectedCoverage: row.legacy ? undefined : { [row.orderingKey]: {
+        version: state.document.acknowledgements?.[row.orderingKey]?.version ?? 0, basis: shoppingRowCoverage(row) } },
+      inspectedRevision: state.contentRevision, requirementChanged: row.requirementChanged, legacyAmount: row.legacy, previousChecked: row.previousChecked,
       manualVersion: row.manualId ? state.document.manualItems.find(item => item.id === row.manualId)?.identity?.version : undefined,
       requirementBreakdown: row.requirements?.map(part => ({ label: part.manualId ? `Extra / reminder: ${part.displayName}` : part.displayName,
         quantity: part.quantity, hidden: part.bucket !== 'items' })),

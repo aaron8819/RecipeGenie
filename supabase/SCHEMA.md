@@ -72,6 +72,7 @@ enforce those ownership boundaries.
 - `supabase/migrations/023_shopping_slice6_corrections.sql`
 - `supabase/migrations/024_shopping_identity_extras.sql`
 - `supabase/migrations/025_shopping_placement_recovery.sql`
+- `supabase/migrations/026_shopping_trip_lifecycle.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
 directly in `supabase/migrations/`. Fresh resets apply all 25 in filename order.
@@ -664,7 +665,7 @@ The repository now uses a baseline-first bootstrap strategy:
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `025`. The archived pre-baseline sequence is not replayed.
+  migration through `026`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -918,7 +919,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 025, and the
+instructions. The current authoritative chain ends at migration 026, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant
@@ -982,3 +983,7 @@ generated-type drift, Stage 2A parity audit, active-reference audit, application
 verification, and preview checks. Production must remain on 001-008 during PR
 repair. Stage 2B is blocked until migration 009 is deployed separately and its
 production parity audit passes.
+
+### Slice 8 lifecycle
+
+Migration 026 adds read-only trip UUID, trip-start revision and content epoch to the existing Shopping row. The private protocol retains one content inverse with post-Clear trip/epoch and ten-minute expiry. Optional V4 acknowledgements store exact obtained bases and monotonic acknowledgement versions. The existing owner lock coordinates recipe deletion, dependency validation, source existence, restoration and receipts. Organization-only writes do not advance content epoch. See [Slice 8](../docs/shopping-slice8.md). Historical migrations and existing documents are preserved.

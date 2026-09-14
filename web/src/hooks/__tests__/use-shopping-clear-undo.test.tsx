@@ -1,4 +1,5 @@
-import { runHookCommand } from '@/test/shopping-hook-command-mock'
+import { shoppingContent } from '@/lib/shopping-clear'
+import { runHookCommand, type HookLifecycle } from '@/test/shopping-hook-command-mock'
 import type { ShoppingCommand } from '@/lib/shopping-command'
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
@@ -8,7 +9,6 @@ import {
   useClearShoppingList,
   useRestoreShoppingContent,
   ShoppingClearUndoConflictError,
-  SHOPPING_CLEAR_UNDO_UNAVAILABLE,
   type ShoppingClearResult,
 } from '@/hooks/shopping/use-shopping-document'
 import {
@@ -26,6 +26,7 @@ const KEY = shoppingKeys.detail(OWNER)
 const auth = vi.hoisted(() => ({ id: 'owner-a' as string | null }))
 const show = vi.hoisted(() => vi.fn())
 const db = vi.hoisted(() => ({
+  lifecycle: { epoch: 0 } as HookLifecycle,
   states: new Map<string, ShoppingDocumentStateV3>(),
   beforeWrite: undefined as (() => void) | undefined,
   afterWrite: undefined as (() => Promise<void> | void) | undefined,
@@ -42,10 +43,11 @@ vi.mock('@/lib/shopping-command-client', () => ({
       db.writes.push({ owner, revision: before.contentRevision, applied })
       if (db.failWrite) throw new Error('Write failed')
       if (!applied) return false
+      if (JSON.stringify(shoppingContent(before.document)) !== JSON.stringify(shoppingContent(next.document))) db.lifecycle.epoch++
       db.states.set(owner, structuredClone(next))
       await db.afterWrite?.()
       return true
-    }),
+    }, [], db.lifecycle),
 }))
 vi.mock('@/lib/auth-context', () => ({
   useAuthContext: () => ({ user: auth.id ? { id: auth.id } : null, loading: false }),
@@ -124,7 +126,10 @@ function setup(withRecipes = false) {
 }
 
 function commit(mutation: ShoppingDocumentMutation) {
-  db.states.set(OWNER, applyShoppingDocumentMutation(db.states.get(OWNER)!, mutation))
+  const before = db.states.get(OWNER)!
+  const after = applyShoppingDocumentMutation(before, mutation)
+  if (JSON.stringify(shoppingContent(before.document)) !== JSON.stringify(shoppingContent(after.document))) db.lifecycle.epoch++
+  db.states.set(OWNER, after)
 }
 
 async function clear(hook: ReturnType<typeof setup>) {
@@ -148,6 +153,7 @@ beforeEach(() => {
   setActivePrincipalId(OWNER)
   show.mockReset()
   db.states.clear()
+  db.lifecycle = { epoch: 0 }
   db.beforeWrite = undefined
   db.afterWrite = undefined
   db.beforeRead = undefined
@@ -173,13 +179,10 @@ describe('conditional Shopping Clear Undo', () => {
     expect(show).not.toHaveBeenCalled()
   })
 
-  it.each(['add', 'edit', 'remove', 'add-then-delete', 'organization'] as const)(
+  it.each(['add', 'edit', 'remove', 'add-then-delete'] as const)(
     'refuses after %s, preserving final persisted state and settings', async (action) => {
       const hook = setup()
       const token = await clear(hook)
-      if (action === 'organization') {
-        commit({ type: 'updatePreferences', preferences: { excludedIngredientKeys: ['pepper'], categoryOrder: ['produce', 'misc'] } })
-      } else {
         commit({ type: 'addManualItem', item: manual('bread') })
         if (action === 'edit') commit({ type: 'editManualItem', id: 'bread', changes: { displayName: 'rye bread' } })
         if (action === 'remove') {
@@ -187,7 +190,6 @@ describe('conditional Shopping Clear Undo', () => {
           commit({ type: 'deleteManualItem', id: 'bread' })
         }
         if (action === 'add-then-delete') commit({ type: 'deleteManualItem', id: 'bread' })
-      }
       hook.client.setQueryData(KEY, structuredClone(db.states.get(OWNER)))
       await refuse(hook, token!)
     })
@@ -301,16 +303,23 @@ describe('conditional Shopping Clear Undo', () => {
     const token = await clear(hook)
     expect(token!.postClearRevision).toBe(9)
     expect(token!.content.recipeEntries).toEqual(newer.document.recipeEntries)
-    await refuse(hook, token!, SHOPPING_CLEAR_UNDO_UNAVAILABLE)
+    await act(async () => { await hook.result.current.undo.mutateAsync(token!) })
   })
 
-  it('refuses recipe-bearing whole Undo without restoring even the manual subset', async () => {
+  it('restores recipe-bearing whole Undo through a compact reference', async () => {
     const hook = setup(true)
     const token = await clear(hook)
-    // Deleting the source now need not advance Shopping revision.
-    await refuse(hook, token!, SHOPPING_CLEAR_UNDO_UNAVAILABLE)
-    expect(db.states.get(OWNER)!.document.manualItems).toEqual([])
-    expect(db.states.get(OWNER)!.document.recipeEntries).toEqual({})
+    await act(async () => { await hook.result.current.undo.mutateAsync(token!) })
+    expect(db.states.get(OWNER)!.document).toEqual(hook.original.document)
+  })
+
+  it('allows organization-only changes without replacing current preferences', async () => {
+    const hook = setup()
+    const token = await clear(hook)
+    commit({ type: 'updatePreferences', preferences: { excludedIngredientKeys: ['pepper'] } })
+    await act(async () => { await hook.result.current.undo.mutateAsync(token!) })
+    expect(db.states.get(OWNER)!.document.preferences.excludedIngredientKeys).toEqual(['pepper'])
+    expect(db.states.get(OWNER)!.document.manualItems).toEqual(hook.original.document.manualItems)
   })
 
   it('refuses repeated Undo, including a stale cache from before the first Undo', async () => {
@@ -400,8 +409,8 @@ describe('conditional Shopping Clear Undo', () => {
       commit({ type: 'addManualItem', item: manual('bread') })
       hook.client.setQueryData(KEY, structuredClone(db.states.get(OWNER)))
     }
-    await act(async () => { await expect(hook.result.current.clear.mutateAsync()).rejects.toBeInstanceOf(ShoppingClearUndoConflictError) })
-    expect(hook.result.current.clear.data).toBeUndefined()
+    const token = await clear(hook)
+    await refuse(hook, token!)
     expect(hook.client.getQueryData(KEY)).toEqual(db.states.get(OWNER))
     expect(db.states.get(OWNER)!.document.manualItems).toEqual([manual('bread')])
     expect(show).toHaveBeenCalled()

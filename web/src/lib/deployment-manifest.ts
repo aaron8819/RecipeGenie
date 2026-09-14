@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "025_shopping_placement_recovery"
+export const EXPECTED_LATEST_MIGRATION = "026_shopping_trip_lifecycle"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

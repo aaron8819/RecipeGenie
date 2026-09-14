@@ -62,7 +62,7 @@ async function prepared(a: Owner, c: ShoppingCommand) {
   return { ticket, commit: async () => {
     const result = await admin.rpc('shopping_commit', { ...args, p_revision: snapshot.row!.content_revision,
       p_dependency: snapshot.dependencyRevision, p_document: plan.document, p_outcome: plan.outcome,
-      p_action: c.mutation.type === 'pantry' ? 'pantry' : 'mutation', p_pantry_item: plan.pantryItem, p_recipe: null });
+      p_action: c.mutation.type === 'initialize' ? 'initialize' : c.mutation.type === 'pantry' ? 'pantry' : 'mutation', p_pantry_item: plan.pantryItem, p_recipe: null });
     assert.equal(result.error, null); return result.data;
   } };
 }
@@ -86,7 +86,7 @@ async function oldInitialization(a: Owner, doc = fixture.originalV4) {
   const ctx = await admin.rpc('shopping_command_context', args); assert.equal(ctx.error, null);
   const snapshot = ctx.data as ShoppingCommandContext;
   const commit = await admin.rpc('shopping_commit', { ...args, p_revision: snapshot.row!.content_revision,
-    p_dependency: snapshot.dependencyRevision, p_document: doc, p_outcome: 'Applied', p_action: 'mutation' });
+    p_dependency: snapshot.dependencyRevision, p_document: doc, p_outcome: 'Applied', p_action: 'initialize' });
   assert.equal(commit.error, null); check(commit.data.status, 'Applied', 'actual old V4 output committed with hash-bound receipt');
   return ticket;
 }
@@ -99,14 +99,17 @@ async function proof(a: Owner) {
 async function main() {
   let complete = false;
   try {
-    // Apply/reapply is read-only with respect to documents and revisions.
+    // Migration rehearsal is opt-in: replaying 025 on a newer schema would
+    // replace the newer command-context function.
     const exact = await owner();
     await db`update public.shopping_list set document=${json(fixture.originalV4)},content_revision=1 where user_id=${exact.id}`;
     const preMigration = await read(exact);
-    const migrationConnection = await db.reserve();
-    try { await migrationConnection.unsafe(readFileSync('../supabase/migrations/025_shopping_placement_recovery.sql', 'utf8')); }
-    finally { migrationConnection.release(); }
-    check(await read(exact), preMigration, 'migration leaves affected preimage and revision unchanged');
+    if (process.argv.includes('--apply')) {
+      const migrationConnection = await db.reserve();
+      try { await migrationConnection.unsafe(readFileSync('../supabase/migrations/025_shopping_placement_recovery.sql', 'utf8')); }
+      finally { migrationConnection.release(); }
+      check(await read(exact), preMigration, 'migration leaves affected preimage and revision unchanged');
+    }
     check(projection(preMigration), ['produce'], 'exact original PostgreSQL defect present before explicit upgrade');
     check(await proof(exact), false, 'direct persisted review fixture has no initialization proof');
     await apply(exact, initialize);

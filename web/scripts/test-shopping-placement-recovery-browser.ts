@@ -73,7 +73,7 @@ async function main(){const browser=await chromium.launch();try{for(const viewpo
   const args={p_owner:a.id,p_sequence:ticket.sequence,p_operation:ticket.operationId,p_hash:createHash('sha256').update(canonicalShoppingPayload(oldCommand)).digest('hex')};
   const ctx=await admin.rpc('shopping_command_context',args);assert.equal(ctx.error,null);
   const committed=await admin.rpc('shopping_commit',{...args,p_revision:ctx.data.row.content_revision,p_dependency:ctx.data.dependencyRevision,
-    p_document:originalV4,p_outcome:'Applied',p_action:'mutation'});assert.equal(committed.error,null);
+    p_document:originalV4,p_outcome:'Applied',p_action:'initialize'});assert.equal(committed.error,null);
   await page.reload();await page.getByTestId('shopping-category-produce').waitFor();
   await page.getByRole('button',{name:'Review retained locations',exact:true}).click();
   await page.getByTestId('shopping-category-dairy').waitFor();

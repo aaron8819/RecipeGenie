@@ -198,7 +198,7 @@ try {
     itemOverrides: beforeClear.row.document.itemOverrides,
   } }, await revision(bridgeOwner));
   check((await commit(await admit(bridgeOwner, undo), undo)).status, 'Applied', 'manual-only conditional Undo');
-  check((await commit(await admit(bridgeOwner, undo), undo)).status, 'Conflict', 'a new operation cannot reuse consumed Undo');
+  check((await commit(await admit(bridgeOwner, undo), undo)).status, 'UndoUnavailable', 'a new operation cannot reuse consumed Undo');
   // Invalid pre-existing document fixture, isolated stack only. Re-add the
   // original constraint NOT VALID so all subsequent writes remain checked.
   const invalidOwner = await owner();

@@ -10,6 +10,7 @@ import { mapRecipeRows } from './recipe-identity';
 import { canonicalShoppingPayload, type ShoppingCommand } from './shopping-command';
 import { settingValue } from './shopping-settings';
 import type { PantryItem } from '@/types/database';
+import { isShoppingContentCommand } from './shopping-lifecycle';
 import { canUndoShoppingClear } from './shopping-clear';
 import { planInitializedShoppingCommand } from './shopping-initialized-command';
 
@@ -17,12 +18,14 @@ export interface ShoppingCommandContext {
   /** Service-only SQL evidence, never accepted from command/client input. */
   lastWriteWasInitialization?: boolean;
   status: string;
-  row: { document: unknown; content_revision: number; shopping_clear_undo_available?: boolean } | null;
+  row: { document: unknown; content_revision: number; shopping_clear_undo_available?: boolean; trip_id?: string; trip_revision?: number; content_epoch?: number } | null;
   dependencyRevision: string;
   pantry: PantryItem[];
   recipes: unknown[];
-  inverse: Pick<ShoppingDocumentV3, 'recipeEntries' | 'manualItems' | 'itemOverrides'> | null;
+  inverse: Pick<ShoppingDocumentV3, 'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements'> | null;
   inverseRevision: number | null;
+  inverseTrip?: string | null;
+  inverseEpoch?: number | null;
 }
 
 export function planShoppingCommand(context: ShoppingCommandContext, command: ShoppingCommand) {
@@ -33,6 +36,9 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
     ({ outcome, document, before, pantryItem });
   if (read && read.status !== 'Supported') return result('UnsupportedDocument');
   const intent = command.mutation;
+  if (isShoppingContentCommand(intent.type) && !['undoClear', 'restoreContent'].includes(intent.type) &&
+    ((command.tripId !== undefined && command.tripId !== context.row?.trip_id) ||
+      ((context.row?.trip_revision ?? context.inverseRevision ?? 0) > command.observedRevision))) return result('TripEnded');
   if (intent.type === 'initialize' || before.document.schemaVersion === 4) {
     return planInitializedShoppingCommand(context, command, before.document);
   }
@@ -44,7 +50,7 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
   }
   // Only explicitly independent settings intents may rebase in V3. Target
   // field versions and the final organization command family arrive in Slice 9.
-  if (!sameRevision && intent.type !== 'deleteRecipe' && intent.type !== 'complete') {
+  if (!sameRevision && intent.type !== 'deleteRecipe' && !['complete', 'undoClear', 'restoreContent'].includes(intent.type)) {
     if (intent.type === 'addManualItem' || intent.type === 'editManualItem') {
       if ((context.inverseRevision ?? 0) > command.observedRevision) return result('Conflict');
       if (intent.type === 'editManualItem' && (!command.observedManual ||
@@ -77,11 +83,12 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
   if (mutation.type === 'pantry') return result('InvalidInput');
   try {
     if (mutation.type === 'restoreContent') {
-      if (!context.inverse || context.inverseRevision !== before.contentRevision ||
-        Object.keys(context.inverse.recipeEntries).length > 0 ||
+      if (!context.inverse || context.inverseRevision !== command.observedRevision || context.inverseTrip !== context.row?.trip_id ||
+        context.inverseEpoch !== context.row?.content_epoch ||
         canonicalShoppingPayload(context.inverse) !== canonicalShoppingPayload(mutation.content)) return result('UndoUnavailable');
 
     }
+    if (mutation.type === 'restoreContent' && Object.keys(context.inverse!.recipeEntries).some(id => !mapRecipeRows(context.recipes as never).some(recipe => recipe.id === id))) return result('SourceUnavailable');
     if (mutation.type === 'addManualItem' || mutation.type === 'editManualItem') {
       if (mutation.type === 'addManualItem' && before.document.manualItems.some((item) => item.id === mutation.item.id)) return result('Conflict');
       const existing = mutation.type === 'editManualItem'

@@ -1,3 +1,5 @@
+import { shoppingRowCoverage } from './shopping-coverage-runtime';
+import { planShoppingAcknowledgement } from './shopping-coverage';
 import { applyShoppingDocumentMutation, createShoppingRecipeEntry, projectShoppingDocument, validateShoppingDocumentV3,
   type ShoppingDocumentV3, type ShoppingManualItemV1 } from './shopping-document';
 import { appendDocumentPurchases, initializeShoppingDocument, legacyQuantity, readInitializedDocument,
@@ -10,6 +12,7 @@ import { splicePurchasePlacement, type PurchaseOrganization } from './shopping-t
 import { SHOPPING_CATEGORIES } from './shopping-categories';
 import { shoppingInverseBytes } from './shopping-clear';
 import type { ShoppingCommandContext } from './shopping-command-planner';
+import { restoredShoppingContent } from './shopping-lifecycle';
 import { recoverShoppingPlacement } from './shopping-placement-recovery';
 
 /** Runs only inside the admitted command planner. No clock, I/O or cache state. */
@@ -40,7 +43,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
   if (selectionIds.length && ((!sameRevision && !command.observedSelections) ||
     (command.observedSelections && selectionIds.some(id => !Object.hasOwn(command.observedSelections!, id) ||
       command.observedSelections![id] !== (document.recipeEntries[id]?.sourceEvidence?.version ?? null))))) return result('Conflict');
-  if (!sameRevision && !isSetting && mutation.type !== 'complete') {
+  if (!sameRevision && !isSetting && !['complete', 'undoClear', 'restoreContent', 'setChecked', 'setCheckedMany'].includes(mutation.type)) {
     if ((context.inverseRevision ?? 0) > command.observedRevision) return result('Conflict');
     if (mutation.type === 'editManualItem') {
       if (!command.observedManual || canonicalShoppingPayload(document.manualItems.find(item => item.id === mutation.id)) !==
@@ -144,10 +147,13 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       if (command.clearUndoRequired !== undefined && (!sameRevision ||
         (command.clearUndoRequired && context.row?.shopping_clear_undo_available !== true))) return result('Conflict');
       next.recipeEntries = {}; next.manualItems = []; next.itemOverrides = {};
+      if (next.acknowledgements) next.acknowledgements = {};
     } else if (mutation.type === 'restoreContent' || mutation.type === 'undoClear') {
-      if (!sameRevision || !context.inverse || context.inverseRevision !== revision || Object.keys(context.inverse.recipeEntries).length) return result('UndoUnavailable');
+      if (!context.inverse || context.inverseRevision !== command.observedRevision ||
+        context.inverseTrip !== context.row?.trip_id || context.inverseEpoch !== context.row?.content_epoch) return result('UndoUnavailable');
+      if (Object.keys(context.inverse.recipeEntries).some(id => !recipes.some(recipe => recipe.id === id))) return result('SourceUnavailable');
       if (mutation.type === 'restoreContent' && canonicalShoppingPayload(mutation.content) !== canonicalShoppingPayload(context.inverse)) return result('UndoUnavailable');
-      next = { ...next, ...structuredClone(context.inverse) };
+      next = restoredShoppingContent(next, context.inverse);
     } else if (isSetting) {
       if (!sameRevision && (command.observedSetting === undefined || command.observedSetting === mutation.enabled ||
         (mutation.type === 'setFamilySetting' && document.preferences[mutation.setting] !== command.observedSetting))) return result('Conflict');
@@ -157,12 +163,31 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       delete next.recipeEntries[mutation.recipeId];
     } else if (mutation.type === 'setChecked' || mutation.type === 'setCheckedMany') {
       const refs = mutation.type === 'setChecked' ? [mutation.rowRef] : mutation.rowRefs;
-      // Only legacy independent check evidence is editable in this activation.
-      // A new obtained-basis acknowledgement belongs to Slice 8.
-      if (refs.some(ref => !next.manualItems.some(item => `manual:${item.id}` === ref && item.identity?.meaning === 'legacyIndependent' && !item.identity.removed))) return result('InvalidInput');
-      for (const item of next.manualItems) if (refs.includes(`manual:${item.id}`) && item.checked !== mutation.checked) {
-        item.checked = mutation.checked; item.identity!.legacy!.previousChecked = mutation.checked;
-        item.identity!.version++; item.identity!.legacy!.version++;
+      const rows = projectShoppingDocument(document, context.pantry).rows;
+      for (const ref of refs) {
+        const row = rows.find(row => row.rowRef === ref);
+        if (!row || row.bucket !== 'items') return result('TargetGone');
+        if (row.legacy) {
+          if (!sameRevision) return result('Conflict');
+          const item = next.manualItems.find(item => `manual:${item.id}` === ref)!;
+          if (item.checked !== mutation.checked) {
+            item.checked = mutation.checked; item.identity!.legacy!.previousChecked = mutation.checked;
+            item.identity!.version++; item.identity!.legacy!.version++;
+          }
+          continue;
+        }
+        const inspected = command.inspectedCoverage?.[row.orderingKey];
+        const current = document.acknowledgements?.[row.orderingKey];
+        if (!inspected || inspected.version !== (current?.version ?? 0)) return result('Conflict');
+        if (mutation.checked) {
+          if (!inspected.basis) return result('InvalidInput');
+          const planned = planShoppingAcknowledgement({ expectedVersion: inspected.version, currentVersion: current?.version ?? 0,
+            inspected: inspected.basis, current: shoppingRowCoverage(row), availability: 'available' });
+          if (planned.status !== 'Checked') return result(planned.status);
+          next.acknowledgements = { ...next.acknowledgements, [row.orderingKey]: { version: revision + 1, basis: planned.obtained } };
+        } else if (current?.basis) {
+          next.acknowledgements = { ...next.acknowledgements, [row.orderingKey]: { version: revision + 1, basis: null } };
+        }
       }
     } else if (mutation.type === 'setBucketOverride' || mutation.type === 'setSuppressed') {
       const row = projectShoppingDocument(next, context.pantry).rows.find(row => row.rowRef === `derived:${mutation.aggregateKey}`);

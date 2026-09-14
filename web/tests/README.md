@@ -320,3 +320,5 @@ test.describe('My Feature', () => {
 - Consider using more specific locators
 
 Shopping Slice 6 has an isolated-stack test configuration: `node node_modules/@playwright/test/cli.js test --config playwright.shopping-protocol.config.ts`. It requires task-owned app port 3116 and Supabase ports 56321/56322; it does not bootstrap or reset shared fixtures. See `docs/shopping-slice6.md` for evidence boundaries.
+
+Slice 8 adds `web/scripts/test-shopping-slice8.ts` (authenticated HTTP, prepared-plan race barriers, exact 1 MiB Undo) and `test-shopping-slice8-browser.ts` (1440×900 and 390×844). Both require a task-owned loopback stack at 57321/57322 and a development app at 3117, with credentials derived from that stack. Neither resets fixtures or contacts hosted services. See `docs/shopping-slice8.md`.

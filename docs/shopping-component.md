@@ -1,3 +1,5 @@
+> Slice 8 supersedes the historical Clear restrictions below: see [Shopping Slice 8](shopping-slice8.md) for runtime coverage, atomic source validation and trip/content-epoch Undo.
+
 # Shopping Domain Reference
 
 > Slice 7 adds explicit identity/extra initialization and durable initial placement through the [Shopping command boundary](shopping-slice6.md). See [Shopping Slice 7](shopping-slice7.md) for the current runtime and later-slice boundaries. Historical sections below retain their original migration context.

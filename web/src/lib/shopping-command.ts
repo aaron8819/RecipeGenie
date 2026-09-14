@@ -7,6 +7,8 @@ export type ShoppingCommand = {
   observedRevision: number;
   mutation: ShoppingDocumentMutation | { type: 'pantry'; rowRef: string } |
     { type: 'deleteRecipe'; recipeId: string } | { type: 'undoClear' };
+  tripId?: string;
+  inspectedCoverage?: Record<string, { version: number; basis: import("./shopping-coverage").ShoppingCoverageBasis | null }>;
   clearUndoRequired?: boolean;
   observedSetting?: boolean;
   observedManual?: ShoppingManualItemV1;
@@ -43,11 +45,12 @@ const fields: Record<string, string[]> = {
 export function readShoppingCommand(value: unknown): ShoppingCommand | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const command = value as Record<string, unknown>;
-  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedManual', 'observedSelections', 'clearUndoRequired'].includes(key)) ||
+  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedManual', 'observedSelections', 'clearUndoRequired', 'tripId', 'inspectedCoverage'].includes(key)) ||
     command.protocol !== SHOPPING_PROTOCOL || !Number.isSafeInteger(command.observedRevision) ||
     Number(command.observedRevision) < 0 ||
     (command.observedSetting !== undefined && typeof command.observedSetting !== 'boolean') ||
     (command.clearUndoRequired !== undefined && typeof command.clearUndoRequired !== 'boolean')) return null;
+  if (command.tripId !== undefined && (typeof command.tripId !== 'string' || !/^[0-9a-f-]{36}$/i.test(command.tripId))) return null;
   const mutation = command.mutation as Record<string, unknown> | null;
   if (!mutation || typeof mutation !== 'object' || Array.isArray(mutation) ||
     typeof mutation.type !== 'string' || !Object.hasOwn(fields, mutation.type)) return null;
@@ -100,6 +103,8 @@ export function readShoppingCommand(value: unknown): ShoppingCommand | null {
 export interface ShoppingReceipt {
   outcome: string;
   revision: number;
+  contentEpoch?: number;
+  tripId?: string;
   pantryId?: string | null;
   pantryWasAdded?: boolean;
   undoAvailable?: boolean | null;
@@ -116,6 +121,9 @@ export const shoppingOutcomeMessage = (status: string): string => ({
   RetryExpired: 'The Shopping retry window expired. Review the saved list; this action was not repeated.',
   UnknownAdmission: 'This Shopping attempt could not be found. Review the saved list before another action.',
   PayloadMismatch: 'This Shopping attempt has different input. The change was not repeated.',
+  TripEnded: 'This Shopping trip ended. Review the current list before another change.',
+  RequirementChanged: 'The requirement changed. Review the current amount before checking it.',
+  SourceUnavailable: 'A saved recipe is no longer available. Undo was not applied.',
   UndoUnavailable: 'Shopping changed after Clear; Undo was not applied.',
   DependencyUnavailable: 'Could not verify Shopping dependencies. Your input is preserved; retry this change.',
 }[status] || 'Could not update the shopping list. Your input is preserved; retry this change.');

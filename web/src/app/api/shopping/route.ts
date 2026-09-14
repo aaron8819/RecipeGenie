@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       const snapshot = context as ShoppingCommandContext;
       const plan = planShoppingCommand(snapshot, command);
       const action = command.mutation.type === 'undoClear' ? 'restoreContent' :
-        ['complete', 'restoreContent', 'pantry', 'deleteRecipe'].includes(command.mutation.type)
+        ['initialize', 'complete', 'restoreContent', 'pantry', 'deleteRecipe'].includes(command.mutation.type)
         ? command.mutation.type : 'mutation';
       const { data: committed, error: commitError } = await admin.rpc('shopping_commit', {
         ...ticket, p_revision: snapshot.row?.content_revision ?? null,

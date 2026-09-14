@@ -1,3 +1,4 @@
+import { isShoppingCoverageBasis } from './shopping-coverage';
 import type { ShoppingDocumentV3, ShoppingManualItemV1, ShoppingRecipeEntryV2 } from './shopping-document';
 import type { LegacyIndependentNeed } from './shopping-target-legacy';
 import { appendPurchasePlacements, canonicalPurchaseDefault, type PurchaseOrganization } from './shopping-target-order';
@@ -236,7 +237,10 @@ export function readInitializedDocument(value: unknown, validateV3: (value: unkn
   const only = (v: Record<string, unknown>, keys: string[]) => Object.keys(v).every(key => keys.includes(key));
   if (!record(value) || value.schemaVersion !== 4 || !record(value.placementEvidence) ||
     !record(value.recipeEntries) || !Array.isArray(value.manualItems) || !record(value.preferences)) return null;
-  const { placementEvidence, ...base } = value;
+  const { placementEvidence, acknowledgements, ...base } = value;
+  if (acknowledgements !== undefined && (!record(acknowledgements) || Object.entries(acknowledgements).some(([key, ack]) =>
+    !text(key) || !record(ack) || !only(ack, ['version', 'basis']) || !Number.isSafeInteger(ack.version) || Number(ack.version) < 0 ||
+    (ack.basis !== null && !isShoppingCoverageBasis(ack.basis))))) return null;
   if (!only(placementEvidence, ['defaults', 'unresolved', 'resolved']) || !record(placementEvidence.defaults) || !record(placementEvidence.unresolved) || !record(placementEvidence.resolved)) return null;
   const strippedRecipes: Record<string, unknown> = {};
   for (const [id, entry] of Object.entries(value.recipeEntries)) {

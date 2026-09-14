@@ -1,3 +1,5 @@
+import { shoppingRowCoverage } from './shopping-coverage-runtime'
+import { compareShoppingCoverage } from './shopping-coverage'
 import type {
   CustomShoppingCategory,
   PackageV1,
@@ -150,6 +152,7 @@ export type ShoppingDocumentV3 = {
   manualItems: ShoppingManualItemV1[]
   itemOverrides: Record<AggregateKey, ShoppingItemOverrideV2>
   preferences: ShoppingPreferencesV1 & ShoppingOrderingPreferences
+  acknowledgements?: Record<string, { version: number; basis: import("./shopping-coverage").ShoppingCoverageBasis | null }>
   placementEvidence?: ShoppingPlacementEvidence
 }
 
@@ -157,6 +160,8 @@ export type ShoppingDocumentV3 = {
 export type ShoppingDocumentStateV3 = {
   document: ShoppingDocumentV3
   contentRevision: number
+  tripId?: string
+  contentEpoch?: number
 }
 
 export type ShoppingDocumentValidationIssue = {
@@ -1044,6 +1049,7 @@ export type ProjectedShoppingRow = {
     occurrenceId?: string
   }[]
   legacy?: boolean
+  requirementChanged?: boolean
   previousChecked?: boolean
 }
 
@@ -1482,6 +1488,10 @@ function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantry
     const parts = sumShoppingRequirements(requirements.filter(part => part.bucket === row.bucket).map(part => part.quantity))
     row.quantity = parts[0] ?? null
     row.additionalQuantities = parts.slice(1)
+    const obtained = document.acknowledgements?.[row.orderingKey]?.basis
+    const coverage = obtained ? compareShoppingCoverage(obtained, shoppingRowCoverage(row)) : null
+    row.checked = coverage === 'Covered'
+    row.requirementChanged = coverage === 'RequirementChanged'
     rows.push(row)
   }
   const categories = shoppingOrderingCategories(document, [...new Set(rows.map(row => row.categoryKey))])

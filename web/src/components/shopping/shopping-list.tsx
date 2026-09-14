@@ -534,6 +534,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     formatShoppingItemAmount(prevProps.item) === formatShoppingItemAmount(nextProps.item) &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
+    prevProps.item.inspectedRevision === nextProps.item.inspectedRevision &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 
@@ -613,6 +614,7 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
     formatShoppingItemAmount(prevProps.item) === formatShoppingItemAmount(nextProps.item) &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
+    prevProps.item.inspectedRevision === nextProps.item.inspectedRevision &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 
@@ -811,16 +813,14 @@ function ShoppingListContent() {
           undoToast.show({ message: 'Shopping list is already clear' })
           return
         }
-        const hasRecipes = Object.keys(result.content.recipeEntries).length > 0
         undoToast.show({
+          duration: 10 * 60 * 1000,
           message: result.historical
             ? 'The earlier Clear was confirmed. Showing the current list.'
-            : hasRecipes
-            ? `Shopping list cleared. ${SHOPPING_CLEAR_UNDO_UNAVAILABLE}`
-            : result.undoAvailable === false
+            : result.undoAvailable !== true
             ? 'Shopping list cleared. Undo is unavailable for this Clear.'
             : 'Shopping list cleared',
-          onUndo: hasRecipes || result.undoAvailable === false ? undefined : () => restoreShoppingContent.mutate(result),
+          onUndo: result.undoAvailable !== true ? undefined : () => restoreShoppingContent.mutate(result),
         })
       },
     })
@@ -910,7 +910,7 @@ function ShoppingListContent() {
     pendingCheckIntentsRef.current = next
     setPendingCheckIntents(next)
 
-    void checkOffItem.mutateAsync({ rowRef, checked }).then(
+    void checkOffItem.mutateAsync({ rowRef, checked, inspectedCoverage: item.inspectedCoverage, inspectedRevision: item.inspectedRevision }).then(
       () => settleCheckIntent(rowRef, version),
       () => settleCheckIntent(rowRef, version)
     )
@@ -1948,9 +1948,9 @@ function ShoppingListContent() {
           <AlertDialogHeader>
             <AlertDialogTitle>Clear shopping list?</AlertDialogTitle>
             <AlertDialogDescription>
-              {selections.length > 0 || shoppingList?.source_recipes?.length
+              {shoppingQuery.clearConfirmation?.undoRequired !== false
                 ? SHOPPING_CLEAR_UNDO_UNAVAILABLE
-                : 'This list exceeds the Undo storage limit. Undo will be unavailable.'} This clears the whole list,
+                : 'Undo is unavailable for this Clear.'} This clears the whole list,
               including manual items. Your saved recipes and organization stay saved.
             </AlertDialogDescription>
           </AlertDialogHeader>

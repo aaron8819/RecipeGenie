@@ -2,11 +2,11 @@ import type { ShoppingDocumentV3 } from './shopping-document';
 
 export const SHOPPING_INVERSE_BYTES = 1048576;
 export type ShoppingContent = Pick<ShoppingDocumentV3,
-  'recipeEntries' | 'manualItems' | 'itemOverrides'>;
+  'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements'>;
 
 export function shoppingContent(document: ShoppingContent): ShoppingContent {
   return { recipeEntries: document.recipeEntries, manualItems: document.manualItems,
-    itemOverrides: document.itemOverrides };
+    itemOverrides: document.itemOverrides, ...(document.acknowledgements ? { acknowledgements: document.acknowledgements } : {}) };
 }
 
 // PostgreSQL jsonb::text uses spaces after separators and expands exponent
@@ -38,6 +38,5 @@ export function canUndoShoppingClear(document: ShoppingContent): boolean {
   // Compatibility fallback for in-memory hook adapters. Persisted states use
   // the database computed field, including original numeric scale and the
   // full-document limit; execution always receives that authoritative field.
-  return Object.keys(document.recipeEntries).length === 0 &&
-    shoppingInverseBytes(shoppingContent(document)) <= SHOPPING_INVERSE_BYTES;
+  return shoppingInverseBytes(shoppingContent(document)) <= SHOPPING_INVERSE_BYTES;
 }
