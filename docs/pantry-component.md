@@ -58,6 +58,11 @@ the shared authenticated shell.
   shared Salt/Black pepper family evidence.
 - Pantry satisfaction is directional and does not change Shopping aggregation
   identity.
+- In initialized Shopping, manual extras bypass automatic Pantry hiding. The
+  Shopping-to-Pantry bridge explicitly hides affected manual needs and advances
+  their edit version, invalidating older rebinds even after a later return.
+  Ordinary Pantry add/edit/remove affects the existing command dependency fence;
+  it does not change manual extra intent. See [Slice 7](shopping-slice7.md).
 
 ### Excluded ingredients
 

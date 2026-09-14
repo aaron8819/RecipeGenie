@@ -29,17 +29,20 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
   if (document.schemaVersion !== 4) return result('InvalidInput');
   const recipes = mapRecipeRows(context.recipes as never);
   if (mutation.type === 'deleteRecipe') return result(recipes.some(r => r.id === mutation.recipeId) ? 'Applied' : 'TargetGone');
+  const selectionIds = mutation.type === 'removeRecipe' ? [mutation.recipeId] :
+    mutation.type === 'upsertRecipes' ? mutation.entries.map(entry => entry.recipeId) :
+      mutation.type === 'upsertRecipe' || mutation.type === 'rescaleRecipe' ? [mutation.entry.recipeId] : [];
+  // The revision binds older callers; explicit tokens also bind open editors
+  // and queued removals even when their caller has fetched a newer revision.
+  if (selectionIds.length && ((!sameRevision && !command.observedSelections) ||
+    (command.observedSelections && selectionIds.some(id => !Object.hasOwn(command.observedSelections!, id) ||
+      command.observedSelections![id] !== (document.recipeEntries[id]?.sourceEvidence?.version ?? null))))) return result('Conflict');
   if (!sameRevision && !isSetting && mutation.type !== 'complete') {
     if ((context.inverseRevision ?? 0) > command.observedRevision) return result('Conflict');
     if (mutation.type === 'editManualItem') {
       if (!command.observedManual || canonicalShoppingPayload(document.manualItems.find(item => item.id === mutation.id)) !==
         canonicalShoppingPayload(command.observedManual)) return result('Conflict');
-    } else if (['upsertRecipe', 'upsertRecipes', 'rescaleRecipe'].includes(mutation.type)) {
-      const entries = mutation.type === 'upsertRecipes' ? mutation.entries :
-        mutation.type === 'upsertRecipe' || mutation.type === 'rescaleRecipe' ? [mutation.entry] : [];
-      if (!command.observedSelections || entries.some(entry => !Object.hasOwn(command.observedSelections!, entry.recipeId) ||
-        command.observedSelections![entry.recipeId] !== (document.recipeEntries[entry.recipeId]?.sourceEvidence?.version ?? null))) return result('Conflict');
-    } else if (!['addManualItem', 'resolveLegacy', 'rebindManualItem', 'restoreManualItem'].includes(mutation.type)) return result('Conflict');
+    } else if (!selectionIds.length && !['addManualItem', 'resolveLegacy', 'rebindManualItem', 'restoreManualItem'].includes(mutation.type)) return result('Conflict');
   }
   let next = structuredClone(document);
   let pantryItem: string | null = null;
@@ -117,7 +120,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         const old = document.recipeEntries[entry.recipeId];
         let ordinal = 0;
         const sourceEvidence = {
-          version: old?.sourceEvidence?.version ?? 0, history: 'captured' as const, sourceRevision: recipe.updated_at,
+          version: old?.sourceEvidence?.version ?? revision + 1, history: 'captured' as const, sourceRevision: recipe.updated_at,
           yieldEvidence: { servings: recipe.servings, metadata: recipe.yield_metadata ?? null },
           occurrences: recipe.ingredientSections.flatMap((section, sectionIndex) => section.ingredients.map((ingredient, index) => ({
             id: `capture:${recipe.id}:${recipe.updated_at}:${sectionIndex}:${index}`, section: section.label,
@@ -125,7 +128,11 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
           }))),
         };
         const captured = { ...expected, sourceEvidence };
-        if (old && canonicalShoppingPayload(captured) !== canonicalShoppingPayload(old)) sourceEvidence.version++;
+        // The owner revision survives removal and Clear. Mint from it, never
+        // from a counter that disappears with the selection (including ABA).
+        if (old && canonicalShoppingPayload(captured) !== canonicalShoppingPayload(old)) {
+          sourceEvidence.version = Math.max(revision + 1, sourceEvidence.version + 1);
+        }
         next.recipeEntries[entry.recipeId] = captured;
         keys.push(...entry.ingredients.map(ingredient => ingredient.purchaseKey));
       }
@@ -171,7 +178,11 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       const row = projectShoppingDocument(next, context.pantry).rows.find(row => row.rowRef === mutation.rowRef);
       if (!row) return result('TargetGone');
       pantryItem = row.displayName;
-      for (const item of next.manualItems) if (`manual:${item.id}` === mutation.rowRef || row.requirements?.some(part => part.manualId === item.id)) item.bucket = 'already_have';
+      for (const item of next.manualItems) if (`manual:${item.id}` === mutation.rowRef || row.requirements?.some(part => part.manualId === item.id)) {
+        if (item.bucket !== 'already_have') {
+          item.bucket = 'already_have'; item.identity!.version++;
+        }
+      }
       for (const entry of Object.values(next.recipeEntries)) for (const ingredient of entry.ingredients) if (ingredient.purchaseKey === row.orderingKey) {
         next.itemOverrides[ingredient.aggregateKey] = { ...next.itemOverrides[ingredient.aggregateKey], bucket: 'already_have' };
       }
@@ -228,6 +239,12 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         }
       }
     } else return result('InvalidInput');
+    // Overrides belong to live recipe atoms. Keep shared atoms' overrides and
+    // all purchase placement, but retire overrides for removed/replaced atoms.
+    if (selectionIds.length) {
+      const active = new Set(Object.values(next.recipeEntries).flatMap(entry => entry.ingredients.map(i => i.aggregateKey)));
+      next.itemOverrides = Object.fromEntries(Object.entries(next.itemOverrides).filter(([key]) => active.has(key)));
+    }
     if (!readInitializedDocument(next, validateShoppingDocumentV3) || shoppingInverseBytes(next) > 4194304) return result('InvalidInput');
     return result(canonicalShoppingPayload(next) === canonicalShoppingPayload(document) && !pantryItem ? 'Unchanged' : 'Applied', next, pantryItem);
   } catch { return result('InvalidInput'); }

@@ -59,7 +59,19 @@ hidden untouched pairs. No replacement sequence is accepted from visible rows.
 Owner binding, bounded admission, canonical payload binding, durable receipts,
 dependency replanning and replay protection remain unchanged. Independent new
 extras may rebase; stale edits compare their observed item, and source replacement
-compares the observed selection version. Explicit legacy/placement conversion
+compares the observed selection version. New selection versions are minted from
+the next owner content revision, which survives removal and Clear. Changed
+captures advance to at least that revision; unchanged captures keep their token.
+Thus a version identifies the inspected selection state, including its lifetime,
+without a counter that resets on re-add. Explicit tokens are checked even when
+the supplied document revision is current. Older callers without tokens require
+an exact document revision. Removal controls carry the displayed token, and
+restoration requires that the selection is still absent. Retrying a committed
+operation returns its receipt before planning; retry never retargets stale intent.
+Editors adopt a returned target only when the fetched revision matches the
+receipt revision. A newer fetch preserves the old draft binding and asks the
+user to reload for a new edit, rather than adopting a replacement after replay.
+Explicit legacy/placement conversion
 requires the reviewed document revision. A later Clear fences stale work.
 Editor drafts retain their inspected preconditions and survive rejection.
 
@@ -69,6 +81,46 @@ uses the same database-computed actual inverse/full-document bounds and compact
 Undo transport. Recipe-bearing Clear and later-write Undo remain unavailable;
 there is no arbitrary restoration command. Individual manual removal retains a
 versioned tombstone for conditional restoration.
+
+### Independent review corrections
+
+The correction request numbers stale yield as F1 and legacy order as F2; the
+independent report uses the opposite numbering. F3/F4 match both documents.
+
+- Legacy rows keep envelope IDs for editing and frozen purchase keys for
+  ordering. Initialization includes manual-only identities, their actual stored
+  categories, hidden rows and dormant slots. The supported V3 projector supplies
+  display order for missing slots; no source-array/alphabetical reconstruction
+  replaces an established order. Conflicting categories stay unresolved, with
+  all original sequences retained. Independent unresolved rows use retained
+  anchors for provisional display without choosing shared placement or writing.
+- Removal and changed-ingredient refresh retire only orphaned atom overrides.
+  Shared overrides, manual extras and all remembered purchase placement survive.
+  Selection controls continue to derive from entries even with no visible rows.
+- The Shopping-to-Pantry bridge increments a manual's version when its bucket
+  changes. Show/hide and manual edit already increment it, so a bridge/return ABA
+  cannot restore a stale rebind precondition. The existing owner lock, dependency
+  revision check and unchanged-payload replan protect validation-to-commit races.
+  Ordinary Pantry insert/update/delete changes dependency revision but does not
+  change a manual extra's bucket, quantity or identity: extras bypass automatic
+  availability hiding. Such transitions may replan a still-valid rebind. This
+  is scoped manual protection, not Slice 8 acknowledgement/version semantics.
+
+No schema migration or bulk document rewrite is needed. Original V4 documents
+remain readable without mutation. Where defective initialization retained the
+sequence, corrected projection restores the displayed order. Where historical
+order was never retained, only the supported deterministic fallback is available;
+no lost order is invented and no broad repair is performed.
+
+Correction regressions (same verified loopback services described below):
+`node --import tsx scripts/test-shopping-slice7-corrections.ts`, then the same
+command with `--upgrade-fixtures` for original Slice 7 version-zero selections;
+`node --import tsx scripts/test-shopping-slice7-corrections-browser.ts` for both
+viewports. The browser script delays real removal requests, uses two authenticated
+sessions, and checks committed SQL state. The database script additionally holds
+production plans across competing commits and tests the real service-only RPC.
+Hook tests separately verify preservation of inspected tokens across newer cache
+state; they are not database evidence. Existing Slice 6/7 suites remain required.
 
 ## Acceptance and executable evidence
 

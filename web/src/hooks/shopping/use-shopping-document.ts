@@ -77,7 +77,7 @@ type MutationPlan<TResult> = {
   ) => TResult
   validateReplay?: ShoppingDocumentReplayValidator
   forceWrite?: boolean
-  resolvedValue?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3, outcome?: string) => TResult
+  resolvedValue?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3, outcome?: string, receiptRevision?: number) => TResult
 }
 
 export const SHOPPING_CLEAR_UNDO_UNAVAILABLE =
@@ -247,8 +247,8 @@ function useShoppingMutation<TVariables, TResult>(
         observedRevision: plan.observedRevision ?? plan.clearConfirmation?.revision ?? initial.contentRevision,
         ...(plan.clearConfirmation ? { clearUndoRequired: plan.clearConfirmation.undoRequired } : {}),
         mutation: plan.mutation,
-        ...(initial.document.schemaVersion === 4 && (plan.mutation.type === 'upsertRecipes' || plan.mutation.type === 'upsertRecipe' || plan.mutation.type === 'rescaleRecipe') ? {
-          observedSelections: plan.observedSelections ?? Object.fromEntries((plan.mutation.type === 'upsertRecipes' ? plan.mutation.entries : [plan.mutation.entry])
+        ...(initial.document.schemaVersion === 4 && (plan.mutation.type === 'removeRecipe' || plan.mutation.type === 'upsertRecipes' || plan.mutation.type === 'upsertRecipe' || plan.mutation.type === 'rescaleRecipe') ? {
+          observedSelections: plan.observedSelections ?? Object.fromEntries((plan.mutation.type === 'removeRecipe' ? [{ recipeId: plan.mutation.recipeId }] : plan.mutation.type === 'upsertRecipes' ? plan.mutation.entries : [plan.mutation.entry])
             .map(entry => [entry.recipeId, initial.document.recipeEntries[entry.recipeId]?.sourceEvidence?.version ?? null])),
         } : {}),
         ...(plan.mutation.type === 'editManualItem' ? {
@@ -296,12 +296,12 @@ function useShoppingMutation<TVariables, TResult>(
       if (result.before && result.receipt?.outcome === 'Applied') {
         const committed = { document: state.document, contentRevision: result.receipt.revision }
         if (plan.committedValue) value = plan.committedValue(result.before, committed, result.receipt)
-        if (plan.resolvedValue) value = plan.resolvedValue(result.before, state, result.receipt.outcome)
+        if (plan.resolvedValue) value = plan.resolvedValue(result.before, state, result.receipt.outcome, result.receipt.revision)
       } else if (plan.committedValue && result.receipt?.outcome === 'Applied') {
         value = plan.committedValue({ document: createEmptyShoppingDocument(), contentRevision: 0 },
           { ...state, contentRevision: result.receipt.revision }, { undoAvailable: false, historical: true })
       } else if (plan.resolvedValue) {
-        value = plan.resolvedValue(state, state, result.receipt?.outcome)
+        value = plan.resolvedValue(state, state, result.receipt?.outcome, result.receipt?.revision)
       }
       assertOwner()
       const cached = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey)
@@ -410,7 +410,10 @@ export function useAddShoppingItem() {
 export function useShoppingFoundationCommand() {
   return useShoppingMutation((state, input: { mutation: ShoppingDocumentMutation; observedRevision: number; observedManual?: ShoppingManualItemV1; observedSelections?: Record<string, number | null> }) => ({
     mutation: input.mutation, observedRevision: input.observedRevision, observedManual: input.observedManual, observedSelections: input.observedSelections,
-    value: state, resolvedValue: (_before, after) => after,
+    value: { ...state, confirmedCurrent: false },
+    resolvedValue: (_before, after, _outcome, receiptRevision) => ({
+      ...after, confirmedCurrent: after.contentRevision === receiptRevision,
+    }),
   }), { fenceOwner: true })
 }
 
@@ -548,11 +551,13 @@ export const useMoveExcludedToShoppingList = useMoveToShoppingList
 export type RecipeContributionIdentity = {
   recipeId: string
   recipeName: string
+  selectionVersion?: number
 }
 
 export function useRemoveRecipeItems() {
   return useShoppingMutation((state, identity: RecipeContributionIdentity) => ({
     mutation: { type: 'removeRecipe', recipeId: identity.recipeId },
+    ...(identity.selectionVersion !== undefined ? { observedSelections: { [identity.recipeId]: identity.selectionVersion } } : {}),
     value: {
       identity,
       entry: state.document.recipeEntries[identity.recipeId] || null,
@@ -563,6 +568,7 @@ export function useRemoveRecipeItems() {
 export function useRestoreRecipeItems() {
   return useShoppingMutation((_state, entry: ShoppingRecipeEntryV2) => ({
     mutation: { type: 'upsertRecipe', entry },
+    observedSelections: { [entry.recipeId]: null },
     value: entry,
   }))
 }

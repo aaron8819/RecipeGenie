@@ -10,7 +10,7 @@ export function shoppingRecipeSelections(entries: Record<string, ShoppingRecipeE
     const label = peers.length > 1
       ? `${entry.recipeName} (${peers.indexOf(entry) + 1})` : entry.recipeName
     return { recipeId: entry.recipeId, recipeName: entry.recipeName, label,
-      selectedServings: entry.selectedServings }
+      selectedServings: entry.selectedServings, selectionVersion: entry.sourceEvidence?.version }
   })
 }
 

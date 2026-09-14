@@ -79,16 +79,29 @@ export function planShoppingInitialization(document: ShoppingDocumentV3, legacyD
   const categories = [...Object.keys(SHOPPING_CATEGORIES), ...document.preferences.customCategories.map(c => `custom_${c.id}`)];
   const organization: PurchaseOrganization = { categories, placements: {}, sequences: {} };
   const conflicts: Record<string, string[]> = {};
+  const contentCategories = new Map<string, Set<string>>();
+  for (const item of document.manualItems) {
+    const key = resolveShoppingIngredientSemantics({ item: item.displayName, unit: item.quantity?.unit }).purchaseKey;
+    const choices = contentCategories.get(key) ?? new Set<string>();
+    choices.add(item.categoryKey); contentCategories.set(key, choices);
+  }
+  for (const entry of Object.values(document.recipeEntries)) for (const ingredient of entry.ingredients) {
+    const key = ingredient.purchaseKey;
+    const choices = contentCategories.get(key) ?? new Set<string>();
+    choices.add(document.preferences.categoryByIngredient[key] ?? ingredient.defaultCategoryKey);
+    contentCategories.set(key, choices);
+  }
   const keys = new Set([
     ...Object.values(document.preferences.ingredientOrderByCategory).flat(),
     ...Object.keys(document.preferences.categoryByIngredient),
     ...Object.values(document.recipeEntries).flatMap(entry => entry.ingredients.map(i => i.purchaseKey)),
+    ...contentCategories.keys(),
   ]);
   for (const key of keys) {
     const locations = Object.entries(document.preferences.ingredientOrderByCategory)
       .filter(([, sequence]) => sequence.includes(key)).map(([category]) => category);
     const remembered = document.preferences.categoryByIngredient[key];
-    const choices = [...new Set([...locations, ...(remembered ? [remembered] : [])])];
+    const choices = [...new Set([...locations, ...(remembered ? [remembered] : []), ...(contentCategories.get(key) ?? [])])];
     if (choices.length > 1 || choices.some(category => !categories.includes(category))) conflicts[key] = choices;
   }
   for (const [category, sequence] of Object.entries(document.preferences.ingredientOrderByCategory)) {
@@ -105,10 +118,10 @@ export function planShoppingInitialization(document: ShoppingDocumentV3, legacyD
   for (const key of [...legacyDisplayKeys, ...[...keys].sort(compareShoppingText)]) {
     if (organization.placements[key] || conflicts[key] || !keys.has(key)) continue;
     const pinned = pinnedPurchaseDefault(key);
-    const category = document.preferences.categoryByIngredient[key] ?? pinned.categoryKey;
+    const category = document.preferences.categoryByIngredient[key] ?? contentCategories.get(key)?.values().next().value ?? pinned.categoryKey;
     organization.placements[key] = { categoryKey: category, defaultCategoryKey: pinned.categoryKey,
       policyVersion: pinned.policyVersion, version: 0,
-      ...(document.preferences.categoryByIngredient[key] ? { userOverride: category } : {}) };
+      ...(document.preferences.categoryByIngredient[key] || contentCategories.has(key) ? { userOverride: category } : {}) };
     organization.sequences[category] = [...(organization.sequences[category] ?? []), key];
   }
   const manuals: ShoppingInitialization['manuals'] = {};

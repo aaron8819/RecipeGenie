@@ -1465,7 +1465,7 @@ function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantry
     const identity = item.identity!
     if (identity.removed) continue
     if (identity.meaning === 'legacyIndependent') {
-      rows.push({ rowRef: `manual:${item.id}`, manualId: item.id, orderingKey: `legacy:${item.id}`,
+      rows.push({ rowRef: `manual:${item.id}`, manualId: item.id, orderingKey: identity.purchaseKey,
         purchaseKeys: [], displayName: item.displayName, quantity: item.quantity,
         categoryKey: item.categoryKey, categoryOrder: 0, bucket: item.bucket,
         checked: false, previousChecked: item.checked, sources: [], legacy: true })
@@ -1485,8 +1485,25 @@ function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantry
     rows.push(row)
   }
   const categories = shoppingOrderingCategories(document, [...new Set(rows.map(row => row.categoryKey))])
+  // An unresolved purchase has no chosen shared slot. Its independent legacy
+  // rows still display at their own recorded positions. Insert only those
+  // missing slots around retained anchors; never reorder the live sequence or
+  // turn this projection into a persisted placement decision.
+  const displayOrder = structuredClone(document.preferences.ingredientOrderByCategory)
+  for (const [key, evidence] of Object.entries(document.placementEvidence!.unresolved)) {
+    for (const [category, original] of Object.entries(evidence.sequences)) {
+      if (!rows.some(row => row.legacy && row.orderingKey === key && row.categoryKey === category)) continue
+      const sequence = displayOrder[category] ?? []
+      if (sequence.includes(key)) continue
+      const index = original.indexOf(key)
+      const successor = original.slice(index + 1).find(anchor => sequence.includes(anchor))
+      const predecessor = original.slice(0, index).reverse().find(anchor => sequence.includes(anchor))
+      sequence.splice(successor ? sequence.indexOf(successor) : predecessor ? sequence.indexOf(predecessor) + 1 : sequence.length, 0, key)
+      displayOrder[category] = sequence
+    }
+  }
   const ordered = orderShoppingRows(rows, categories, document.preferences.categoryOrder,
-    document.preferences.ingredientOrderByCategory)
+    displayOrder)
   return { rows: ordered, items: ordered.filter(row => row.bucket === 'items'),
     alreadyHave: ordered.filter(row => row.bucket === 'already_have'), excluded: ordered.filter(row => row.bucket === 'excluded') }
 }

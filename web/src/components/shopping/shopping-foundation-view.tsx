@@ -78,6 +78,10 @@ function ManualNeedEditor({ item, state }: { item: ShoppingManualItemV1; state: 
   const submit = async (mutation: Parameters<typeof command.mutateAsync>[0]['mutation']) => {
     try {
       const result = await command.mutateAsync({ mutation, observedRevision: observed.revision, observedManual: observed.item });
+      if (!result.confirmedCurrent) {
+        setError('Your change was confirmed, but the list changed afterwards. Reload before starting another edit.');
+        return true;
+      }
       const saved = result.document.manualItems.find(candidate => candidate.id === item.id);
       if (saved) setObserved({ item: saved, revision: result.contentRevision });
       setError(''); return true;
@@ -155,6 +159,10 @@ function SelectionYield({ recipe, state }: { recipe: Recipe; state: ShoppingDocu
       const result = await command.mutateAsync({ observedRevision: observed.revision,
         observedSelections: { [recipe.id]: observed.version }, mutation: { type: 'upsertRecipe',
           entry: createShoppingRecipeEntry(recipe, recipe.servings * Number(scale.numerator) / Number(scale.denominator), scale) } });
+      if (!result.confirmedCurrent) {
+        setError('Your change was confirmed, but the selection may have changed afterwards. Reload before starting another yield edit.');
+        return;
+      }
       setObserved({ revision: result.contentRevision, version: result.document.recipeEntries[recipe.id].sourceEvidence!.version });
       setError('');
     } catch (error) { setError(errorText(error)); }

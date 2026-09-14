@@ -2,6 +2,11 @@
 
 > Slice 7 adds explicit identity/extra initialization and durable initial placement through the [Shopping command boundary](shopping-slice6.md). See [Shopping Slice 7](shopping-slice7.md) for the current runtime and later-slice boundaries. Historical sections below retain their original migration context.
 
+The Slice 7 correction keeps selection versions non-reusable across removal,
+binds removal controls to their inspected selection, preserves legacy row
+placement, and versions manual bucket transitions through the Pantry bridge.
+See the linked Slice 7 correction notes for concurrency and recovery details.
+
 Shopping persistence is a single versioned JSON document per user, guarded by
 one `content_revision`. The V3-capable application reads V2 or V3 and writes
 V3. The document stores recipe inputs, manual items, explicit row overrides,

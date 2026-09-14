@@ -792,9 +792,9 @@ function ShoppingListContent() {
     })
   }, [removeItem, restoreItem, undoToast])
 
-  const handleRemoveRecipeItems = useCallback((recipeId: string | undefined, recipeName: string) => {
+  const handleRemoveRecipeItems = useCallback((recipeId: string | undefined, recipeName: string, selectionVersion?: number) => {
     if (!recipeId) return
-    removeRecipeItems.mutate({ recipeId, recipeName }, {
+    removeRecipeItems.mutate({ recipeId, recipeName, selectionVersion }, {
       onSuccess: ({ entry }) => {
         undoToast.show({
           message: `Items from "${recipeName || 'recipe'}" removed`,
@@ -1782,13 +1782,13 @@ function ShoppingListContent() {
                   </div>
                   {(isDesktop || !recipeSectionCollapsed) ? (
                     <div className="flex flex-col gap-2 border-t border-stone-100 px-3 pb-3 pt-3 md:px-3.5 md:pb-3.5">
-                      {selections.map(({ recipeId, label }) => {
+                      {selections.map(({ recipeId, label, selectionVersion }) => {
                         return (
                           <RecipeTag
                             key={recipeId}
                             recipeName={label}
                             recipe={recipesById.get(recipeId)}
-                            onRemove={() => handleRemoveRecipeItems(recipeId, label)}
+                            onRemove={() => handleRemoveRecipeItems(recipeId, label, selectionVersion)}
                             onViewRecipe={() => handleRecipeTagClick(recipeId, label)}
                             isRemoving={documentUnavailable}
                           />
