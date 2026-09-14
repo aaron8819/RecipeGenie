@@ -16,6 +16,7 @@ import { SHOPPING_CATEGORIES } from '@/lib/shopping-categories';
 import { shoppingRecipeSelections } from '@/lib/shopping-sources';
 import { shoppingPlacementRecoveryCandidates } from '@/lib/shopping-placement-recovery';
 import { useUndoToast } from '@/hooks/use-undo-toast';
+import { PlacementResolution } from './shopping-placement-resolution';
 import type { Recipe, ShoppingQuantity } from '@/types/database';
 
 const amountText = (quantity: ShoppingQuantity | null) => quantity?.exactQuantityV1?.authored ?? (quantity?.amount == null ? '' : String(quantity.amount));
@@ -221,36 +222,7 @@ export function ShoppingFoundationControls({ state }: { state: ShoppingDocumentS
         </details>
       </details>)}
     </section>
-    {Object.entries(state.document.placementEvidence!.unresolved).map(([key, evidence]) =>
-      <PlacementResolution key={key} purchaseKey={key} evidence={evidence} state={state} />)}
+    {Object.keys(state.document.placementEvidence!.unresolved).map(key =>
+      <PlacementResolution key={key} purchaseKey={key} state={state} />)}
   </details>;
-}
-
-function PlacementResolution({ purchaseKey, evidence, state }: {
-  purchaseKey: string; evidence: { categories: string[]; sequences: Record<string, string[]> }; state: ShoppingDocumentStateV3;
-}) {
-  const command = useShoppingFoundationCommand();
-  const [category, setCategory] = useState('');
-  const [anchor, setAnchor] = useState('');
-  const [error, setError] = useState('');
-  const categories = [...Object.entries(SHOPPING_CATEGORIES).map(([key, value]) => ({ key, name: value.name })),
-    ...state.document.preferences.customCategories.map(c => ({ key: `custom_${c.id}`, name: c.name }))];
-  return <section className="mt-3 grid gap-2 rounded border p-3" aria-label={`Resolve location for ${purchaseKey}`}>
-    <h3>Choose the remembered location for {purchaseKey}</h3>
-    <p>Stored choices: {evidence.categories.join(', ')}. This choice applies to the whole purchase.</p>
-    <label>Destination<select className="w-full rounded border p-2" value={category} onChange={e => { setCategory(e.target.value); setAnchor(''); }}>
-      <option value="">Choose a destination</option><option value="@default">Reset Category to the pinned default</option>
-      {categories.map(c => <option key={c.key} value={c.key}>{c.name}</option>)}
-    </select></label>
-    <label>Position<select className="w-full rounded border p-2" value={anchor} onChange={e => setAnchor(e.target.value)}>
-      <option value="">After every saved purchase</option>{(state.document.preferences.ingredientOrderByCategory[category] ?? []).map(key => <option key={key} value={key}>Before {key}</option>)}
-    </select></label>
-    <Button disabled={command.isPending || !category} onClick={async () => {
-      try { await command.mutateAsync({ observedRevision: state.contentRevision, mutation: {
-        type: 'resolvePlacement', purchaseKey, categoryKey: category, anchor: anchor || null,
-      } }); setError(''); } catch (error) { setError(errorText(error)); }
-    }}>Confirm purchase location</Button>
-    <details><summary>Original location and order evidence</summary><pre className="whitespace-pre-wrap break-all text-xs">{JSON.stringify(evidence, null, 2)}</pre></details>
-    {error && <p role="alert">{error}</p>}
-  </section>;
 }

@@ -157,6 +157,29 @@ owner-scoped monotone cache handling prevents historical responses from rolling
 back a newer fetched revision. No replacement writer or second order authority
 is added. F1/F3/F4 and later-slice boundaries remain unchanged.
 
+Placement confirmation captures one query snapshot when its owner/purchase
+editor opens: revision, recovery evidence, defaults, categories and saved order.
+Destination and anchor edits use that snapshot. Background refreshes never renew
+its revision or dropdown context. A stale submission carries the original
+revision to the unchanged authoritative boundary and conflicts without moving
+the purchase. The UI explains the conflict and requires **Review current
+placement** before another valid confirmation. That explicit action presents the
+current order and evidence; valid destination/anchor input is retained, while an
+anchor no longer in that destination is cleared. Editing a field alone never
+renews review. Cancel discards the draft without writes; account/target changes
+discard it by identity. Pending delivery locks field edits and review renewal,
+using the existing owner-scoped attempt signal. Retrying keeps the exact payload
+and receipt; successful receipt replay does not become a fresh location decision.
+
+The component regression uses the actual query/mutation hooks, QueryClient and
+command client with simulated transport/persistence. Run
+`src/components/shopping/__tests__/shopping-placement-binding.test.tsx` via
+Vitest. `node --import tsx scripts/test-shopping-placement-binding-browser.ts`
+replays the two-session stale-anchor/cache-refresh reproduction against the
+verified loopback services at both required sizes, checks actual submitted
+revisions and SQL outcomes, and verifies deliberate re-review and confirmation.
+It does not intercept successful responses or fabricate database results.
+
 Regression commands: `node --import tsx scripts/test-shopping-placement-recovery.ts`
 and `node --import tsx scripts/test-shopping-placement-recovery-browser.ts`.
 The tracked defective fixture was generated through the actual `21c73d8`
