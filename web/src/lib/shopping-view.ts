@@ -13,6 +13,7 @@ export function shoppingDocumentToList(
   const projection = projectShoppingDocument(state.document, pantryItems)
   const mapRow = (row: (typeof projection.rows)[number]): ShoppingItem => ({
     ...(state.document.schemaVersion === 4 ? {
+      organizationVersions: { ...state.document.organizationVersions },
       coveragePending: !!row.legacy,
       inspectedCoverage: row.legacy ? undefined : { [row.orderingKey]: {
         version: state.document.acknowledgements?.[row.orderingKey]?.version ?? 0, basis: shoppingRowCoverage(row) } },

@@ -4,7 +4,7 @@ import type { ShoppingCommand } from './shopping-command';
 /** Owner organization survives a trip. Everything else is content intent. */
 export function isShoppingContentCommand(type: ShoppingCommand['mutation']['type']): boolean {
   return !['initialize', 'deleteRecipe', 'setExclusion', 'setFamilySetting',
-    'updatePreferences', 'updateCategoryPreferences', 'learnOrder', 'resolvePlacement'].includes(type);
+    'organize', 'updatePreferences', 'updateCategoryPreferences', 'learnOrder', 'resolvePlacement'].includes(type);
 }
 
 export function restoredShoppingContent(document: ShoppingDocumentV3, inverse: Pick<ShoppingDocumentV3,

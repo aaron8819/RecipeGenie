@@ -42,6 +42,7 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
   if (intent.type === 'initialize' || before.document.schemaVersion === 4) {
     return planInitializedShoppingCommand(context, command, before.document);
   }
+  if (intent.type === 'organize') return result('InvalidInput');
   const sameRevision = command.observedRevision === before.contentRevision;
   if (intent.type === 'complete' && command.clearUndoRequired !== undefined &&
     (!sameRevision || (command.clearUndoRequired &&

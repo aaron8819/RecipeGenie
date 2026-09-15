@@ -2,7 +2,7 @@
 
 import { shoppingSourceControls, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
 import { ShoppingDocumentReadError } from '@/hooks/shopping/use-shopping-document'
-import { useShoppingDocumentState } from '@/hooks/shopping/use-shopping-document'
+import { useOrganizeShopping, useShoppingDocumentState } from '@/hooks/shopping/use-shopping-document'
 import { ShoppingFoundationControls, ShoppingInitializationNotice } from './shopping-foundation-view'
 
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
@@ -62,6 +62,7 @@ import {
   useUpdateShoppingConfig,
   useAddToPantryAndRemove,
 } from "@/hooks/use-shopping"
+import { ShoppingOrganizationDialog } from "./shopping-organization-dialog"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { Recipe, ShoppingItem } from "@/types/database"
 import { cn } from "@/lib/utils"
@@ -680,6 +681,9 @@ export function ShoppingListView() {
 }
 
 function ShoppingListContent() {
+  const organizationQuery = useShoppingDocumentState()
+  const organizePurchase = useOrganizeShopping()
+  const dragSnapshot = useRef<ShoppingItem[]>([])
   const router = useRouter()
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === "undefined") return true
@@ -1320,6 +1324,7 @@ function ShoppingListContent() {
     if (!isManageMode) return
     const { active } = event
     const activeId = String(active.id)
+    dragSnapshot.current = structuredClone(shoppingList?.items ?? [])
     setActiveItem(filteredItems.find((item) => item.rowId === activeId) || null)
   }
 
@@ -1342,7 +1347,7 @@ function ShoppingListContent() {
 
     if (documentUnavailable || !over || active.id === over.id || !shoppingList?.items) return
 
-    const items = shoppingList.items
+    const items = dragSnapshot.current
     const intent = resolveShoppingDropIntent(
       items,
       String(active.id),
@@ -1351,7 +1356,11 @@ function ShoppingListContent() {
     if (!intent) return
 
     try {
-      await reorderList.mutateAsync({ items, ...intent })
+      const result = await reorderList.mutateAsync({ items, ...intent })
+      if (result?.undo) {
+        const inverse = result.undo
+        undoToast.show({ message: 'Purchase moved', onUndo: async () => { await organizePurchase.mutateAsync(inverse) } })
+      }
     } catch (error) {
       console.error("Failed to reorder:", error)
     }
@@ -1962,6 +1971,8 @@ function ShoppingListContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {showSettings && !documentUnavailable && organizationQuery.data?.document.schemaVersion === 4 ?
+        <ShoppingOrganizationDialog document={organizationQuery.data.document} onClose={() => setShowSettings(false)} /> :
       <ShoppingSettingsModal
         open={showSettings && !documentUnavailable}
         onOpenChange={setShowSettings}
@@ -1970,7 +1981,7 @@ function ShoppingListContent() {
           await updateConfig.mutateAsync(updates)
         }}
         isUpdating={updateConfig.isPending}
-      />
+      />}
 
     </div>
     </>

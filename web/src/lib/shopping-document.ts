@@ -153,6 +153,7 @@ export type ShoppingDocumentV3 = {
   itemOverrides: Record<AggregateKey, ShoppingItemOverrideV2>
   preferences: ShoppingPreferencesV1 & ShoppingOrderingPreferences
   acknowledgements?: Record<string, { version: number; basis: import("./shopping-coverage").ShoppingCoverageBasis | null }>
+  organizationVersions?: Record<string, number>
   placementEvidence?: ShoppingPlacementEvidence
 }
 

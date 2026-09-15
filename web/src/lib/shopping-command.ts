@@ -1,3 +1,4 @@
+import { validOrganizationIntent } from './shopping-organization';
 import type { ShoppingDocumentMutation, ShoppingManualItemV1 } from './shopping-document';
 
 export const SHOPPING_PROTOCOL = 1;
@@ -6,10 +7,11 @@ export type ShoppingCommand = {
   protocol: 1;
   observedRevision: number;
   mutation: ShoppingDocumentMutation | { type: 'pantry'; rowRef: string } |
-    { type: 'deleteRecipe'; recipeId: string } | { type: 'undoClear' };
+    { type: 'deleteRecipe'; recipeId: string } | { type: 'undoClear' } | import('./shopping-organization').OrganizationIntent;
   tripId?: string;
   inspectedCoverage?: Record<string, { version: number; basis: import("./shopping-coverage").ShoppingCoverageBasis | null }>;
   clearUndoRequired?: boolean;
+  observedSettingVersion?: number;
   observedSetting?: boolean;
   observedManual?: ShoppingManualItemV1;
   observedSelections?: Record<string, number | null>;
@@ -24,6 +26,7 @@ export function canonicalShoppingPayload(value: unknown): string {
 }
 
 const fields: Record<string, string[]> = {
+  organize: ['action', 'versions'],
   initialize: [], resolveLegacy: ['id', 'expectedVersion', 'choice', 'quantity', 'purchaseName', 'categoryKey', 'anchor'],
   resolvePlacement: ['purchaseKey', 'categoryKey', 'anchor'],
   restoreManualItem: ['id', 'expectedVersion'], rebindManualItem: ['id', 'expectedVersion', 'displayName', 'quantity'],
@@ -45,7 +48,7 @@ const fields: Record<string, string[]> = {
 export function readShoppingCommand(value: unknown): ShoppingCommand | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const command = value as Record<string, unknown>;
-  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedManual', 'observedSelections', 'clearUndoRequired', 'tripId', 'inspectedCoverage'].includes(key)) ||
+  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedSettingVersion', 'observedManual', 'observedSelections', 'clearUndoRequired', 'tripId', 'inspectedCoverage'].includes(key)) ||
     command.protocol !== SHOPPING_PROTOCOL || !Number.isSafeInteger(command.observedRevision) ||
     Number(command.observedRevision) < 0 ||
     (command.observedSetting !== undefined && typeof command.observedSetting !== 'boolean') ||
@@ -56,6 +59,8 @@ export function readShoppingCommand(value: unknown): ShoppingCommand | null {
     typeof mutation.type !== 'string' || !Object.hasOwn(fields, mutation.type)) return null;
   if (Object.keys(mutation).some((key) => key !== 'type' && !fields[mutation.type as string].includes(key))) return null;
   if (command.clearUndoRequired !== undefined && mutation.type !== 'complete') return null;
+  if (mutation.type === 'organize' && !validOrganizationIntent(mutation)) return null;
+  if (command.observedSettingVersion !== undefined && (!Number.isSafeInteger(command.observedSettingVersion) || Number(command.observedSettingVersion) < 0)) return null;
   let nodes = 0;
   const bounded = (item: unknown, depth: number): boolean => {
     if (++nodes > 40000 || depth > 24) return false;

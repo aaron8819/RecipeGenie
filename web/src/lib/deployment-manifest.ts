@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "027_shopping_coverage_constraints"
+export const EXPECTED_LATEST_MIGRATION = "028_shopping_organization_versions"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

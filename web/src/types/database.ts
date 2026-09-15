@@ -132,6 +132,7 @@ export type ShoppingQuantity = {
 }
 
 export type ShoppingItem = {
+  organizationVersions?: Record<string, number>
   inspectedCoverage?: Record<string, { version: number; basis: import('../lib/shopping-coverage').ShoppingCoverageBasis | null }>
   inspectedRevision?: number
   requirementChanged?: boolean

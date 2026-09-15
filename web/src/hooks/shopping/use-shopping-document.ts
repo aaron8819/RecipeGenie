@@ -1,5 +1,7 @@
 'use client'
 
+import { applyOrganization, moveInverse, inspectOrganization, organizationVersion, type OrganizationIntent } from '@/lib/shopping-organization'
+
 import { isShoppingContentCommand } from '@/lib/shopping-lifecycle'
 import type { ShoppingCommand } from '@/lib/shopping-command'
 import { executeShoppingCommand } from '@/lib/shopping-command-client'
@@ -68,6 +70,7 @@ type ShoppingDocumentRow = {
 }
 
 type MutationPlan<TResult> = {
+  observedSettingVersion?: number
   observedRevision?: number
   observedManual?: ShoppingManualItemV1
   observedSelections?: Record<string, number | null>
@@ -250,6 +253,7 @@ function useShoppingMutation<TVariables, TResult>(
       let value = plan.value
       const command = {
         protocol: 1 as const,
+        ...(plan.observedSettingVersion !== undefined ? { observedSettingVersion: plan.observedSettingVersion } : {}),
         observedRevision: plan.observedRevision ?? plan.clearConfirmation?.revision ?? initial.contentRevision,
         ...(plan.clearConfirmation ? { clearUndoRequired: plan.clearConfirmation.undoRequired } : {}),
         mutation: plan.mutation,
@@ -518,6 +522,10 @@ export function useBulkCheckOff() {
   }))
 }
 
+export function useOrganizeShopping() {
+  return useShoppingMutation((_state, intent: OrganizationIntent) => ({ mutation: intent, value: undefined }), { fenceOwner: true })
+}
+
 export function useReorderShoppingList() {
   return useShoppingMutation((_state, input: {
     items: ShoppingItem[]
@@ -527,6 +535,22 @@ export function useReorderShoppingList() {
   }) => {
     if (!input.draggedItem.orderingKey || !input.targetItem.orderingKey) {
       throw new Error('Shopping ordering identity is missing')
+    }
+    if (_state.document.schemaVersion === 4 && input.draggedItem.organizationVersions && input.targetItem.organizationVersions) {
+      const action = { kind: 'move' as const, key: input.draggedItem.orderingKey,
+        destination: { categoryKey: input.targetItem.categoryKey, at: input.placement,
+          anchor: input.targetItem.orderingKey,
+          anchorVersion: input.targetItem.organizationVersions[`purchase:${input.targetItem.orderingKey}`] ?? 0 } };
+      const inspected = inspectOrganization(_state.document, action);
+      inspected.versions = Object.fromEntries(Object.keys(inspected.versions).map(f => [f,
+        (f === `purchase:${input.draggedItem.orderingKey}` ? input.draggedItem.organizationVersions : input.targetItem.organizationVersions)![f] ?? 0]));
+      return { mutation: inspected, value: { ...input, undo: null as OrganizationIntent | null },
+        resolvedValue: (before: ShoppingDocumentStateV3, _after: ShoppingDocumentStateV3, outcome?: string) => {
+          const inverse = moveInverse(before.document, input.draggedItem.orderingKey!);
+          const applied = applyOrganization(before.document, inspected);
+          return { ...input, undo: outcome === 'Applied' && inverse && 'document' in applied
+            ? inspectOrganization(applied.document, inverse) : null };
+        } };
     }
     return {
       mutation: {
@@ -539,7 +563,7 @@ export function useReorderShoppingList() {
         targetCategoryKey: input.targetItem.categoryKey,
         placement: input.placement,
       },
-      value: input,
+      value: { ...input, undo: null as OrganizationIntent | null },
     }
   })
 }
@@ -753,11 +777,13 @@ function useShoppingSettingMutation() {
     if (!input.owner || input.owner !== getActivePrincipalId()) throw new ShoppingSettingsConflictError()
     const validateReplay = (fresh: ShoppingDocumentStateV3) =>
       validateSettingIntent(input.observed, fresh, input.intent)
-    validateReplay(state)
+    if (state.document.schemaVersion !== 4) validateReplay(state)
     const result = (before: ShoppingDocumentStateV3) =>
       settingValue(before, input.intent) === input.intent.enabled ? 'unchanged' as const : 'applied' as const
     return {
       mutation: input.intent, value: result(state), validateReplay,
+      ...(input.observed?.document.schemaVersion === 4 ? { observedSettingVersion: organizationVersion(input.observed.document,
+        input.intent.type === 'setExclusion' ? `exclusion:${input.intent.key}` : `setting:${input.intent.setting}`) } : {}),
       resolvedValue: (before: ShoppingDocumentStateV3, _after: ShoppingDocumentStateV3, outcome?: string) =>
         outcome === 'Applied' ? 'applied' as const : outcome === 'Unchanged' ? 'unchanged' as const : result(before),
     }

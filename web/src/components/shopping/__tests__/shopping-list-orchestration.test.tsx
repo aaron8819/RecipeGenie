@@ -12,6 +12,7 @@ globalThis.React = React
 // controls are covered through real authenticated Slice 7 browser workflows.
 vi.mock('@/hooks/shopping/use-shopping-document', async importOriginal => ({
   ...await importOriginal<typeof import('@/hooks/shopping/use-shopping-document')>(),
+  useOrganizeShopping: () => ({ mutateAsync: vi.fn() }),
   useShoppingDocumentState: () => ({ data: undefined }),
   useShoppingFoundationCommand: () => ({ isPending: false }),
 }))
@@ -56,6 +57,7 @@ const checkOffMutateAsync = vi.fn<
   (intent: CheckIntent) => Promise<CheckIntent>
 >()
 const pendingCheckMutations: PendingCheckMutation[] = []
+let dndOnDragStart: ((event: { active: { id: string } }) => void) | null = null
 let dndOnDragEnd: ((event: {
   active: { id: string }
   over: { id: string } | null
@@ -287,10 +289,12 @@ vi.mock("next/image", () => ({
 }))
 
 vi.mock("@dnd-kit/core", () => ({
-  DndContext: ({ children, onDragEnd }: {
+  DndContext: ({ children, onDragEnd, onDragStart }: {
     children: React.ReactNode
+    onDragStart: typeof dndOnDragStart
     onDragEnd: typeof dndOnDragEnd
   }) => {
+    dndOnDragStart = onDragStart
     dndOnDragEnd = onDragEnd
     return <>{children}</>
   },
@@ -997,6 +1001,7 @@ describe("ShoppingListView orchestration", () => {
     expect(dndOnDragEnd).not.toBeNull()
 
     await act(async () => {
+      dndOnDragStart?.({ active: { id: "manual:apple" } })
       await dndOnDragEnd?.({
         active: { id: "manual:apple" },
         over: { id: "manual:milk" },

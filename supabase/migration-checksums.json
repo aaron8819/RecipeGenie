@@ -25,5 +25,6 @@
   "024_shopping_identity_extras.sql": "dd77e93dc2c1a659ae1da2bebd0d549a1fd7595ee5b6d6dcf78a042d445c5aa3",
   "025_shopping_placement_recovery.sql": "a7e4ab094469fd6022e7e4ff67f9e8492095605a5eaaf211c8440c894f3d620c",
   "026_shopping_trip_lifecycle.sql": "32d7f2a8d2707576fe97306c4cceb9a47c785fc149272673db7dbe5c3d527a7a",
-  "027_shopping_coverage_constraints.sql": "54cb53e407982b4d21fd754fb42f2162bf09e433c24bb5480a0c3b50a23deb02"
+  "027_shopping_coverage_constraints.sql": "54cb53e407982b4d21fd754fb42f2162bf09e433c24bb5480a0c3b50a23deb02",
+  "028_shopping_organization_versions.sql": "e4737af276c0f1492fb57b4b0fd431f72af3eb47367b60d1771cad7109207a05"
 }

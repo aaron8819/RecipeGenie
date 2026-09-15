@@ -62,7 +62,9 @@ describe('F2 existing V4 placement recovery', () => {
     const before = affected();
     const moved = run(before, { type: 'updateCategoryPreferences', preferences: { categoryByIngredient: { lemon: 'produce' } } }).document;
     const reset = run(moved, { type: 'updateCategoryPreferences', preferences: { categoryByIngredient: {} } }).document;
-    expect(reset).toEqual(before); // Conflicting histories really are identical.
+    const { organizationVersions, ...content } = reset;
+    expect(content).toEqual(before); // Content is identical; Slice 9 retains the ABA history.
+    expect(organizationVersions?.['purchase:lemon']).toBe(2);
     expect(run(reset, initialize).document.placementEvidence!.unresolved.lemon).toBeDefined();
   });
   it('keeps recovery harmless after repeat and a later explicit reset', () => {

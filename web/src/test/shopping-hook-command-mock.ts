@@ -18,7 +18,7 @@ export async function runHookCommand(
   pantryItems: import('@/types/database').PantryItem[] = [],
   lifecycle?: HookLifecycle,
 ) {
-  if (command.mutation.type === 'pantry' || command.mutation.type === 'deleteRecipe') throw new Error('Unexpected command');
+  if (command.mutation.type === 'organize' || command.mutation.type === 'pantry' || command.mutation.type === 'deleteRecipe') throw new Error('Unexpected command');
   const mutation = command.mutation.type === 'undoClear'
     ? { type: 'restoreContent' as const, content: lifecycle?.inverse?.content ?? { recipeEntries: {}, manualItems: [], itemOverrides: {} } }
     : command.mutation;

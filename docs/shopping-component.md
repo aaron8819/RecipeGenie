@@ -1,3 +1,5 @@
+> Slice 9 adds [shared organization controls](shopping-slice9.md), targeted field history and conditional organization Undo. Earlier V3 guidance below remains historical.
+
 > Slice 8 supersedes the historical Clear restrictions below: see [Shopping Slice 8](shopping-slice8.md) for runtime coverage, atomic source validation and trip/content-epoch Undo.
 
 # Shopping Domain Reference

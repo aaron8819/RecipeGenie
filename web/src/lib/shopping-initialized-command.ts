@@ -1,3 +1,4 @@
+import { applyOrganization, inspectOrganization, organizationVersion, purchaseOrganization } from './shopping-organization';
 import { shoppingRowCoverage } from './shopping-coverage-runtime';
 import { planShoppingAcknowledgement } from './shopping-coverage';
 import { applyShoppingDocumentMutation, createShoppingRecipeEntry, projectShoppingDocument, validateShoppingDocumentV3,
@@ -8,8 +9,6 @@ import { canonicalShoppingPayload, type ShoppingCommand } from './shopping-comma
 import { editLegacyIndependentNeed } from './shopping-target-legacy';
 import { resolveShoppingIngredientSemantics } from './shopping-ingredient-semantics';
 import { mapRecipeRows } from './recipe-identity';
-import { splicePurchasePlacement, type PurchaseOrganization } from './shopping-target-order';
-import { SHOPPING_CATEGORIES } from './shopping-categories';
 import { shoppingInverseBytes } from './shopping-clear';
 import type { ShoppingCommandContext } from './shopping-command-planner';
 import { restoredShoppingContent } from './shopping-lifecycle';
@@ -33,6 +32,14 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       ? result('Applied', initialized) : result('InvalidInput');
   }
   if (document.schemaVersion !== 4) return result('InvalidInput');
+  if (mutation.type === 'organize') {
+    try {
+      const planned = applyOrganization(document, mutation);
+      if (!('document' in planned)) return result(planned.status);
+      if (!readInitializedDocument(planned.document, validateShoppingDocumentV3) || shoppingInverseBytes(planned.document) > 4194304) return result('InvalidInput');
+      return result('Applied', planned.document);
+    } catch { return result('InvalidInput'); }
+  }
   const recipes = mapRecipeRows(context.recipes as never);
   if (mutation.type === 'deleteRecipe') return result(recipes.some(r => r.id === mutation.recipeId) ? 'Applied' : 'TargetGone');
   const selectionIds = mutation.type === 'removeRecipe' ? [mutation.recipeId] :
@@ -155,9 +162,13 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       if (mutation.type === 'restoreContent' && canonicalShoppingPayload(mutation.content) !== canonicalShoppingPayload(context.inverse)) return result('UndoUnavailable');
       next = restoredShoppingContent(next, context.inverse);
     } else if (isSetting) {
-      if (!sameRevision && (command.observedSetting === undefined || command.observedSetting === mutation.enabled ||
+      const field = mutation.type === 'setExclusion' ? `exclusion:${mutation.key}` : `setting:${mutation.setting}`;
+      if (command.observedSettingVersion !== undefined && command.observedSettingVersion !== organizationVersion(document, field)) return result('Conflict');
+      if (command.observedSettingVersion === undefined && !sameRevision && (command.observedSetting === undefined || command.observedSetting === mutation.enabled ||
         (mutation.type === 'setFamilySetting' && document.preferences[mutation.setting] !== command.observedSetting))) return result('Conflict');
       next = applyShoppingDocumentMutation(before, mutation).document;
+      if (canonicalShoppingPayload(next) !== canonicalShoppingPayload(document)) next = { ...next,
+        organizationVersions: { ...document.organizationVersions, [field]: organizationVersion(document, field) + 1 } };
     } else if (mutation.type === 'removeRecipe') {
       if (!next.recipeEntries[mutation.recipeId]) return result('TargetGone');
       delete next.recipeEntries[mutation.recipeId];
@@ -218,22 +229,14 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       if (!sameRevision) return result('Conflict');
       const key = mutation.draggedOrderingKey;
       if (!next.placementEvidence!.defaults[key] || !next.placementEvidence!.defaults[mutation.targetOrderingKey]) return result('Conflict');
-      const org: PurchaseOrganization = {
-        categories: [...Object.keys(SHOPPING_CATEGORIES), ...next.preferences.customCategories.map(c => `custom_${c.id}`)],
-        sequences: next.preferences.ingredientOrderByCategory,
-        placements: Object.fromEntries(Object.entries(next.placementEvidence!.defaults).map(([k, p]) => [k, {
-          categoryKey: next.preferences.categoryByIngredient[k] ?? p.categoryKey, defaultCategoryKey: p.categoryKey,
-          policyVersion: p.policyVersion, version: 0,
-          ...(next.preferences.categoryByIngredient[k] ? { userOverride: next.preferences.categoryByIngredient[k] } : {}),
-        }])),
-      };
+      const org = purchaseOrganization(next);
       if (org.placements[key].categoryKey !== mutation.sourceCategoryKey || org.placements[mutation.targetOrderingKey].categoryKey !== mutation.targetCategoryKey) return result('Conflict');
-      const moved = splicePurchasePlacement(org, { key, expectedVersion: 0, destination: {
-        categoryKey: mutation.targetCategoryKey, at: mutation.placement, anchor: mutation.targetOrderingKey, anchorVersion: 0,
-      } });
-      if (!('organization' in moved)) return result(moved.status);
-      next.preferences.ingredientOrderByCategory = moved.organization.sequences;
-      next.preferences.categoryByIngredient[key] = mutation.targetCategoryKey;
+      const moved = applyOrganization(next, inspectOrganization(next, { kind: 'move', key, destination: {
+        categoryKey: mutation.targetCategoryKey, at: mutation.placement, anchor: mutation.targetOrderingKey,
+        anchorVersion: org.placements[mutation.targetOrderingKey].version,
+      } }));
+      if (!('document' in moved)) return result(moved.status);
+      next = moved.document;
     } else if (mutation.type === 'updatePreferences' || mutation.type === 'updateCategoryPreferences') {
       // Keep independent labels/settings operable. Replacement organization
       // writes cannot reconstruct or erase saved slots; full controls are Slice 9.
@@ -272,6 +275,32 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
     if (selectionIds.length) {
       const active = new Set(Object.values(next.recipeEntries).flatMap(entry => entry.ingredients.map(i => i.aggregateKey)));
       next.itemOverrides = Object.fromEntries(Object.entries(next.itemOverrides).filter(([key]) => active.has(key)));
+    }
+    if (canonicalShoppingPayload(next.preferences) !== canonicalShoppingPayload(document.preferences) && !isSetting && mutation.type !== 'learnOrder') {
+      const versions = { ...next.organizationVersions };
+      const bump = (field: string) => { versions[field] = organizationVersion(document, field) + 1; };
+      for (const key of new Set([...next.preferences.excludedIngredientKeys, ...document.preferences.excludedIngredientKeys])) {
+        if (next.preferences.excludedIngredientKeys.includes(key) !== document.preferences.excludedIngredientKeys.includes(key)) bump(`exclusion:${key}`);
+      }
+      for (const setting of ['excludeSaltVariants', 'excludeBlackPepperVariants'] as const) {
+        if (next.preferences[setting] !== document.preferences[setting]) bump(`setting:${setting}`);
+      }
+      if (canonicalShoppingPayload(next.preferences.ingredientOrderByCategory) !== canonicalShoppingPayload(document.preferences.ingredientOrderByCategory) ||
+          canonicalShoppingPayload(next.preferences.categoryByIngredient) !== canonicalShoppingPayload(document.preferences.categoryByIngredient)) {
+        bump('purchases');
+        // Legacy whole-map commands are revision-fenced; conservatively fence their inspected targets too.
+        if (['updatePreferences', 'updateCategoryPreferences', 'resolvePlacement', 'resolveLegacy'].includes(mutation.type)) {
+          for (const key of Object.keys(next.placementEvidence!.defaults)) bump(`purchase:${key}`);
+        }
+      }
+      if (canonicalShoppingPayload(next.preferences.customCategories) !== canonicalShoppingPayload(document.preferences.customCategories)) {
+        bump('categories');
+        for (const c of [...next.preferences.customCategories, ...document.preferences.customCategories]) { bump(`category:custom_${c.id}`); bump(`label:custom_${c.id}`); }
+      }
+      if (canonicalShoppingPayload(next.preferences.categoryOrder) !== canonicalShoppingPayload(document.preferences.categoryOrder)) {
+        bump('sections'); for (const key of next.preferences.categoryOrder) bump(`section:${key}`);
+      }
+      next.organizationVersions = versions;
     }
     if (!readInitializedDocument(next, validateShoppingDocumentV3) || shoppingInverseBytes(next) > 4194304) return result('InvalidInput');
     return result(canonicalShoppingPayload(next) === canonicalShoppingPayload(document) && !pantryItem ? 'Unchanged' : 'Applied', next, pantryItem);
