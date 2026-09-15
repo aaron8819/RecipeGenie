@@ -1,4 +1,4 @@
-import { shoppingRowCoverage } from './shopping-coverage-runtime'
+import { shoppingMaterialKey, shoppingRowCoverage } from './shopping-coverage-runtime'
 import { compareShoppingCoverage } from './shopping-coverage'
 import type {
   CustomShoppingCategory,
@@ -1047,9 +1047,11 @@ export type ProjectedShoppingRow = {
     quantity: ShoppingQuantity | null
     bucket: ShoppingBucket
     occurrenceId?: string
+    materialKey?: string
   }[]
   legacy?: boolean
   requirementChanged?: boolean
+  coverageNeedsRecheck?: boolean
   previousChecked?: boolean
 }
 
@@ -1457,7 +1459,13 @@ function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantry
       const bucket = override?.suppressed ? 'excluded' : override?.bucket ?? classification.bucket
       const row = group(ingredient.purchaseKey, ingredient.purchaseKey)
       row.previousChecked ||= override?.checked === true
+      const raw = entry.sourceEvidence?.occurrences[ordinal]?.raw
+      const alternatives = raw && typeof raw === 'object' && 'alternatives' in raw &&
+        Array.isArray(raw.alternatives) ? raw.alternatives.filter((value): value is string => typeof value === 'string') : []
       row.requirements!.push({ recipeId: entry.recipeId, displayName: entry.recipeName,
+        materialKey: entry.sourceEvidence?.history === 'reconstructed' && ingredient.displayName.includes('(or ')
+          ? JSON.stringify(['reconstructed-alternatives', ingredient.displayName, [...ingredient.pantryMatchKeys].sort()])
+          : shoppingMaterialKey(ingredient.purchaseKey, alternatives),
         quantity: ingredient.quantity ?? { amount: null, unit: ingredient.purchaseUnit, ...unknownQuantityWording(ingredient.preparation) },
         bucket, occurrenceId: entry.sourceEvidence?.occurrences[ordinal]?.id })
       row.sources.push({ recipeId: entry.recipeId, recipeName: entry.recipeName,
@@ -1492,6 +1500,7 @@ function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantry
     const coverage = obtained ? compareShoppingCoverage(obtained, shoppingRowCoverage(row)) : null
     row.checked = coverage === 'Covered'
     row.requirementChanged = coverage === 'RequirementChanged'
+    row.coverageNeedsRecheck = obtained?.comparisonVersion === 1
     rows.push(row)
   }
   const categories = shoppingOrderingCategories(document, [...new Set(rows.map(row => row.categoryKey))])

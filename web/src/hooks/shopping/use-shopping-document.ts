@@ -78,7 +78,7 @@ type MutationPlan<TResult> = {
   committedValue?: (
     before: ShoppingDocumentStateV3,
     committed: ShoppingDocumentStateV3,
-    receipt?: { undoAvailable?: boolean | null; historical?: boolean }
+    receipt?: { undoAvailable?: boolean | null; historical?: boolean; synchronizationFailed?: boolean }
   ) => TResult
   validateReplay?: ShoppingDocumentReplayValidator
   forceWrite?: boolean
@@ -101,6 +101,7 @@ export interface ShoppingClearResult {
   readonly postClearRevision: number
   readonly undoAvailable?: boolean
   readonly historical?: boolean
+  readonly synchronizationFailed?: boolean
   readonly content: Pick<ShoppingDocumentV3,
     'recipeEntries' | 'manualItems' | 'itemOverrides'>
 }
@@ -269,7 +270,7 @@ function useShoppingMutation<TVariables, TResult>(
       try {
         result = await executeShoppingCommand(ownerUserId, command)
       } catch (error) {
-        cacheState(await refetch())
+        try { cacheState(await refetch()) } catch { assertOwner() }
         // Unknown delivery can include a committed write. Only terminal
         // conflict receipts justify saying that Clear/Undo was not applied.
         const knownConflict = error instanceof ShoppingDocumentConflictError &&
@@ -290,12 +291,14 @@ function useShoppingMutation<TVariables, TResult>(
         undoToast.show({ message: 'Shopping change confirmed. Could not refresh the list; try loading it again.' })
         void queryClient.invalidateQueries({ queryKey: shoppingKey })
         if (plan.committedValue && result.receipt?.outcome === 'Applied') {
-          return plan.committedValue(result.before || initial,
+          return plan.committedValue(result.before || { document: createEmptyShoppingDocument(), contentRevision: 0 },
             { ...initial, contentRevision: result.receipt.revision },
-            { undoAvailable: false, historical: result.status === 'AlreadyApplied' })
+            { undoAvailable: false, historical: result.status === 'AlreadyApplied', synchronizationFailed: true })
         }
         return plan.value
       }
+      assertOwner()
+      state = reconcileShoppingState(queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey), state)
       if (result.before && result.receipt?.outcome === 'Applied') {
         const committed = { document: state.document, contentRevision: result.receipt.revision }
         if (plan.committedValue) value = plan.committedValue(result.before, committed, { ...result.receipt, undoAvailable: result.receipt.undoAvailable === true &&
@@ -304,19 +307,15 @@ function useShoppingMutation<TVariables, TResult>(
         if (plan.resolvedValue) value = plan.resolvedValue(result.before, state, result.receipt.outcome, result.receipt.revision)
       } else if (plan.committedValue && result.receipt?.outcome === 'Applied') {
         value = plan.committedValue({ document: createEmptyShoppingDocument(), contentRevision: 0 },
-          { ...state, contentRevision: result.receipt.revision }, { undoAvailable: false, historical: true })
+          { ...state, contentRevision: result.receipt.revision }, {
+            undoAvailable: result.receipt.undoAvailable === true && result.receipt.contentEpoch !== undefined &&
+              state.contentEpoch === result.receipt.contentEpoch && state.tripId === result.receipt.tripId,
+            historical: true,
+          })
       } else if (plan.resolvedValue) {
         value = plan.resolvedValue(state, state, result.receipt?.outcome, result.receipt?.revision)
       }
       assertOwner()
-      const cached = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey)
-      if (options.fenceOwner && cached && cached.contentRevision > state.contentRevision) {
-        throw new ShoppingClearUndoConflictError(
-          options.settings
-            ? 'Shopping changed before the response arrived. Review the latest settings.'
-            : 'Shopping changed before the response arrived. Review the latest list; Clear Undo is unavailable.'
-        )
-      }
       cacheState(state)
       return value
     },
@@ -643,6 +642,7 @@ export function useClearShoppingList() {
       postClearRevision: committed.contentRevision,
       undoAvailable: receipt?.undoAvailable === true,
       historical: receipt?.historical === true,
+      synchronizationFailed: receipt?.synchronizationFailed === true,
       content: {
         recipeEntries: before.document.recipeEntries,
         manualItems: before.document.manualItems,

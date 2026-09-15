@@ -73,9 +73,10 @@ enforce those ownership boundaries.
 - `supabase/migrations/024_shopping_identity_extras.sql`
 - `supabase/migrations/025_shopping_placement_recovery.sql`
 - `supabase/migrations/026_shopping_trip_lifecycle.sql`
+- `supabase/migrations/027_shopping_coverage_constraints.sql`
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 25 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 27 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -919,7 +920,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 026, and the
+instructions. The current authoritative chain ends at migration 027, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

@@ -318,7 +318,9 @@ export function ShoppingItemRow({
 
         <div className={cn("flex min-h-[48px] min-w-0 flex-1 flex-col justify-center", isChecked && "opacity-60")}>
           {item.legacyAmount && <p className="text-sm">Legacy amount — meaning not set</p>}
-          {item.requirementChanged && <p className="text-sm">Requirement changed</p>}
+          {item.coverageNeedsRecheck
+            ? <p className="text-sm">Please recheck: the previous check did not save enough ingredient or package detail.</p>
+            : item.requirementChanged && <p className="text-sm">Requirement changed</p>}
           {item.previousChecked && <p className="text-sm">Previously checked; confirm current need.</p>}
           {item.requirementBreakdown && <details className="text-sm"><summary>Recipe and extra breakdown</summary>
             {item.requirementBreakdown.map((part, index) => <p key={index}>{formatShoppingQuantityPart(part.quantity ?? { amount: null, unit: '' })} — {part.label}{part.hidden ? ' (hidden or in Pantry)' : ''}</p>)}

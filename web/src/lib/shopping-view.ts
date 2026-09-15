@@ -16,7 +16,8 @@ export function shoppingDocumentToList(
       coveragePending: !!row.legacy,
       inspectedCoverage: row.legacy ? undefined : { [row.orderingKey]: {
         version: state.document.acknowledgements?.[row.orderingKey]?.version ?? 0, basis: shoppingRowCoverage(row) } },
-      inspectedRevision: state.contentRevision, requirementChanged: row.requirementChanged, legacyAmount: row.legacy, previousChecked: row.previousChecked,
+      inspectedRevision: state.contentRevision, requirementChanged: row.requirementChanged, coverageNeedsRecheck: row.coverageNeedsRecheck,
+      legacyAmount: row.legacy, previousChecked: row.previousChecked,
       manualVersion: row.manualId ? state.document.manualItems.find(item => item.id === row.manualId)?.identity?.version : undefined,
       requirementBreakdown: row.requirements?.map(part => ({ label: part.manualId ? `Extra / reminder: ${part.displayName}` : part.displayName,
         quantity: part.quantity, hidden: part.bucket !== 'items' })),

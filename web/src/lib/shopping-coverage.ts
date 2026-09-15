@@ -16,7 +16,7 @@ export type CoveragePart = {
   | { kind: 'token'; token: string }
 )
 export interface ShoppingCoverageBasis {
-  comparisonVersion: 1
+  comparisonVersion: 1 | 2
   parts: CoveragePart[]
 }
 
@@ -36,7 +36,7 @@ function add(a: Exact, b: Exact): Exact {
   return { n: n / divisor, d: d / divisor }
 }
 function partsByMeaning(basis: ShoppingCoverageBasis): Map<string, Exact> | null {
-  if (basis.comparisonVersion !== 1 || !Array.isArray(basis.parts)) return null
+  if (![1, 2].includes(basis.comparisonVersion) || !Array.isArray(basis.parts)) return null
   const result = new Map<string, Exact>()
   for (const part of basis.parts) {
     if (!part || typeof part.purchaseKey !== 'string' || !part.purchaseKey ||
@@ -79,6 +79,9 @@ export function compareShoppingCoverage(
   const saved = partsByMeaning(obtained), needed = partsByMeaning(current)
   if (!saved || !needed) return 'InvalidInput'
   if (!needed.size) return 'Empty'
+  // V1 runtime producers omitted material constraints and package evidence.
+  // Retain that evidence for inspection, but never upgrade its meaning.
+  if (obtained.comparisonVersion !== current.comparisonVersion) return 'RequirementChanged'
   for (const [key, amount] of needed) {
     const available = saved.get(key)
     if (!available || available.n * amount.d < amount.n * available.d) return 'RequirementChanged'

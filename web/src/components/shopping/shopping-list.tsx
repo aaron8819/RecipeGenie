@@ -815,7 +815,9 @@ function ShoppingListContent() {
         }
         undoToast.show({
           duration: 10 * 60 * 1000,
-          message: result.historical
+          message: result.synchronizationFailed
+            ? 'Clear confirmed. Could not refresh the list; reload to see current state. Undo is unavailable.'
+            : result.historical
             ? 'The earlier Clear was confirmed. Showing the current list.'
             : result.undoAvailable !== true
             ? 'Shopping list cleared. Undo is unavailable for this Clear.'

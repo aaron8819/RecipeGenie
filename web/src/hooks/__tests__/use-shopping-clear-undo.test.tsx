@@ -168,7 +168,7 @@ describe('conditional Shopping Clear Undo', () => {
     const hook = setup()
     const token = await clear(hook)
     expect(token).toEqual({
-      ownerUserId: OWNER, postClearRevision: 8,
+      ownerUserId: OWNER, postClearRevision: 8, synchronizationFailed: false,
       undoAvailable: true, historical: false,
       content: { manualItems: hook.original.document.manualItems, recipeEntries: {}, itemOverrides: {} },
     })
@@ -414,5 +414,34 @@ describe('conditional Shopping Clear Undo', () => {
     expect(hook.client.getQueryData(KEY)).toEqual(db.states.get(OWNER))
     expect(db.states.get(OWNER)!.document.manualItems).toEqual([manual('bread')])
     expect(show).toHaveBeenCalled()
+  })
+
+  it('keeps committed Clear successful when its captured read loses to newer cache (review F3)', async () => {
+    const hook = setup()
+    let once = true
+    db.beforeRead = () => {
+      if (!once) return
+      once = false
+      commit({ type: 'addManualItem', item: manual('bread') })
+      hook.client.setQueryData(KEY, structuredClone(db.states.get(OWNER)))
+    }
+    const token = await clear(hook)
+    expect(token).toMatchObject({ postClearRevision: 8, undoAvailable: false })
+    await waitFor(() => expect(hook.result.current.clear.isSuccess).toBe(true))
+    expect(show).not.toHaveBeenCalled()
+    expect(hook.client.getQueryData(KEY)).toEqual(db.states.get(OWNER))
+    expect(db.states.get(OWNER)!.document.manualItems).toEqual([manual('bread')])
+    expect(db.writes.filter(write => write.applied)).toHaveLength(1)
+  })
+
+  it('reports confirmed Clear separately from a failed follow-up read', async () => {
+    const hook = setup()
+    db.beforeRead = () => { throw new Error('Read unavailable') }
+    const token = await clear(hook)
+    expect(token).toMatchObject({ postClearRevision: 8, undoAvailable: false })
+    await waitFor(() => expect(hook.result.current.clear.isSuccess).toBe(true))
+    expect(show).toHaveBeenLastCalledWith(expect.objectContaining({ message: expect.stringContaining('change confirmed') }))
+    expect(db.states.get(OWNER)!.document.manualItems).toEqual([])
+    expect(db.writes.filter(write => write.applied)).toHaveLength(1)
   })
 })

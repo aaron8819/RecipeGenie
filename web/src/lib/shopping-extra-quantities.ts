@@ -1,6 +1,12 @@
 import type { RationalV1, ShoppingQuantity } from '@/types/database';
 import { normalizeRationalV1, parseRationalLexeme } from './recipe-quantity';
 import { normalizeUnit } from './shopping-list-normalization';
+import { resolveShoppingIngredientSemantics } from './shopping-ingredient-semantics';
+
+export function isUnknownSizePackage(quantity: ShoppingQuantity | null): boolean {
+  return Boolean(quantity && !quantity.exactPackageV1 &&
+    resolveShoppingIngredientSemantics({ item: '', unit: quantity.unit }).quantityKind === 'package');
+}
 
 // Deliberately bounded, exact conversions. Kitchen measures and SI volume
 // remain distinct rather than importing the old rounded ml approximations.
@@ -26,7 +32,7 @@ export function sumShoppingRequirements(operands: (ShoppingQuantity | null)[]): 
     const exact = part.exactQuantityV1;
     let amount = exact?.kind === 'exact' ? exact.value :
       !exact && part.amount !== null ? parseRationalLexeme(String(part.amount)) : null;
-    if (!amount || part.exactPackageV1) { result.push(part); continue; }
+    if (!amount || part.exactPackageV1 || isUnknownSizePackage(part)) { result.push(part); continue; }
     let unit = normalizeUnit(part.unit);
     if (unit === 'count') unit = '';
     const conversion = conversions[unit];

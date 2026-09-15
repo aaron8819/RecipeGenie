@@ -61,6 +61,43 @@ writes and legacy RPC writes remain fenced.
 
 ## Coverage and user feedback
 
+### Slice 8 corrections (F1–F3)
+
+Coverage version 2 groups exact quantities by canonical allowed alternatives
+before summation. Captured source occurrences supply alternatives; Pantry
+family matches are not material identity. Reconstructed alternative wording
+retains a separate conservative identity until explicitly refreshed. Unknown
+package sizes retain each normalized count/descriptor token, including repeated
+occurrences; only known identical package sizes permit scalar count coverage.
+Display operands retain original package wording.
+
+Migration 027 accepts both coverage versions without rewriting documents,
+revisions, acknowledgements or inverses. Version 1 runtime evidence omitted
+alternatives and operand provenance, so it cannot prove safe material coverage
+after source changes or removals. The authorized compatibility strategy retains
+that evidence and acknowledgement version, but requires one explicit recheck
+before it can satisfy version 2 demand (with an explicit request to recheck missing ingredient/package detail). Legacy
+boolean evidence and corrected version 2 completion are unaffected. Old clients
+cannot check version 2 demand with version 1 inspected evidence. A rollout must
+use the corrected reader and command boundary together; downgrading the
+application can reintroduce the old coverage interpretation.
+
+Clear success comes from its Applied receipt. A follow-up read reconciles with
+the newest same-owner cache before evaluating Undo against the receipt's trip
+and content epoch. New content disables Undo without turning Clear into a
+conflict; organization-only changes preserve eligibility. A failed read returns
+confirmed success with separate synchronization feedback and no Undo. Receipt
+recovery can offer the original compact Undo when current epoch/trip still
+match, even without a historical preimage in the response. No cache preimage is
+presented as authoritative restoration evidence. Rejected and unknown command
+outcomes remain distinct even if their synchronization read fails.
+
+`test-shopping-slice8-corrections.ts` and
+`test-shopping-slice8-corrections-browser.ts` exercise these rules through local
+authenticated commands and persisted receipts. The browser runner uses held
+responses and a controlled clock for the delayed-cache race, at both required
+viewports. Browser verification remains development-mode only.
+
 Acknowledgements are optional V4 metadata. Existing boolean checks remain labeled
 previous evidence. New checks save exact current buyable operands before rounding;
 hidden recipe parts are excluded and manual extras remain explicit. The existing
