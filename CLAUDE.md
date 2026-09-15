@@ -64,7 +64,7 @@ global auth-state file.
 
 **Meal planner** (`lib/meal-planner.ts`): For each recipe category, filters by history exclusion window (default 7 days, configurable 3–14). Recipes made exactly N days ago ARE excluded (`dateMade >= cutoffDate`). Falls back to recent recipes when pool is insufficient. Day assignments use 0=Sunday through 6=Saturday.
 
-**Shopping list** (`lib/shopping-ingredient-semantics.ts` → `shopping-ingredient-resolution.ts` → `shopping-document.ts`): Separates conservative purchase identity from explicitly directional Pantry/exclusion family policy, preserves exact source quantities and structured packages/ranges, and projects persisted `ShoppingDocumentV3` state deterministically. Purchase identity drives aggregation and personalized ordering; semantic category defaults precede keyword fallback.
+**Shopping list** (`lib/shopping-ingredient-semantics.ts` → `shopping-ingredient-resolution.ts` → `shopping-document.ts`): Separates conservative purchase identity from explicitly directional Pantry/exclusion family policy, preserves exact source quantities and structured packages/ranges, and projects supported legacy and initialized V4 documents deterministically. Authenticated Shopping commands own writes, shared purchase placement, obtained-basis completion, and trip-safe Clear/Undo; see `docs/shopping-component.md`.
 
 **Recipe parser** (`lib/recipe-parser.ts`): Parses plain text into structured recipes. Handles Unicode fractions, ranges, parenthetical units, modifiers, "X or Y" alternatives. Detects section headers (Ingredients/Instructions/Directions/Method/Steps).
 

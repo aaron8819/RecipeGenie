@@ -7,7 +7,7 @@ import {
 import {
   persistShoppingMutationWithReplay,
   ShoppingDocumentConflictError,
-} from "../shopping-document-persistence"
+} from "../../test/shopping-legacy-persistence"
 
 function state(revision: number): ShoppingDocumentStateV3 {
   return { document: createEmptyShoppingDocument(), contentRevision: revision }

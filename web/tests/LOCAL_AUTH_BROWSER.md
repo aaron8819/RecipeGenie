@@ -4,6 +4,26 @@ Use this workflow for normal authenticated development and exhaustive browser
 inspection. It is local-only: Docker hosts Supabase, Recipe Genie runs on
 `127.0.0.1:3107`, and all fixture mutations stay on the machine.
 
+## Optimized production-build inspection
+
+For an authorized disposable backend, build with its loopback
+`NEXT_PUBLIC_SUPABASE_URL` and anon key, then run `next start` bound to loopback.
+To permit browser authentication in production mode, explicitly set
+`RECIPE_GENIE_E2E_TARGET=local` and `RECIPE_GENIE_LOCAL_CSP_ORIGIN` to the exact
+same backend origin (including its port) in the server process. For the Shopping
+slice scripts this is `http://127.0.0.1:57321`, with the app on port 3117.
+
+The allowance requires an HTTP loopback app URL, an HTTP loopback backend with
+an explicit port, exact origin equality and absence of `VERCEL`. Missing or
+inconsistent configuration retains the hosted CSP. It adds no wildcard, disables
+no authentication or CSP directive, and never applies to a hosted request.
+Do not set this opt-in in deployment configuration. Build and start are separate
+steps; wait for a successful build before starting the server.
+
+Without this opt-in the production `connect-src` rejects the local Supabase
+`/auth/v1/token?grant_type=password` request. A passing build alone is not an
+authenticated production-browser result.
+
 ## Prerequisites
 
 - Node 22 and npm 10

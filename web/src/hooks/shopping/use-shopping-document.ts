@@ -84,7 +84,6 @@ type MutationPlan<TResult> = {
     receipt?: { undoAvailable?: boolean | null; historical?: boolean; synchronizationFailed?: boolean }
   ) => TResult
   validateReplay?: ShoppingDocumentReplayValidator
-  forceWrite?: boolean
   resolvedValue?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3, outcome?: string, receiptRevision?: number) => TResult
 }
 

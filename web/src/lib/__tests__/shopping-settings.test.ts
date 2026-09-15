@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyShoppingDocumentMutation, createEmptyShoppingDocument } from '../shopping-document';
-import { persistShoppingMutationWithReplay } from '../shopping-document-persistence';
+import { persistShoppingMutationWithReplay } from '../../test/shopping-legacy-persistence';
 import {
   settingValue, validateSettingIntent, validateSettingsReplacement,
   type ShoppingSettingIntent,

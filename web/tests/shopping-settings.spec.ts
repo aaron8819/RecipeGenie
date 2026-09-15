@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { expect, test, type Page } from '@playwright/test';
 import { applyShoppingDocumentMutation, createEmptyShoppingDocument,
   type ShoppingDocumentStateV3, type ShoppingDocumentMutation } from '../src/lib/shopping-document';
-import { persistShoppingMutationWithReplay } from '../src/lib/shopping-document-persistence';
+import { persistShoppingMutationWithReplay } from '../src/test/shopping-legacy-persistence';
 import { validateSettingIntent, validateSettingsReplacement,
   type ShoppingSettingIntent } from '../src/lib/shopping-settings';
 import { E2E_CONFIG } from './e2e-env';
