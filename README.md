@@ -51,7 +51,7 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 - Canonical bootstrap is baseline-first and applies every tracked file in
   `supabase/migrations/`, currently `001_baseline.sql` through
-  `028_shopping_organization_versions.sql`.
+  `029_shopping_manual_field_versions.sql`.
 - Pre-baseline incremental migrations are retained under
   `supabase/migrations/archive/2026-03-09-pre-028-squash/` for historical
   context only.

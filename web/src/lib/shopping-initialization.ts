@@ -15,6 +15,7 @@ export interface FrozenManualIdentity {
   purchaseKey: string;
   policyVersion: string;
   version: number;
+  fieldVersions?: { displayName: number; quantity: number; guard: number };
   meaning: 'extra' | 'reminder' | 'legacyIndependent';
   removed?: boolean;
   legacy?: LegacyIndependentNeed;
@@ -271,10 +272,13 @@ export function readInitializedDocument(value: unknown, validateV3: (value: unkn
   for (const item of value.manualItems) {
     if (!record(item) || !record(item.identity)) return null;
     const { identity, ...stripped } = item;
-    if (!only(identity, ['purchaseKey', 'policyVersion', 'version', 'meaning', 'legacy', 'conversion', 'removed']) ||
+    if (!only(identity, ['purchaseKey', 'policyVersion', 'version', 'meaning', 'legacy', 'conversion', 'removed', 'fieldVersions']) ||
       !text(identity.purchaseKey) || !text(identity.policyVersion) || !Number.isSafeInteger(identity.version) || Number(identity.version) < 0 ||
       !['extra', 'reminder', 'legacyIndependent'].includes(String(identity.meaning)) ||
       (identity.removed !== undefined && typeof identity.removed !== 'boolean')) return null;
+    const fields = identity.fieldVersions;
+    if (fields !== undefined && (!record(fields) || !only(fields, ['displayName', 'quantity', 'guard']) ||
+      ['displayName', 'quantity', 'guard'].some(key => !Number.isSafeInteger(fields[key]) || Number(fields[key]) < 0))) return null;
     if (identity.meaning === 'legacyIndependent' ? !isLegacyIndependentNeed(identity.legacy) : identity.legacy !== undefined) return null;
     if (identity.conversion !== undefined && !isLegacyIndependentNeed(identity.conversion)) return null;
     strippedManuals.push(stripped);

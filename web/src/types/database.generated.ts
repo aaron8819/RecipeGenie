@@ -209,20 +209,29 @@ export type Database = {
       }
       shopping_list: {
         Row: {
+          content_epoch: number
           content_revision: number
           document: Json
+          trip_id: string
+          trip_revision: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          content_epoch?: number
           content_revision?: number
           document?: Json
+          trip_id?: string
+          trip_revision?: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          content_epoch?: number
           content_revision?: number
           document?: Json
+          trip_id?: string
+          trip_revision?: number
           updated_at?: string
           user_id?: string
         }

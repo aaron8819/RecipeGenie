@@ -23,6 +23,17 @@ remain visible operands. Re-adding a recipe replaces its selected frozen snapsho
 and exact yield; it does not add another occurrence. Source controls use recipe
 UUIDs, including hidden or empty selections and duplicate titles.
 
+Manual wording and quantity commands compare the inspected touched-field versions
+and a shared identity/visibility guard. Purchase-equivalent wording and quantity
+edits can commute; same-field changes (including value-return ABA) conflict.
+Explicit unchanged replacement fields still count as intent; forms omit unchanged
+fields and preserve explicit quantity clearing. Legacy edits retain whole-record
+checks. Rebind, removal/restoration and Shopping-to-Pantry/visibility changes
+advance the shared guard; their whole-item version checks remain intact.
+Migration 029 adds optional `identity.fieldVersions` without rewriting old rows.
+Missing field history starts from the existing whole-item version. Only a
+successful command records new history; reads remain pure.
+
 Completion acknowledges the inspected buyable basis. Demand changes retain checks
 only when coverage is proven. Alternative constraints, unknown package sizes,
 ranges and unknown quantities remain conservative. Unsupported V1 coverage is

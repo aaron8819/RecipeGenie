@@ -87,7 +87,13 @@ function ManualNeedEditor({ item, state }: { item: ShoppingManualItemV1; state: 
         return true;
       }
       const saved = result.document.manualItems.find(candidate => candidate.id === item.id);
-      if (saved) setObserved({ item: saved, revision: result.contentRevision });
+      if (saved) {
+        setObserved({ item: saved, revision: result.contentRevision });
+        // Reconcile untouched inputs without erasing typing during the refresh.
+        setName(current => current === name ? saved.displayName : current);
+        setAmount(current => current === amount ? amountText(saved.quantity) : current);
+        setUnit(current => current === unit ? saved.quantity?.unit ?? '' : current);
+      }
       setError(''); return true;
     }
     catch (error) { setError(errorText(error)); return false; }
@@ -103,9 +109,13 @@ function ManualNeedEditor({ item, state }: { item: ShoppingManualItemV1; state: 
         <label>Unit<Input aria-label={`Unit for ${item.displayName}`} value={unit} onChange={e => setUnit(e.target.value)} /></label>
       </div>
       <Button variant="outline" disabled={command.isPending || !name.trim()} onClick={() => void submit(
-        !legacy && purchaseKey !== identity.purchaseKey ? {
+        !legacy && purchaseKey !== observed.item.identity!.purchaseKey ? {
           type: 'rebindManualItem', id: item.id, expectedVersion: observed.item.identity!.version, displayName: name, quantity: draftQuantity(amount, unit, observed.item.quantity),
-        } : { type: 'editManualItem', id: item.id, changes: { displayName: name, quantity: draftQuantity(amount, unit, observed.item.quantity) } }
+        } : { type: 'editManualItem', id: item.id, changes: {
+          ...(name !== observed.item.displayName ? { displayName: name } : {}),
+          ...(amount !== amountText(observed.item.quantity) || unit !== (observed.item.quantity?.unit ?? '')
+            ? { quantity: draftQuantity(amount, unit, observed.item.quantity) } : {}),
+        } }
       )}>Save {legacy ? 'independent amount' : 'extra or reminder'}</Button>
       {!legacy && purchaseKey !== identity.purchaseKey && <p role="status">This changes the purchase to {purchaseKey}. It will share its saved position in {currentCategory === 'legacy-placement' ? pinnedPurchaseDefault(purchaseKey).categoryKey : currentCategory}. New total: {sumShoppingRequirements([...recipeParts, ...otherExtras, draftQuantity(amount, unit, observed.item.quantity)]).map(amountLabel).join(' + ')}. Other requirements are retained.</p>}
       {legacy && <>

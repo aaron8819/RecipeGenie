@@ -58,7 +58,9 @@ hidden untouched pairs. No replacement sequence is accepted from visible rows.
 
 Owner binding, bounded admission, canonical payload binding, durable receipts,
 dependency replanning and replay protection remain unchanged. Independent new
-extras may rebase; stale edits compare their observed item, and source replacement
+extras may rebase; legacy/non-field edits compare their observed item, while
+resolved wording/quantity edits compare touched-field history and a shared guard
+(migration 029). Source replacement
 compares the observed selection version. New selection versions are minted from
 the next owner content revision, which survives removal and Clear. Changed
 captures advance to at least that revision; unchanged captures keep their token.

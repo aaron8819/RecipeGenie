@@ -13,6 +13,7 @@ import { shoppingInverseBytes } from './shopping-clear';
 import type { ShoppingCommandContext } from './shopping-command-planner';
 import { restoredShoppingContent } from './shopping-lifecycle';
 import { recoverShoppingPlacement } from './shopping-placement-recovery';
+import { advanceManualFieldVersions, manualEditMatches } from './shopping-manual-versions';
 
 /** Runs only inside the admitted command planner. No clock, I/O or cache state. */
 export function planInitializedShoppingCommand(context: ShoppingCommandContext, command: ShoppingCommand, document: ShoppingDocumentV3) {
@@ -53,8 +54,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
   if (!sameRevision && !isSetting && !['complete', 'undoClear', 'restoreContent', 'setChecked', 'setCheckedMany'].includes(mutation.type)) {
     if ((context.inverseRevision ?? 0) > command.observedRevision) return result('Conflict');
     if (mutation.type === 'editManualItem') {
-      if (!command.observedManual || canonicalShoppingPayload(document.manualItems.find(item => item.id === mutation.id)) !==
-        canonicalShoppingPayload(command.observedManual)) return result('Conflict');
+      if (!command.observedManual) return result('Conflict');
     } else if (!selectionIds.length && !['addManualItem', 'resolveLegacy', 'rebindManualItem', 'restoreManualItem'].includes(mutation.type)) return result('Conflict');
   }
   let next = structuredClone(document);
@@ -83,6 +83,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         delete item.identity.removed;
       } else if (mutation.type === 'editManualItem') {
         const changes = mutation.changes;
+        if (command.observedManual && !manualEditMatches(item, command.observedManual, mutation)) return result('Conflict');
         if ('identity' in changes || 'categoryKey' in changes) return result('InvalidInput');
         if (item.identity.meaning === 'legacyIndependent') {
           const edit = editLegacyIndependentNeed(item.identity.legacy!, item.identity.legacy!.version, {
@@ -301,6 +302,13 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         bump('sections'); for (const key of next.preferences.categoryOrder) bump(`section:${key}`);
       }
       next.organizationVersions = versions;
+    }
+    const previousManuals = new Map(document.manualItems.map(item => [item.id, item]));
+    for (const item of next.manualItems) {
+      const previous = previousManuals.get(item.id);
+      if (previous && canonicalShoppingPayload(previous) !== canonicalShoppingPayload(item)) {
+        advanceManualFieldVersions(previous, item, mutation);
+      }
     }
     if (!readInitializedDocument(next, validateShoppingDocumentV3) || shoppingInverseBytes(next) > 4194304) return result('InvalidInput');
     return result(canonicalShoppingPayload(next) === canonicalShoppingPayload(document) && !pantryItem ? 'Unchanged' : 'Applied', next, pantryItem);
