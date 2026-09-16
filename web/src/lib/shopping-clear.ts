@@ -2,11 +2,12 @@ import type { ShoppingDocumentV3 } from './shopping-document';
 
 export const SHOPPING_INVERSE_BYTES = 1048576;
 export type ShoppingContent = Pick<ShoppingDocumentV3,
-  'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements'>;
+  'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements' | 'tripVisibility'>;
 
 export function shoppingContent(document: ShoppingContent): ShoppingContent {
   return { recipeEntries: document.recipeEntries, manualItems: document.manualItems,
-    itemOverrides: document.itemOverrides, ...(document.acknowledgements ? { acknowledgements: document.acknowledgements } : {}) };
+    itemOverrides: document.itemOverrides, ...(document.acknowledgements ? { acknowledgements: document.acknowledgements } : {}),
+    ...(document.tripVisibility ? { tripVisibility: document.tripVisibility } : {}) };
 }
 
 // PostgreSQL jsonb::text uses spaces after separators and expands exponent

@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "029_shopping_manual_field_versions"
+export const EXPECTED_LATEST_MIGRATION = "030_shopping_trip_visibility"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

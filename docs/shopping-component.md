@@ -44,6 +44,15 @@ manual and recipe parts. Commands establish missing slots. Moves splice only the
 moved key; projection, filters, reload, source removal and Clear never compact
 dormant slots. Reset Position, Reset Category and Clear are distinct operations.
 
+V4 `tripVisibility` owns explicit bucket choices by purchase key, independently
+of active sources, placement and completion. Recipe refresh/removal, manual
+removal/rebind and coordinated recipe deletion retain dormant choices. Equivalent
+manual/recipe demand uses the same choice on return. Clear removes it; bounded
+Undo restores it as content while preserving later organization. Migration 030
+extends validation, content snapshots and coordinated deletion without rewriting
+existing rows. Commands recover only consistent retained legacy bucket evidence;
+already-pruned choices and contradictory history cannot be reconstructed.
+
 Clear starts a new trip and retains organization. Its single inverse is bounded
 to 1 MiB and ten minutes. Undo requires unchanged content epoch and existing owned
 recipe sources under transactional locking; organization-only changes survive.

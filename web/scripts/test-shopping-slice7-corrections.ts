@@ -169,6 +169,7 @@ async function main() {
       await apply(a, { type: 'removeRecipe', recipeId: r2.id });
       const empty = await read(a);
       check(empty.document.itemOverrides, {}, 'F3 last hidden source removes orphan override');
+      check(empty.document.tripVisibility, { lemon: bucket }, 'F-R1 last hidden source retains trip purchase visibility');
       check(empty.document.preferences, before.document.preferences, 'F3 all dormant placement survives');
     }
     const a = await owner(); await apply(a, { type: 'initialize' }); await apply(a, extra('manual'));

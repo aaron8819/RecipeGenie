@@ -14,6 +14,7 @@ import type { ShoppingCommandContext } from './shopping-command-planner';
 import { restoredShoppingContent } from './shopping-lifecycle';
 import { recoverShoppingPlacement } from './shopping-placement-recovery';
 import { advanceManualFieldVersions, manualEditMatches } from './shopping-manual-versions';
+import { recoverTripVisibility } from './shopping-trip-visibility';
 
 /** Runs only inside the admitted command planner. No clock, I/O or cache state. */
 export function planInitializedShoppingCommand(context: ShoppingCommandContext, command: ShoppingCommand, document: ShoppingDocumentV3) {
@@ -57,7 +58,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       if (!command.observedManual) return result('Conflict');
     } else if (!selectionIds.length && !['addManualItem', 'resolveLegacy', 'rebindManualItem', 'restoreManualItem'].includes(mutation.type)) return result('Conflict');
   }
-  let next = structuredClone(document);
+  let next = structuredClone(recoverTripVisibility(document));
   let pantryItem: string | null = null;
   try {
     if (mutation.type === 'resolvePlacement') {
@@ -77,6 +78,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       if (!item || !item.identity || (item.identity.removed && mutation.type !== 'restoreManualItem')) return result('TargetGone');
       if ('expectedVersion' in mutation && mutation.expectedVersion !== item.identity.version) return result('Conflict');
       const originalItem = canonicalShoppingPayload(item);
+      let visibilityChanged = false;
       if (mutation.type === 'deleteManualItem') item.identity.removed = true;
       else if (mutation.type === 'restoreManualItem') {
         if (!item.identity.removed) return result('Unchanged');
@@ -98,11 +100,22 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
           return result('Conflict'); // Identity changes require a previewed rebind.
         }
         Object.assign(item, changes);
+        if (changes.bucket !== undefined && item.identity.meaning !== 'legacyIndependent') {
+          visibilityChanged = (next.tripVisibility?.[item.identity.purchaseKey] ?? document.manualItems.find(i => i.id === item.id)!.bucket) !== changes.bucket;
+          for (const other of next.manualItems) {
+            if (other.id !== item.id && other.identity?.meaning !== 'legacyIndependent' && other.identity?.purchaseKey === item.identity.purchaseKey &&
+                (visibilityChanged || other.bucket !== changes.bucket)) {
+              other.bucket = changes.bucket; other.identity.version++;
+            }
+          }
+          next.tripVisibility = { ...next.tripVisibility, [item.identity.purchaseKey]: changes.bucket };
+        }
         if (item.identity.meaning !== 'legacyIndependent') item.identity.meaning = item.quantity === null ? 'reminder' : 'extra';
       } else if (mutation.type === 'rebindManualItem') {
         if (item.identity.meaning === 'legacyIndependent') return result('InvalidInput');
         item.displayName = mutation.displayName; item.quantity = mutation.quantity;
         item.identity.purchaseKey = resolveShoppingIngredientSemantics({ item: item.displayName, unit: item.quantity?.unit }).purchaseKey;
+        item.bucket = next.tripVisibility?.[item.identity.purchaseKey] ?? 'items';
         item.identity.policyVersion = SHOPPING_IDENTITY_POLICY;
         item.identity.meaning = item.quantity === null ? 'reminder' : 'extra';
         next = appendDocumentPurchases(next, [item.identity.purchaseKey]);
@@ -120,7 +133,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         next = resolveShoppingPlacement(next, purchaseKey, mutation.categoryKey, mutation.anchor);
       }
       const updatedItem = next.manualItems.find(candidate => candidate.id === mutation.id)!;
-      if (originalItem !== canonicalShoppingPayload(updatedItem)) updatedItem.identity!.version++;
+      if (visibilityChanged || originalItem !== canonicalShoppingPayload(updatedItem)) updatedItem.identity!.version++;
     } else if (mutation.type === 'upsertRecipe' || mutation.type === 'upsertRecipes' || mutation.type === 'rescaleRecipe') {
       const entries = mutation.type === 'upsertRecipes' ? mutation.entries : [mutation.entry];
       if (!Array.isArray(entries) || entries.length > 100 || new Set(entries.map(entry => entry.recipeId)).size !== entries.length) return result('InvalidInput');
@@ -156,6 +169,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         (command.clearUndoRequired && context.row?.shopping_clear_undo_available !== true))) return result('Conflict');
       next.recipeEntries = {}; next.manualItems = []; next.itemOverrides = {};
       if (next.acknowledgements) next.acknowledgements = {};
+      if (next.tripVisibility) next.tripVisibility = {};
     } else if (mutation.type === 'restoreContent' || mutation.type === 'undoClear') {
       if (!context.inverse || context.inverseRevision !== command.observedRevision ||
         context.inverseTrip !== context.row?.trip_id || context.inverseEpoch !== context.row?.content_epoch) return result('UndoUnavailable');
@@ -205,8 +219,14 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       const row = projectShoppingDocument(next, context.pantry).rows.find(row => row.rowRef === `derived:${mutation.aggregateKey}`);
       if (!row) return result('TargetGone');
       const bucket = mutation.type === 'setSuppressed' ? mutation.suppressed ? 'excluded' : 'items' : mutation.bucket;
+      const previousBucket = next.tripVisibility?.[row.orderingKey];
+      next.tripVisibility = { ...next.tripVisibility };
+      if (bucket) next.tripVisibility[row.orderingKey] = bucket;
+      else delete next.tripVisibility[row.orderingKey];
       for (const item of next.manualItems) if (item.identity?.purchaseKey === row.orderingKey && item.identity.meaning !== 'legacyIndependent') {
-        if (item.bucket !== (bucket ?? 'items')) { item.bucket = bucket ?? 'items'; item.identity.version++; }
+        if (item.bucket !== (bucket ?? 'items') || (previousBucket ?? item.bucket) !== (bucket ?? 'items')) {
+          item.bucket = bucket ?? 'items'; item.identity.version++;
+        }
       }
       for (const entry of Object.values(next.recipeEntries)) for (const ingredient of entry.ingredients) if (ingredient.purchaseKey === row.orderingKey) {
         const override = { ...next.itemOverrides[ingredient.aggregateKey] };
@@ -218,8 +238,10 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
       const row = projectShoppingDocument(next, context.pantry).rows.find(row => row.rowRef === mutation.rowRef);
       if (!row) return result('TargetGone');
       pantryItem = row.displayName;
+      const previousBucket = next.tripVisibility?.[row.orderingKey];
+      if (!row.legacy) next.tripVisibility = { ...next.tripVisibility, [row.orderingKey]: 'already_have' };
       for (const item of next.manualItems) if (`manual:${item.id}` === mutation.rowRef || row.requirements?.some(part => part.manualId === item.id)) {
-        if (item.bucket !== 'already_have') {
+        if (item.bucket !== 'already_have' || (previousBucket ?? item.bucket) !== 'already_have') {
           item.bucket = 'already_have'; item.identity!.version++;
         }
       }
@@ -271,8 +293,8 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         }
       }
     } else return result('InvalidInput');
-    // Overrides belong to live recipe atoms. Keep shared atoms' overrides and
-    // all purchase placement, but retire overrides for removed/replaced atoms.
+    // Source-specific compatibility overrides may retire; purchase visibility
+    // above belongs to the trip and survives absent recipe/manual demand.
     if (selectionIds.length) {
       const active = new Set(Object.values(next.recipeEntries).flatMap(entry => entry.ingredients.map(i => i.aggregateKey)));
       next.itemOverrides = Object.fromEntries(Object.entries(next.itemOverrides).filter(([key]) => active.has(key)));

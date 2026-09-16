@@ -13,8 +13,16 @@ To permit browser authentication in production mode, explicitly set
 same backend origin (including its port) in the server process. For the Shopping
 slice scripts this is `http://127.0.0.1:57321`, with the app on port 3117.
 
-The allowance requires an HTTP loopback app URL, an HTTP loopback backend with
-an explicit port, exact origin equality and absence of `VERCEL`. Missing or
+The allowance requires an HTTP loopback app URL and a validated incoming Host,
+an HTTP loopback backend with an explicit port, exact origin equality and absence
+of `VERCEL`. Host accepts case-insensitive `localhost`, strict dotted-decimal
+IPv4 in 127/8, and bracketed IPv6 loopback (compressed or expanded), optionally
+with a decimal port from 1 to 65535. Abbreviated/numeric IPv4, leading-zero octets
+or ports, trailing dots, userinfo, lists, paths and zone identifiers are rejected.
+There is no trusted proxy configuration: `Forwarded` rejects the exception and
+`X-Forwarded-Host` must be absent or exactly match Host, case-insensitively.
+Forwarded headers never establish authority. Local-target responses use private,
+no-store caching and vary on authority headers. Missing or
 inconsistent configuration retains the hosted CSP. It adds no wildcard, disables
 no authentication or CSP directive, and never applies to a hosted request.
 Do not set this opt-in in deployment configuration. Build and start are separate

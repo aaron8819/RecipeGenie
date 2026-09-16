@@ -53,6 +53,9 @@ describe('Slice 7 independent review corrections', () => {
     const manual = structuredClone(h.document.manualItems);
     h.apply({ type: 'removeRecipe', recipeId: recipe.id });
     expect(h.document.recipeEntries).toEqual({}); expect(h.document.itemOverrides).toEqual({});
+    expect(h.document.tripVisibility).toEqual(kind === 'checked' ? undefined : {
+      [h.select(4).entry.ingredients[0].purchaseKey]: kind === 'suppressed' ? 'excluded' : 'already_have',
+    });
     expect(h.document.manualItems).toEqual(manual); expect(h.document.preferences).toEqual(organization);
   });
   it('F4 bridge and return invalidate stale rebind even after bucket ABA', () => {

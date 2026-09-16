@@ -6,7 +6,7 @@ import { isShoppingContentCommand } from '@/lib/shopping-lifecycle'
 import type { ShoppingCommand } from '@/lib/shopping-command'
 import { executeShoppingCommand } from '@/lib/shopping-command-client'
 import { reconcileShoppingState, type ShoppingCachedState } from '@/lib/shopping-cache'
-import { canUndoShoppingClear } from '@/lib/shopping-clear'
+import { canUndoShoppingClear, shoppingContent, type ShoppingContent } from '@/lib/shopping-clear'
 import { shoppingRecipeSelections } from '@/lib/shopping-sources'
 import { readShoppingCompatibility } from '@/lib/shopping-compatibility'
 
@@ -104,8 +104,7 @@ export interface ShoppingClearResult {
   readonly undoAvailable?: boolean
   readonly historical?: boolean
   readonly synchronizationFailed?: boolean
-  readonly content: Pick<ShoppingDocumentV3,
-    'recipeEntries' | 'manualItems' | 'itemOverrides'>
+  readonly content: ShoppingContent
 }
 
 type DuplicateFeedbackOwner = 'mutation' | 'caller'
@@ -666,11 +665,7 @@ export function useClearShoppingList() {
       undoAvailable: receipt?.undoAvailable === true,
       historical: receipt?.historical === true,
       synchronizationFailed: receipt?.synchronizationFailed === true,
-      content: {
-        recipeEntries: before.document.recipeEntries,
-        manualItems: before.document.manualItems,
-        itemOverrides: before.document.itemOverrides,
-      },
+      content: shoppingContent(before.document),
     }),
   }), { fenceOwner: true })
 }

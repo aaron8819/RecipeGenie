@@ -8,8 +8,9 @@ export function isShoppingContentCommand(type: ShoppingCommand['mutation']['type
 }
 
 export function restoredShoppingContent(document: ShoppingDocumentV3, inverse: Pick<ShoppingDocumentV3,
-  'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements'>): ShoppingDocumentV3 {
+  'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements' | 'tripVisibility'>): ShoppingDocumentV3 {
   const next = { ...document, ...structuredClone(inverse) };
+  if (!inverse.tripVisibility) delete next.tripVisibility;
   const categories = new Set(['produce', 'deli', 'bakery', 'protein', 'dairy', 'pantry', 'frozen', 'misc',
     ...document.preferences.customCategories.map(category => `custom_${category.id}`)]);
   // Legacy amounts have an independent location. A deleted category is never

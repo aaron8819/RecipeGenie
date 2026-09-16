@@ -19,6 +19,9 @@ export function proxy(request: NextRequest) {
   const isDev = process.env.NODE_ENV === 'development';
   const localOrigin = localCspConnectionOrigin({
     requestUrl: request.url,
+    host: request.headers.get('host'),
+    forwardedHost: request.headers.get('x-forwarded-host'),
+    forwarded: request.headers.get('forwarded'),
     target: process.env.RECIPE_GENIE_E2E_TARGET,
     allowedOrigin: process.env.RECIPE_GENIE_LOCAL_CSP_ORIGIN,
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -45,6 +48,10 @@ export function proxy(request: NextRequest) {
   ].join('; ');
 
   headers.set('Content-Security-Policy', csp);
+  if (process.env.RECIPE_GENIE_E2E_TARGET === 'local') {
+    headers.set('Cache-Control', 'private, no-store');
+    headers.append('Vary', 'Host, X-Forwarded-Host, Forwarded');
+  }
   headers.set('x-nonce', nonce); // Next.js reads this to apply nonce to inline scripts
   headers.set('X-Frame-Options', 'DENY');
   headers.set('X-Content-Type-Options', 'nosniff');

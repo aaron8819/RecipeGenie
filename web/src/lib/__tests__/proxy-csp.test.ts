@@ -8,7 +8,7 @@ describe('production proxy CSP', () => {
   function policy(url: string) {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:57321');
-    return proxy(new NextRequest(url)).headers.get('content-security-policy')!;
+    return proxy(new NextRequest(url, { headers: { host: new URL(url).host } })).headers.get('content-security-policy')!;
   }
   it('keeps the existing hosted policy with no opt-in', () => {
     vi.stubEnv('RECIPE_GENIE_E2E_TARGET', undefined);

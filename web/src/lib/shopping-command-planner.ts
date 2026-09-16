@@ -22,7 +22,7 @@ export interface ShoppingCommandContext {
   dependencyRevision: string;
   pantry: PantryItem[];
   recipes: unknown[];
-  inverse: Pick<ShoppingDocumentV3, 'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements'> | null;
+  inverse: Pick<ShoppingDocumentV3, 'recipeEntries' | 'manualItems' | 'itemOverrides' | 'acknowledgements' | 'tripVisibility'> | null;
   inverseRevision: number | null;
   inverseTrip?: string | null;
   inverseEpoch?: number | null;

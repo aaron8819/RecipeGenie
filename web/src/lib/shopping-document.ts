@@ -154,6 +154,7 @@ export type ShoppingDocumentV3 = {
   preferences: ShoppingPreferencesV1 & ShoppingOrderingPreferences
   acknowledgements?: Record<string, { version: number; basis: import("./shopping-coverage").ShoppingCoverageBasis | null }>
   organizationVersions?: Record<string, number>
+  tripVisibility?: Record<string, ShoppingBucket>
   placementEvidence?: ShoppingPlacementEvidence
 }
 
@@ -1457,7 +1458,8 @@ function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantry
       const occurrence = { ...ingredient, recipeId: entry.recipeId, recipeName: entry.recipeName }
       const override = document.itemOverrides[ingredient.aggregateKey]
       const classification = derivedClassification([occurrence], pantry, exclusions, settings)
-      const bucket = override?.suppressed ? 'excluded' : override?.bucket ?? classification.bucket
+      const bucket = document.tripVisibility?.[ingredient.purchaseKey] ??
+        (override?.suppressed ? 'excluded' : override?.bucket ?? classification.bucket)
       const row = group(ingredient.purchaseKey, ingredient.purchaseKey)
       row.previousChecked ||= override?.checked === true
       const raw = entry.sourceEvidence?.occurrences[ordinal]?.raw
@@ -1488,7 +1490,8 @@ function projectInitializedShoppingDocument(document: ShoppingDocumentV3, pantry
     }
     const row = group(identity.purchaseKey, identity.purchaseKey)
     row.previousChecked ||= item.checked
-    row.requirements!.push({ manualId: item.id, displayName: item.displayName, quantity: item.quantity, bucket: item.bucket })
+    row.requirements!.push({ manualId: item.id, displayName: item.displayName, quantity: item.quantity,
+      bucket: document.tripVisibility?.[identity.purchaseKey] ?? item.bucket })
   }
   for (const row of groups.values()) {
     const requirements = row.requirements!

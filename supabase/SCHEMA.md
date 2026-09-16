@@ -76,6 +76,12 @@ enforce those ownership boundaries.
 - `supabase/migrations/027_shopping_coverage_constraints.sql`
 - `supabase/migrations/028_shopping_organization_versions.sql`
 - `supabase/migrations/029_shopping_manual_field_versions.sql`
+- `supabase/migrations/030_shopping_trip_visibility.sql`
+
+Migration 030 adds optional purchase-keyed trip visibility, includes it in content
+epochs and bounded Clear inverses, and captures proven retained choices before
+coordinated recipe deletion. Existing rows are not rewritten. Missing or
+contradictory historical choices are not reconstructed.
 
 Migration 029 extends V4 structural validation with optional manual wording,
 quantity and shared guard versions. Existing documents and row metadata are not
@@ -927,7 +933,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 029, and the
+instructions. The current authoritative chain ends at migration 030, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

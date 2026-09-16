@@ -238,7 +238,9 @@ export function readInitializedDocument(value: unknown, validateV3: (value: unkn
   const only = (v: Record<string, unknown>, keys: string[]) => Object.keys(v).every(key => keys.includes(key));
   if (!record(value) || value.schemaVersion !== 4 || !record(value.placementEvidence) ||
     !record(value.recipeEntries) || !Array.isArray(value.manualItems) || !record(value.preferences)) return null;
-  const { placementEvidence, acknowledgements, organizationVersions, ...base } = value;
+  const { placementEvidence, acknowledgements, organizationVersions, tripVisibility, ...base } = value;
+  if (tripVisibility !== undefined && (!record(tripVisibility) || Object.entries(tripVisibility).some(([key, bucket]) =>
+    !text(key) || typeof bucket !== 'string' || !['items', 'already_have', 'excluded'].includes(bucket)))) return null;
   if (organizationVersions !== undefined && (!record(organizationVersions) || Object.entries(organizationVersions).some(([key, version]) =>
     !text(key) || !Number.isSafeInteger(version) || Number(version) < 0))) return null;
   if (acknowledgements !== undefined && (!record(acknowledgements) || Object.entries(acknowledgements).some(([key, ack]) =>

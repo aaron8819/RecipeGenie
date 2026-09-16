@@ -85,7 +85,8 @@ describe('F2 existing V4 placement recovery', () => {
     const removed = run(repaired, { type: 'removeRecipe', recipeId: entry.recipeId }).document;
     expect(removed.preferences).toEqual(repaired.preferences);
     removed.recipeEntries[entry.recipeId] = entry;
-    expect(category(removed)).toBe('dairy');
+    expect(projectShoppingDocument(removed).excluded[0]?.categoryKey).toBe('dairy');
+    expect(removed.tripVisibility?.lemon).toBe('excluded');
   });
   it('preserves unrelated content byte-for-byte', () => {
     const before = affected(), after = recoverShoppingPlacement(before, true);
