@@ -7,30 +7,58 @@ inspection. It is local-only: Docker hosts Supabase, Recipe Genie runs on
 ## Optimized production-build inspection
 
 For an authorized disposable backend, build with its loopback
-`NEXT_PUBLIC_SUPABASE_URL` and anon key, then run `next start` bound to loopback.
-To permit browser authentication in production mode, explicitly set
-`RECIPE_GENIE_E2E_TARGET=local` and `RECIPE_GENIE_LOCAL_CSP_ORIGIN` to the exact
-same backend origin (including its port) in the server process. For the Shopping
-slice scripts this is `http://127.0.0.1:57321`, with the app on port 3117.
+`NEXT_PUBLIC_SUPABASE_URL` and anon key. Use the pinned Node/npm runtime.
+Set `RECIPE_GENIE_E2E_TARGET=local` and `RECIPE_GENIE_LOCAL_CSP_ORIGIN` to that
+exact backend origin including port, in the ignored `.env.local` or process
+environment. Wait for the build to succeed, then start these two processes
+from `web/` in separate terminals:
 
-The allowance requires an HTTP loopback app URL and a validated incoming Host,
-an HTTP loopback backend with an explicit port, exact origin equality and absence
-of `VERCEL`. Host accepts case-insensitive `localhost`, strict dotted-decimal
-IPv4 in 127/8, and bracketed IPv6 loopback (compressed or expanded), optionally
-with a decimal port from 1 to 65535. Abbreviated/numeric IPv4, leading-zero octets
-or ports, trailing dots, userinfo, lists, paths and zone identifiers are rejected.
-There is no trusted proxy configuration: `Forwarded` rejects the exception and
-`X-Forwarded-Host` must be absent or exactly match Host, case-insensitively.
-Forwarded headers never establish authority. Local-target responses use private,
-no-store caching and vary on authority headers. Missing or
-inconsistent configuration retains the hosted CSP. It adds no wildcard, disables
-no authentication or CSP directive, and never applies to a hosted request.
-Do not set this opt-in in deployment configuration. Build and start are separate
-steps; wait for a successful build before starting the server.
+```powershell
+npm run build
+npm start -- --hostname 127.0.0.1 --port 3118
+npm run local:production -- --port 3117 --upstream-port 3118
+```
 
-Without this opt-in the production `connect-src` rejects the local Supabase
-`/auth/v1/token?grant_type=password` request. A passing build alone is not an
-authenticated production-browser result.
+Browse port 3117. The separate verification ingress binds only to `127.0.0.1`
+(or `--hostname ::1`) and forwards only to `127.0.0.1` on the selected upstream
+port. It is a local HTTP verification tool, not a deployment server or a forward
+proxy. Stop both processes after inspection. It requires the existing `tsx`
+dev dependency; there is no custom Next server or production dependency.
+
+The ingress examines Node's `IncomingMessage.rawHeaders` before forwarding.
+Exactly one Host field is required; missing or duplicate Host fields (even
+identical values or different casing) are rejected. Header-count truncation is
+disabled while Node's header byte limit remains enforced. A validated loopback
+Host, exact explicit backend opt-in and absent `VERCEL` are required to append
+the origin to the upstream's known production `connect-src` directive. Client
+validation markers are ignored. All ingress responses use private, no-store.
+The original status, nonce, cookies and unrelated security headers are retained.
+
+Host accepts case-insensitive `localhost`, strict dotted-decimal IPv4 in 127/8,
+and bracketed IPv6 loopback (compressed or expanded), optionally with a decimal
+port from 1 to 65535. Abbreviated/numeric IPv4, leading-zero octets or ports,
+trailing dots, userinfo, lists, paths and zone identifiers do not qualify.
+`Forwarded` disqualifies the allowance; `X-Forwarded-Host` must be absent or
+occur exactly once and match Host case-insensitively. Neither establishes
+trust. The backend origin must be HTTP localhost, 127.0.0.1 or [::1] with an
+explicit port, no path/query/credentials, and match the public Supabase URL.
+
+Supported launch paths:
+
+- `npm start` / direct `next start`: always restrictive production CSP, even
+  with the local opt-in or forged validation headers. Direct access to the
+  upstream cannot obtain the allowance. Hosted production uses this policy.
+- `npm run local:production` in front of an optimized `next start`: the only
+  supported production-build local CSP allowance, enforced at raw ingress.
+  Default, disabled, inconsistent and hosted/VERCEL settings stay restrictive.
+- `npm run dev` / `npm run local:e2e:dev`: existing development/HMR policy;
+  these are not production-build verification or deployment paths.
+
+Do not deploy the local ingress or set the opt-in in hosted configuration.
+`npm run test:csp:server` exercises the built server and ingress with raw TCP
+requests, including duplicates, direct-upstream bypass attempts, redirects and
+errors. A passing build alone is not authenticated browser evidence. The
+Shopping slice scripts use backend `http://127.0.0.1:57321` and ingress 3117.
 
 ## Prerequisites
 

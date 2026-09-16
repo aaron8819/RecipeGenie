@@ -6,9 +6,26 @@ const local = {
   host: '127.0.0.1:3117',
   allowedOrigin: 'http://127.0.0.1:57321', supabaseUrl: 'http://127.0.0.1:57321',
 };
+function checkOrigin(input: Omit<Parameters<typeof localCspConnectionOrigin>[0], 'rawHeaders'> & {
+  host?: string; forwardedHost?: string; forwarded?: string;
+}) {
+  const rawHeaders = Object.entries({ Host: input.host,
+    'X-Forwarded-Host': input.forwardedHost, Forwarded: input.forwarded })
+    .flatMap(([name, value]) => value === undefined ? [] : [name, value]);
+  return localCspConnectionOrigin({ ...input, rawHeaders });
+}
 describe('local production-build CSP', () => {
+  it.each([
+    ['Host', 'localhost', 'Host', 'remote.example'],
+    ['Host', 'remote.example', 'Host', 'localhost'],
+    ['Host', 'localhost', 'hOsT', 'localhost'],
+    ['Host', 'localhost', 'HOST', 'localhost', 'host', 'localhost'],
+    ['Host', 'localhost', 'X-Forwarded-Host', 'localhost', 'X-Forwarded-Host', 'localhost'],
+  ])('refuses raw duplicates: %j', (...rawHeaders) => {
+    expect(localCspConnectionOrigin({ ...local, rawHeaders })).toBeNull();
+  });
   it('adds only the explicit matching loopback origin', () => {
-    expect(localCspConnectionOrigin(local)).toBe(local.allowedOrigin);
+    expect(checkOrigin(local)).toBe(local.allowedOrigin);
   });
   it.each([
     { target: undefined }, { target: 'production' }, { allowedOrigin: undefined },
@@ -29,11 +46,11 @@ describe('local production-build CSP', () => {
     { forwardedHost: '' }, { forwarded: '' },
     { host: 'recipe-genie.example', forwardedHost: 'localhost' },
   ])('fails closed outside explicit local verification: %j', override => {
-    expect(localCspConnectionOrigin({ ...local, ...override })).toBeNull();
+    expect(checkOrigin({ ...local, ...override })).toBeNull();
   });
   it.each(['localhost', 'LOCALHOST:3117', '127.0.0.1', '127.9.8.7:65535',
     '[::1]', '[::1]:3117', '[0:0:0:0:0:0:0:1]:80'])('accepts strict loopback Host %s', host => {
-    expect(localCspConnectionOrigin({ ...local, host })).toBe(local.allowedOrigin);
+    expect(checkOrigin({ ...local, host })).toBe(local.allowedOrigin);
   });
   it.each([
     'http://localhost:*', 'http://localhost', 'http://127.0.0.2:57321',
@@ -42,6 +59,6 @@ describe('local production-build CSP', () => {
     'http://localhost:57321#x', 'http://localhost:57321/; https://evil.example',
     'http://localhost.evil.example:57321', 'not a URL',
   ])('rejects unsafe or non-origin configuration: %s', origin => {
-    expect(localCspConnectionOrigin({ ...local, allowedOrigin: origin, supabaseUrl: origin })).toBeNull();
+    expect(checkOrigin({ ...local, allowedOrigin: origin, supabaseUrl: origin })).toBeNull();
   });
 });

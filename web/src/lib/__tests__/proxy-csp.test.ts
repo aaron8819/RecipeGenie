@@ -14,11 +14,11 @@ describe('production proxy CSP', () => {
     vi.stubEnv('RECIPE_GENIE_E2E_TARGET', undefined);
     expect(policy('http://127.0.0.1:3117/shopping')).toContain(hosted + ';');
   });
-  it('limits the opt-in to loopback requests and excludes hosted deployment', () => {
+  it('stays restrictive even with local opt-in and loopback authority', () => {
     vi.stubEnv('RECIPE_GENIE_E2E_TARGET', 'local');
     vi.stubEnv('RECIPE_GENIE_LOCAL_CSP_ORIGIN', 'http://127.0.0.1:57321');
     vi.stubEnv('VERCEL', undefined);
-    expect(policy('http://127.0.0.1:3117/shopping')).toContain(hosted + ' http://127.0.0.1:57321;');
+    expect(policy('http://127.0.0.1:3117/shopping')).toContain(hosted + ';');
     expect(policy('https://recipe-genie.example/shopping')).toContain(hosted + ';');
     vi.stubEnv('VERCEL', '1');
     const csp = policy('http://127.0.0.1:3117/shopping');

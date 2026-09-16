@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { localCspConnectionOrigin } from './lib/local-csp';
 
 export function proxy(request: NextRequest) {
   // Generate nonce once and attach to the request so layout headers() receives it
@@ -17,16 +16,8 @@ export function proxy(request: NextRequest) {
   // Add security headers (nonce already on request for layout; set on response for CSP)
   const headers = new Headers(response.headers);
   const isDev = process.env.NODE_ENV === 'development';
-  const localOrigin = localCspConnectionOrigin({
-    requestUrl: request.url,
-    host: request.headers.get('host'),
-    forwardedHost: request.headers.get('x-forwarded-host'),
-    forwarded: request.headers.get('forwarded'),
-    target: process.env.RECIPE_GENIE_E2E_TARGET,
-    allowedOrigin: process.env.RECIPE_GENIE_LOCAL_CSP_ORIGIN,
-    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-    vercel: process.env.VERCEL,
-  });
+  // Normalized NextRequest headers cannot prove raw Host uniqueness. Only the
+  // separate loopback verification ingress may add a local production origin.
 
   // Content Security Policy with nonce-based script execution
   // Nonce allows only scripts with matching nonce attribute, blocking XSS
@@ -40,7 +31,7 @@ export function proxy(request: NextRequest) {
     // In dev: allow localhost for HMR WebSocket
     isDev
       ? "connect-src 'self' https://*.supabase.co wss://*.supabase.co ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*"
-      : `connect-src 'self' https://*.supabase.co wss://*.supabase.co${localOrigin ? ` ${localOrigin}` : ''}`,
+      : "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
