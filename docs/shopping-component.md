@@ -94,3 +94,19 @@ See [local production-build configuration](../web/tests/LOCAL_AUTH_BROWSER.md).
 Slice 10's exact scenario ledger and independent-review handoff are retained in
 `.codex-artifacts/slice10/`. Local verification does not authorize deployment or
 establish hosted health. Foundation acceptance requires independent review.
+
+## Shopping presentation
+
+Initialized lists use the normal Add item form for manual extras and reminders.
+Each ingredient has one collapsed View sources disclosure containing every
+recipe occurrence and manual contribution; contributions outside the displayed
+bucket are explicitly marked. Manual edit/remove and legacy-meaning controls
+live in that ingredient's disclosure, including In Pantry and Excluded rows.
+Yield controls sit with Recipes in list, which includes hidden-only selections.
+Unresolved placement controls appear on affected rows; dormant placement
+evidence without a row retains a conditional recovery control.
+
+Entirely unspecified quantities omit the main-row amount only. Expanded source
+wording, mixed known/unknown amounts, copy/export, and persisted quantities keep
+their existing lossless semantics. Disclosure and form interactions are separate
+from check-off and drag handles.

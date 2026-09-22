@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useRef, useState, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePantryItems } from '@/hooks/use-pantry';
-import { useRecipes } from '@/hooks/use-recipes';
 import { useShoppingDocumentState, useShoppingFoundationCommand } from '@/hooks/shopping/use-shopping-document';
 import { createShoppingRecipeEntry, type ShoppingDocumentStateV3, type ShoppingManualItemV1 } from '@/lib/shopping-document';
 import { formatShoppingQuantityPart } from '@/lib/shopping-quantity-display';
@@ -13,11 +12,10 @@ import { sumShoppingRequirements } from '@/lib/shopping-extra-quantities';
 import { initializedCategory, pinnedPurchaseDefault } from '@/lib/shopping-initialization';
 import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics';
 import { SHOPPING_CATEGORIES } from '@/lib/shopping-categories';
-import { shoppingRecipeSelections } from '@/lib/shopping-sources';
 import { shoppingPlacementRecoveryCandidates } from '@/lib/shopping-placement-recovery';
 import { useUndoToast } from '@/hooks/use-undo-toast';
 import { PlacementResolution } from './shopping-placement-resolution';
-import type { Recipe, ShoppingQuantity } from '@/types/database';
+import type { Recipe, ShoppingItem, ShoppingQuantity } from '@/types/database';
 
 const amountText = (quantity: ShoppingQuantity | null) => quantity?.exactQuantityV1?.authored ?? (quantity?.amount == null ? '' : String(quantity.amount));
 function draftQuantity(text: string, unit: string, original: ShoppingQuantity | null = null): ShoppingQuantity | null {
@@ -100,7 +98,7 @@ function ManualNeedEditor({ item, state }: { item: ShoppingManualItemV1; state: 
   };
   if (identity.removed) return null;
   return <details className="rounded-xl border p-3" data-testid={`need-${item.id}`}>
-    <summary className="cursor-pointer break-words font-medium">{item.displayName}: {amountLabel(item.quantity)} — {legacy ? 'Legacy amount — meaning not set' : identity.meaning === 'reminder' ? 'Reminder' : 'Extra'}</summary>
+    <summary className="min-h-11 cursor-pointer content-center break-words font-medium">{legacy ? 'Resolve legacy amount' : 'Edit manual addition'}: {item.displayName}</summary>
     <div className="mt-3 grid gap-3">
       {item.checked && <p>Previously checked; confirm current need.</p>}
       <label>Name<Input aria-label={`Name for ${item.displayName}`} value={name} onChange={e => setName(e.target.value)} /></label>
@@ -156,7 +154,7 @@ function ManualNeedEditor({ item, state }: { item: ShoppingManualItemV1; state: 
   </details>;
 }
 
-function SelectionYield({ recipe, state }: { recipe: Recipe; state: ShoppingDocumentStateV3 }) {
+export function SelectionYield({ recipe, state }: { recipe: Recipe; state: ShoppingDocumentStateV3 }) {
   const command = useShoppingFoundationCommand();
   const entry = state.document.recipeEntries[recipe.id];
   const basis = getScalingBasis(recipe.yield_metadata, recipe.servings);
@@ -192,47 +190,58 @@ function SelectionYield({ recipe, state }: { recipe: Recipe; state: ShoppingDocu
   </form>;
 }
 
-export function ShoppingFoundationControls({ state }: { state: ShoppingDocumentStateV3 }) {
+/** The normal Add item flow for initialized lists uses the accepted extra command. */
+export function ShoppingAddItem({ state, inputRef }: {
+  state: ShoppingDocumentStateV3;
+  inputRef?: RefObject<HTMLInputElement | null>;
+}) {
   const pantry = usePantryItems();
-  const recipes = useRecipes();
   const command = useShoppingFoundationCommand();
+  const localInput = useRef<HTMLInputElement>(null);
+  const input = inputRef ?? localInput;
+  const amountId = useId();
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [unit, setUnit] = useState('');
+  const [showAmount, setShowAmount] = useState(false);
   const [error, setError] = useState('');
-  const selections = shoppingRecipeSelections(state.document.recipeEntries);
-  return <details className="mb-4 rounded-xl border bg-card p-4" open>
-    <summary className="cursor-pointer font-semibold">Extras, source quantities and legacy amounts</summary>
-    <ShoppingInitializationNotice />
-    <p className="my-3 text-sm">New manual amounts are extra. Checking acknowledges the current buyable amount. Larger or changed requirements reopen; saved legacy checks remain previous-check evidence.</p>
-    <form className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_auto]" onSubmit={async event => {
-      event.preventDefault();
-      try {
-        await command.mutateAsync({ observedRevision: state.contentRevision, mutation: { type: 'addManualItem', item: {
-          id: crypto.randomUUID(), displayName: name, quantity: draftQuantity(amount, unit), categoryKey: 'misc', bucket: 'items', checked: false,
-        } } });
-        setName(''); setAmount(''); setUnit(''); setError('');
-      } catch (error) { setError(errorText(error)); }
-    }}>
-      <label>Purchase<Input aria-label="Purchase" value={name} onChange={e => setName(e.target.value)} /></label>
-      <label>Extra amount<Input aria-label="Extra amount" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Reminder if blank" /></label>
-      <label>Unit<Input aria-label="Extra unit" value={unit} onChange={e => setUnit(e.target.value)} /></label>
-      <Button className="self-end" type="submit" disabled={command.isPending || !name.trim() || !pantry.isSuccess}>Add extra or reminder</Button>
-    </form>
+  return <form className="grid gap-2" aria-label="Add shopping item" onSubmit={async event => {
+    event.preventDefault();
+    try {
+      await command.mutateAsync({ observedRevision: state.contentRevision, mutation: { type: 'addManualItem', item: {
+        id: crypto.randomUUID(), displayName: name, quantity: draftQuantity(amount, unit), categoryKey: 'misc', bucket: 'items', checked: false,
+      } } });
+      setName(''); setAmount(''); setUnit(''); setError(''); input.current?.focus();
+    } catch (error) { setError(errorText(error)); }
+  }}>
+    <div className="flex gap-2">
+      <Input ref={input} aria-label="Item name" placeholder="Add an item…" value={name} onChange={e => setName(e.target.value)} className="h-12 min-w-0 rounded-xl bg-white" />
+      <Button className="h-12 shrink-0 rounded-xl" type="submit" disabled={command.isPending || !name.trim() || !pantry.isSuccess}>Add item</Button>
+    </div>
+    <button type="button" className="min-h-11 w-fit text-sm text-muted-foreground underline-offset-4 hover:underline" aria-expanded={showAmount} aria-controls={amountId} onClick={() => setShowAmount(!showAmount)}>Add an amount{amount ? ` (${amount}${unit ? ' ' + unit : ''})` : ''}</button>
+    <div id={amountId} hidden={!showAmount} className={showAmount ? 'grid grid-cols-2 gap-2' : 'hidden'}>
+      <label className="text-sm">Extra amount<Input aria-label="Extra amount" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Optional" /></label>
+      <label className="text-sm">Unit<Input aria-label="Extra unit" value={unit} onChange={e => setUnit(e.target.value)} /></label>
+      <p className="col-span-2 text-xs text-muted-foreground">Added amounts are extra to recipe quantities. Leave blank for a reminder.</p>
+    </div>
     {error && <p role="alert">{error}</p>}
-    <section className="mt-4 space-y-3" aria-label="Extras and legacy amounts">
-      {state.document.manualItems.filter(item => !item.identity?.removed).map(item => <ManualNeedEditor key={item.id} item={item} state={state} />)}
-    </section>
-    <section className="mt-4 space-y-3" aria-label="Selection quantities and frozen evidence">
-      {selections.map(selection => <details key={selection.recipeId} className="rounded-lg border p-3">
-        <summary>{selection.label}: {selection.selectedServings} selected servings</summary>
-        {recipes.data?.find(recipe => recipe.id === selection.recipeId) && <SelectionYield recipe={recipes.data.find(recipe => recipe.id === selection.recipeId)!} state={state} />}
-        <details><summary>Frozen source evidence {state.document.recipeEntries[selection.recipeId].sourceEvidence?.history === 'reconstructed' ? '(original history unavailable)' : ''}</summary>
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs">{JSON.stringify(state.document.recipeEntries[selection.recipeId].sourceEvidence, null, 2)}</pre>
-        </details>
-      </details>)}
-    </section>
-    {Object.keys(state.document.placementEvidence!.unresolved).map(key =>
-      <PlacementResolution key={key} purchaseKey={key} state={state} />)}
-  </details>;
+  </form>;
+}
+
+export function ShoppingRowControls({ item, state }: { item: ShoppingItem; state: ShoppingDocumentStateV3 }) {
+  const manualIds = new Set(item.requirementBreakdown?.map(part => part.manualId).filter(Boolean));
+  if (item.rowId?.startsWith('manual:')) manualIds.add(item.rowId.slice(7));
+  return <div className="space-y-2">
+    {state.document.manualItems.filter(manual => manualIds.has(manual.id) && !manual.identity?.removed)
+      .map(manual => <ManualNeedEditor key={manual.id} item={manual} state={state} />)}
+    {item.orderingKey && state.document.placementEvidence?.unresolved[item.orderingKey] &&
+      <PlacementResolution purchaseKey={item.orderingKey} state={state} />}
+  </div>;
+}
+
+/** Dormant placement evidence has no ingredient row; show only those exceptions. */
+export function ShoppingDormantRecovery({ state, items }: { state: ShoppingDocumentStateV3; items: ShoppingItem[] }) {
+  const visible = new Set(items.map(item => item.orderingKey));
+  return <>{Object.keys(state.document.placementEvidence?.unresolved ?? {}).filter(key => !visible.has(key))
+    .map(key => <PlacementResolution key={key} purchaseKey={key} state={state} />)}</>;
 }

@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { canonicalizeRecipeFixture } from '@/test/recipe-fixtures'
 import type { Ingredient, ShoppingItem, ShoppingQuantity } from '@/types/database'
 import { shoppingDocumentToList } from '@/hooks/shopping/use-shopping-document'
@@ -52,7 +52,10 @@ describe('lossless Shopping quantities from frozen evidence to rendered text', (
       isCheckingOff={false} isRemoving={false} isAddingToPantry={false}
       recipeColorMap={new Map()} onCheckOff={vi.fn()} onAddToPantry={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.getByText('1–2 + 1–2', { exact: true })).toBeVisible()
-    expect(screen.getByText('Needs: 1–2 carrot; 1–2 carrot', { exact: true })).toBeVisible()
+    fireEvent.click(screen.getByText('View sources'))
+    const sourceParts = screen.getAllByText('1–2 carrot', { exact: true })
+    expect(sourceParts).toHaveLength(2)
+    sourceParts.forEach(part => expect(part).toBeVisible())
     expect(JSON.stringify(document)).toBe(before)
   })
 
@@ -115,14 +118,18 @@ describe('lossless Shopping quantities from frozen evidence to rendered text', (
     expect(formatShoppingItemAmount(legacy)).toBe('1–2 + 100 g')
   })
 
-  it('retains repeated unspecified requirements in source detail as well as the main display', () => {
+  it('retains repeated unspecified requirements in sources and copy without a main-row placeholder', () => {
     const unknown: Ingredient = { item: 'flour', amount: null, unit: '' }
     const row = list(documentFor([unknown, unknown])).items[0]
     render(<ShoppingItemRow item={row} isDesktop={true} sourceDisplay="tags"
       isCheckingOff={false} isRemoving={false} isAddingToPantry={false}
       recipeColorMap={new Map()} onCheckOff={vi.fn()} onAddToPantry={vi.fn()} onRemove={vi.fn()} />)
-    expect(screen.getByText('amount unspecified + amount unspecified', { exact: true })).toBeVisible()
-    expect(screen.getByText('Needs: amount unspecified flour; amount unspecified flour', { exact: true })).toBeVisible()
+    expect(screen.queryByText('amount unspecified + amount unspecified', { exact: true })).not.toBeInTheDocument()
+    expect(formatShoppingItemAmount(row)).toBe('amount unspecified + amount unspecified')
+    fireEvent.click(screen.getByText('View sources'))
+    const sourceParts = screen.getAllByText('amount unspecified flour', { exact: true })
+    expect(sourceParts).toHaveLength(2)
+    sourceParts.forEach(part => expect(part).toBeVisible())
   })
 
   it('keeps awkward exact range endpoints and package counts instead of rounding them again', () => {

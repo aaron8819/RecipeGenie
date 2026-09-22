@@ -1,9 +1,10 @@
 "use client"
 
 import { shoppingSourceControls, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
+import type { ShoppingDocumentStateV3 } from '@/lib/shopping-document'
 import { ShoppingDocumentReadError } from '@/hooks/shopping/use-shopping-document'
 import { useOrganizeShopping, useShoppingDocumentState } from '@/hooks/shopping/use-shopping-document'
-import { ShoppingFoundationControls, ShoppingInitializationNotice } from './shopping-foundation-view'
+import { ShoppingAddItem, ShoppingDormantRecovery, SelectionYield, ShoppingInitializationNotice } from './shopping-foundation-view'
 
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
 import Image from "next/image"
@@ -161,12 +162,14 @@ function parseEditableAmount(value: string): number | null | "invalid" {
 function RecipeTag({ 
   recipeName, 
   recipe,
+  selectedServings,
   onRemove, 
   onViewRecipe,
   isRemoving,
 }: { 
   recipeName: string
   recipe?: Recipe
+  selectedServings?: number
   onRemove: () => void
   onViewRecipe?: () => void
   isRemoving: boolean
@@ -174,7 +177,7 @@ function RecipeTag({
   const recipeImageUrl = getRecipeImageUrl(recipe?.image_url || null)
   const metadata = [
     recipe?.category,
-    recipe?.servings ? `${recipe.servings} servings` : null,
+    selectedServings ? `${selectedServings} selected servings` : recipe?.servings ? `${recipe.servings} servings` : null,
   ].filter(Boolean).join(" · ")
   
   return (
@@ -219,7 +222,7 @@ function RecipeTag({
         type="button"
         onClick={(e) => { e.stopPropagation(); onRemove(); }}
         disabled={isRemoving}
-        className="flex min-h-9 min-w-9 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-200 hover:text-foreground active:bg-stone-300 disabled:opacity-50"
+        className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-200 hover:text-foreground active:bg-stone-300 disabled:opacity-50"
         title={`Remove all items from ${recipeName}`}
       >
         <X className="h-4 w-4" />
@@ -234,6 +237,7 @@ function SwipeableItem({
   isDesktop,
   showDragHandle,
   sourceDisplay,
+  foundationState,
   onCheckOff,
   onRemove,
   onAddToPantry,
@@ -253,6 +257,7 @@ function SwipeableItem({
   isDesktop: boolean
   showDragHandle?: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  foundationState?: ShoppingDocumentStateV3
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
@@ -281,7 +286,7 @@ function SwipeableItem({
   const MAX_VERTICAL_DEVIATION = 30
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (window.innerWidth >= 768) return
+    if (window.innerWidth >= 768 || (e.target as HTMLElement).closest('button, input, select, summary, [data-shopping-sources]')) return
 
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
@@ -432,6 +437,7 @@ function SwipeableItem({
           isDesktop={isDesktop}
           showDragHandle={showDragHandle}
           sourceDisplay={sourceDisplay}
+        foundationState={foundationState}
           onCheckOff={onCheckOff}
           onRemove={onRemove}
           onAddToPantry={onAddToPantry}
@@ -457,6 +463,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isDesktop,
   showDragHandle,
   sourceDisplay,
+  foundationState,
   onCheckOff,
   onRemove,
   onAddToPantry,
@@ -474,6 +481,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isDesktop: boolean
   showDragHandle: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  foundationState?: ShoppingDocumentStateV3
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
@@ -515,6 +523,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
         isAddingToPantry={isAddingToPantry}
         showDragHandle={showDragHandle}
         sourceDisplay={sourceDisplay}
+        foundationState={foundationState}
         recipeColorMap={recipeColorMap}
         onViewRecipe={onViewRecipe}
         onEdit={onEdit}
@@ -541,6 +550,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
 
   return (
     sameItem &&
+    prevProps.foundationState === nextProps.foundationState &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
     prevProps.readOnly === nextProps.readOnly &&
     prevProps.isRemoving === nextProps.isRemoving &&
@@ -556,6 +566,7 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
   item,
   isDesktop,
   sourceDisplay,
+  foundationState,
   onCheckOff,
   onRemove,
   onAddToPantry,
@@ -572,6 +583,7 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
   item: ShoppingItem
   isDesktop: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  foundationState?: ShoppingDocumentStateV3
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
@@ -591,6 +603,7 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
         item={item}
         isDesktop={isDesktop}
         sourceDisplay={sourceDisplay}
+        foundationState={foundationState}
         onCheckOff={onCheckOff}
         onRemove={onRemove}
         onAddToPantry={onAddToPantry}
@@ -621,6 +634,7 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
 
   return (
     sameItem &&
+    prevProps.foundationState === nextProps.foundationState &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
     prevProps.readOnly === nextProps.readOnly &&
     prevProps.isRemoving === nextProps.isRemoving &&
@@ -675,13 +689,12 @@ function useSwipeHint() {
 }
 
 export function ShoppingListView() {
-  const query = useShoppingDocumentState()
-  return <>{!query.error && query.data?.document.schemaVersion === 4
-    ? <ShoppingFoundationControls state={query.data} /> : <ShoppingInitializationNotice />}<ShoppingListContent /></>
+  return <><ShoppingInitializationNotice /><ShoppingListContent /></>
 }
 
 function ShoppingListContent() {
   const organizationQuery = useShoppingDocumentState()
+  const foundationState = !organizationQuery.error && organizationQuery.data?.document.schemaVersion === 4 ? organizationQuery.data : undefined
   const organizePurchase = useOrganizeShopping()
   const dragSnapshot = useRef<ShoppingItem[]>([])
   const router = useRouter()
@@ -1499,7 +1512,8 @@ function ShoppingListContent() {
                     onCheckOff: () => handleCheckOff(item),
                     onRemove: () => handleRemoveItem(item),
                     onAddToPantry: () => handleAddToPantry(item),
-                    onEdit: isManualShoppingItem(item) ? () => handleStartEditingManualItem(item) : undefined,
+                    foundationState,
+                    onEdit: !foundationState && isManualShoppingItem(item) ? () => handleStartEditingManualItem(item) : undefined,
                     readOnly: documentUnavailable,
                     isCheckingOff: Boolean(pendingCheckIntent),
                     isRemoving: false,
@@ -1546,6 +1560,7 @@ function ShoppingListContent() {
   return (
     <>
     <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col">
+      {foundationState && <ShoppingDormantRecovery state={foundationState} items={[...(shoppingList?.items ?? []), ...(shoppingList?.already_have ?? []), ...(shoppingList?.excluded ?? [])]} />}
       {recoveryNotice}
       {shoppingQuery.pantryError ? (
         <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -1557,7 +1572,7 @@ function ShoppingListContent() {
       ) : null}
       {/* Mobile sticky add item - always accessible at top */}
       <div className={cn("sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-2 backdrop-blur-md", isDesktop && "hidden")}>
-        <form onSubmit={handleAddItem} className="relative">
+        {foundationState ? (isDesktop ? null : <ShoppingAddItem state={foundationState} inputRef={addItemInputRef} />) : <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
             placeholder="Add milk, apples, basil..."
@@ -1576,7 +1591,7 @@ function ShoppingListContent() {
           >
             <span className="text-lg leading-none font-semibold">+</span>
           </Button>
-        </form>
+        </form>}
       </div>
 
       {/* Mobile header - compact title and actions */}
@@ -1630,7 +1645,7 @@ function ShoppingListContent() {
         </div>
 
         {/* Desktop add item form - stays in header */}
-        <form onSubmit={handleAddItem} className="relative">
+        {foundationState ? (isDesktop ? <ShoppingAddItem state={foundationState} inputRef={addItemInputRef} /> : null) : <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
             placeholder="Add tomatoes, milk..."
@@ -1650,7 +1665,7 @@ function ShoppingListContent() {
             <Plus className="h-4 w-4" />
             <span>Add Item</span>
           </Button>
-        </form>
+        </form>}
       </header>
 
       {/* Shopping List */}
@@ -1783,7 +1798,8 @@ function ShoppingListContent() {
                         variant="ghost"
                         size="sm"
                         onClick={toggleRecipeSection}
-                        className="h-9 shrink-0 gap-1 rounded-full px-3 text-xs font-medium text-primary hover:bg-sage-50 hover:text-primary"
+                        className="h-11 shrink-0 gap-1 rounded-full px-3 text-xs font-medium text-primary hover:bg-sage-50 hover:text-primary"
+                        aria-expanded={!recipeSectionCollapsed}
                         aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
                       >
                         {recipeSectionCollapsed ? "Show" : "Hide"}
@@ -1793,16 +1809,22 @@ function ShoppingListContent() {
                   </div>
                   {(isDesktop || !recipeSectionCollapsed) ? (
                     <div className="flex flex-col gap-2 border-t border-stone-100 px-3 pb-3 pt-3 md:px-3.5 md:pb-3.5">
-                      {selections.map(({ recipeId, label, selectionVersion }) => {
+                      {selections.map(({ recipeId, label, selectedServings, selectionVersion }) => {
                         return (
+                          <div key={recipeId}>
                           <RecipeTag
-                            key={recipeId}
                             recipeName={label}
+                            selectedServings={selectedServings}
                             recipe={recipesById.get(recipeId)}
                             onRemove={() => handleRemoveRecipeItems(recipeId, label, selectionVersion)}
                             onViewRecipe={() => handleRecipeTagClick(recipeId, label)}
                             isRemoving={documentUnavailable}
                           />
+                          {foundationState && recipesById.has(recipeId) && <details className="px-2 text-sm">
+                            <summary className="min-h-11 cursor-pointer content-center text-muted-foreground" aria-label={`Change yield for ${label}`}>Change yield</summary>
+                            <SelectionYield recipe={recipesById.get(recipeId)!} state={foundationState} />
+                          </details>}
+                          </div>
                         )
                       })}
                     </div>
@@ -1860,6 +1882,7 @@ function ShoppingListContent() {
                   <div className="grid gap-2">
                     {mergedAlreadyHave.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel="In pantry"
@@ -1879,6 +1902,7 @@ function ShoppingListContent() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     {mergedAlreadyHave.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel="In pantry"
@@ -1912,6 +1936,7 @@ function ShoppingListContent() {
                   <div className="grid gap-2">
                     {projectedShoppingList.excluded.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}
@@ -1931,6 +1956,7 @@ function ShoppingListContent() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     {projectedShoppingList.excluded.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}

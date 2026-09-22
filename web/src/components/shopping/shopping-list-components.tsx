@@ -2,6 +2,8 @@ import { shoppingSourceControls as dedupeSources, shoppingSourceLabel, isManualS
 import { formatShoppingItemAmount, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
 export { formatShoppingItemAmount, formatAmountPart, formatEncodedRangeAmount, formatAdditionalAmountParts } from '@/lib/shopping-quantity-display'
 import React from "react"
+import type { ShoppingDocumentStateV3 } from '@/lib/shopping-document'
+import { ShoppingRowControls } from './shopping-foundation-view'
 import type {
   ButtonHTMLAttributes,
   CSSProperties,
@@ -98,7 +100,8 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
   if (source.originalItem === 'garlic' && sourceUnit === 'clove') {
     itemUnitSuffix = source.originalAmount === 1 ? ' clove' : ' cloves'
   }
-  const itemPhrase = `${orderedPreparations.join(' ')}${orderedPreparations.length ? ' ' : ''}${source.originalItem}${itemUnitSuffix}`
+  const sourceName = source.originalAmount != null && Math.abs(source.originalAmount) !== 1 && !sourceUnit ? pluralizeShoppingPurchaseName(source.originalItem) : source.originalItem
+  const itemPhrase = `${orderedPreparations.join(' ')}${orderedPreparations.length ? ' ' : ''}${sourceName}${itemUnitSuffix}`
   const qualifiedItem = `${asNeeded ? 'as needed ' : ''}${itemPhrase}${suffixes.length ? `, ${suffixes.join(', ')}` : ''}`
   const displayUnit = itemUnitSuffix ? '' : sourceUnit
 
@@ -135,37 +138,38 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
   return `${prefix}${qualifiedItem}`.trim()
 }
 
-function buildSourceDetailLabel(item: ShoppingItem): string | null {
-  if (!item.sources?.length) return null
-
-  const sourceDetails = item.sources
-    .map(formatSourceIngredientLabel)
-    .filter((label): label is string => Boolean(label))
-  const details = sourceDetails.filter(
-    (label) => label.toLowerCase() !== item.item.toLowerCase()
-  )
-
-  if (details.length === 0) return null
-
-  return `Needs: ${details.join("; ")}`
+// Presentation only: export/copy continues using the lossless amount formatter.
+function rowAmount(item: ShoppingItem): string {
+  const parts: import("@/types/database").ShoppingQuantity[] = item.quantityParts ?? [item, ...(item.additionalAmounts ?? [])]
+  const entirelyUnspecified = parts.every(part => part.amount == null &&
+    !part.exactPackageV1 && (!part.exactQuantityV1 ||
+      part.exactQuantityV1.kind === 'qualitative'))
+  return entirelyUnspecified ? '' : formatShoppingItemAmount(item)
 }
 
-function buildSourceSummary(sources: ReturnType<typeof dedupeSources>): string | null {
-  const nonManualSources = sources.filter((source) => !source.manualId)
-
-  if (nonManualSources.length === 0) {
-    return sources.some((source) => !!source.manualId) ? "Added manually" : null
-  }
-
-  if (nonManualSources.length === 1) {
-    return `From ${shoppingSourceLabel(nonManualSources[0])}`
-  }
-
-  if (nonManualSources.length === 2) {
-    return `From ${shoppingSourceLabel(nonManualSources[0])} and ${shoppingSourceLabel(nonManualSources[1])}`
-  }
-
-  return `From ${shoppingSourceLabel(nonManualSources[0])} + ${nonManualSources.length - 1} more`
+function ShoppingSources({ item, onViewRecipe, children }: {
+  item: ShoppingItem
+  onViewRecipe?: (recipeId: string | undefined, recipeName: string) => void
+  children?: ReactNode
+}) {
+  const sources = item.requirementBreakdown ?? (item.sources ?? []).map(source => ({
+    label: source.manualId || isManualShoppingItem(item) ? 'Added manually' : shoppingSourceLabel(source),
+    source, quantity: source.manualId ? item : null, hidden: false,
+  }))
+  if (!sources.length && !children) return null
+  return <details className="text-sm" data-shopping-sources="true">
+    <summary aria-label={`View sources for ${getDisplayItemName(item)}`} className="min-h-11 cursor-pointer content-center text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-primary">View sources</summary>
+    <div className="space-y-2 pb-2" onTouchStart={event => event.stopPropagation()}>
+      {sources.map((part, index) => <div key={index} className="break-words text-sm text-muted-foreground">
+        <span>{(part.source && formatSourceIngredientLabel(part.source)) ||
+          `${formatShoppingQuantityPart(part.quantity ?? { amount: null, unit: '' })} ${getDisplayItemName({ ...item, amount: part.quantity?.amount ?? null, unit: part.quantity?.unit ?? '' })}`}</span>
+        {' — '}
+        {part.source && !part.source.manualId && !isManualShoppingItem(item) && onViewRecipe ? <button type="button" className="min-h-11 text-left underline underline-offset-4" onClick={() => onViewRecipe(part.source?.recipeId, part.source?.recipeName ?? part.label)}>{part.label}</button> : <span>{part.label}</span>}
+        {part.hidden && <span> (not included above: hidden or in Pantry)</span>}
+      </div>)}
+      {children}
+    </div>
+  </details>
 }
 
 export function SourceTag({
@@ -211,12 +215,11 @@ export function ShoppingItemRow({
   item,
   isDesktop,
   showDragHandle = false,
-  sourceDisplay = "tags",
+  foundationState,
   isCheckingOff,
   readOnly = false,
   isRemoving,
   isAddingToPantry,
-  recipeColorMap,
   dragHandleProps,
   dragStyle,
   isDragging,
@@ -231,6 +234,7 @@ export function ShoppingItemRow({
   isDesktop: boolean
   showDragHandle?: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  foundationState?: ShoppingDocumentStateV3
   readOnly?: boolean
   isCheckingOff: boolean
   isRemoving: boolean
@@ -247,20 +251,14 @@ export function ShoppingItemRow({
   onRemove: () => void
 }) {
   const isChecked = item.checked || false
-  const amountLabel = formatShoppingItemAmount(item)
-  const uniqueSources = dedupeSources(item)
-  const nonManualSources = isManualShoppingItem(item) ? [] : uniqueSources.filter((source) => !source.manualId)
-  const sourceSummary = isManualShoppingItem(item) ? "Added manually" : buildSourceSummary(uniqueSources)
-  const sourceDetailLabel = buildSourceDetailLabel(item)
-  const singleRecipeSource = nonManualSources.length === 1 ? nonManualSources[0] : null
+  const amountLabel = rowAmount(item)
   const displayItemName = getDisplayItemName(item)
-  const secondaryMetaLabel = sourceDetailLabel
 
   return (
     <div
       data-testid="shopping-item-row"
       className={cn(
-        "group swipeable-content flex min-h-[84px] items-center justify-between px-3 py-3.5 transition-transform duration-200 ease-out hover:bg-stone-50/70 sm:px-4 md:min-h-[72px] md:px-5 md:py-3",
+        "group swipeable-content flex min-h-[64px] items-start justify-between px-3 py-1.5 transition-transform duration-200 ease-out hover:bg-stone-50/70 sm:px-4 md:min-h-[64px] md:px-5 md:py-1.5",
         showSwipeHint && "animate-swipe-hint"
       )}
       style={{
@@ -279,7 +277,7 @@ export function ShoppingItemRow({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
         {showDragHandle ? (
           <button
             type="button"
@@ -300,7 +298,7 @@ export function ShoppingItemRow({
           disabled={readOnly || item.coveragePending}
           onClick={onCheckOff}
           aria-busy={isCheckingOff || undefined}
-          className="my-0 flex min-h-[52px] min-w-[52px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 md:min-h-[48px] md:min-w-[48px]"
+          className="my-0 flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 "
           aria-label={`Check off ${displayItemName}`}
           aria-pressed={isChecked}
         >
@@ -316,15 +314,7 @@ export function ShoppingItemRow({
           </span>
         </button>
 
-        <div className={cn("flex min-h-[48px] min-w-0 flex-1 flex-col justify-center", isChecked && "opacity-60")}>
-          {item.legacyAmount && <p className="text-sm">Legacy amount — meaning not set</p>}
-          {item.coverageNeedsRecheck
-            ? <p className="text-sm">Please recheck: the previous check did not save enough ingredient or package detail.</p>
-            : item.requirementChanged && <p className="text-sm">Requirement changed</p>}
-          {item.previousChecked && <p className="text-sm">Previously checked; confirm current need.</p>}
-          {item.requirementBreakdown && <details className="text-sm"><summary>Recipe and extra breakdown</summary>
-            {item.requirementBreakdown.map((part, index) => <p key={index}>{formatShoppingQuantityPart(part.quantity ?? { amount: null, unit: '' })} — {part.label}{part.hidden ? ' (hidden or in Pantry)' : ''}</p>)}
-          </details>}
+        <div className={cn("flex min-h-11 min-w-0 flex-1 flex-col pt-2.5", isChecked && "opacity-60")}>
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
             {amountLabel ? (
               <span
@@ -345,48 +335,12 @@ export function ShoppingItemRow({
               {displayItemName}
             </span>
           </div>
-          {sourceDisplay === "tags" ? (
-            <div className="mt-1 flex min-w-0 flex-wrap gap-1.5">
-              {uniqueSources.map((source, index) => (
-                <SourceTag
-                  key={source.recipeId ?? source.manualId ?? `unknown-source-${index}`}
-                  recipeName={shoppingSourceLabel(source)}
-                  isManual={!!source.manualId || isManualShoppingItem(item)}
-                  colorIndex={recipeColorMap.get(source.recipeId ?? "")}
-                  onClick={
-                    !source.manualId && onViewRecipe
-                      ? () => onViewRecipe(source.recipeId, source.recipeName)
-                      : undefined
-                  }
-                  className="shrink-0 px-1.5 py-0.5 text-[9px] md:px-2 md:text-[10px]"
-                />
-              ))}
-            </div>
-          ) : null}
-          {sourceDisplay === "summary" && sourceSummary ? (
-            <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-5 text-stone-500">
-              {secondaryMetaLabel ? (
-                <span className="max-w-full break-words font-medium text-slate-500">
-                  {secondaryMetaLabel}
-                </span>
-              ) : null}
-              {singleRecipeSource && onViewRecipe ? (
-                <button
-                  type="button"
-                  onClick={() => onViewRecipe(singleRecipeSource.recipeId, singleRecipeSource.recipeName)}
-                  className="max-w-full truncate text-left underline-offset-2 hover:text-foreground hover:underline"
-                >
-                  {sourceSummary}
-                </button>
-              ) : (
-                <p className="max-w-full truncate">{sourceSummary}</p>
-              )}
-            </div>
-          ) : secondaryMetaLabel ? (
-            <p className="mt-1 break-words text-[11px] font-medium text-slate-500">
-              {secondaryMetaLabel}
-            </p>
-          ) : null}
+          {item.legacyAmount && <p className="text-sm">Choose what this saved amount means in View sources.</p>}
+          {item.coverageNeedsRecheck ? <p className="text-sm">Please recheck the current amount.</p> : item.requirementChanged && <p className="text-sm">Requirement changed</p>}
+          {item.previousChecked && <p className="text-sm">Previously checked; confirm current need.</p>}
+          <ShoppingSources item={item} onViewRecipe={onViewRecipe}>
+            {foundationState && <ShoppingRowControls item={item} state={foundationState} />}
+          </ShoppingSources>
         </div>
       </div>
 
@@ -394,7 +348,7 @@ export function ShoppingItemRow({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={`Actions for ${displayItemName}`}
             disabled={readOnly}
           >
@@ -402,10 +356,10 @@ export function ShoppingItemRow({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {onEdit ? (
-            <DropdownMenuItem onClick={onEdit} disabled={!!item.requirementBreakdown || item.coveragePending}>
+          {onEdit && !item.requirementBreakdown && !item.coveragePending ? (
+            <DropdownMenuItem onClick={onEdit}>
               <Pencil className="mr-2 h-4 w-4" />
-              {item.requirementBreakdown || item.coveragePending ? 'Edit in Extras and legacy amounts' : 'Edit item'}
+              Edit item
             </DropdownMenuItem>
           ) : null}
           <DropdownMenuItem onClick={onAddToPantry} disabled={isAddingToPantry}>
@@ -516,6 +470,7 @@ export function ManualShoppingItemEditor({
 
 export function ShoppingRestoreChip({
   item,
+  foundationState,
   reasonLabel,
   onRestore,
   disabled,
@@ -524,6 +479,7 @@ export function ShoppingRestoreChip({
   compact = false,
 }: {
   item: ShoppingItem
+  foundationState?: ShoppingDocumentStateV3
   reasonLabel: string
   onRestore: () => void
   disabled: boolean
@@ -531,7 +487,7 @@ export function ShoppingRestoreChip({
   tone?: "pantry" | "excluded"
   compact?: boolean
 }) {
-  const amountLabel = formatShoppingItemAmount(item)
+  const amountLabel = rowAmount(item)
   const sources = isManualShoppingItem(item) ? [] : dedupeSources(item).filter((source) => !source.manualId)
   const toneClasses = tone === "excluded"
     ? {
@@ -544,13 +500,14 @@ export function ShoppingRestoreChip({
       }
 
   return (
+    <div>
     <button
       type="button"
       onClick={onRestore}
       disabled={disabled}
       aria-label={`Restore ${item.item}${amountLabel ? ` ${amountLabel}` : ""} ${reasonLabel}`}
       className={cn(
-        "rounded-2xl border text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+        "w-full rounded-2xl border text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
         compact ? "min-h-[44px] px-3 py-2.5" : "px-4 py-3",
         toneClasses.shell
       )}
@@ -571,7 +528,7 @@ export function ShoppingRestoreChip({
             <span className={cn("rounded-full px-2 py-0.5 font-medium", toneClasses.badge, compact ? "text-[10px]" : "text-xs")}>
               {reasonLabel}
             </span>
-            {sources.map((source, index) => (
+            {!foundationState && sources.map((source, index) => (
               <SourceTag
                 key={source.recipeId ?? source.manualId ?? `unknown-source-${index}`}
                 recipeName={shoppingSourceLabel(source)}
@@ -584,6 +541,8 @@ export function ShoppingRestoreChip({
         </div>
       </div>
     </button>
+    {foundationState && <ShoppingSources item={item}><ShoppingRowControls item={item} state={foundationState} /></ShoppingSources>}
+    </div>
   )
 }
 

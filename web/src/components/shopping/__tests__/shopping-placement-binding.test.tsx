@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ShoppingFoundationControls } from '../shopping-foundation-view';
+import { ShoppingDormantRecovery } from '../shopping-foundation-view';
 import { PlacementResolution } from '../shopping-placement-resolution';
 import { useShoppingDocumentState } from '@/hooks/shopping/use-shopping-document';
 import { shoppingKeys } from '@/lib/query-keys';
@@ -42,7 +42,7 @@ function change(mutation: ShoppingCommand['mutation']) {
 }
 function Harness() {
   const query = useShoppingDocumentState();
-  return query.data ? <><output data-testid="fetched-revision">{query.data.contentRevision}</output><ShoppingFoundationControls state={query.data} /></> : null;
+  return query.data ? <><output data-testid="fetched-revision">{query.data.contentRevision}</output><ShoppingDormantRecovery state={query.data} items={[]} /></> : null;
 }
 function mount() {
   client.setQueryData(shoppingKeys.detail(mock.owner), structuredClone(saved));

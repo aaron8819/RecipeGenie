@@ -141,7 +141,7 @@ export type ShoppingItem = {
   manualVersion?: number
   legacyAmount?: boolean
   previousChecked?: boolean
-  requirementBreakdown?: { label: string; quantity: ShoppingQuantity | null; hidden: boolean }[]
+  requirementBreakdown?: { label: string; quantity: ShoppingQuantity | null; hidden: boolean; manualId?: string; source?: NonNullable<ShoppingItem['sources']>[number] }[]
   // Complete ordered display requirements. When present, includes the primary
   // exactly once and supersedes the legacy quantity fields below.
   quantityParts?: ShoppingQuantity[]

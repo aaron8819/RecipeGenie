@@ -187,7 +187,7 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.getByText("2 lb")).toBeInTheDocument()
     expect(screen.getByText("apples")).toBeInTheDocument()
-    expect(screen.getAllByText("Autumn Soup")).toHaveLength(1)
+    expect(screen.getAllByText("Autumn Soup")).toHaveLength(2)
     expect(screen.getByRole("button", { name: "Reorder apples" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /^Actions for / })).toBeInTheDocument()
 
@@ -220,7 +220,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByTestId("shopping-item-row").className).toContain("items-center")
+    expect(screen.getByTestId("shopping-item-row").className).toContain("items-start")
     expect(screen.getByText("Swipe left to delete")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).toHaveAttribute("aria-busy", "true")
     expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).not.toBeDisabled()
@@ -250,7 +250,8 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "From Weeknight Pasta" }))
+    fireEvent.click(screen.getByText("View sources"))
+    fireEvent.click(screen.getByRole("button", { name: "Weeknight Pasta" }))
     expect(onViewRecipe).toHaveBeenCalledWith(undefined, "Weeknight Pasta")
   })
 
@@ -276,7 +277,9 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("From Weeknight Pasta + 2 more")).toBeInTheDocument()
+    expect(screen.getByLabelText('View sources for apples').parentElement).not.toHaveAttribute('open')
+    expect(screen.getByText('Sunday Chili')).toBeInTheDocument()
+    expect(screen.getByText('Lunch Bowl')).toBeInTheDocument()
   })
 
   it("shows additional amounts in the main quantity display", () => {
@@ -303,7 +306,7 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.getByText("3 cloves + 1 head")).toBeInTheDocument()
     expect(screen.queryByText("Also: 1 head")).not.toBeInTheDocument()
-    expect(screen.getByText("From Roast Chicken")).toBeInTheDocument()
+    expect(screen.getByText("Roast Chicken")).toBeInTheDocument()
   })
 
   it("shows prep-specific source details without repeating exact bare item forms", () => {
@@ -333,50 +336,51 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.getByText("4")).toBeInTheDocument()
     expect(screen.getByText("limes")).toBeInTheDocument()
-    expect(screen.getByText("Needs: juice of 2 limes; lime wedges")).toBeInTheDocument()
-    expect(screen.getByText("From Pollo Asado Tacos and Shredded Chipotle Beef")).toBeInTheDocument()
+    expect(screen.getByText("juice of 2 limes")).toBeInTheDocument()
+    expect(screen.getByText("lime wedges")).toBeInTheDocument()
+    expect(screen.getByText("Shredded Chipotle Beef")).toBeInTheDocument()
   })
 
   it.each([
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 1, originalUnit: "clove", preparationModifiers: ["finely grated", "small"] },
-      "Needs: 1 finely grated small garlic clove",
+      "1 finely grated small garlic clove",
     ],
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 1, originalUnit: "clove", preparationModifiers: ["finely grated"] },
-      "Needs: 1 finely grated garlic clove",
+      "1 finely grated garlic clove",
     ],
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 2, originalUnit: "clove", preparationModifiers: ["finely grated"] },
-      "Needs: 2 finely grated garlic cloves",
+      "2 finely grated garlic cloves",
     ],
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 0.5, originalUnit: "clove", preparationModifiers: ["finely grated"] },
-      "Needs: ½ finely grated garlic cloves",
+      "½ finely grated garlic cloves",
     ],
     [
       "avocado",
       { originalItem: "avocado", originalAmount: 1, originalUnit: "count", preparationModifiers: ["diced", "sliced"] },
-      "Needs: 1 sliced or diced avocado",
+      "1 sliced or diced avocado",
     ],
     [
       "jasmine rice",
       { originalItem: "jasmine rice", originalAmount: 2, originalUnit: "cup", preparationModifiers: ["cooked", "warm"] },
-      "Needs: 2 cup warm cooked jasmine rice",
+      "2 cup warm cooked jasmine rice",
     ],
     [
       "water",
       { originalItem: "water", originalAmount: null, originalUnit: "", preparationModifiers: ["as needed"] },
-      "Needs: as needed water",
+      "as needed water",
     ],
     [
       "kosher salt",
       { originalItem: "kosher salt", originalAmount: 0.5, originalUnit: "tsp", preparationModifiers: ["to taste"] },
-      "Needs: ½ tsp kosher salt, to taste",
+      "½ tsp kosher salt, to taste",
     ],
   ])("renders source preparation separately from the %s purchase row", (
     purchaseItem,
@@ -705,7 +709,8 @@ it('keeps UUID source buttons distinct, including a recipe titled Manual', () =>
   ] })} isDesktop={false} sourceDisplay="tags" isCheckingOff={false}
     isRemoving={false} isAddingToPantry={false} recipeColorMap={new Map()}
     onViewRecipe={onViewRecipe} onCheckOff={vi.fn()} onAddToPantry={vi.fn()} onRemove={vi.fn()} />)
-  expect(screen.getAllByRole('button', { name: 'Soup (1)' })).toHaveLength(1)
+  fireEvent.click(screen.getByText('View sources'))
+  expect(screen.getAllByRole('button', { name: 'Soup (1)' })).toHaveLength(2)
   fireEvent.click(screen.getByRole('button', { name: 'Soup (2)' }))
   expect(onViewRecipe).toHaveBeenLastCalledWith('soup-b', 'Soup')
   fireEvent.click(screen.getByRole('button', { name: 'Manual' }))
