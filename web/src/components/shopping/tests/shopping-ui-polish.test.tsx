@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, within, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShoppingItemRow, formatShoppingItemAmount } from '../shopping-list-components';
 import { ShoppingAddItem, ShoppingRowControls, SelectionYield } from '../shopping-foundation-view';
 import { createEmptyShoppingDocument, createShoppingRecipeEntry, type ShoppingDocumentStateV3 } from '@/lib/shopping-document';
@@ -11,7 +11,8 @@ import { parseQuantityV1 } from '@/lib/recipe-quantity';
 import type { Recipe, ShoppingItem } from '@/types/database';
 
 const command = vi.hoisted(() => ({ mutateAsync: vi.fn(), isPending: false }));
-vi.mock('@/hooks/shopping/use-shopping-document', () => ({ useShoppingFoundationCommand: () => command }));
+const addItem = vi.hoisted(() => ({ mutateAsync: vi.fn(), isPending: false }));
+vi.mock('@/hooks/shopping/use-shopping-document', () => ({ useShoppingFoundationCommand: () => command, useAddShoppingItem: () => addItem }));
 vi.mock('@/hooks/use-pantry', () => ({ usePantryItems: () => ({ isSuccess: true }) }));
 vi.mock('@/hooks/use-undo-toast', () => ({ useUndoToast: () => ({ show: vi.fn() }) }));
 
@@ -24,6 +25,11 @@ function row(value: ShoppingItem) {
 }
 
 describe('Shopping presentation and relocated controls', () => {
+  beforeEach(() => {
+    command.mutateAsync.mockReset();
+    addItem.mutateAsync.mockReset().mockResolvedValue({});
+  });
+
   it('projects every recipe occurrence and exact manual source without changing the document', () => {
     const current = state();
     const recipe = canonicalizeRecipeFixture({ name: 'Salad', fixtureIngredients: [
@@ -90,6 +96,55 @@ describe('Shopping presentation and relocated controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
     await waitFor(() => expect(screen.getByLabelText('Item name')).toHaveFocus());
     expect(command.mutateAsync).toHaveBeenLastCalledWith(expect.objectContaining({ observedRevision: 7, mutation: expect.objectContaining({ type: 'addManualItem', item: expect.objectContaining({ quantity: expect.objectContaining({ exactQuantityV1: expect.objectContaining({ authored: '1/2' }) }) }) }) }));
+  });
+
+  it.each([
+    ['zucchini, celery', ['zucchini', 'celery']],
+    [' zucchini, , celery, basil, ', ['zucchini', 'celery', 'basil']],
+  ])('adds comma-separated amount-free items individually in order: %s', async (text, names) => {
+    render(<ShoppingAddItem state={state()} />);
+    fireEvent.change(screen.getByLabelText('Item name'), { target: { value: text } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    await waitFor(() => expect(addItem.mutateAsync).toHaveBeenCalledTimes(names.length));
+    expect(addItem.mutateAsync.mock.calls.map(([value]) => value.itemName)).toEqual(names);
+    expect(new Set(addItem.mutateAsync.mock.calls.map(([value]) => value.rowId)).size).toBe(names.length);
+    expect(command.mutateAsync).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByLabelText('Item name')).toHaveValue(''));
+  });
+
+  it('reports duplicates without losing a successful addition or unresolved name', async () => {
+    addItem.mutateAsync.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('Item already in shopping list')).mockResolvedValueOnce({});
+    render(<ShoppingAddItem state={state()} />);
+    fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'zucchini, celery, basil' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    await waitFor(() => expect(addItem.mutateAsync).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Added: zucchini, basil. Already on the list: celery.'));
+    expect(screen.getByLabelText('Item name')).toHaveValue('celery');
+  });
+
+  it('stops after an uncertain result and retains that item and the unsubmitted remainder', async () => {
+    addItem.mutateAsync.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('Outcome unknown'));
+    render(<ShoppingAddItem state={state()} />);
+    fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'zucchini, celery, basil' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not confirm celery'));
+    expect(addItem.mutateAsync.mock.calls.map(([value]) => value.itemName)).toEqual(['zucchini', 'celery']);
+    expect(screen.getByRole('alert')).toHaveTextContent('Added: zucchini.');
+    expect(screen.getByRole('alert')).toHaveTextContent('Review the list before retrying');
+    expect(screen.getByLabelText('Item name')).toHaveValue('celery, basil');
+  });
+
+  it('rejects a comma-separated list with an amount while retaining the draft', async () => {
+    render(<ShoppingAddItem state={state()} />);
+    fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'zucchini, celery' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add an amount' }));
+    fireEvent.change(screen.getByLabelText('Extra unit'), { target: { value: 'bunches' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Add one item at a time');
+    expect(screen.getByLabelText('Item name')).toHaveValue('zucchini, celery');
+    expect(screen.getByLabelText('Extra unit')).toHaveValue('bunches');
+    expect(addItem.mutateAsync).not.toHaveBeenCalled();
+    expect(command.mutateAsync).not.toHaveBeenCalled();
   });
 
   it('places only the relevant manual editor on a row and keeps legacy resolution operable', () => {

@@ -98,6 +98,10 @@ establish hosted health. Foundation acceptance requires independent review.
 ## Shopping presentation
 
 Initialized lists use the normal Add item form for manual extras and reminders.
+Without an amount, comma-separated names add separate purchases in input order;
+empty segments are ignored. A supplied amount or unit requires one item name.
+If a batch stops after a failed or uncertain command, the form reports confirmed
+additions and retains the unresolved names for review before retrying.
 Each ingredient has one collapsed View sources disclosure containing every
 recipe occurrence and manual contribution; contributions outside the displayed
 bucket are explicitly marked. Manual edit/remove and legacy-meaning controls
