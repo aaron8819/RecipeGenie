@@ -208,50 +208,60 @@ export function ShoppingAddItem({ state, inputRef }: {
   const [unit, setUnit] = useState('');
   const [showAmount, setShowAmount] = useState(false);
   const [error, setError] = useState('');
+  const submitting = useRef(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   return <form className="grid gap-2" aria-label="Add shopping item" onSubmit={async event => {
     event.preventDefault();
-    const items = name.split(',').map(item => item.trim()).filter(Boolean);
-    if (!items.length) { setError('Enter an item or paste a comma-separated list.'); input.current?.focus(); return; }
-    if (name.includes(',') && (amount.trim() || unit.trim())) {
-      setError('Add one item at a time when specifying an amount or unit. Your input is preserved.');
-      input.current?.focus();
-      return;
-    }
-    if (name.includes(',')) {
-      const added: string[] = [];
-      const duplicates: string[] = [];
-      let failed: string | null = null;
-      let failure: unknown;
-      for (const item of items) {
-        try {
-          await addItem.mutateAsync({ itemName: item, rowId: createShoppingManualItemId() });
-          added.push(item);
-        } catch (error) {
-          if (isAlreadyInShoppingListError(error)) duplicates.push(item);
-          else { failed = item; failure = error; break; }
-        }
-      }
-      const unresolved = [...duplicates, ...(failed ? items.slice(added.length + duplicates.length) : [])];
-      setName(unresolved.join(', '));
-      if (unresolved.length) {
-        const parts = [added.length ? `Added: ${added.join(', ')}.` : '',
-          duplicates.length ? `Already on the list: ${duplicates.join(', ')}.` : '',
-          failed ? `Could not confirm ${failed}: ${errorText(failure)}. Review the list before retrying; remaining items were not submitted.` : ''];
-        setError(parts.filter(Boolean).join(' '));
-      } else setError('');
-      input.current?.focus();
-      return;
-    }
+    if (submitting.current) return;
+    submitting.current = true;
+    setIsSubmitting(true);
     try {
+      const items = name.split(',').map(item => item.trim()).filter(Boolean);
+      if (!items.length) { setError('Enter an item or paste a comma-separated list.'); input.current?.focus(); return; }
+      if (name.includes(',') && (amount.trim() || unit.trim())) {
+        setError('Add one item at a time when specifying an amount or unit. Your input is preserved.');
+        input.current?.focus();
+        return;
+      }
+      if (name.includes(',')) {
+        const added: string[] = [];
+        const duplicates: string[] = [];
+        let failed: string | null = null;
+        let failure: unknown;
+        for (const item of items) {
+          try {
+            await addItem.mutateAsync({ itemName: item, rowId: createShoppingManualItemId() });
+            added.push(item);
+          } catch (error) {
+            if (isAlreadyInShoppingListError(error)) duplicates.push(item);
+            else { failed = item; failure = error; break; }
+          }
+        }
+        const unresolved = [...duplicates, ...(failed ? items.slice(added.length + duplicates.length) : [])];
+        setName(unresolved.join(', '));
+        if (unresolved.length) {
+          const parts = [added.length ? `Added: ${added.join(', ')}.` : '',
+            duplicates.length ? `Already on the list: ${duplicates.join(', ')}.` : '',
+            failed ? `Could not confirm ${failed}: ${errorText(failure)}. Review the list before retrying; remaining items were not submitted.` : ''];
+          setError(parts.filter(Boolean).join(' '));
+        } else setError('');
+        input.current?.focus();
+        return;
+      }
       await command.mutateAsync({ observedRevision: state.contentRevision, mutation: { type: 'addManualItem', item: {
         id: crypto.randomUUID(), displayName: items[0], quantity: draftQuantity(amount, unit), categoryKey: 'misc', bucket: 'items', checked: false,
       } } });
       setName(''); setAmount(''); setUnit(''); setError(''); input.current?.focus();
-    } catch (error) { setError(errorText(error)); }
+    } catch (error) {
+      setError(errorText(error));
+    } finally {
+      submitting.current = false;
+      setIsSubmitting(false);
+    }
   }}>
     <div className="flex gap-2">
       <Input ref={input} aria-label="Item name" placeholder="Add an item…" value={name} onChange={e => setName(e.target.value)} className="h-12 min-w-0 rounded-xl bg-white" />
-      <Button className="h-12 shrink-0 rounded-xl" type="submit" disabled={command.isPending || addItem.isPending || !name.trim() || !pantry.isSuccess}>Add item</Button>
+      <Button className="h-12 shrink-0 rounded-xl" type="submit" disabled={isSubmitting || command.isPending || addItem.isPending || !name.trim() || !pantry.isSuccess}>Add item</Button>
     </div>
     <button type="button" className="min-h-11 w-fit text-sm text-muted-foreground underline-offset-4 hover:underline" aria-expanded={showAmount} aria-controls={amountId} onClick={() => setShowAmount(!showAmount)}>Add an amount{amount ? ` (${amount}${unit ? ' ' + unit : ''})` : ''}</button>
     <div id={amountId} hidden={!showAmount} className={showAmount ? 'grid grid-cols-2 gap-2' : 'hidden'}>

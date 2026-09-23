@@ -87,6 +87,9 @@ preserves earlier implementation context; its temporary restrictions are not
 current V4 requirements.
 
 Run the root trusted `scripts/rg-verify.ps1 pr` gate under Node 22.23.1/npm 10.9.8.
+The Add item form admits one submission at a time across Enter and button clicks.
+It releases that guard after validation, confirmation, or failure; uncertain batch
+items stay in the input for review and are never retried automatically.
 Authenticated local scripts under `web/scripts/test-shopping-*.ts` additionally
 exercise HTTP, persisted outcomes, deterministic races and populated upgrades.
 Their ports and local fixture requirements are explicit in each script.

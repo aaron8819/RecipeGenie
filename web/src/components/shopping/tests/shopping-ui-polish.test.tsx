@@ -112,6 +112,63 @@ describe('Shopping presentation and relocated controls', () => {
     await waitFor(() => expect(screen.getByLabelText('Item name')).toHaveValue(''));
   });
 
+  it.each([
+    ['Enter then Enter', 'enter', 'enter'],
+    ['click then click', 'click', 'click'],
+    ['Enter then click', 'enter', 'click'],
+    ['click then Enter', 'click', 'enter'],
+  ])('ignores rapid %s while a batch is in flight', async (_label, first, second) => {
+    let finish!: () => void;
+    addItem.mutateAsync.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    render(<ShoppingAddItem state={state()} />);
+    const input = screen.getByLabelText('Item name');
+    fireEvent.change(input, { target: { value: 'turnip, yam' } });
+    const form = input.closest('form')!;
+    const submit = (kind: string) => kind === 'enter'
+      ? fireEvent.submit(form)
+      : fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    submit(first);
+    submit(second);
+    expect(addItem.mutateAsync).toHaveBeenCalledTimes(1);
+    finish();
+    await waitFor(() => expect(addItem.mutateAsync).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add item' })).toBeDisabled());
+    await waitFor(() => expect(input).toHaveValue(''));
+  });
+
+  it('releases the guard after an uncertain result and keeps unresolved input', async () => {
+    addItem.mutateAsync.mockRejectedValueOnce(new Error('Outcome unknown'));
+    render(<ShoppingAddItem state={state()} />);
+    const input = screen.getByLabelText('Item name');
+    fireEvent.change(input, { target: { value: 'turnip, yam' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Could not confirm turnip'));
+    expect(input).toHaveValue('turnip, yam');
+    expect(screen.getByRole('button', { name: 'Add item' })).toBeEnabled();
+    expect(addItem.mutateAsync).toHaveBeenCalledTimes(1);
+    fireEvent.change(input, { target: { value: 'new item' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    await waitFor(() => expect(command.mutateAsync).toHaveBeenCalledTimes(1));
+  });
+
+  it('releases the guard after validation and a thrown single-item command', async () => {
+    command.mutateAsync.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValueOnce({});
+    render(<ShoppingAddItem state={state()} />);
+    const input = screen.getByLabelText('Item name');
+    fireEvent.change(input, { target: { value: 'turnip, yam' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add an amount' }));
+    fireEvent.change(screen.getByLabelText('Extra unit'), { target: { value: 'cup' } });
+    fireEvent.submit(input.closest('form')!);
+    expect(screen.getByRole('alert')).toHaveTextContent('Add one item at a time');
+    fireEvent.change(input, { target: { value: 'turnip' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Connection lost'));
+    expect(input).toHaveValue('turnip');
+    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+    await waitFor(() => expect(command.mutateAsync).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(input).toHaveValue(''));
+  });
+
   it('reports duplicates without losing a successful addition or unresolved name', async () => {
     addItem.mutateAsync.mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('Item already in shopping list')).mockResolvedValueOnce({});
     render(<ShoppingAddItem state={state()} />);
