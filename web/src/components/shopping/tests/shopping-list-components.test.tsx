@@ -334,7 +334,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("4")).toBeInTheDocument()
+    expect(screen.queryByText("4")).not.toBeInTheDocument()
     expect(screen.getByText("limes")).toBeInTheDocument()
     expect(screen.getByText("juice of 2 limes")).toBeInTheDocument()
     expect(screen.getByText("lime wedges")).toBeInTheDocument()
