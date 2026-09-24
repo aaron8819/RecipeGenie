@@ -119,6 +119,9 @@ export function formatShoppingItemAmount(item: ShoppingItem): string {
 export function formatShoppingPurchaseAmount(item: ShoppingItem): string {
   const [category] = categorizeIngredient(item.item)
   const parts: ShoppingQuantity[] = item.quantityParts ?? [item, ...(item.additionalAmounts ?? [])]
+  if (item.sources?.some(source => source.recipeId && source.originalAmount == null &&
+    !source.exactPackageV1 && (!source.exactQuantityV1 ||
+      source.exactQuantityV1.kind === 'qualitative'))) return ''
   // A partial total would imply the shopper has the complete purchase amount.
   if (parts.some(part => part.amount == null && !part.exactPackageV1 &&
     (!part.exactQuantityV1 || part.exactQuantityV1.kind === 'qualitative'))) return ''

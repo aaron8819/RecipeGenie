@@ -87,6 +87,13 @@ describe('Shopping presentation and relocated controls', () => {
     expect(screen.queryByText('2')).not.toBeInTheDocument();
   });
 
+  it('hides a synthesized count when a source amount was unspecified', () => {
+    row(item({ item: 'onion', amount: 3, unit: 'count', quantityParts: [{ amount: 3, unit: 'count' }],
+      sources: [{ recipeId: 'recipe-1', recipeName: 'Soup', originalItem: 'onion', originalAmount: 2, originalUnit: 'count' },
+        { recipeId: 'recipe-1', recipeName: 'Soup', originalItem: 'onion', originalAmount: null, originalUnit: '' }] }));
+    expect(screen.getByText('onion').parentElement).not.toHaveTextContent('3');
+  });
+
   it('keeps recipe measures in sources instead of the purchase row', () => {
     row(item({ item: 'broccoli', amount: 144, unit: 'tsp', quantityParts: [{ amount: 144, unit: 'tsp' }],
       requirementBreakdown: [{ label: 'Beef and Broccoli', quantity: { amount: 3, unit: 'cup' }, hidden: false }] }));
