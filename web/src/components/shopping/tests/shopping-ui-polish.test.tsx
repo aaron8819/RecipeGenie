@@ -91,7 +91,7 @@ describe('Shopping presentation and relocated controls', () => {
     row(item({ item: 'onion', amount: 3, unit: 'count', quantityParts: [{ amount: 3, unit: 'count' }],
       sources: [{ recipeId: 'recipe-1', recipeName: 'Soup', originalItem: 'onion', originalAmount: 2, originalUnit: 'count' },
         { recipeId: 'recipe-1', recipeName: 'Soup', originalItem: 'onion', originalAmount: null, originalUnit: '' }] }));
-    expect(screen.getByText('onion').parentElement).not.toHaveTextContent('3');
+    expect(screen.getByText('onions').parentElement).not.toHaveTextContent('3');
   });
 
   it('keeps recipe measures in sources instead of the purchase row', () => {
