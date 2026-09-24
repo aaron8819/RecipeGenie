@@ -185,7 +185,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("2 lb")).toBeInTheDocument()
+    expect(screen.queryByText("2 lb")).not.toBeInTheDocument()
     expect(screen.getByText("apples")).toBeInTheDocument()
     expect(screen.getAllByText("Autumn Soup")).toHaveLength(2)
     expect(screen.getByRole("button", { name: "Reorder apples" })).toBeInTheDocument()
@@ -658,11 +658,11 @@ describe("ShoppingRestoreChip", () => {
     )
 
     expect(screen.getByText("milk")).toBeInTheDocument()
-    expect(screen.getByText("1 cup")).toBeInTheDocument()
+    expect(screen.queryByText("1 cup")).not.toBeInTheDocument()
     expect(screen.getByText("Excluded: dairy")).toBeInTheDocument()
     expect(screen.getByText("Pasta Bake")).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Restore milk 1 cup Excluded: dairy" }))
+    fireEvent.click(screen.getByRole("button", { name: "Restore milk Excluded: dairy" }))
     expect(onRestore).toHaveBeenCalledTimes(1)
   })
 })

@@ -102,6 +102,7 @@ import {
   ShoppingStateSection,
   SourceTag,
 } from "./shopping-list-components"
+import { formatShoppingPurchaseAmount } from '@/lib/shopping-quantity-display'
 import {
   categoryIntentMapsEqual,
   deriveCategoryContent,
@@ -660,9 +661,9 @@ function DragOverlayItem({
       <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-foreground">
-          {formatShoppingItemAmount(item) && (
+          {formatShoppingPurchaseAmount(item) && (
             <span className="text-muted-foreground mr-1.5 font-medium">
-              {formatShoppingItemAmount(item)}
+              {formatShoppingPurchaseAmount(item)}
             </span>
           )}
           {item.item}
@@ -1289,7 +1290,7 @@ function ShoppingListContent() {
 
         lines.push(`${categoryData.name}:`)
         items.forEach((item) => {
-          const amount = formatShoppingItemAmount(item)
+          const amount = formatShoppingPurchaseAmount(item)
           const prefix = amount ? amount + ' ' : ''
           lines.push(`  - ${prefix}${item.item}`)
         })

@@ -82,20 +82,36 @@ describe('Shopping presentation and relocated controls', () => {
     expect(screen.getByText(`${wording ?? 'amount unspecified'} basil`)).toBeInTheDocument();
   });
 
-  it('retains the unknown part of mixed demand in the main quantity', () => {
+  it('does not show a partial count for mixed known and unknown demand', () => {
     row(item({ quantityParts: [{ amount: 2, unit: 'count' }, { amount: null, unit: '' }] }));
-    expect(screen.getByText('2 + amount unspecified')).toBeInTheDocument();
+    expect(screen.queryByText('2')).not.toBeInTheDocument();
   });
 
-  it('adds exact manual quantities through the accepted command and returns focus', async () => {
-    command.mutateAsync.mockResolvedValueOnce({});
+  it('keeps recipe measures in sources instead of the purchase row', () => {
+    row(item({ item: 'broccoli', amount: 144, unit: 'tsp', quantityParts: [{ amount: 144, unit: 'tsp' }],
+      requirementBreakdown: [{ label: 'Beef and Broccoli', quantity: { amount: 3, unit: 'cup' }, hidden: false }] }));
+    expect(screen.getByText('broccoli').parentElement).toHaveTextContent('broccoli');
+    expect(screen.getByText('broccoli').parentElement).not.toHaveTextContent('144 tsp');
+    fireEvent.click(screen.getByText('View sources'));
+    expect(screen.getByText('3 cup broccoli')).toBeVisible();
+  });
+
+  it('hides cheese teaspoons but shows whole produce and protein pounds', () => {
+    row(item({ item: 'cheddar cheese', amount: 96, unit: 'tsp', quantityParts: [{ amount: 96, unit: 'tsp' }] }));
+    row(item({ item: 'carrot', amount: 4, unit: 'count', quantityParts: [{ amount: 4, unit: 'count' }] }));
+    row(item({ item: 'ground beef', amount: 1, unit: 'lb', quantityParts: [{ amount: 1, unit: 'lb' }] }));
+    expect(screen.getByText('cheddar cheese').parentElement).not.toHaveTextContent('96 tsp');
+    expect(screen.getByText('4')).toBeVisible();
+    expect(screen.getByText('1 lb')).toBeVisible();
+  });
+
+  it('adds a name without an amount control and returns focus', async () => {
     render(<ShoppingAddItem state={state()} />);
     fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'lemon' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add an amount' }));
-    fireEvent.change(screen.getByLabelText('Extra amount'), { target: { value: '1/2' } });
+    expect(screen.queryByRole('button', { name: 'Add an amount' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
     await waitFor(() => expect(screen.getByLabelText('Item name')).toHaveFocus());
-    expect(command.mutateAsync).toHaveBeenLastCalledWith(expect.objectContaining({ observedRevision: 7, mutation: expect.objectContaining({ type: 'addManualItem', item: expect.objectContaining({ quantity: expect.objectContaining({ exactQuantityV1: expect.objectContaining({ authored: '1/2' }) }) }) }) }));
+    expect(addItem.mutateAsync).toHaveBeenLastCalledWith(expect.objectContaining({ itemName: 'lemon' }));
   });
 
   it.each([
@@ -148,24 +164,19 @@ describe('Shopping presentation and relocated controls', () => {
     expect(addItem.mutateAsync).toHaveBeenCalledTimes(1);
     fireEvent.change(input, { target: { value: 'new item' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
-    await waitFor(() => expect(command.mutateAsync).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(addItem.mutateAsync).toHaveBeenCalledTimes(2));
   });
 
-  it('releases the guard after validation and a thrown single-item command', async () => {
-    command.mutateAsync.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValueOnce({});
+  it('releases the guard after a thrown single-item command', async () => {
+    addItem.mutateAsync.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValueOnce({});
     render(<ShoppingAddItem state={state()} />);
     const input = screen.getByLabelText('Item name');
-    fireEvent.change(input, { target: { value: 'turnip, yam' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add an amount' }));
-    fireEvent.change(screen.getByLabelText('Extra unit'), { target: { value: 'cup' } });
-    fireEvent.submit(input.closest('form')!);
-    expect(screen.getByRole('alert')).toHaveTextContent('Add one item at a time');
     fireEvent.change(input, { target: { value: 'turnip' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Connection lost'));
     expect(input).toHaveValue('turnip');
     fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
-    await waitFor(() => expect(command.mutateAsync).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(addItem.mutateAsync).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(input).toHaveValue(''));
   });
 
@@ -191,18 +202,6 @@ describe('Shopping presentation and relocated controls', () => {
     expect(screen.getByLabelText('Item name')).toHaveValue('celery, basil');
   });
 
-  it('rejects a comma-separated list with an amount while retaining the draft', async () => {
-    render(<ShoppingAddItem state={state()} />);
-    fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'zucchini, celery' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add an amount' }));
-    fireEvent.change(screen.getByLabelText('Extra unit'), { target: { value: 'bunches' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Add one item at a time');
-    expect(screen.getByLabelText('Item name')).toHaveValue('zucchini, celery');
-    expect(screen.getByLabelText('Extra unit')).toHaveValue('bunches');
-    expect(addItem.mutateAsync).not.toHaveBeenCalled();
-    expect(command.mutateAsync).not.toHaveBeenCalled();
-  });
 
   it('places only the relevant manual editor on a row and keeps legacy resolution operable', () => {
     const current = state();

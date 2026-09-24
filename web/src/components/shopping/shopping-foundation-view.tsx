@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useRef, useState, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePantryItems } from '@/hooks/use-pantry';
@@ -193,20 +193,15 @@ export function SelectionYield({ recipe, state }: { recipe: Recipe; state: Shopp
 }
 
 /** The normal Add item flow for initialized lists uses the accepted extra command. */
-export function ShoppingAddItem({ state, inputRef }: {
+export function ShoppingAddItem({ inputRef }: {
   state: ShoppingDocumentStateV3;
   inputRef?: RefObject<HTMLInputElement | null>;
 }) {
   const pantry = usePantryItems();
-  const command = useShoppingFoundationCommand();
   const addItem = useAddShoppingItem();
   const localInput = useRef<HTMLInputElement>(null);
   const input = inputRef ?? localInput;
-  const amountId = useId();
   const [name, setName] = useState('');
-  const [amount, setAmount] = useState('');
-  const [unit, setUnit] = useState('');
-  const [showAmount, setShowAmount] = useState(false);
   const [error, setError] = useState('');
   const submitting = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -218,11 +213,6 @@ export function ShoppingAddItem({ state, inputRef }: {
     try {
       const items = name.split(',').map(item => item.trim()).filter(Boolean);
       if (!items.length) { setError('Enter an item or paste a comma-separated list.'); input.current?.focus(); return; }
-      if (name.includes(',') && (amount.trim() || unit.trim())) {
-        setError('Add one item at a time when specifying an amount or unit. Your input is preserved.');
-        input.current?.focus();
-        return;
-      }
       if (name.includes(',')) {
         const added: string[] = [];
         const duplicates: string[] = [];
@@ -248,10 +238,8 @@ export function ShoppingAddItem({ state, inputRef }: {
         input.current?.focus();
         return;
       }
-      await command.mutateAsync({ observedRevision: state.contentRevision, mutation: { type: 'addManualItem', item: {
-        id: crypto.randomUUID(), displayName: items[0], quantity: draftQuantity(amount, unit), categoryKey: 'misc', bucket: 'items', checked: false,
-      } } });
-      setName(''); setAmount(''); setUnit(''); setError(''); input.current?.focus();
+      await addItem.mutateAsync({ itemName: items[0], rowId: createShoppingManualItemId() });
+      setName(''); setError(''); input.current?.focus();
     } catch (error) {
       setError(errorText(error));
     } finally {
@@ -261,13 +249,7 @@ export function ShoppingAddItem({ state, inputRef }: {
   }}>
     <div className="flex gap-2">
       <Input ref={input} aria-label="Item name" placeholder="Add an item…" value={name} onChange={e => setName(e.target.value)} className="h-12 min-w-0 rounded-xl bg-white" />
-      <Button className="h-12 shrink-0 rounded-xl" type="submit" disabled={isSubmitting || command.isPending || addItem.isPending || !name.trim() || !pantry.isSuccess}>Add item</Button>
-    </div>
-    <button type="button" className="min-h-11 w-fit text-sm text-muted-foreground underline-offset-4 hover:underline" aria-expanded={showAmount} aria-controls={amountId} onClick={() => setShowAmount(!showAmount)}>Add an amount{amount ? ` (${amount}${unit ? ' ' + unit : ''})` : ''}</button>
-    <div id={amountId} hidden={!showAmount} className={showAmount ? 'grid grid-cols-2 gap-2' : 'hidden'}>
-      <label className="text-sm">Extra amount<Input aria-label="Extra amount" value={amount} onChange={e => setAmount(e.target.value)} placeholder="Optional" /></label>
-      <label className="text-sm">Unit<Input aria-label="Extra unit" value={unit} onChange={e => setUnit(e.target.value)} /></label>
-      <p className="col-span-2 text-xs text-muted-foreground">Added amounts are extra to recipe quantities. Leave blank for a reminder.</p>
+      <Button className="h-12 shrink-0 rounded-xl" type="submit" disabled={isSubmitting || addItem.isPending || !name.trim() || !pantry.isSuccess}>Add item</Button>
     </div>
     {error && <p role="alert">{error}</p>}
   </form>;

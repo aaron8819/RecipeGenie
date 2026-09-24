@@ -1607,10 +1607,10 @@ describe("ShoppingListView orchestration", () => {
     expectCategoryExpanded("produce", false)
 
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Restore milk 1 cup In pantry" }))
+      fireEvent.click(screen.getByRole("button", { name: "Restore milk In pantry" }))
     })
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Restore salt 1 tsp Excluded: salt" }))
+      fireEvent.click(screen.getAllByRole("button", { name: "Restore salt Excluded: salt" })[0])
     })
 
     expect(moveToListMutate).toHaveBeenCalledWith(
@@ -1643,7 +1643,8 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.queryByText("No shopping list yet")).not.toBeInTheDocument()
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("2 cups").length).toBeGreaterThan(0)
+    expect(screen.queryByText("2 cups")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Restore rice In pantry" })).toBeInTheDocument()
     expect(screen.getByText("Excluded: cilantro")).toBeInTheDocument()
   })
 
@@ -1733,7 +1734,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.queryByText("Edit manual item")).not.toBeInTheDocument()
     const updatedRow = screen.getByText("shallots").closest("li")
     expect(updatedRow).not.toBeNull()
-    expect(updatedRow).toHaveTextContent(/(1\/2|½)\s*lb/i)
+    expect(updatedRow).not.toHaveTextContent(/(1\/2|½)\s*lb/i)
   })
 
   it("keeps manual edits inline when the rename would create a duplicate", async () => {

@@ -1,5 +1,5 @@
 import { shoppingSourceControls as dedupeSources, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
-import { formatShoppingItemAmount, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
+import { formatShoppingPurchaseAmount, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
 export { formatShoppingItemAmount, formatAmountPart, formatEncodedRangeAmount, formatAdditionalAmountParts } from '@/lib/shopping-quantity-display'
 import React from "react"
 import type { ShoppingDocumentStateV3 } from '@/lib/shopping-document'
@@ -138,13 +138,8 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
   return `${prefix}${qualifiedItem}`.trim()
 }
 
-// Presentation only: export/copy continues using the lossless amount formatter.
 function rowAmount(item: ShoppingItem): string {
-  const parts: import("@/types/database").ShoppingQuantity[] = item.quantityParts ?? [item, ...(item.additionalAmounts ?? [])]
-  const entirelyUnspecified = parts.every(part => part.amount == null &&
-    !part.exactPackageV1 && (!part.exactQuantityV1 ||
-      part.exactQuantityV1.kind === 'qualitative'))
-  return entirelyUnspecified ? '' : formatShoppingItemAmount(item)
+  return formatShoppingPurchaseAmount(item)
 }
 
 function ShoppingSources({ item, onViewRecipe, children }: {

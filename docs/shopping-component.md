@@ -100,9 +100,10 @@ establish hosted health. Foundation acceptance requires independent review.
 
 ## Shopping presentation
 
-Initialized lists use the normal Add item form for manual extras and reminders.
-Without an amount, comma-separated names add separate purchases in input order;
-empty segments are ignored. A supplied amount or unit requires one item name.
+Initialized lists use the normal Add item form for name-only manual reminders.
+Comma-separated names add separate purchases in input order; empty segments are
+ignored. Precise manual amounts can still be entered in the row's View sources
+editor when needed.
 If a batch stops after a failed or uncertain command, the form reports confirmed
 additions and retains the unresolved names for review before retrying.
 Each ingredient has one collapsed View sources disclosure containing every
@@ -113,7 +114,9 @@ Yield controls sit with Recipes in list, which includes hidden-only selections.
 Unresolved placement controls appear on affected rows; dormant placement
 evidence without a row retains a conditional recovery control.
 
-Entirely unspecified quantities omit the main-row amount only. Expanded source
-wording, mixed known/unknown amounts, copy/export, and persisted quantities keep
-their existing lossless semantics. Disclosure and form interactions are separate
-from check-off and drag handles.
+Purchase rows and Copy show useful store quantities only: whole produce counts,
+package counts, and protein pounds. Recipe volume measures such as cups or
+teaspoons are not purchase quantities. Expanded View sources retains exact
+authored recipe wording and all mixed known/unknown requirements. Persisted
+quantities and command behavior are unchanged. Disclosure and form interactions
+are separate from check-off and drag handles.

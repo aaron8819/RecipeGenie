@@ -2,6 +2,7 @@ import type { ShoppingItem, ShoppingQuantity } from '@/types/database'
 import { getIngredientDisplayUnit } from './ingredient-units'
 import { toFraction } from './utils'
 import { formatStructuredRecipeQuantity } from './recipe-quantity'
+import { categorizeIngredient } from './shopping-categories'
 
 const DISPLAY_UNIT_PLURALS: Record<string, string> = {
   piece: "pieces",
@@ -112,4 +113,27 @@ export function formatShoppingItemAmount(item: ShoppingItem): string {
   const primary = item.amount !== null || item.exactQuantityV1
     ? [formatShoppingQuantityPart(item)] : []
   return [...primary, ...formatAdditionalAmountParts(item.additionalAmounts)].join(' + ')
+}
+
+/** Purchase-facing amounts only; exact recipe requirements remain in View sources. */
+export function formatShoppingPurchaseAmount(item: ShoppingItem): string {
+  const [category] = categorizeIngredient(item.item)
+  const parts: ShoppingQuantity[] = item.quantityParts ?? [item, ...(item.additionalAmounts ?? [])]
+  // A partial total would imply the shopper has the complete purchase amount.
+  if (parts.some(part => part.amount == null && !part.exactPackageV1 &&
+    (!part.exactQuantityV1 || part.exactQuantityV1.kind === 'qualitative'))) return ''
+  const purchasableUnits = new Set([
+    'bag', 'bags', 'box', 'boxes', 'bottle', 'bottles', 'bunch', 'bunches',
+    'can', 'cans', 'clove', 'cloves', 'head', 'heads', 'jar', 'jars',
+    'package', 'packages', 'stalk', 'stalks',
+  ])
+  return parts.filter(part => {
+    if (part.amount == null && (!part.exactQuantityV1 ||
+      part.exactQuantityV1.kind === 'qualitative')) return false
+    const unit = getIngredientDisplayUnit(part.exactAuthoredUnit ?? part.unit).toLowerCase()
+    if (purchasableUnits.has(unit) || /^(?:bag|box|bottle|can|jar|package) \(/.test(unit)) return true
+    if ((category === 'produce' || /^(?:large )?eggs?$/.test(item.item)) &&
+      (!unit || unit === 'count')) return true
+    return category === 'protein' && ['lb', 'lbs', 'pound', 'pounds'].includes(unit)
+  }).map(formatShoppingQuantityPart).join(' + ')
 }
