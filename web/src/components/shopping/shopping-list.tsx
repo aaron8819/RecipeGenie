@@ -102,7 +102,7 @@ import {
   ShoppingStateSection,
   SourceTag,
 } from "./shopping-list-components"
-import { formatShoppingPurchaseAmount } from '@/lib/shopping-quantity-display'
+import { formatShoppingPurchaseAmount, shoppingPurchaseDisplayName } from '@/lib/shopping-quantity-display'
 import {
   categoryIntentMapsEqual,
   deriveCategoryContent,
@@ -666,7 +666,7 @@ function DragOverlayItem({
               {formatShoppingPurchaseAmount(item)}
             </span>
           )}
-          {item.item}
+            {shoppingPurchaseDisplayName(item)}
         </span>
         {uniqueSources.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -1292,7 +1292,7 @@ function ShoppingListContent() {
         items.forEach((item) => {
           const amount = formatShoppingPurchaseAmount(item)
           const prefix = amount ? amount + ' ' : ''
-          lines.push(`  - ${prefix}${item.item}`)
+          lines.push(`  - ${prefix}${shoppingPurchaseDisplayName(item)}`)
         })
         lines.push("")
       })

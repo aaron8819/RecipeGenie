@@ -1,5 +1,5 @@
 import { shoppingSourceControls as dedupeSources, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
-import { formatShoppingPurchaseAmount, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
+import { formatShoppingPurchaseAmount, shoppingPurchaseDisplayName, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
 export { formatShoppingItemAmount, formatAmountPart, formatEncodedRangeAmount, formatAdditionalAmountParts } from '@/lib/shopping-quantity-display'
 import React from "react"
 import type { ShoppingDocumentStateV3 } from '@/lib/shopping-document'
@@ -73,9 +73,15 @@ function formatSourceIngredientLabel(source: NonNullable<ShoppingItem["sources"]
   if (!source.originalItem) return null
 
   const preparations = new Set(source.preparationModifiers || [])
+  if (source.exactQuantityV1 && ['qualitative', 'unparsed'].includes(source.exactQuantityV1.kind)) {
+    const wording = source.exactQuantityV1.authored.toLowerCase()
+    for (const preparation of preparations) {
+      if (wording.includes(preparation)) preparations.delete(preparation)
+    }
+  }
   const suffixes = ['to taste', 'for garnish', 'for serving', 'for topping', 'divided', 'plus more']
     .filter((preparation) => preparations.delete(preparation))
-  const asNeeded = preparations.delete('as needed')
+  const asNeeded = preparations.delete('as needed') && source.exactQuantityV1?.kind !== 'qualitative'
   const preparationOrder = [
     'warm', 'cooked', 'day-old', 'finely grated', 'finely minced',
     'thinly sliced', 'sliced', 'diced', 'small', 'medium', 'large',
@@ -247,7 +253,7 @@ export function ShoppingItemRow({
 }) {
   const isChecked = item.checked || false
   const amountLabel = rowAmount(item)
-  const displayItemName = getDisplayItemName(item)
+  const displayItemName = shoppingPurchaseDisplayName(item)
 
   return (
     <div

@@ -777,6 +777,10 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "As needed",
+          "kind": "qualitative",
+        },
         "excludedBy": undefined,
         "item": "toast the bread",
         "sources": [
@@ -817,6 +821,10 @@ exports[`recipe workflow fixture corpus v1 > 'legacy-unheaded-format' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "As needed",
+          "kind": "qualitative",
+        },
         "excludedBy": undefined,
         "item": "spread peanut butter and top with banana",
         "sources": [
@@ -1191,6 +1199,10 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "As needed",
+          "kind": "qualitative",
+        },
         "excludedBy": undefined,
         "item": "black pepper",
         "sources": [
@@ -1229,6 +1241,10 @@ exports[`recipe workflow fixture corpus v1 > 'missing-quantities-salad' 1`] = `
       {
         "additionalAmounts": undefined,
         "amount": null,
+        "exactQuantity": {
+          "authored": "As needed",
+          "kind": "qualitative",
+        },
         "excludedBy": undefined,
         "item": "mixed greens",
         "sources": [

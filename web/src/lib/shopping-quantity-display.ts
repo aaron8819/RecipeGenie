@@ -3,6 +3,36 @@ import { getIngredientDisplayUnit } from './ingredient-units'
 import { toFraction } from './utils'
 import { formatStructuredRecipeQuantity } from './recipe-quantity'
 import { categorizeIngredient } from './shopping-categories'
+import { sumShoppingRequirements } from './shopping-extra-quantities'
+import { pluralizeShoppingPurchaseName } from './shopping-ingredient-semantics'
+
+/** The existing high-confidence whole-produce default, display only.
+ * One item per qualitative occurrence, stable at every selected yield.
+ * Requirements and completion coverage continue to use the source wording.
+ */
+function isWholeItemEstimate(item: ShoppingItem, part: ShoppingQuantity): boolean {
+  return ['onion', 'lemon', 'lime'].includes(item.orderingKey ?? item.item) &&
+    ['', 'count'].includes(part.unit) && !part.exactPackageV1 &&
+    part.amount == null && part.exactQuantityV1?.kind === 'qualitative' &&
+    part.exactQuantityV1.authored.trim().toLowerCase() === 'as needed'
+}
+
+function purchaseParts(item: ShoppingItem): ShoppingQuantity[] {
+  const parts = item.quantityParts ?? [item, ...(item.additionalAmounts ?? [])]
+  return parts.some(part => isWholeItemEstimate(item, part))
+    ? sumShoppingRequirements(parts.map(part => isWholeItemEstimate(item, part)
+      ? { amount: 1, unit: 'count' } : part))
+    : parts
+}
+
+export function shoppingPurchaseDisplayName(item: ShoppingItem): string {
+  const parts = purchaseParts(item)
+  const count = parts.find(part => ['', 'count'].includes(part.unit))?.amount
+  const name = count && Math.abs(count) !== 1
+    ? pluralizeShoppingPurchaseName(item.item) : item.item
+  const estimated = (item.quantityParts ?? [item]).some(part => isWholeItemEstimate(item, part))
+  return estimated && formatShoppingPurchaseAmount(item) ? `${name} (estimate)` : name
+}
 
 const DISPLAY_UNIT_PLURALS: Record<string, string> = {
   piece: "pieces",
@@ -118,13 +148,14 @@ export function formatShoppingItemAmount(item: ShoppingItem): string {
 /** Purchase-facing amounts only; exact recipe requirements remain in View sources. */
 export function formatShoppingPurchaseAmount(item: ShoppingItem): string {
   const [category] = categorizeIngredient(item.item)
-  const parts: ShoppingQuantity[] = item.quantityParts ?? [item, ...(item.additionalAmounts ?? [])]
+  const parts = purchaseParts(item)
   if (item.sources?.some(source => source.recipeId && source.originalAmount == null &&
+    !isWholeItemEstimate(item, { amount: null, unit: source.originalUnit ?? '', exactQuantityV1: source.exactQuantityV1 }) &&
     !source.exactPackageV1 && (!source.exactQuantityV1 ||
-      source.exactQuantityV1.kind === 'qualitative'))) return ''
+      ['qualitative', 'unparsed'].includes(source.exactQuantityV1.kind)))) return ''
   // A partial total would imply the shopper has the complete purchase amount.
   if (parts.some(part => part.amount == null && !part.exactPackageV1 &&
-    (!part.exactQuantityV1 || part.exactQuantityV1.kind === 'qualitative'))) return ''
+    (!part.exactQuantityV1 || ['qualitative', 'unparsed'].includes(part.exactQuantityV1.kind)))) return ''
   const purchasableUnits = new Set([
     'bag', 'bags', 'box', 'boxes', 'bottle', 'bottles', 'bunch', 'bunches',
     'can', 'cans', 'clove', 'cloves', 'head', 'heads', 'jar', 'jars',

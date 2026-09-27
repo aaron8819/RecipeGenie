@@ -1,5 +1,28 @@
 # Shopping domain reference
 
+## Qualitative whole-produce purchase estimates
+
+Recipe capture keeps missing recipe quantities as `As needed` source
+evidence, rather than persisting the normalization default as an exact recipe
+quantity. Captured raw occurrences retain the original ingredient unchanged.
+Structured qualitative wording is preserved too.
+
+Purchase display alone estimates one item per `As needed` occurrence for the
+existing supported whole purchases: onion, lemon, and lime, with no unit or
+`count`. Row and Copy share the same sum and name, e.g. `1 onion (estimate)` or
+`3 onions (estimate)` for two counted onions plus one qualitative occurrence.
+View sources still shows `2 onions` and `As needed onion` separately. Measured
+produce, herbs, salt, oil, sauces, and unsupported purchases receive no estimate.
+
+The estimate stays one per occurrence at every selected yield. There was no
+documented qualitative estimate scaling contract; the former numeric default
+incidentally went through ordinary scaling. Qualitative source wording never
+scales into an exact quantity. Purchase identity, persisted requirements,
+completion coverage, and source occurrence IDs do not use the display estimate.
+Historical frozen Shopping captures are not silently rewritten; captures made
+before this correction may need explicit recipe reselection to restore their
+qualitative quantity. This change introduces no migration or background repair.
+
 Shopping stores one owner document. Supported old documents read without writes;
 explicit initialization produces V4. The authenticated `/api/shopping` boundary
 admits commands, plans against authoritative state, and commits through the

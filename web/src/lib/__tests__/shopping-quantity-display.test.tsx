@@ -82,8 +82,7 @@ describe('lossless Shopping quantities from frozen evidence to rendered text', (
     for (const ingredients of [[known, unknown], [unknown, known]]) {
       const text = list(documentFor(ingredients)).items.map(formatShoppingItemAmount).join(' + ')
       expect(text).toContain('2 cup')
-      expect(text).toContain(modifier ?? 'amount unspecified')
-      if (!modifier) expect(text).not.toContain('as needed')
+      expect(text.toLowerCase()).toContain(modifier ?? 'as needed')
     }
   })
 
@@ -118,16 +117,16 @@ describe('lossless Shopping quantities from frozen evidence to rendered text', (
     expect(formatShoppingItemAmount(legacy)).toBe('1–2 + 100 g')
   })
 
-  it('retains repeated unspecified requirements in sources and copy without a main-row placeholder', () => {
+  it('retains repeated As needed requirements in sources without a main-row placeholder', () => {
     const unknown: Ingredient = { item: 'flour', amount: null, unit: '' }
     const row = list(documentFor([unknown, unknown])).items[0]
     render(<ShoppingItemRow item={row} isDesktop={true} sourceDisplay="tags"
       isCheckingOff={false} isRemoving={false} isAddingToPantry={false}
       recipeColorMap={new Map()} onCheckOff={vi.fn()} onAddToPantry={vi.fn()} onRemove={vi.fn()} />)
-    expect(screen.queryByText('amount unspecified + amount unspecified', { exact: true })).not.toBeInTheDocument()
-    expect(formatShoppingItemAmount(row)).toBe('amount unspecified + amount unspecified')
+    expect(screen.queryByText('As needed + As needed', { exact: true })).not.toBeInTheDocument()
+    expect(formatShoppingItemAmount(row)).toBe('As needed + As needed')
     fireEvent.click(screen.getByText('View sources'))
-    const sourceParts = screen.getAllByText('amount unspecified flour', { exact: true })
+    const sourceParts = screen.getAllByText('As needed flour', { exact: true })
     expect(sourceParts).toHaveLength(2)
     sourceParts.forEach(part => expect(part).toBeVisible())
   })
@@ -173,7 +172,7 @@ describe('lossless Shopping quantities from frozen evidence to rendered text', (
   it('preserves zero versus missing across projection and incompatible units', () => {
     const rows = list(documentFor([{ item: 'flour', amount: 0, unit: 'cup' },
       { item: 'flour', amount: null, unit: '' }, { item: 'flour', amount: 100, unit: 'g' }])).items
-    expect(rows.map(formatShoppingItemAmount)).toEqual(['0 cup + 100 g + amount unspecified'])
+    expect(rows.map(formatShoppingItemAmount)).toEqual(['0 cup + 100 g + As needed'])
   })
 
   it('check/uncheck and reload retain requirements and frozen source JSON', () => {

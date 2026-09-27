@@ -8,6 +8,8 @@ import { shoppingDocumentToList } from '@/lib/shopping-view';
 import { canonicalizeRecipeFixture } from '@/test/recipe-fixtures';
 import { initializeShoppingDocument } from '@/lib/shopping-initialization';
 import { parseQuantityV1 } from '@/lib/recipe-quantity';
+import { parseIngredientLine } from '@/lib/recipe-parser';
+import { formatShoppingPurchaseAmount, shoppingPurchaseDisplayName } from '@/lib/shopping-quantity-display';
 import type { Recipe, ShoppingItem } from '@/types/database';
 
 const command = vi.hoisted(() => ({ mutateAsync: vi.fn(), isPending: false }));
@@ -25,6 +27,18 @@ function row(value: ShoppingItem) {
 }
 
 describe('Shopping presentation and relocated controls', () => {
+  it.each([false, true])('shows an explicit onion estimate and faithful sources (counted=%s)', counted => {
+    const current = state();
+    const recipe = canonicalizeRecipeFixture({ fixtureIngredients: [parseIngredientLine('As needed onion'),
+      ...(counted ? [parseIngredientLine('2 onions')] : [])] });
+    current.document.recipeEntries[recipe.id] = createShoppingRecipeEntry(recipe, 4, { numerator: '1', denominator: '1' });
+    const value = shoppingDocumentToList('user-1', current).items[0];
+    row(value);
+    expect(screen.getByText(counted ? 'onions (estimate)' : 'onion (estimate)').parentElement).toHaveTextContent(counted ? '3' : '1');
+    expect(`${formatShoppingPurchaseAmount(value)} ${shoppingPurchaseDisplayName(value)}`).toBe(counted ? '3 onions (estimate)' : '1 onion (estimate)');
+    expect(screen.getByText('As needed onion')).toBeInTheDocument();
+    if (counted) expect(screen.getByText('2 onions')).toBeInTheDocument();
+  });
   beforeEach(() => {
     command.mutateAsync.mockReset();
     addItem.mutateAsync.mockReset().mockResolvedValue({});

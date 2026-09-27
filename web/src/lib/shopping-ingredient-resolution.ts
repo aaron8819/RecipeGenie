@@ -16,6 +16,7 @@ import {
   normalizeQuantityV1,
   normalizeScaleRatioV1,
   parseRationalLexeme,
+  parseQuantityV1,
   rationalToNumber,
   resolveIngredientQuantity,
   scalePackageV1,
@@ -247,19 +248,29 @@ export function resolveShoppingIngredient({
       ? citrusPreparations[0]
       : undefined
 
+  // A normalization default is a purchase estimate, never recipe evidence.
+  // Recipe Detail uses "As needed" for a missing authored quantity too.
+  const sourceQuantity = exactQuantity ||
+    (purchase.originalQuantity == null && (purchase.purchaseQuantity == null ||
+        purchase.purchaseQuantityIsEstimate)
+      ? parseQuantityV1(semantics.preparation.filter(value =>
+        ['to taste', 'for garnish', 'for serving', 'for topping', 'plus more'].includes(value)
+      ).join(', ') || 'As needed', 'legacy-synthesized')
+      : undefined)
+
   return {
     purchaseKey,
     aggregateKey: createShoppingAggregateKey(purchaseKey, discriminator),
     displayName,
     quantity:
-      purchase.purchaseQuantity == null && !exactQuantity && !exactPackage
+      purchase.purchaseQuantity == null && !sourceQuantity && !exactPackage
         ? null
         : {
-            amount: exactQuantity && exactQuantity.kind !== 'exact'
+            amount: sourceQuantity && sourceQuantity.kind !== 'exact'
               ? null
               : amount,
             unit: purchaseUnit,
-            exactQuantityV1: exactQuantity,
+            exactQuantityV1: sourceQuantity,
             exactPackageV1: exactPackage,
             exactAuthoredUnit: resolved.authoredUnit || undefined,
           },

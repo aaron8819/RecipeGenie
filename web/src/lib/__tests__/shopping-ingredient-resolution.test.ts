@@ -67,7 +67,9 @@ describe("resolveShoppingIngredient", () => {
 
     expect(results.map((result) => result.displayName)).toEqual(["garlic", "milk"])
     expect(results[0].aggregateKey).toBe(moved.aggregateKey)
-    expect(results[1].quantity).toBeNull()
+    expect(results[1].quantity).toMatchObject({
+      amount: null, exactQuantityV1: { kind: 'qualitative', authored: 'As needed' },
+    })
   })
 
   it("uses semantic range identity rather than authored punctuation", () => {
