@@ -75,7 +75,6 @@ export function usePantryItems() {
       if (error) throw error
       return data as PantryItem[]
     },
-    placeholderData: (previousData) => previousData,
     staleTime: 30 * 1000,
     enabled: !loading && !!user,
   })
@@ -94,9 +93,11 @@ export function useAddPantryItems() {
     scope: { id: `${PANTRY_WRITE_SCOPE_ID}:${principalId(user?.id)}` },
     mutationFn: async (rawInput: string): Promise<PantryAddResult> => {
       const candidates = parsePantryCandidates(rawInput)
-      const knownItems = new Set(
-        (queryClient.getQueryData<PantryItem[]>(pantryKey) || []).map((item) => item.item)
-      )
+      // Cache presence is only an optimization. Database uniqueness decides
+      // duplicates when availability has not been read successfully.
+      const cached = queryClient.getQueryState(pantryKey)?.status === 'success'
+        ? queryClient.getQueryData<PantryItem[]>(pantryKey) : undefined
+      const knownItems = new Set(cached?.map((item) => item.item))
       const outcomes: PantryAddOutcome[] = []
       const insertedItems: PantryItem[] = []
 
@@ -141,7 +142,7 @@ export function useAddPantryItems() {
         }
       }
 
-      if (insertedItems.length > 0) {
+      if (insertedItems.length > 0 && queryClient.getQueryState(pantryKey)?.status === "success") {
         queryClient.setQueryData<PantryItem[]>(
           pantryKey,
           (old) => sortPantryItems([...(old || []), ...insertedItems.filter((item) =>
@@ -194,10 +195,11 @@ export function useRestorePantryItem() {
       await queryClient.cancelQueries({ queryKey: pantryKey })
       const previousPantry = queryClient.getQueryData<PantryItem[]>(pantryKey)
 
+      if (queryClient.getQueryState(pantryKey)?.status !== "success") return { ownerUserId: principalId(user?.id), previousPantry }
       queryClient.setQueryData<PantryItem[]>(
         pantryKey,
         (old) => {
-          if (!old) return [item]
+          if (!old) return undefined
           if (old.some((existing) => existing.id === item.id || existing.item === item.item)) {
             return old
           }
@@ -208,11 +210,12 @@ export function useRestorePantryItem() {
       return { ownerUserId: principalId(user?.id), previousPantry }
     },
     onError: (_error, _item, context) => {
-      if (context?.previousPantry) {
+      if (context?.previousPantry && queryClient.getQueryState(pantryKey)?.status === "success") {
         queryClient.setQueryData(pantryKey, context.previousPantry)
       }
     },
     onSuccess: (restoredItem) => {
+      if (queryClient.getQueryState(pantryKey)?.status !== "success") return
       queryClient.setQueryData<PantryItem[]>(
         pantryKey,
         (old) => {
@@ -254,13 +257,14 @@ export function useRemovePantryItem() {
 
       queryClient.setQueryData<PantryItem[]>(
         pantryKey,
-        (old) => old?.filter((candidate) => candidate.id !== item.id)
+        (old) => queryClient.getQueryState(pantryKey)?.status === "success"
+          ? old?.filter((candidate) => candidate.id !== item.id) : undefined
       )
 
       return { ownerUserId: principalId(user?.id), previousPantry }
     },
     onError: (_error, _item, context) => {
-      if (context?.previousPantry) {
+      if (context?.previousPantry && queryClient.getQueryState(pantryKey)?.status === "success") {
         queryClient.setQueryData(pantryKey, context.previousPantry)
       }
     },

@@ -1,5 +1,11 @@
 "use client"
 
+import { shoppingSourceControls, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
+import type { ShoppingDocumentStateV3 } from '@/lib/shopping-document'
+import { ShoppingDocumentReadError } from '@/hooks/shopping/use-shopping-document'
+import { useOrganizeShopping, useShoppingDocumentState } from '@/hooks/shopping/use-shopping-document'
+import { ShoppingAddItem, ShoppingDormantRecovery, SelectionYield, ShoppingInitializationNotice } from './shopping-foundation-view'
+
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -28,6 +34,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -43,6 +53,7 @@ import {
   useRestoreRecipeItems,
   useClearShoppingList,
   useRestoreShoppingContent,
+  SHOPPING_CLEAR_UNDO_UNAVAILABLE,
   useCheckOffItem,
   useBulkCheckOff,
   useMoveToShoppingList,
@@ -52,9 +63,10 @@ import {
   useUpdateShoppingConfig,
   useAddToPantryAndRemove,
 } from "@/hooks/use-shopping"
+import { ShoppingOrganizationDialog } from "./shopping-organization-dialog"
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { Recipe, ShoppingItem } from "@/types/database"
-import { cn, toFraction } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
@@ -73,7 +85,6 @@ import {
   deriveCheckedPartition,
   deriveOrderedCategories,
   deriveSortableItemIds,
-  deriveUniqueRecipeNames,
   deriveVisibleShoppingItems,
   groupItemsByCategory,
   mergeAlreadyHaveItems,
@@ -81,7 +92,6 @@ import {
   sortItemsWithinGroups,
 } from "./shopping-list.selectors"
 import {
-  formatEncodedRangeAmount,
   formatShoppingItemAmount,
   getRecipeColorIndex,
   ManualShoppingItemEditor,
@@ -92,6 +102,7 @@ import {
   ShoppingStateSection,
   SourceTag,
 } from "./shopping-list-components"
+import { formatShoppingPurchaseAmount, shoppingPurchaseDisplayName } from '@/lib/shopping-quantity-display'
 import {
   categoryIntentMapsEqual,
   deriveCategoryContent,
@@ -117,11 +128,6 @@ type ManualEditDraft = {
 type PendingCheckIntent = {
   checked: boolean
   version: number
-}
-
-function isManualOnlyItem(item: ShoppingItem) {
-  const sources = item.sources || []
-  return sources.length > 0 && sources.every((source) => source.recipeName === "Manual")
 }
 
 function parseEditableAmount(value: string): number | null | "invalid" {
@@ -157,12 +163,14 @@ function parseEditableAmount(value: string): number | null | "invalid" {
 function RecipeTag({ 
   recipeName, 
   recipe,
+  selectedServings,
   onRemove, 
   onViewRecipe,
   isRemoving,
 }: { 
   recipeName: string
   recipe?: Recipe
+  selectedServings?: number
   onRemove: () => void
   onViewRecipe?: () => void
   isRemoving: boolean
@@ -170,7 +178,7 @@ function RecipeTag({
   const recipeImageUrl = getRecipeImageUrl(recipe?.image_url || null)
   const metadata = [
     recipe?.category,
-    recipe?.servings ? `${recipe.servings} servings` : null,
+    selectedServings ? `${selectedServings} selected servings` : recipe?.servings ? `${recipe.servings} servings` : null,
   ].filter(Boolean).join(" · ")
   
   return (
@@ -181,6 +189,7 @@ function RecipeTag({
       <button
         type="button"
         onClick={onViewRecipe}
+        aria-label={`View ${recipeName}`}
         disabled={!onViewRecipe}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default",
@@ -214,7 +223,7 @@ function RecipeTag({
         type="button"
         onClick={(e) => { e.stopPropagation(); onRemove(); }}
         disabled={isRemoving}
-        className="flex min-h-9 min-w-9 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-200 hover:text-foreground active:bg-stone-300 disabled:opacity-50"
+        className="flex min-h-11 min-w-11 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-200 hover:text-foreground active:bg-stone-300 disabled:opacity-50"
         title={`Remove all items from ${recipeName}`}
       >
         <X className="h-4 w-4" />
@@ -229,10 +238,12 @@ function SwipeableItem({
   isDesktop,
   showDragHandle,
   sourceDisplay,
+  foundationState,
   onCheckOff,
   onRemove,
   onAddToPantry,
   isCheckingOff,
+  readOnly,
   isRemoving,
   isAddingToPantry,
   recipeColorMap,
@@ -247,9 +258,11 @@ function SwipeableItem({
   isDesktop: boolean
   showDragHandle?: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  foundationState?: ShoppingDocumentStateV3
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
+  readOnly?: boolean
   isCheckingOff: boolean
   isRemoving: boolean
   isAddingToPantry: boolean
@@ -274,7 +287,7 @@ function SwipeableItem({
   const MAX_VERTICAL_DEVIATION = 30
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (window.innerWidth >= 768) return
+    if (window.innerWidth >= 768 || (e.target as HTMLElement).closest('button, input, select, summary, [data-shopping-sources]')) return
 
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
@@ -397,18 +410,18 @@ function SwipeableItem({
             onAddToPantry()
             setSwipeOffset(0)
           }}
-          disabled={isAddingToPantry}
+          disabled={readOnly || isAddingToPantry}
           className="h-11 w-11 rounded-full bg-sage-500/90 flex items-center justify-center text-white disabled:opacity-50"
-          aria-label="Quick add to pantry"
+          aria-label={`Add ${item.item} to pantry`}
         >
           <Package className="h-5 w-5" />
         </button>
         <button
           type="button"
           onClick={handleDeleteClick}
-          disabled={isRemoving}
+          disabled={readOnly || isRemoving}
           className="h-11 w-11 rounded-full bg-destructive/90 flex items-center justify-center text-white disabled:opacity-50"
-          aria-label="Quick remove item"
+          aria-label={`Remove ${item.item} from list`}
         >
           <Trash2 className="h-5 w-5" />
         </button>
@@ -425,10 +438,12 @@ function SwipeableItem({
           isDesktop={isDesktop}
           showDragHandle={showDragHandle}
           sourceDisplay={sourceDisplay}
+        foundationState={foundationState}
           onCheckOff={onCheckOff}
           onRemove={onRemove}
           onAddToPantry={onAddToPantry}
           isCheckingOff={isCheckingOff}
+          readOnly={readOnly}
           isRemoving={isRemoving}
           isAddingToPantry={isAddingToPantry}
           recipeColorMap={recipeColorMap}
@@ -449,10 +464,12 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isDesktop,
   showDragHandle,
   sourceDisplay,
+  foundationState,
   onCheckOff,
   onRemove,
   onAddToPantry,
   isCheckingOff,
+  readOnly,
   isRemoving,
   isAddingToPantry,
   recipeColorMap,
@@ -465,9 +482,11 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
   isDesktop: boolean
   showDragHandle: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  foundationState?: ShoppingDocumentStateV3
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
+  readOnly?: boolean
   isCheckingOff: boolean
   isRemoving: boolean
   isAddingToPantry: boolean
@@ -484,7 +503,7 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.rowId || item.item })
+  } = useSortable({ id: item.rowId || item.item, disabled: readOnly })
 
   const dragStyle = {
     transform: CSS.Transform.toString(transform),
@@ -500,10 +519,12 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
         onRemove={onRemove}
         onAddToPantry={onAddToPantry}
         isCheckingOff={isCheckingOff}
+          readOnly={readOnly}
         isRemoving={isRemoving}
         isAddingToPantry={isAddingToPantry}
         showDragHandle={showDragHandle}
         sourceDisplay={sourceDisplay}
+        foundationState={foundationState}
         recipeColorMap={recipeColorMap}
         onViewRecipe={onViewRecipe}
         onEdit={onEdit}
@@ -521,14 +542,18 @@ const SortableShoppingItem = memo(function SortableShoppingItem({
     prevProps.item.rowId === nextProps.item.rowId &&
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
+    formatShoppingItemAmount(prevProps.item) === formatShoppingItemAmount(nextProps.item) &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
+    prevProps.item.inspectedRevision === nextProps.item.inspectedRevision &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 
   return (
     sameItem &&
+    prevProps.foundationState === nextProps.foundationState &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
+    prevProps.readOnly === nextProps.readOnly &&
     prevProps.isRemoving === nextProps.isRemoving &&
     prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
     prevProps.isDesktop === nextProps.isDesktop &&
@@ -542,10 +567,12 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
   item,
   isDesktop,
   sourceDisplay,
+  foundationState,
   onCheckOff,
   onRemove,
   onAddToPantry,
   isCheckingOff,
+  readOnly,
   isRemoving,
   isAddingToPantry,
   recipeColorMap,
@@ -557,9 +584,11 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
   item: ShoppingItem
   isDesktop: boolean
   sourceDisplay?: "tags" | "summary" | "none"
+  foundationState?: ShoppingDocumentStateV3
   onCheckOff: () => void
   onRemove: () => void
   onAddToPantry: () => void
+  readOnly?: boolean
   isCheckingOff: boolean
   isRemoving: boolean
   isAddingToPantry: boolean
@@ -575,10 +604,12 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
         item={item}
         isDesktop={isDesktop}
         sourceDisplay={sourceDisplay}
+        foundationState={foundationState}
         onCheckOff={onCheckOff}
         onRemove={onRemove}
         onAddToPantry={onAddToPantry}
         isCheckingOff={isCheckingOff}
+          readOnly={readOnly}
         isRemoving={isRemoving}
         isAddingToPantry={isAddingToPantry}
         recipeColorMap={recipeColorMap}
@@ -595,14 +626,18 @@ const StaticShoppingItem = memo(function StaticShoppingItem({
     prevProps.item.rowId === nextProps.item.rowId &&
     prevProps.item.amount === nextProps.item.amount &&
     prevProps.item.unit === nextProps.item.unit &&
+    formatShoppingItemAmount(prevProps.item) === formatShoppingItemAmount(nextProps.item) &&
     prevProps.item.categoryKey === nextProps.item.categoryKey &&
     prevProps.item.checked === nextProps.item.checked &&
+    prevProps.item.inspectedRevision === nextProps.item.inspectedRevision &&
     JSON.stringify(prevProps.item.sources) === JSON.stringify(nextProps.item.sources)
   )
 
   return (
     sameItem &&
+    prevProps.foundationState === nextProps.foundationState &&
     prevProps.isCheckingOff === nextProps.isCheckingOff &&
+    prevProps.readOnly === nextProps.readOnly &&
     prevProps.isRemoving === nextProps.isRemoving &&
     prevProps.isAddingToPantry === nextProps.isAddingToPantry &&
     prevProps.isDesktop === nextProps.isDesktop &&
@@ -619,35 +654,28 @@ function DragOverlayItem({
   item: ShoppingItem
   recipeColorMap: Map<string, number>
 }) {
-  const uniqueSources = useMemo(() => {
-    if (!item.sources) return []
-    const seen = new Set<string>()
-    return item.sources.filter((source) => {
-      if (seen.has(source.recipeName)) return false
-      seen.add(source.recipeName)
-      return true
-    })
-  }, [item.sources])
+  const uniqueSources = shoppingSourceControls(item)
 
   return (
     <div className="flex items-center gap-2 bg-white shadow-lg rounded-md px-3 py-2 border border-sage-200">
       <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-foreground">
-          {formatShoppingItemAmount(item) && (
+          {formatShoppingPurchaseAmount(item) && (
             <span className="text-muted-foreground mr-1.5 font-medium">
-              {formatShoppingItemAmount(item)}
+              {formatShoppingPurchaseAmount(item)}
             </span>
           )}
-          {item.item}
+            {shoppingPurchaseDisplayName(item)}
         </span>
         {uniqueSources.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {uniqueSources.map((source, idx) => (
               <SourceTag 
-                key={`${source.recipeName}-${idx}`} 
-                recipeName={source.recipeName}
-                colorIndex={recipeColorMap.get(source.recipeName)}
+                key={source.recipeId ?? source.manualId ?? `unknown-source-${idx}`}
+                recipeName={shoppingSourceLabel(source)}
+                isManual={!!source.manualId || isManualShoppingItem(item)}
+                colorIndex={recipeColorMap.get(source.recipeId ?? "")}
               />
             ))}
           </div>
@@ -662,6 +690,14 @@ function useSwipeHint() {
 }
 
 export function ShoppingListView() {
+  return <><ShoppingInitializationNotice /><ShoppingListContent /></>
+}
+
+function ShoppingListContent() {
+  const organizationQuery = useShoppingDocumentState()
+  const foundationState = !organizationQuery.error && organizationQuery.data?.document.schemaVersion === 4 ? organizationQuery.data : undefined
+  const organizePurchase = useOrganizeShopping()
+  const dragSnapshot = useRef<ShoppingItem[]>([])
   const router = useRouter()
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === "undefined") return true
@@ -672,6 +708,8 @@ export function ShoppingListView() {
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
   const [dragOverCategory, setDragOverCategory] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [showClearConfirmation, setShowClearConfirmation] = useState(false)
+  const clearConfirmation = useRef<{ revision: number; undoRequired: boolean } | undefined>(undefined)
   const [shoppingMode, setShoppingMode] = useState<ShoppingMode>("shop")
   const [categoryIntents, setCategoryIntents] = useState<CategoryIntentByKey>(new Map())
   const [editingItemRowId, setEditingItemRowId] = useState<string | null>(null)
@@ -709,9 +747,13 @@ export function ShoppingListView() {
     return () => mq.removeEventListener("change", handler)
   }, [])
 
-  const { data: shoppingList, isLoading, isFetching } = useShoppingList()
+  const shoppingQuery = useShoppingList()
+  const { data: shoppingList, isLoading, isFetching } = shoppingQuery
+  const selections = useMemo(() => shoppingQuery.selections ?? [], [shoppingQuery.selections])
+  const documentUnavailable = !!shoppingQuery.documentError || shoppingQuery.hasDocument === false
+  const pantryUnavailable = !!shoppingQuery.pantryError || shoppingQuery.hasPantry === false
   
-  // Fetch all recipes to find by name if ID is not available
+  // Library metadata is optional; selection identity comes from Shopping.
   const { data: allRecipes } = useRecipes()
   const { data: config } = useShoppingConfig()
   const updateConfig = useUpdateShoppingConfig()
@@ -733,16 +775,13 @@ export function ShoppingListView() {
   const undoToast = useUndoToast()
 
   // Handle clicking on a recipe tag
-  const handleRecipeTagClick = useCallback((recipeId: string | undefined, recipeName: string) => {
+  const handleRecipeTagClick = useCallback((recipeId: string | undefined, _recipeName: string) => {
     if (recipeId) {
       openRecipeDetail(router, recipeId, "shopping")
-    } else if (allRecipes) {
-      const recipe = allRecipes.find(r => r.name === recipeName)
-      if (recipe) {
-        openRecipeDetail(router, recipe.id, "shopping")
-      }
+    } else {
+      undoToast.show({ message: 'This recipe is unavailable. You can still remove its shopping selection.' })
     }
-  }, [allRecipes, router])
+  }, [router, undoToast])
 
   const handleStartEditingManualItem = useCallback((item: ShoppingItem) => {
     const rowId = item.rowId || null
@@ -773,9 +812,9 @@ export function ShoppingListView() {
     })
   }, [removeItem, restoreItem, undoToast])
 
-  const handleRemoveRecipeItems = useCallback((recipeId: string | undefined, recipeName: string) => {
+  const handleRemoveRecipeItems = useCallback((recipeId: string | undefined, recipeName: string, selectionVersion?: number) => {
     if (!recipeId) return
-    removeRecipeItems.mutate({ recipeId, recipeName }, {
+    removeRecipeItems.mutate({ recipeId, recipeName, selectionVersion }, {
       onSuccess: ({ entry }) => {
         undoToast.show({
           message: `Items from "${recipeName || 'recipe'}" removed`,
@@ -786,15 +825,37 @@ export function ShoppingListView() {
   }, [removeRecipeItems, restoreRecipeItems, undoToast])
 
   const handleClearListWithUndo = useCallback(() => {
-    clearList.mutate(undefined, {
-      onSuccess: (content) => {
+    clearList.mutate(clearConfirmation.current, {
+      onSuccess: (result) => {
+        if (!result) {
+          undoToast.show({ message: 'Shopping list is already clear' })
+          return
+        }
         undoToast.show({
-          message: 'Shopping list cleared',
-          onUndo: () => restoreShoppingContent.mutate(content),
+          duration: 10 * 60 * 1000,
+          message: result.synchronizationFailed
+            ? 'Clear confirmed. Could not refresh the list; reload to see current state. Undo is unavailable.'
+            : result.historical
+            ? 'The earlier Clear was confirmed. Showing the current list.'
+            : result.undoAvailable !== true
+            ? 'Shopping list cleared. Undo is unavailable for this Clear.'
+            : 'Shopping list cleared',
+          onUndo: result.undoAvailable !== true ? undefined : () => restoreShoppingContent.mutate(result),
         })
       },
     })
   }, [clearList, restoreShoppingContent, undoToast])
+
+  const handleRequestClear = useCallback(() => {
+    clearConfirmation.current = shoppingQuery.clearConfirmation
+    // Selections remain authoritative even without Pantry projection.
+    if (shoppingQuery.clearConfirmation?.undoRequired === false ||
+        selections.length > 0 || shoppingList?.source_recipes?.length) {
+      setShowClearConfirmation(true)
+    } else {
+      handleClearListWithUndo()
+    }
+  }, [shoppingQuery.clearConfirmation, selections.length, shoppingList?.source_recipes, handleClearListWithUndo])
 
   // Handle bulk check-off (check all items in a category)
   const handleBulkCheckOff = useCallback((items: ShoppingItem[]) => {
@@ -869,7 +930,7 @@ export function ShoppingListView() {
     pendingCheckIntentsRef.current = next
     setPendingCheckIntents(next)
 
-    void checkOffItem.mutateAsync({ rowRef, checked }).then(
+    void checkOffItem.mutateAsync({ rowRef, checked, inspectedCoverage: item.inspectedCoverage, inspectedRevision: item.inspectedRevision }).then(
       () => settleCheckIntent(rowRef, version),
       () => settleCheckIntent(rowRef, version)
     )
@@ -939,7 +1000,7 @@ export function ShoppingListView() {
     if (!editingItemRowId) return
 
     const targetItem = filteredItems.find((candidate) => candidate.rowId === editingItemRowId)
-    if (!targetItem || !isManualOnlyItem(targetItem)) {
+    if (!targetItem || !isManualShoppingItem(targetItem)) {
       setEditingItemRowId(null)
       setManualEditError(null)
       return
@@ -975,7 +1036,7 @@ export function ShoppingListView() {
       })
     } catch (error) {
       if (isAlreadyInShoppingListError(error)) {
-        setManualEditError(`"${trimmedName}" is already on the shopping list.`)
+        setManualEditError(`"${trimmedName}" is already on the shopping list. Choose a different ingredient name or cancel this edit.`)
         return
       }
 
@@ -1000,7 +1061,13 @@ export function ShoppingListView() {
     return buildCategoryViewModel(groupedItems, orderedCategories)
   }, [groupedItems, orderedCategories])
 
-  const categoryContent = useMemo(() => deriveCategoryContent(filteredItems), [filteredItems])
+  const categoryContent = useMemo(() => {
+    const known = new Set(orderedCategories.map((category) => category.key))
+    return deriveCategoryContent(filteredItems, (item) => {
+      const key = item.categoryKey || "misc"
+      return known.has(key) ? key : "__unknown_category__"
+    })
+  }, [filteredItems, orderedCategories])
   const effectiveCategoryIntents = useMemo(
     () => reconcileCategoryIntents(
       categoryIntents,
@@ -1065,52 +1132,13 @@ export function ShoppingListView() {
     return deriveSortableItemIds(filteredItems)
   }, [filteredItems])
 
-  // Get unique recipe names from active items only (excluding "Manual" and pending deletions)
-  // Only show recipe tags when there are active unchecked items
-  const uniqueRecipes = useMemo(() => {
-    return deriveUniqueRecipeNames(projectedShoppingList.items || [])
-  }, [projectedShoppingList.items])
-
-  const recipeIdsByName = useMemo(() => {
-    const ids = new Map<string, string>()
-    for (const item of projectedShoppingList.items || []) {
-      for (const source of item.sources || []) {
-        if (source.recipeId && source.recipeName !== "Manual") {
-          ids.set(source.recipeName, source.recipeId)
-        }
-      }
-    }
-    for (const recipe of allRecipes || []) {
-      if (!ids.has(recipe.name)) ids.set(recipe.name, recipe.id)
-    }
-    return ids
-  }, [allRecipes, projectedShoppingList.items])
-
-  const recipesByName = useMemo(() => {
-    return new Map((allRecipes || []).map((recipe) => [recipe.name, recipe]))
-  }, [allRecipes])
-
-  // Create a color mapping that assigns a unique color per recipe when possible.
-  // Prefer hash-based index for stability; on collision use next available index.
-  // If there are more recipes than colors, later recipes may reuse colors.
-  const recipeColorMap = useMemo(() => {
-    const map = new Map<string, number>()
-    const usedIndices = new Set<number>()
-    for (const recipeName of uniqueRecipes) {
-      let idx = getRecipeColorIndex(recipeName)
-      if (usedIndices.size < 10) {
-        while (usedIndices.has(idx)) {
-          idx = (idx + 1) % 10
-        }
-        usedIndices.add(idx)
-      }
-      map.set(recipeName, idx)
-    }
-    return map
-  }, [uniqueRecipes])
+  const recipesById = useMemo(() => new Map((allRecipes ?? []).map((recipe) => [recipe.id, recipe])), [allRecipes])
+  const recipeColorMap = useMemo(() => new Map(selections.map((entry) =>
+    [entry.recipeId, getRecipeColorIndex(entry.recipeId)])), [selections])
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (documentUnavailable || pantryUnavailable) return
     if (!newItem.trim()) {
       setAddFeedback({
         tone: "warning",
@@ -1256,23 +1284,15 @@ export function ShoppingListView() {
     // Format the list as plain text grouped by category
     const lines: string[] = []
 
-    orderedCategories.forEach((categoryData) => {
-        const items = (shoppingList.items || []).filter(
-          (item) => (item.categoryKey || "misc") === categoryData.key
-        )
+    categoryViewModels.forEach((categoryData) => {
+        const items = categoryData.items
         if (items.length === 0) return
 
         lines.push(`${categoryData.name}:`)
         items.forEach((item) => {
-          const rangeAmount = formatEncodedRangeAmount(item.amount, item.unit || "")
-          const amount = item.amount ? toFraction(item.amount) : ""
-          const unit = item.unit || ""
-          const prefix = rangeAmount
-            ? `${rangeAmount} `
-            : amount
-              ? `${amount}${unit ? " " + unit : ""} `
-              : ""
-          lines.push(`  - ${prefix}${item.item}`)
+          const amount = formatShoppingPurchaseAmount(item)
+          const prefix = amount ? amount + ' ' : ''
+          lines.push(`  - ${prefix}${shoppingPurchaseDisplayName(item)}`)
         })
         lines.push("")
       })
@@ -1318,6 +1338,7 @@ export function ShoppingListView() {
     if (!isManageMode) return
     const { active } = event
     const activeId = String(active.id)
+    dragSnapshot.current = structuredClone(shoppingList?.items ?? [])
     setActiveItem(filteredItems.find((item) => item.rowId === activeId) || null)
   }
 
@@ -1338,9 +1359,9 @@ export function ShoppingListView() {
     setActiveItem(null)
     setDragOverCategory(null)
 
-    if (!over || active.id === over.id || !shoppingList?.items) return
+    if (documentUnavailable || !over || active.id === over.id || !shoppingList?.items) return
 
-    const items = shoppingList.items
+    const items = dragSnapshot.current
     const intent = resolveShoppingDropIntent(
       items,
       String(active.id),
@@ -1349,7 +1370,11 @@ export function ShoppingListView() {
     if (!intent) return
 
     try {
-      await reorderList.mutateAsync({ items, ...intent })
+      const result = await reorderList.mutateAsync({ items, ...intent })
+      if (result?.undo) {
+        const inverse = result.undo
+        undoToast.show({ message: 'Purchase moved', onUndo: async () => { await organizePurchase.mutateAsync(inverse) } })
+      }
     } catch (error) {
       console.error("Failed to reorder:", error)
     }
@@ -1361,6 +1386,7 @@ export function ShoppingListView() {
         <button
           type="button"
           className={triggerClassName}
+          disabled={documentUnavailable}
           aria-label="Organize"
           aria-pressed={isManageMode}
         >
@@ -1437,7 +1463,7 @@ export function ShoppingListView() {
               itemCount={items.length}
               isCollapsed={isCollapsed}
               isDragTarget={!!isDragTarget}
-              isBulkCheckOffPending={bulkCheckOff.isPending}
+              isBulkCheckOffPending={documentUnavailable || bulkCheckOff.isPending || items.every(item => item.coveragePending)}
               onToggleCategory={() => toggleCategory(categoryData.key, interactiveUncheckedCount)}
               onBulkCheckOff={() => handleBulkCheckOff(items)}
               compact={!isManageMode}
@@ -1456,13 +1482,13 @@ export function ShoppingListView() {
                     !isManageMode &&
                     !!item.rowId &&
                     editingItemRowId === item.rowId &&
-                    isManualOnlyItem(item)
+                    isManualShoppingItem(item)
                   const editorContent = isEditingManualItem ? (
                     <ManualShoppingItemEditor
                       itemName={manualEditDraft.itemName}
                       amount={manualEditDraft.amount}
                       unit={manualEditDraft.unit}
-                      isSaving={updateItem.isPending}
+                      isSaving={documentUnavailable || updateItem.isPending}
                       errorMessage={manualEditError}
                       onItemNameChange={(value) => {
                         setManualEditDraft((prev) => ({ ...prev, itemName: value }))
@@ -1487,7 +1513,9 @@ export function ShoppingListView() {
                     onCheckOff: () => handleCheckOff(item),
                     onRemove: () => handleRemoveItem(item),
                     onAddToPantry: () => handleAddToPantry(item),
-                    onEdit: isManualOnlyItem(item) ? () => handleStartEditingManualItem(item) : undefined,
+                    foundationState,
+                    onEdit: !foundationState && isManualShoppingItem(item) ? () => handleStartEditingManualItem(item) : undefined,
+                    readOnly: documentUnavailable,
                     isCheckingOff: Boolean(pendingCheckIntent),
                     isRemoving: false,
                     isAddingToPantry: pendingPantryItems.has(item.rowId || item.item.toLowerCase().trim()),
@@ -1512,12 +1540,40 @@ export function ShoppingListView() {
     </>
   )
 
+  const documentMessage = shoppingQuery.documentError instanceof ShoppingDocumentReadError
+    ? 'This shopping list could not be opened. Your saved list has not been changed.'
+    : shoppingQuery.hasDocument
+      ? "Couldn’t refresh your shopping list. Showing the last loaded list."
+      : "Couldn’t load your shopping list. Try again."
+  const recoveryNotice = shoppingQuery.documentError ? (
+    <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+      <p>{documentMessage}</p>
+      <Button variant="outline" onClick={() => void shoppingQuery.retryDocument()} disabled={isFetching}>Try again</Button>
+    </div>
+  ) : null
+  if (!shoppingList && documentUnavailable) return (
+    <div className="mx-auto w-full max-w-3xl p-4">
+      <h1 className="mb-4 font-display text-3xl">Shopping List</h1>
+      {recoveryNotice ?? <p role="status">Loading your shopping list...</p>}
+    </div>
+  )
+
   return (
     <>
     <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col">
+      {foundationState && <ShoppingDormantRecovery state={foundationState} items={[...(shoppingList?.items ?? []), ...(shoppingList?.already_have ?? []), ...(shoppingList?.excluded ?? [])]} />}
+      {recoveryNotice}
+      {shoppingQuery.pantryError ? (
+        <div role="alert" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p>{shoppingQuery.hasPantry
+            ? "Couldn’t refresh pantry items. Showing the last loaded availability."
+            : "Couldn’t load pantry items. Try again."}</p>
+          <Button variant="outline" onClick={() => void shoppingQuery.retryPantry()} disabled={isFetching}>Try again</Button>
+        </div>
+      ) : null}
       {/* Mobile sticky add item - always accessible at top */}
       <div className={cn("sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-2 backdrop-blur-md", isDesktop && "hidden")}>
-        <form onSubmit={handleAddItem} className="relative">
+        {foundationState ? (isDesktop ? null : <ShoppingAddItem state={foundationState} inputRef={addItemInputRef} />) : <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
             placeholder="Add milk, apples, basil..."
@@ -1530,13 +1586,13 @@ export function ShoppingListView() {
           />
           <Button
             type="submit"
-            disabled={addItem.isPending}
+            disabled={addItem.isPending || documentUnavailable || pantryUnavailable}
             aria-label="Add item"
             className="absolute right-1.5 top-1/2 flex h-9 min-h-[44px] w-9 min-w-[44px] -translate-y-1/2 items-center justify-center rounded-full bg-primary font-medium text-primary-foreground shadow-sm hover:opacity-90"
           >
             <span className="text-lg leading-none font-semibold">+</span>
           </Button>
-        </form>
+        </form>}
       </div>
 
       {/* Mobile header - compact title and actions */}
@@ -1549,7 +1605,8 @@ export function ShoppingListView() {
           )}
           <button
             type="button"
-            onClick={handleClearListWithUndo}
+            onClick={handleRequestClear}
+            disabled={documentUnavailable}
             className="flex h-11 w-11 items-center justify-center rounded-full text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
             aria-label="Clear list"
           >
@@ -1578,7 +1635,8 @@ export function ShoppingListView() {
             </Button>
             <Button
               variant="outline"
-              onClick={handleClearListWithUndo}
+              onClick={handleRequestClear}
+              disabled={documentUnavailable}
               className="flex h-10 items-center gap-2 rounded-xl border-red-100 bg-red-50 px-4 text-sm font-medium text-red-600 hover:bg-red-100 hover:text-red-700"
             >
               <Trash2 className="h-4 w-4" />
@@ -1588,7 +1646,7 @@ export function ShoppingListView() {
         </div>
 
         {/* Desktop add item form - stays in header */}
-        <form onSubmit={handleAddItem} className="relative">
+        {foundationState ? (isDesktop ? <ShoppingAddItem state={foundationState} inputRef={addItemInputRef} /> : null) : <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
             placeholder="Add tomatoes, milk..."
@@ -1601,14 +1659,14 @@ export function ShoppingListView() {
           />
           <Button
             type="submit"
-            disabled={addItem.isPending}
+            disabled={addItem.isPending || documentUnavailable || pantryUnavailable}
             aria-label="Add item"
             className="absolute right-1.5 top-1/2 flex h-10 w-auto -translate-y-1/2 items-center justify-center gap-2 rounded-xl bg-primary px-5 font-medium text-primary-foreground shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             <span>Add Item</span>
           </Button>
-        </form>
+        </form>}
       </header>
 
       {/* Shopping List */}
@@ -1616,12 +1674,12 @@ export function ShoppingListView() {
       {/* Shopping List */}
       {showLoading ? (
         <p className="text-center text-muted-foreground py-8">Loading your shopping list...</p>
-      ) : filteredItems.length === 0 && mergedAlreadyHave.length === 0 && projectedShoppingList.excluded.length === 0 ? (
+      ) : shoppingList && selections.length === 0 && filteredItems.length === 0 && mergedAlreadyHave.length === 0 && projectedShoppingList.excluded.length === 0 ? (
         <div className="flex-1 flex items-center justify-center">
           <EmptyState
             icon={ShoppingCart}
             title="Your shopping list is clear"
-            description="Add a few items above, or build the list from recipes and meal plans."
+            description="No recipes selected. Add a few items above, or build the list from recipes and meal plans."
             action={{
               label: "Add item",
               onClick: () => addItemInputRef.current?.focus(),
@@ -1634,6 +1692,9 @@ export function ShoppingListView() {
         </div>
       ) : (
         <div className="relative">
+          {shoppingList && filteredItems.length === 0 && selections.length > 0 ? (
+            <p className="mb-4 text-muted-foreground">Nothing left to buy. Your selected recipes are still in the list.</p>
+          ) : null}
           {isManageMode ? (
             <Card className="mb-4 border-amber-200 bg-amber-50/80 shadow-sm">
               <CardContent className="flex items-start justify-between gap-3 px-4 py-3">
@@ -1717,7 +1778,7 @@ export function ShoppingListView() {
             )}
             </div>
 
-            {!isManageMode && uniqueRecipes.length > 0 && (
+            {!isManageMode && selections.length > 0 && (
               <Card
                 className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_10px_28px_rgba(63,52,43,0.055)] md:sticky md:top-24 md:col-start-2 md:row-start-2 md:row-end-[span_6]"
                 data-testid="shopping-recipe-context"
@@ -1729,7 +1790,7 @@ export function ShoppingListView() {
                         Recipes in list
                       </p>
                       <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-500">
-                        {uniqueRecipes.length}
+                        {selections.length}
                       </span>
                     </div>
                     {!isDesktop ? (
@@ -1738,7 +1799,8 @@ export function ShoppingListView() {
                         variant="ghost"
                         size="sm"
                         onClick={toggleRecipeSection}
-                        className="h-9 shrink-0 gap-1 rounded-full px-3 text-xs font-medium text-primary hover:bg-sage-50 hover:text-primary"
+                        className="h-11 shrink-0 gap-1 rounded-full px-3 text-xs font-medium text-primary hover:bg-sage-50 hover:text-primary"
+                        aria-expanded={!recipeSectionCollapsed}
                         aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
                       >
                         {recipeSectionCollapsed ? "Show" : "Hide"}
@@ -1748,17 +1810,22 @@ export function ShoppingListView() {
                   </div>
                   {(isDesktop || !recipeSectionCollapsed) ? (
                     <div className="flex flex-col gap-2 border-t border-stone-100 px-3 pb-3 pt-3 md:px-3.5 md:pb-3.5">
-                      {uniqueRecipes.map((recipeName) => {
-                        const recipeId = recipeIdsByName.get(recipeName)
+                      {selections.map(({ recipeId, label, selectedServings, selectionVersion }) => {
                         return (
+                          <div key={recipeId}>
                           <RecipeTag
-                            key={recipeName}
-                            recipeName={recipeName}
-                            recipe={recipesByName.get(recipeName)}
-                            onRemove={() => handleRemoveRecipeItems(recipeId, recipeName)}
-                            onViewRecipe={() => handleRecipeTagClick(recipeId, recipeName)}
-                            isRemoving={false}
+                            recipeName={label}
+                            selectedServings={selectedServings}
+                            recipe={recipesById.get(recipeId)}
+                            onRemove={() => handleRemoveRecipeItems(recipeId, label, selectionVersion)}
+                            onViewRecipe={() => handleRecipeTagClick(recipeId, label)}
+                            isRemoving={documentUnavailable}
                           />
+                          {foundationState && recipesById.has(recipeId) && <details className="px-2 text-sm">
+                            <summary className="min-h-11 cursor-pointer content-center text-muted-foreground" aria-label={`Change yield for ${label}`}>Change yield</summary>
+                            <SelectionYield recipe={recipesById.get(recipeId)!} state={foundationState} />
+                          </details>}
+                          </div>
                         )
                       })}
                     </div>
@@ -1787,7 +1854,8 @@ export function ShoppingListView() {
                   <Button
                     variant="default"
                     size="sm"
-                    onClick={handleClearListWithUndo}
+                    onClick={handleRequestClear}
+                    disabled={documentUnavailable}
                     className="mt-1"
                   >
                     Complete Shopping
@@ -1815,11 +1883,12 @@ export function ShoppingListView() {
                   <div className="grid gap-2">
                     {mergedAlreadyHave.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel="In pantry"
                         onRestore={() => handleRestorePantryItem(item)}
-                        disabled={moveToList.isPending}
+                        disabled={documentUnavailable || moveToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="pantry"
                         compact={true}
@@ -1834,11 +1903,12 @@ export function ShoppingListView() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     {mergedAlreadyHave.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `already-have-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel="In pantry"
                         onRestore={() => handleRestorePantryItem(item)}
-                        disabled={moveToList.isPending}
+                        disabled={documentUnavailable || moveToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="pantry"
                       />
@@ -1867,11 +1937,12 @@ export function ShoppingListView() {
                   <div className="grid gap-2">
                     {projectedShoppingList.excluded.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}
                         onRestore={() => handleRestoreExcludedItem(item)}
-                        disabled={moveExcludedToList.isPending}
+                        disabled={documentUnavailable || moveExcludedToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="excluded"
                         compact={true}
@@ -1886,11 +1957,12 @@ export function ShoppingListView() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     {projectedShoppingList.excluded.map((item, index) => (
                       <ShoppingRestoreChip
+                        foundationState={foundationState}
                         key={item.rowId || `excluded-${item.item}-${item.unit || ''}-${index}`}
                         item={item}
                         reasonLabel={item.excludedBy ? `Excluded: ${item.excludedBy}` : "Excluded"}
                         onRestore={() => handleRestoreExcludedItem(item)}
-                        disabled={moveExcludedToList.isPending}
+                        disabled={documentUnavailable || moveExcludedToList.isPending}
                         recipeColorMap={recipeColorMap}
                         tone="excluded"
                       />
@@ -1909,15 +1981,34 @@ export function ShoppingListView() {
         </div>
 
       {/* Shopping Settings Modal */}
+      <AlertDialog open={showClearConfirmation && !documentUnavailable} onOpenChange={setShowClearConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear shopping list?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {shoppingQuery.clearConfirmation?.undoRequired !== false
+                ? SHOPPING_CLEAR_UNDO_UNAVAILABLE
+                : 'Undo is unavailable for this Clear.'} This clears the whole list,
+              including manual items. Your saved recipes and organization stay saved.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearListWithUndo}>Clear list</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {showSettings && !documentUnavailable && organizationQuery.data?.document.schemaVersion === 4 ?
+        <ShoppingOrganizationDialog document={organizationQuery.data.document} onClose={() => setShowSettings(false)} /> :
       <ShoppingSettingsModal
-        open={showSettings}
+        open={showSettings && !documentUnavailable}
         onOpenChange={setShowSettings}
         config={config || null}
         onUpdateConfig={async (updates) => {
           await updateConfig.mutateAsync(updates)
         }}
         isUpdating={updateConfig.isPending}
-      />
+      />}
 
     </div>
     </>

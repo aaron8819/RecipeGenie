@@ -209,20 +209,29 @@ export type Database = {
       }
       shopping_list: {
         Row: {
+          content_epoch: number
           content_revision: number
           document: Json
+          trip_id: string
+          trip_revision: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          content_epoch?: number
           content_revision?: number
           document?: Json
+          trip_id?: string
+          trip_revision?: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          content_epoch?: number
           content_revision?: number
           document?: Json
+          trip_id?: string
+          trip_revision?: number
           updated_at?: string
           user_id?: string
         }
@@ -354,6 +363,7 @@ export type Database = {
       get_recipe_identity_compat_usage: { Args: never; Returns: number }
       is_shopping_document_v2: { Args: { p_document: Json }; Returns: boolean }
       is_shopping_document_v3: { Args: { p_document: Json }; Returns: boolean }
+      is_shopping_document_v4: { Args: { p_document: Json }; Returns: boolean }
       merge_tags: {
         Args: { p_source_tag: string; p_target_tag: string }
         Returns: undefined
@@ -381,6 +391,44 @@ export type Database = {
       resolve_recipe_identity: {
         Args: { p_legacy_id?: string; p_recipe_uuid?: string }
         Returns: string
+      }
+      shopping_admit: {
+        Args: {
+          p_hash: string
+          p_operation: string
+          p_owner: string
+          p_recover: boolean
+        }
+        Returns: Json
+      }
+      shopping_clear_undo_available: {
+        Args: { p_row: Database["public"]["Tables"]["shopping_list"]["Row"] }
+        Returns: boolean
+      }
+      shopping_command_context: {
+        Args: {
+          p_hash: string
+          p_operation: string
+          p_owner: string
+          p_sequence: number
+        }
+        Returns: Json
+      }
+      shopping_commit: {
+        Args: {
+          p_action: string
+          p_dependency: number
+          p_document: Json
+          p_hash: string
+          p_operation: string
+          p_outcome: string
+          p_owner: string
+          p_pantry_item?: string
+          p_recipe?: string
+          p_revision: number
+          p_sequence: number
+        }
+        Returns: Json
       }
       toggle_weekly_recipe_made: {
         Args: {

@@ -43,6 +43,15 @@ test.describe('My unauthenticated tests', () => {
 
 ## Running Tests
 
+Shopping Slice 5: `node node_modules/@playwright/test/cli.js test
+tests/shopping-rules.spec.ts tests/shopping-operability.spec.ts --project=chromium`
+uses an already verified loopback Supabase and app at port 3107. Both files
+create disposable owners and clean up only their fixtures; do not run bootstrap
+or a shared-fixture reset for these checks. The rules test stores real V3 data
+and checks manual edits, unchanged frozen sources/order, and no read writes at
+1440×900 and 390×844. The operability test additionally intercepts read failures
+and invalid responses; those responses are not persisted database fixtures.
+
 ### Run the core CI project
 ```bash
 npm run test:e2e:core
@@ -178,7 +187,12 @@ npm run test:e2e:codegen
 | `recipes.spec.ts` | Recipe CRUD, add/edit modals, import from text, category management |
 | `meal-planner.spec.ts` | Plan generation, settings modal, day assignments, mark as made |
 | `shopping-list.spec.ts` | List generation, check off items, auto-collapse, add to pantry |
+| `shopping-clear-undo.spec.ts` | Local-only disposable owners; desktop/mobile Clear Undo, real CAS races, preserved manual edits, and recipe-list disclosure. Run with `--project=chromium`; requires running loopback Supabase and local E2E configuration, never resets shared fixtures. |
+| `shopping-settings.spec.ts` | G03/H07 real CAS interleavings, independent exclusions/family settings, stale reset refusal, retained conflict input, reload, and Slice 1 Undo at 1440×900 and 390×844. Uses disposable owners and two authenticated contexts; requires existing loopback Supabase and local E2E config, never resets shared fixtures. |
+| `shopping-quantities.spec.ts` | Slice 3 lossless quantities through saved recipes, UI add, reload, check/uncheck, desktop clipboard, and Pantry/excluded buckets at 1440×900 and 390×844. Verifies saved recipe sections and frozen Shopping inputs remain unchanged. Disposable local owners only; no shared reset, auth artifacts, traces or video. Run with `--project=chromium` and existing loopback Supabase. |
+| `shopping-operability.spec.ts` | Slice 4 UUID source navigation/removal, hidden/empty selections, unknown categories and read recovery at 1440×900 and 390×844. Real persisted supported fixtures; browser-only failed reads and unsupported responses. Asserts no recovery writes. Disposable loopback owners, masked screenshots, no auth state/trace/video or shared reset. Run with `--project=chromium`. |
 | `shopping-list-mobile.spec.ts` | Mobile-specific shopping list flows (viewport 375px) |
+| `design-corrections.spec.ts` | Local-only manual-before-recipe editing, live Pantry/exclusions, labels and control semantics at 1440×900 and 390×844; restores the original Shopping document and removes disposable data |
 | `pantry.spec.ts` | Add/delete items, excluded keywords, clear all |
 | `responsive.spec.ts` | Mobile (375px, 390px, 414px), tablet (768px), desktop (1024px, 1440px) |
 | `accessibility.spec.ts` | WCAG 2.1 AA, axe-core checks, keyboard nav, focus indicators |
@@ -304,3 +318,7 @@ test.describe('My Feature', () => {
 - Check if element is in viewport
 - Verify selectors are correct
 - Consider using more specific locators
+
+Shopping Slice 6 has an isolated-stack test configuration: `node node_modules/@playwright/test/cli.js test --config playwright.shopping-protocol.config.ts`. It requires task-owned app port 3116 and Supabase ports 56321/56322; it does not bootstrap or reset shared fixtures. See `docs/shopping-slice6.md` for evidence boundaries.
+
+Slice 8 adds `web/scripts/test-shopping-slice8.ts` (authenticated HTTP, prepared-plan race barriers, exact 1 MiB Undo) and `test-shopping-slice8-browser.ts` (1440×900 and 390×844). Both require a task-owned loopback stack at 57321/57322 and a development app at 3117, with credentials derived from that stack. Neither resets fixtures or contacts hosted services. See `docs/shopping-slice8.md`.

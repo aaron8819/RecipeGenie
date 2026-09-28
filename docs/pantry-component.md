@@ -1,5 +1,7 @@
 # Pantry Domain Reference
 
+> Slice 6 supersedes legacy Shopping write paths described below. See [Shopping command boundary](../docs/shopping-slice6.md) for the current service-only commit, receipts, writer fence and rollout constraints. Historical sections retain their original migration context.
+
 Use this doc when working on pantry items, Shopping exclusions, or
 Pantry-to-Shopping flows.
 
@@ -45,11 +47,22 @@ the shared authenticated shell.
   action menu while preserving the existing optimistic mutation and Undo flow.
 - Pantry presence is joined live during Shopping projection and classifies
   matching ingredients as `already_have`.
+- Failed reads show Retry instead of the empty-state message. Cached rows may
+  remain with an explicit refresh warning; absent data has no authoritative
+  zero count. Successful standalone Pantry inserts/removals remain safe by
+  database uniqueness and row ID, but their partial results never establish a
+  full successful snapshot or clear a read error. Only a successful refetch
+  restores authoritative availability for Shopping.
 - Satisfaction uses resolver-produced exact/alternative candidates, bounded
   lemon/lime whole-fruit candidates for explicit juice or zest usage, and the
   shared Salt/Black pepper family evidence.
 - Pantry satisfaction is directional and does not change Shopping aggregation
   identity.
+- In initialized Shopping, manual extras bypass automatic Pantry hiding. The
+  Shopping-to-Pantry bridge explicitly hides affected manual needs and advances
+  their edit version, invalidating older rebinds even after a later return.
+  Ordinary Pantry add/edit/remove affects the existing command dependency fence;
+  it does not change manual extra intent. See [Slice 7](shopping-slice7.md).
 
 ### Excluded ingredients
 
@@ -57,6 +70,10 @@ the shared authenticated shell.
   semantic registry also permits only explicitly safe common forms, such as
   cumin to ground cumin and oregano to dried oregano.
 - Matching never uses substrings or family equality by itself.
+- Each addition/removal submits the existing canonical purchase key, not a
+  replacement array. Concurrent different-key changes survive. Repeated
+  transitions are authoritative no-ops; ambiguous stale opposite intent
+  conflicts. Failed additions retain their input for retry.
 
 ### Always-excluded families
 
@@ -65,8 +82,16 @@ the shared authenticated shell.
   accessible checkboxes and are persisted in `ShoppingDocumentV3.preferences`.
 - Settings immediately affect the deterministic Shopping projection; no
   contribution regeneration is required.
+- Pantry additions/removals and ingredient exclusions also reclassify current
+  recipe-derived rows. Explicit Shopping bucket overrides win over these live
+  inputs; manual rows retain their chosen bucket. The UI explains these
+  exceptions and does not instruct users to clear or regenerate Shopping.
 - Ingredient exclusions remain a separate section and count; changing a family
   setting does not change `excluded_keywords`.
+- Family controls update only their targeted setting, retain a failed choice
+  for explicit retry, and show authoritative saved values after conflict.
+  Independent settings survive concurrent writes. See the Shopping reference
+  for the precise temporary value/revision and ABA limitations.
 
 ### What Can I Make
 
@@ -79,4 +104,4 @@ rather than introduce a separate matcher.
 - See [`shopping-component.md`](./shopping-component.md) for the downstream shopping behavior that consumes pantry data.
 - See [`./project_overview.md`](./project_overview.md) for the broader architecture map.
 
-Last updated: 2026-08-07
+Last updated: 2026-09-12

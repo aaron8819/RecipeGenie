@@ -7,15 +7,15 @@ import { setActivePrincipalId } from "@/lib/principal-session"
 import { useDeleteRecipe } from "@/hooks/use-recipes"
 import type { Recipe } from "@/types/database"
 
-const deleteRecipeByUuid = vi.fn()
+const executeShoppingCommand = vi.fn()
 const supabaseClient = { kind: "test-client" }
 const recipeUuid = "71111111-1111-4111-8111-111111111111"
 
 vi.mock("@/lib/auth-context", () => ({
   useAuthContext: () => ({ user: { id: "user-a" } }),
 }))
-vi.mock("@/lib/recipe-deletion", () => ({
-  deleteRecipeByUuid: (...args: unknown[]) => deleteRecipeByUuid(...args),
+vi.mock("@/lib/shopping-command-client", () => ({
+  executeShoppingCommand: (...args: unknown[]) => executeShoppingCommand(...args),
 }))
 vi.mock("@/lib/supabase/client", () => ({ getSupabase: () => supabaseClient }))
 
@@ -48,11 +48,11 @@ function createWrapper() {
 beforeEach(() => {
   vi.clearAllMocks()
   setActivePrincipalId("user-a")
-  deleteRecipeByUuid.mockResolvedValue(recipeUuid)
+  executeShoppingCommand.mockResolvedValue({ status: 'Applied', receipt: { outcome: 'Applied', revision: 2 } })
 })
 
 describe("useDeleteRecipe", () => {
-  it("delegates recipe and Shopping cleanup to the atomic database function", async () => {
+  it("delegates recipe and Shopping cleanup to the authoritative command boundary", async () => {
     const { wrapper, queryClient } = createWrapper()
     const listKey = recipeKeys.list("user-a", {
       category: null, search: null, favoritesOnly: false, tags: [], limit: null,
@@ -64,14 +64,16 @@ describe("useDeleteRecipe", () => {
 
     await act(() => result.current.mutateAsync(recipeUuid))
 
-    expect(deleteRecipeByUuid).toHaveBeenCalledWith(supabaseClient, recipeUuid, "user-a")
+    expect(executeShoppingCommand).toHaveBeenCalledWith("user-a", {
+      protocol: 1, observedRevision: 0, mutation: { type: 'deleteRecipe', recipeId: recipeUuid },
+    })
     expect(queryClient.getQueryData(listKey)).toEqual([])
     expect(queryClient.getQueryData(recipeKeys.detail("user-a", recipeUuid))).toBeNull()
     expect(queryClient.getQueryState(shoppingKeys.detail("user-a"))?.isInvalidated).toBe(true)
   })
 
   it("restores recipe caches when the atomic delete fails", async () => {
-    deleteRecipeByUuid.mockRejectedValueOnce(new Error("recipe delete failed"))
+    executeShoppingCommand.mockRejectedValueOnce(new Error("recipe delete failed"))
     const { wrapper, queryClient } = createWrapper()
     const detailKey = recipeKeys.detail("user-a", recipeUuid)
     queryClient.setQueryData(detailKey, recipe)

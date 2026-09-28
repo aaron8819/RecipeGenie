@@ -1,5 +1,7 @@
 # Recipes Domain Reference
 
+> Slice 6 supersedes legacy Shopping write paths described below. See [Shopping command boundary](../docs/shopping-slice6.md) for the current service-only commit, receipts, writer fence and rollout constraints. Historical sections retain their original migration context.
+
 Use this doc when working on recipe CRUD, recipe detail, the recipe form
 dialog, text or URL import, recipe images, tags/categories, or recipe sharing.
 
@@ -241,3 +243,5 @@ The local inspection suite covers mobile import state transitions at 360x800,
 390x844, 430x932, and 390x420, plus the preserved desktop flow at 1200x800.
 
 Last updated: 2026-08-03
+
+Shopping Slice 8 validates owned recipe sources inside the existing owner-locked commit boundary. Recipe deletion remains an admitted `deleteRecipe` command; direct deletion stays fenced. Frozen Shopping evidence survives recipe edits, while deletion removes the current selection and prevents later refresh/Undo from reviving it. See [Shopping Slice 8](shopping-slice8.md).

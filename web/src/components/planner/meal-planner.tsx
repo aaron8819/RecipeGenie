@@ -1148,7 +1148,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const { data: config } = useUserConfig()
   const updateConfig = useUpdateUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
-  const { data: shoppingList } = useShoppingList()
+  const { selections: shoppingSelections } = useShoppingList()
 
   const clearPendingAssignmentOverlay = useCallback((weekDate: string) => {
     setPendingAssignmentCounts((prev) => {
@@ -1550,8 +1550,8 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
 
   const displayedRecipes = recipes
   const shoppingRecipeIds = useMemo(
-    () => new Set(shoppingList?.source_recipes || []),
-    [shoppingList?.source_recipes]
+    () => new Set(shoppingSelections.map((selection) => selection.recipeId)),
+    [shoppingSelections]
   )
   const activeRecipeOverlay = useMemo(() => deriveActiveRecipeOverlay({
     recipes: displayedRecipes,
@@ -1799,9 +1799,6 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                 style={{ width: `${progress.percentage}%` }}
               />
             </div>
-            <p className="text-xs text-slate-400">
-              You&apos;re on track to hit your nutrition goals!
-            </p>
           </div>
         </PlannerSectionShell>
 

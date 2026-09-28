@@ -50,11 +50,16 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   const [isVisible, setIsVisible] = useState(false)
   const [progress, setProgress] = useState(100)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const transitionRef = useRef<NodeJS.Timeout | null>(null)
   const animationRef = useRef<number | null>(null)
   const toastRef = useRef<ToastState | null>(null)
   const queueRef = useRef<UndoToastOptions[]>([])
 
   const clearTimers = useCallback(() => {
+    if (transitionRef.current) {
+      clearTimeout(transitionRef.current)
+      transitionRef.current = null
+    }
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
@@ -66,6 +71,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const showNextToast = useCallback(() => {
+    clearTimers()
     const nextOptions = queueRef.current.shift()
     if (!nextOptions) {
       setToast(null)
@@ -95,7 +101,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
       nextToast.onExpire?.()
       clearTimers()
       setIsVisible(false)
-      setTimeout(() => {
+      transitionRef.current = setTimeout(() => {
         showNextToast()
       }, 200)
     }, duration)
@@ -116,7 +122,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
     clearTimers()
     toastRef.current?.onDismiss?.()
     setIsVisible(false)
-    setTimeout(() => {
+    transitionRef.current = setTimeout(() => {
       showNextToast()
     }, 200)
   }, [clearTimers, showNextToast])
@@ -146,7 +152,7 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
       clearTimers()
       setIsVisible(false)
       queueRef.current = [options]
-      setTimeout(() => {
+      transitionRef.current = setTimeout(() => {
         showNextToast()
       }, 200)
       return
@@ -159,11 +165,11 @@ export function UndoToastProvider({ children }: { children: React.ReactNode }) {
   const handleUndo = useCallback(() => {
     if (toast && toast.onUndo) {
       clearTimers()
-      toast.onUndo()
       setIsVisible(false)
-      setTimeout(() => {
+      transitionRef.current = setTimeout(() => {
         showNextToast()
       }, 200)
+      toast.onUndo()
     }
   }, [toast, clearTimers, showNextToast])
 

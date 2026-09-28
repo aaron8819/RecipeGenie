@@ -11,11 +11,14 @@ type CategoryContent = {
 
 export type CategoryContentByKey = Map<string, CategoryContent>
 
-export function deriveCategoryContent(items: ShoppingItem[]): CategoryContentByKey {
+export function deriveCategoryContent(
+  items: ShoppingItem[],
+  categoryForItem: (item: ShoppingItem) => string = (item) => item.categoryKey || "misc"
+): CategoryContentByKey {
   const contentByKey: CategoryContentByKey = new Map()
 
   items.forEach((item) => {
-    const categoryKey = item.categoryKey || "misc"
+    const categoryKey = categoryForItem(item)
     const content = contentByKey.get(categoryKey) || {
       checkedRowIds: new Set<string>(),
       uncheckedRowIds: new Set<string>(),

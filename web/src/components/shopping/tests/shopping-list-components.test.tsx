@@ -30,7 +30,7 @@ function item(overrides: Partial<ShoppingItem> = {}): ShoppingItem {
 }
 
 function chooseItemAction(name: string) {
-  fireEvent.pointerDown(screen.getByRole("button", { name: "Item actions" }))
+  fireEvent.pointerDown(screen.getByRole("button", { name: /^Actions for / }))
   fireEvent.click(screen.getByRole("menuitem", { name }))
 }
 
@@ -66,12 +66,12 @@ describe("ShoppingCategorySection", () => {
     expect(screen.getByText("1 done")).toBeInTheDocument()
     expect(screen.getByText("Spinach row")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Check all items in Produce" }).className).toContain("min-w-[44px]")
-    expect(screen.getByRole("button", { name: "Collapse category" }).className).toContain("h-9")
+    expect(screen.getByRole("button", { name: /^Collapse .* category$/ }).className).toContain("h-9")
 
     fireEvent.click(screen.getByRole("button", { name: "Check all items in Produce" }))
     expect(onBulkCheckOff).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole("button", { name: "Collapse category" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Collapse .* category$/ }))
     expect(onToggleCategory).toHaveBeenCalledTimes(1)
   })
 
@@ -98,7 +98,7 @@ describe("ShoppingCategorySection", () => {
     )
 
     expect(screen.queryByText("Hidden child")).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Expand .* category$/ })).toBeInTheDocument()
   })
 })
 
@@ -155,7 +155,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Reorder apples" })).not.toBeInTheDocument()
   })
 
   it("renders desktop row actions, dedupes sources, and forwards callbacks", () => {
@@ -168,8 +168,8 @@ describe("ShoppingItemRow", () => {
       <ShoppingItemRow
         item={item({
           sources: [
-            { recipeName: "Autumn Soup" },
-            { recipeName: "Autumn Soup" },
+            { recipeId: "soup-id", recipeName: "Autumn Soup" },
+            { recipeId: "soup-id", recipeName: "Autumn Soup" },
           ],
         })}
         isDesktop={true}
@@ -185,13 +185,13 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("2 lb")).toBeInTheDocument()
+    expect(screen.queryByText("2 lb")).not.toBeInTheDocument()
     expect(screen.getByText("apples")).toBeInTheDocument()
-    expect(screen.getAllByText("Autumn Soup")).toHaveLength(1)
-    expect(screen.getByRole("button", { name: "Drag to reorder" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Item actions" })).toBeInTheDocument()
+    expect(screen.getAllByText("Autumn Soup")).toHaveLength(2)
+    expect(screen.getByRole("button", { name: "Reorder apples" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Actions for / })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Check off item" }))
+    fireEvent.click(screen.getByRole("button", { name: "Check off apples", pressed: false }))
     chooseItemAction("Edit item")
     chooseItemAction("Add to pantry")
     chooseItemAction("Remove from list")
@@ -201,7 +201,7 @@ describe("ShoppingItemRow", () => {
     expect(onAddToPantry).toHaveBeenCalledTimes(1)
     expect(onRemove).toHaveBeenCalledTimes(1)
 
-    expect(screen.getByRole("button", { name: "Item actions" }).className).not.toContain("hidden")
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).not.toContain("hidden")
   })
 
   it("keeps mobile action trigger centered and leaves a busy check-off actionable", () => {
@@ -220,13 +220,13 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByTestId("shopping-item-row").className).toContain("items-center")
+    expect(screen.getByTestId("shopping-item-row").className).toContain("items-start")
     expect(screen.getByText("Swipe left to delete")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Uncheck item" })).toHaveAttribute("aria-busy", "true")
-    expect(screen.getByRole("button", { name: "Uncheck item" })).not.toBeDisabled()
-    expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("h-11")
-    expect(screen.getByRole("button", { name: "Item actions" }).className).toContain("w-11")
-    expect(screen.getByRole("button", { name: "Item actions" }).className).not.toContain("hidden")
+    expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).toHaveAttribute("aria-busy", "true")
+    expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).not.toBeDisabled()
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).toContain("h-11")
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).toContain("w-11")
+    expect(screen.getByRole("button", { name: /^Actions for / }).className).not.toContain("hidden")
   })
 
   it("renders compact provenance summaries in shopping mode", () => {
@@ -250,7 +250,8 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "From Weeknight Pasta" }))
+    fireEvent.click(screen.getByText("View sources"))
+    fireEvent.click(screen.getByRole("button", { name: "Weeknight Pasta" }))
     expect(onViewRecipe).toHaveBeenCalledWith(undefined, "Weeknight Pasta")
   })
 
@@ -276,10 +277,12 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("From Weeknight Pasta + 2 more")).toBeInTheDocument()
+    expect(screen.getByLabelText('View sources for apples').parentElement).not.toHaveAttribute('open')
+    expect(screen.getByText('Sunday Chili')).toBeInTheDocument()
+    expect(screen.getByText('Lunch Bowl')).toBeInTheDocument()
   })
 
-  it("moves additional amounts into a secondary line for easier scanning", () => {
+  it("shows additional amounts in the main quantity display", () => {
     render(
       <ShoppingItemRow
         item={item({
@@ -301,10 +304,9 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("3 cloves")).toBeInTheDocument()
-    expect(screen.queryByText("3 cloves + 1 head")).not.toBeInTheDocument()
-    expect(screen.getByText("Also: 1 head")).toBeInTheDocument()
-    expect(screen.getByText("From Roast Chicken")).toBeInTheDocument()
+    expect(screen.getByText("3 cloves + 1 head")).toBeInTheDocument()
+    expect(screen.queryByText("Also: 1 head")).not.toBeInTheDocument()
+    expect(screen.getByText("Roast Chicken")).toBeInTheDocument()
   })
 
   it("shows prep-specific source details without repeating exact bare item forms", () => {
@@ -315,9 +317,9 @@ describe("ShoppingItemRow", () => {
           amount: 4,
           unit: "count",
           sources: [
-            { recipeName: "Pollo Asado Tacos", originalItem: "juice of 2 limes" },
-            { recipeName: "Shredded Chipotle Beef", originalItem: "lime" },
-            { recipeName: "Pollo Asado Tacos", originalItem: "lime wedges" },
+            { recipeId: "tacos-id", recipeName: "Pollo Asado Tacos", originalItem: "juice of 2 limes" },
+            { recipeId: "beef-id", recipeName: "Shredded Chipotle Beef", originalItem: "lime" },
+            { recipeId: "tacos-id", recipeName: "Pollo Asado Tacos", originalItem: "lime wedges" },
           ],
         })}
         isDesktop={false}
@@ -332,52 +334,53 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByText("4")).toBeInTheDocument()
+    expect(screen.queryByText("4")).not.toBeInTheDocument()
     expect(screen.getByText("limes")).toBeInTheDocument()
-    expect(screen.getByText("Needs: juice of 2 limes; lime wedges")).toBeInTheDocument()
-    expect(screen.getByText("From Pollo Asado Tacos and Shredded Chipotle Beef")).toBeInTheDocument()
+    expect(screen.getByText("juice of 2 limes")).toBeInTheDocument()
+    expect(screen.getByText("lime wedges")).toBeInTheDocument()
+    expect(screen.getByText("Shredded Chipotle Beef")).toBeInTheDocument()
   })
 
   it.each([
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 1, originalUnit: "clove", preparationModifiers: ["finely grated", "small"] },
-      "Needs: 1 finely grated small garlic clove",
+      "1 finely grated small garlic clove",
     ],
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 1, originalUnit: "clove", preparationModifiers: ["finely grated"] },
-      "Needs: 1 finely grated garlic clove",
+      "1 finely grated garlic clove",
     ],
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 2, originalUnit: "clove", preparationModifiers: ["finely grated"] },
-      "Needs: 2 finely grated garlic cloves",
+      "2 finely grated garlic cloves",
     ],
     [
       "garlic",
       { originalItem: "garlic", originalAmount: 0.5, originalUnit: "clove", preparationModifiers: ["finely grated"] },
-      "Needs: ½ finely grated garlic cloves",
+      "½ finely grated garlic cloves",
     ],
     [
       "avocado",
       { originalItem: "avocado", originalAmount: 1, originalUnit: "count", preparationModifiers: ["diced", "sliced"] },
-      "Needs: 1 sliced or diced avocado",
+      "1 sliced or diced avocado",
     ],
     [
       "jasmine rice",
       { originalItem: "jasmine rice", originalAmount: 2, originalUnit: "cup", preparationModifiers: ["cooked", "warm"] },
-      "Needs: 2 cup warm cooked jasmine rice",
+      "2 cup warm cooked jasmine rice",
     ],
     [
       "water",
       { originalItem: "water", originalAmount: null, originalUnit: "", preparationModifiers: ["as needed"] },
-      "Needs: as needed water",
+      "as needed water",
     ],
     [
       "kosher salt",
       { originalItem: "kosher salt", originalAmount: 0.5, originalUnit: "tsp", preparationModifiers: ["to taste"] },
-      "Needs: ½ tsp kosher salt, to taste",
+      "½ tsp kosher salt, to taste",
     ],
   ])("renders source preparation separately from the %s purchase row", (
     purchaseItem,
@@ -472,7 +475,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByRole("button", { name: "Item actions" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Actions for / })).toBeInTheDocument()
     chooseItemAction("Edit item")
 
     expect(onEdit).toHaveBeenCalledTimes(1)
@@ -655,11 +658,11 @@ describe("ShoppingRestoreChip", () => {
     )
 
     expect(screen.getByText("milk")).toBeInTheDocument()
-    expect(screen.getByText("1 cup")).toBeInTheDocument()
+    expect(screen.queryByText("1 cup")).not.toBeInTheDocument()
     expect(screen.getByText("Excluded: dairy")).toBeInTheDocument()
     expect(screen.getByText("Pasta Bake")).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Restore milk 1 cup Excluded: dairy" }))
+    fireEvent.click(screen.getByRole("button", { name: "Restore milk Excluded: dairy" }))
     expect(onRestore).toHaveBeenCalledTimes(1)
   })
 })
@@ -693,4 +696,23 @@ describe("ManualShoppingItemEditor", () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(onSave).toHaveBeenCalledTimes(1)
   })
+})
+
+
+it('keeps UUID source buttons distinct, including a recipe titled Manual', () => {
+  const onViewRecipe = vi.fn()
+  render(<ShoppingItemRow item={item({ rowId: 'derived:carrot', sources: [
+    { recipeId: 'soup-a', recipeName: 'Soup', label: 'Soup (1)' },
+    { recipeId: 'soup-a', recipeName: 'Soup', label: 'Soup (1)' },
+    { recipeId: 'soup-b', recipeName: 'Soup', label: 'Soup (2)' },
+    { recipeId: 'manual-recipe', recipeName: 'Manual' },
+  ] })} isDesktop={false} sourceDisplay="tags" isCheckingOff={false}
+    isRemoving={false} isAddingToPantry={false} recipeColorMap={new Map()}
+    onViewRecipe={onViewRecipe} onCheckOff={vi.fn()} onAddToPantry={vi.fn()} onRemove={vi.fn()} />)
+  fireEvent.click(screen.getByText('View sources'))
+  expect(screen.getAllByRole('button', { name: 'Soup (1)' })).toHaveLength(2)
+  fireEvent.click(screen.getByRole('button', { name: 'Soup (2)' }))
+  expect(onViewRecipe).toHaveBeenLastCalledWith('soup-b', 'Soup')
+  fireEvent.click(screen.getByRole('button', { name: 'Manual' }))
+  expect(onViewRecipe).toHaveBeenLastCalledWith('manual-recipe', 'Manual')
 })

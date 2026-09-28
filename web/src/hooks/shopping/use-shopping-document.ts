@@ -1,7 +1,26 @@
 'use client'
 
+import { applyOrganization, moveInverse, inspectOrganization, organizationVersion, type OrganizationIntent } from '@/lib/shopping-organization'
+
+import { isShoppingContentCommand } from '@/lib/shopping-lifecycle'
+import type { ShoppingCommand } from '@/lib/shopping-command'
+import { executeShoppingCommand } from '@/lib/shopping-command-client'
+import { reconcileShoppingState, type ShoppingCachedState } from '@/lib/shopping-cache'
+import { canUndoShoppingClear, shoppingContent, type ShoppingContent } from '@/lib/shopping-clear'
+import { shoppingRecipeSelections } from '@/lib/shopping-sources'
+import { readShoppingCompatibility } from '@/lib/shopping-compatibility'
+
+import { shoppingDocumentToList, shoppingDocumentToConfig } from '@/lib/shopping-view'
+export { shoppingDocumentToList, shoppingDocumentToConfig } from '@/lib/shopping-view'
+import { manualShoppingQuantity, validateManualPurchaseIntent } from '@/lib/shopping-manual-rules'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  settingValue, validateSettingIntent, validateSettingsReplacement,
+  ShoppingSettingsConflictError,
+  type ShoppingSettingIntent,
+} from '@/lib/shopping-settings'
 import { useAuthContext } from '@/lib/auth-context'
+import { getActivePrincipalId } from '@/lib/principal-session'
 import { useUndoToast } from '@/hooks/use-undo-toast'
 import { usePantryItems } from '@/hooks/use-pantry'
 import { mapRecipeRows } from '@/lib/recipe-identity'
@@ -11,7 +30,6 @@ import {
   createEmptyShoppingDocument,
   createShoppingRecipeEntry,
   projectShoppingDocument,
-  validateShoppingDocumentStateV3,
   type RowRef,
   type ShoppingDocumentMutation,
   type ShoppingDocumentStateV3,
@@ -20,21 +38,16 @@ import {
   type ShoppingRecipeEntryV2,
 } from '@/lib/shopping-document'
 import {
-  persistShoppingMutationWithReplay,
   ShoppingDocumentConflictError,
   type ShoppingDocumentReplayValidator,
 } from '@/lib/shopping-document-persistence'
-import {
-  createShoppingPurchaseKey,
-  normalizeUnit,
-} from '@/lib/shopping-list-normalization'
+import { createShoppingPurchaseKey } from '@/lib/shopping-list-normalization'
 import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics'
 import { categorizeIngredient } from '@/lib/shopping-categories'
 import {
   normalizeScaleRatioV1,
   parseRationalLexeme,
 } from '@/lib/recipe-quantity'
-import { normalizePantryItemName } from '@/lib/pantry'
 import { isAlreadyInShoppingListError } from '@/lib/shopping-feedback'
 import { getSupabase } from '@/lib/supabase/client'
 import { requireShoppingRowRef } from '@/lib/shopping-row-reference'
@@ -44,7 +57,6 @@ import type {
   Recipe,
   ShoppingConfig,
   ShoppingItem,
-  ShoppingList,
 } from '@/types/database'
 
 const SHOPPING_DOCUMENT_WRITE_SCOPE = 'shopping-document-write'
@@ -52,151 +64,106 @@ const SHOPPING_DOCUMENT_WRITE_SCOPE = 'shopping-document-write'
 type ShoppingDocumentRow = {
   document: unknown
   content_revision: number
+  trip_id?: string
+  content_epoch?: number
+  shopping_clear_undo_available?: boolean
 }
 
 type MutationPlan<TResult> = {
-  mutation: ShoppingDocumentMutation
+  observedSettingVersion?: number
+  observedRevision?: number
+  observedManual?: ShoppingManualItemV1
+  observedSelections?: Record<string, number | null>
+  inspectedCoverage?: ShoppingCommand['inspectedCoverage']
+  clearConfirmation?: { revision: number; undoRequired: boolean }
+  mutation: ShoppingCommand['mutation']
   value: TResult
+  committedValue?: (
+    before: ShoppingDocumentStateV3,
+    committed: ShoppingDocumentStateV3,
+    receipt?: { undoAvailable?: boolean | null; historical?: boolean; synchronizationFailed?: boolean }
+  ) => TResult
   validateReplay?: ShoppingDocumentReplayValidator
+  resolvedValue?: (before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3, outcome?: string, receiptRevision?: number) => TResult
+}
+
+export const SHOPPING_CLEAR_UNDO_UNAVAILABLE =
+  'Undo is available for 10 minutes unless Shopping content changes or a saved recipe is deleted.'
+
+export class ShoppingClearUndoConflictError extends ShoppingDocumentConflictError {
+  constructor(message = 'Shopping changed after Clear; Undo was not applied.') {
+    super()
+    this.message = message
+    this.name = 'ShoppingClearUndoConflictError'
+  }
+}
+
+export interface ShoppingClearResult {
+  readonly ownerUserId: string
+  readonly postClearRevision: number
+  readonly undoAvailable?: boolean
+  readonly historical?: boolean
+  readonly synchronizationFailed?: boolean
+  readonly content: ShoppingContent
 }
 
 type DuplicateFeedbackOwner = 'mutation' | 'caller'
 
-function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingDocumentStateV3 {
-  const validation = validateShoppingDocumentStateV3({
-    document: row.document,
-    contentRevision: Number(row.content_revision),
-  })
-  if (!validation.ok || validation.contentRevision === undefined) {
-    throw new Error('Stored Shopping document is invalid')
-  }
-  return {
-    document: validation.document,
-    contentRevision: validation.contentRevision,
+export class ShoppingDocumentReadError extends Error {
+  constructor() {
+    super('This shopping list could not be opened. Your saved list has not been changed.')
+    this.name = 'ShoppingDocumentReadError'
   }
 }
 
-async function fetchShoppingDocumentState(): Promise<ShoppingDocumentStateV3> {
+function assertShoppingReadable(queryClient: ReturnType<typeof useQueryClient>, key: readonly string[]) {
+  if (queryClient.getQueryState(key)?.status === 'error') {
+    throw new Error('Could not load the shopping list. Try again.')
+  }
+}
+
+function parseShoppingDocumentRow(row: ShoppingDocumentRow): ShoppingCachedState {
+  const result = readShoppingCompatibility(row.document, Number(row.content_revision))
+  if (result.status !== 'Supported') throw new ShoppingDocumentReadError()
+  return { ...result.state, tripId: row.trip_id, contentEpoch: row.content_epoch, clearUndoAvailable: row.shopping_clear_undo_available }
+}
+
+async function fetchShoppingDocumentState(ownerUserId?: string): Promise<ShoppingCachedState> {
   const supabase = getSupabase()
   const request = supabase.from('shopping_list') as unknown as {
     select: (columns: string) => {
-      single: () => Promise<{
+      eq: (column: string, value: string) => ReturnType<typeof request.select>
+      maybeSingle: () => Promise<{
         data: ShoppingDocumentRow | null
         error: { message: string } | null
       }>
     }
   }
-  const { data, error } = await request
-    .select('document,content_revision')
-    .single()
+  const selection = request.select('document,content_revision,shopping_clear_undo_available,trip_id,content_epoch')
+  const { data, error } = await (ownerUserId
+    ? selection.eq('user_id', ownerUserId)
+    : selection).maybeSingle()
   if (error) throw error
-  if (!data) throw new Error('Shopping document not found')
+  if (!data) return { document: createEmptyShoppingDocument(), contentRevision: 0 }
   return parseShoppingDocumentRow(data)
-}
-
-async function writeShoppingDocumentCas(
-  userId: string,
-  current: ShoppingDocumentStateV3,
-  next: ShoppingDocumentStateV3
-): Promise<ShoppingDocumentStateV3 | null> {
-  const supabase = getSupabase()
-  const request = supabase.from('shopping_list') as unknown as {
-    update: (values: { document: unknown; content_revision: number }) => {
-      eq: (column: string, value: string | number) => {
-        eq: (column: string, value: string | number) => {
-          select: (columns: string) => {
-            maybeSingle: () => Promise<{
-              data: ShoppingDocumentRow | null
-              error: { message: string } | null
-            }>
-          }
-        }
-      }
-    }
-  }
-  const { data, error } = await request
-    .update({
-      document: next.document,
-      content_revision: current.contentRevision + 1,
-    })
-    .eq('user_id', userId)
-    .eq('content_revision', current.contentRevision)
-    .select('document,content_revision')
-    .maybeSingle()
-  if (error) throw error
-  return data ? parseShoppingDocumentRow(data) : null
-}
-
-export function shoppingDocumentToList(
-  userId: string,
-  state: ShoppingDocumentStateV3,
-  pantryItems: PantryItem[] = []
-): ShoppingList {
-  const projection = projectShoppingDocument(state.document, pantryItems)
-  const mapRow = (row: (typeof projection.rows)[number]): ShoppingItem => ({
-    rowId: row.rowRef,
-    orderingKey: row.orderingKey,
-    item: row.displayName,
-    amount: row.quantity?.amount ?? null,
-    unit: row.quantity?.unit || '',
-    exactQuantityV1: row.quantity?.exactQuantityV1,
-    exactPackageV1: row.quantity?.exactPackageV1,
-    exactAuthoredUnit: row.quantity?.exactAuthoredUnit,
-    categoryKey: row.categoryKey,
-    categoryOrder: row.categoryOrder,
-    sources: row.manualId
-      ? [{ recipeName: 'Manual' }]
-      : row.sources.map((source) => ({
-          ...source,
-        })),
-    additionalAmounts: row.additionalQuantities
-      ?.filter((quantity) => quantity.amount !== null)
-      .map((quantity) => ({
-        amount: quantity.amount as number,
-        unit: quantity.unit,
-      })),
-    checked: row.checked,
-    excludedBy: row.excludedBy,
-  })
-  const entries = Object.values(state.document.recipeEntries)
-  return {
-    user_id: userId,
-    items: projection.items.map(mapRow),
-    already_have: projection.alreadyHave.map(mapRow),
-    excluded: projection.excluded.map(mapRow),
-    source_recipes: entries.map((entry) => entry.recipeId).sort(),
-    scale: entries.length === 1
-      ? Number(entries[0].scaleV1.numerator) / Number(entries[0].scaleV1.denominator)
-      : 1,
-    total_servings: entries.reduce((total, entry) => total + entry.selectedServings, 0),
-    custom_order: Object.keys(
-      state.document.preferences.ingredientOrderByCategory
-    ).length > 0,
-  }
-}
-
-export function shoppingDocumentToConfig(
-  state: ShoppingDocumentStateV3
-): ShoppingConfig {
-  const preferences = state.document.preferences
-  return {
-    category_overrides: { ...preferences.categoryByIngredient },
-    custom_categories: [...preferences.customCategories],
-    category_order: preferences.categoryOrder.length > 0
-      ? [...preferences.categoryOrder]
-      : null,
-    excluded_keywords: [...preferences.excludedIngredientKeys],
-    exclude_salt_variants: preferences.excludeSaltVariants,
-    exclude_black_pepper_variants: preferences.excludeBlackPepperVariants,
-  }
 }
 
 export function useShoppingDocumentState() {
   const { user, loading } = useAuthContext()
   return useQuery({
     queryKey: shoppingKeys.detail(principalId(user?.id)),
-    queryFn: fetchShoppingDocumentState,
-    placeholderData: (previousData) => previousData,
+    // Consume the signal so removal/unmount cancels even a transport that
+    // ignores abort. Reconciliation runs at Query's actual commit boundary.
+    queryFn: async ({ signal }) => {
+      const state = await fetchShoppingDocumentState(user!.id)
+      signal.throwIfAborted()
+      return state
+    },
+    structuralSharing: (current, incoming) => reconcileShoppingState(
+      current as ShoppingDocumentStateV3 | undefined,
+      incoming as ShoppingDocumentStateV3,
+    ),
+    retry: (count, error) => !(error instanceof ShoppingDocumentReadError) && count < 2,
     staleTime: 30 * 1000,
     enabled: !loading && Boolean(user),
   })
@@ -208,13 +175,25 @@ export function useShoppingList() {
   const pantryQuery = usePantryItems()
   return {
     ...documentQuery,
-    data: documentQuery.data
+    data: documentQuery.data && pantryQuery.data !== undefined
       ? shoppingDocumentToList(
           principalId(user?.id),
           documentQuery.data,
-          pantryQuery.data || []
+          pantryQuery.data
         )
       : undefined,
+    selections: documentQuery.data ? shoppingRecipeSelections(documentQuery.data.document.recipeEntries) : [],
+    clearConfirmation: documentQuery.data ? {
+      revision: documentQuery.data.contentRevision,
+      undoRequired: documentQuery.data.clearUndoAvailable ?? canUndoShoppingClear(documentQuery.data.document),
+    } : undefined,
+    documentError: documentQuery.error,
+    pantryError: pantryQuery.error,
+    hasDocument: documentQuery.data !== undefined,
+    hasPantry: pantryQuery.data !== undefined,
+    canAddItem: documentQuery.isSuccess && pantryQuery.isSuccess,
+    retryDocument: () => documentQuery.refetch(),
+    retryPantry: () => pantryQuery.refetch(),
     isLoading: documentQuery.isLoading || pantryQuery.isLoading,
     isFetching: documentQuery.isFetching || pantryQuery.isFetching,
   }
@@ -225,7 +204,11 @@ function useShoppingMutation<TVariables, TResult>(
     state: ShoppingDocumentStateV3,
     variables: TVariables
   ) => Promise<MutationPlan<TResult>> | MutationPlan<TResult>,
-  options: { duplicateFeedbackOwner?: DuplicateFeedbackOwner } = {}
+  options: {
+    duplicateFeedbackOwner?: DuplicateFeedbackOwner
+    fenceOwner?: boolean
+    settings?: boolean
+  } = {}
 ) {
   const queryClient = useQueryClient()
   const { user } = useAuthContext()
@@ -234,21 +217,109 @@ function useShoppingMutation<TVariables, TResult>(
   const undoToast = useUndoToast()
 
   return useMutation({
+    // A queued Clear must not acquire the next owner's mutation function.
+    mutationKey: options.fenceOwner ? [options.settings ? 'shopping-settings' : 'shopping-clear-undo', ownerUserId] : undefined,
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (variables: TVariables) => {
-      const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
-        await fetchShoppingDocumentState()
+      const assertOwner = () => {
+        if (!user || getActivePrincipalId() !== ownerUserId) {
+          throw new ShoppingClearUndoConflictError(
+            options.settings
+              ? 'Your account changed. The settings change was not completed.'
+              : 'Shopping account changed; Clear/Undo was not completed for this account.'
+          )
+        }
+      }
+      const refetch = async () => {
+        assertOwner()
+        const fresh = await fetchShoppingDocumentState(options.fenceOwner ? ownerUserId : undefined)
+        assertOwner()
+        return fresh
+      }
+      const cacheState = (next: ShoppingDocumentStateV3) => {
+        assertOwner()
+        queryClient.setQueryData<ShoppingDocumentStateV3>(shoppingKey, (cached) =>
+          reconcileShoppingState(cached, next))
+      }
+      assertOwner()
+      assertShoppingReadable(queryClient, shoppingKey)
+      const initial = options.settings ? await refetch() :
+        queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) || await refetch()
+      if (options.settings) cacheState(initial)
       const plan = await createPlan(initial, variables)
-      const state = await persistShoppingMutationWithReplay({
-        initial,
+      assertOwner()
+      let value = plan.value
+      const command = {
+        protocol: 1 as const,
+        ...(plan.observedSettingVersion !== undefined ? { observedSettingVersion: plan.observedSettingVersion } : {}),
+        observedRevision: plan.observedRevision ?? plan.clearConfirmation?.revision ?? initial.contentRevision,
+        ...(plan.clearConfirmation ? { clearUndoRequired: plan.clearConfirmation.undoRequired } : {}),
         mutation: plan.mutation,
-        write: (current, next) => writeShoppingDocumentCas(user!.id, current, next),
-        refetch: fetchShoppingDocumentState,
-        onRefetched: (fresh) => queryClient.setQueryData(shoppingKey, fresh),
-        validateReplay: plan.validateReplay,
-      })
-      queryClient.setQueryData(shoppingKey, state)
-      return plan.value
+        ...(isShoppingContentCommand(plan.mutation.type) && initial.tripId ? { tripId: initial.tripId } : {}),
+        ...(plan.inspectedCoverage ? { inspectedCoverage: plan.inspectedCoverage } : {}),
+        ...(initial.document.schemaVersion === 4 && (plan.mutation.type === 'removeRecipe' || plan.mutation.type === 'upsertRecipes' || plan.mutation.type === 'upsertRecipe' || plan.mutation.type === 'rescaleRecipe') ? {
+          observedSelections: plan.observedSelections ?? Object.fromEntries((plan.mutation.type === 'removeRecipe' ? [{ recipeId: plan.mutation.recipeId }] : plan.mutation.type === 'upsertRecipes' ? plan.mutation.entries : [plan.mutation.entry])
+            .map(entry => [entry.recipeId, initial.document.recipeEntries[entry.recipeId]?.sourceEvidence?.version ?? null])),
+        } : {}),
+        ...(plan.mutation.type === 'editManualItem' ? {
+          observedManual: plan.observedManual ?? initial.document.manualItems.find((item) =>
+            plan.mutation.type === 'editManualItem' && item.id === plan.mutation.id),
+        } : {}),
+        ...((plan.mutation.type === 'setExclusion' || plan.mutation.type === 'setFamilySetting')
+          ? { observedSetting: settingValue(initial, plan.mutation) } : {}),
+      }
+      let result
+      try {
+        result = await executeShoppingCommand(ownerUserId, command)
+      } catch (error) {
+        try { cacheState(await refetch()) } catch { assertOwner() }
+        // Unknown delivery can include a committed write. Only terminal
+        // conflict receipts justify saying that Clear/Undo was not applied.
+        const knownConflict = error instanceof ShoppingDocumentConflictError &&
+          (!('status' in error) || error.status === 'Conflict' || error.status === 'UndoUnavailable')
+        if (plan.mutation.type === 'complete' && knownConflict) {
+          throw new ShoppingClearUndoConflictError('Shopping changed or Undo is unavailable. Review the current list and confirm Clear again; nothing was cleared.')
+        }
+        if (['restoreContent', 'undoClear'].includes(plan.mutation.type) && knownConflict) {
+          throw new ShoppingClearUndoConflictError()
+        }
+        throw error
+      }
+      let state: ShoppingDocumentStateV3
+      try { state = await refetch() } catch {
+        assertOwner()
+        // Execution is known committed. A subsequent read failure must not
+        // turn it into a failed input submission that invites another write.
+        undoToast.show({ message: 'Shopping change confirmed. Could not refresh the list; try loading it again.' })
+        void queryClient.invalidateQueries({ queryKey: shoppingKey })
+        if (plan.committedValue && result.receipt?.outcome === 'Applied') {
+          return plan.committedValue(result.before || { document: createEmptyShoppingDocument(), contentRevision: 0 },
+            { ...initial, contentRevision: result.receipt.revision },
+            { undoAvailable: false, historical: result.status === 'AlreadyApplied', synchronizationFailed: true })
+        }
+        return plan.value
+      }
+      assertOwner()
+      state = reconcileShoppingState(queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey), state)
+      if (result.before && result.receipt?.outcome === 'Applied') {
+        const committed = { document: state.document, contentRevision: result.receipt.revision }
+        if (plan.committedValue) value = plan.committedValue(result.before, committed, { ...result.receipt, undoAvailable: result.receipt.undoAvailable === true &&
+          (result.receipt.contentEpoch === undefined ? state.contentRevision === result.receipt.revision :
+            state.contentEpoch === result.receipt.contentEpoch && state.tripId === result.receipt.tripId) })
+        if (plan.resolvedValue) value = plan.resolvedValue(result.before, state, result.receipt.outcome, result.receipt.revision)
+      } else if (plan.committedValue && result.receipt?.outcome === 'Applied') {
+        value = plan.committedValue({ document: createEmptyShoppingDocument(), contentRevision: 0 },
+          { ...state, contentRevision: result.receipt.revision }, {
+            undoAvailable: result.receipt.undoAvailable === true && result.receipt.contentEpoch !== undefined &&
+              state.contentEpoch === result.receipt.contentEpoch && state.tripId === result.receipt.tripId,
+            historical: true,
+          })
+      } else if (plan.resolvedValue) {
+        value = plan.resolvedValue(state, state, result.receipt?.outcome, result.receipt?.revision)
+      }
+      assertOwner()
+      cacheState(state)
+      return value
     },
     onError: (error) => {
       if (isAlreadyInShoppingListError(error) &&
@@ -308,7 +379,7 @@ export function useAddShoppingItem() {
     })
     const displayName = input.itemName.trim()
     let pantryItems = pantryQuery.data
-    if (!pantryItems) {
+    if (!pantryItems || pantryQuery.isError) {
       pantryItems = (await pantryQuery.refetch({ throwOnError: true })).data
     }
     if (!pantryItems) throw new Error('Could not load Pantry items')
@@ -316,15 +387,11 @@ export function useAddShoppingItem() {
     const resolvedPantryItems = [...pantryItems]
     const manualRowRef = `manual:${input.rowId}`
     const validateDuplicate = (current: ShoppingDocumentStateV3) => {
-      const projection = projectShoppingDocument(
-        current.document,
-        resolvedPantryItems
-      )
-      if (projection.items.some((row) =>
-        row.rowRef !== manualRowRef &&
-        row.orderingKey === itemSemantics.purchaseKey)) {
-        throw new Error('Item already in shopping list')
-      }
+      const outcome = validateManualPurchaseIntent(current.document, {
+        type: 'add', rowRef: manualRowRef, purchaseKey: itemSemantics.purchaseKey,
+        pantryItems: resolvedPantryItems,
+      })
+      if (outcome === 'Conflict') throw new Error('Item already in shopping list')
     }
     validateDuplicate(state)
     const purchaseKey = itemSemantics.purchaseKey
@@ -332,9 +399,7 @@ export function useAddShoppingItem() {
     const item: ShoppingManualItemV1 = {
       id: input.rowId,
       displayName,
-      quantity: input.amount == null && !input.unit
-        ? null
-        : { amount: input.amount ?? null, unit: normalizeUnit(input.unit || '') },
+      quantity: manualShoppingQuantity(input.amount, input.unit),
       categoryKey: state.document.preferences.categoryByIngredient[purchaseKey] ||
         defaultCategory,
       bucket: 'items',
@@ -346,6 +411,16 @@ export function useAddShoppingItem() {
       validateReplay: validateDuplicate,
     }
   })
+}
+
+export function useShoppingFoundationCommand() {
+  return useShoppingMutation((state, input: { mutation: ShoppingDocumentMutation; observedRevision: number; observedManual?: ShoppingManualItemV1; observedSelections?: Record<string, number | null> }) => ({
+    mutation: input.mutation, observedRevision: input.observedRevision, observedManual: input.observedManual, observedSelections: input.observedSelections,
+    value: { ...state, confirmedCurrent: false },
+    resolvedValue: (_before, after, _outcome, receiptRevision) => ({
+      ...after, confirmedCurrent: after.contentRevision === receiptRevision,
+    }),
+  }), { fenceOwner: true })
 }
 
 export function useUpdateShoppingItem() {
@@ -360,18 +435,15 @@ export function useUpdateShoppingItem() {
       unit: input.updates.unit,
     })
     const displayName = input.updates.itemName.trim()
-    const projection = projectShoppingDocument(state.document)
-    if (projection.rows.some((row) =>
-      row.rowRef !== rowRef &&
-      row.orderingKey === itemSemantics.purchaseKey)) {
-      throw new Error('Item already in shopping list')
+    const validateIdentityChange = (current: ShoppingDocumentStateV3) => {
+      const outcome = validateManualPurchaseIntent(current.document, {
+        type: 'edit', rowRef, purchaseKey: itemSemantics.purchaseKey,
+      })
+      if (outcome === 'TargetGone') throw new Error('Manual item no longer exists')
+      if (outcome === 'Conflict') throw new Error('Item already in shopping list')
     }
-    const quantity = input.updates.amount == null && !input.updates.unit
-      ? null
-      : {
-          amount: input.updates.amount ?? null,
-          unit: normalizeUnit(input.updates.unit || ''),
-        }
+    validateIdentityChange(state)
+    const quantity = manualShoppingQuantity(input.updates.amount, input.updates.unit)
     return {
       mutation: {
         type: 'editManualItem',
@@ -379,6 +451,7 @@ export function useUpdateShoppingItem() {
         changes: { displayName, quantity },
       },
       value: { item: input.item, updates: input.updates },
+      validateReplay: validateIdentityChange,
     }
   }, { duplicateFeedbackOwner: 'caller' })
 }
@@ -395,8 +468,10 @@ export function useRemoveShoppingItem() {
 }
 
 export function useRestoreShoppingItem() {
-  return useShoppingMutation((_state, item: ShoppingItem) => ({
-    mutation: mutationForRow(
+  return useShoppingMutation((state, item: ShoppingItem) => ({
+    mutation: state.document.schemaVersion === 4 && item.rowId?.startsWith('manual:') && item.manualVersion !== undefined
+      ? { type: 'restoreManualItem' as const, id: item.rowId.slice(7), expectedVersion: item.manualVersion + 1 }
+      : mutationForRow(
       item,
       (aggregateKey) => ({ type: 'setSuppressed', aggregateKey, suppressed: false }),
       (id) => ({
@@ -419,7 +494,10 @@ export function useCheckOffItem() {
   return useShoppingMutation((_state, intent: {
     rowRef: RowRef
     checked: boolean
+    inspectedCoverage?: ShoppingCommand['inspectedCoverage']
+    inspectedRevision?: number
   }) => ({
+    inspectedCoverage: intent.inspectedCoverage, observedRevision: intent.inspectedRevision,
     mutation: {
       type: 'setChecked',
       rowRef: intent.rowRef,
@@ -431,6 +509,8 @@ export function useCheckOffItem() {
 
 export function useBulkCheckOff() {
   return useShoppingMutation((_state, items: ShoppingItem[]) => ({
+    inspectedCoverage: Object.assign({}, ...items.map(item => item.inspectedCoverage)),
+    observedRevision: items[0]?.inspectedRevision,
     mutation: {
       type: 'setCheckedMany',
       rowRefs: items.map((item) => requireShoppingRowRef(item)),
@@ -438,6 +518,10 @@ export function useBulkCheckOff() {
     },
     value: { count: items.length },
   }))
+}
+
+export function useOrganizeShopping() {
+  return useShoppingMutation((_state, intent: OrganizationIntent) => ({ mutation: intent, value: undefined }), { fenceOwner: true })
 }
 
 export function useReorderShoppingList() {
@@ -450,6 +534,22 @@ export function useReorderShoppingList() {
     if (!input.draggedItem.orderingKey || !input.targetItem.orderingKey) {
       throw new Error('Shopping ordering identity is missing')
     }
+    if (_state.document.schemaVersion === 4 && input.draggedItem.organizationVersions && input.targetItem.organizationVersions) {
+      const action = { kind: 'move' as const, key: input.draggedItem.orderingKey,
+        destination: { categoryKey: input.targetItem.categoryKey, at: input.placement,
+          anchor: input.targetItem.orderingKey,
+          anchorVersion: input.targetItem.organizationVersions[`purchase:${input.targetItem.orderingKey}`] ?? 0 } };
+      const inspected = inspectOrganization(_state.document, action);
+      inspected.versions = Object.fromEntries(Object.keys(inspected.versions).map(f => [f,
+        (f === `purchase:${input.draggedItem.orderingKey}` ? input.draggedItem.organizationVersions : input.targetItem.organizationVersions)![f] ?? 0]));
+      return { mutation: inspected, value: { ...input, undo: null as OrganizationIntent | null },
+        resolvedValue: (before: ShoppingDocumentStateV3, _after: ShoppingDocumentStateV3, outcome?: string) => {
+          const inverse = moveInverse(before.document, input.draggedItem.orderingKey!);
+          const applied = applyOrganization(before.document, inspected);
+          return { ...input, undo: outcome === 'Applied' && inverse && 'document' in applied
+            ? inspectOrganization(applied.document, inverse) : null };
+        } };
+    }
     return {
       mutation: {
         type: 'learnOrder',
@@ -461,7 +561,7 @@ export function useReorderShoppingList() {
         targetCategoryKey: input.targetItem.categoryKey,
         placement: input.placement,
       },
-      value: input,
+      value: { ...input, undo: null as OrganizationIntent | null },
     }
   })
 }
@@ -482,11 +582,13 @@ export const useMoveExcludedToShoppingList = useMoveToShoppingList
 export type RecipeContributionIdentity = {
   recipeId: string
   recipeName: string
+  selectionVersion?: number
 }
 
 export function useRemoveRecipeItems() {
   return useShoppingMutation((state, identity: RecipeContributionIdentity) => ({
     mutation: { type: 'removeRecipe', recipeId: identity.recipeId },
+    ...(identity.selectionVersion !== undefined ? { observedSelections: { [identity.recipeId]: identity.selectionVersion } } : {}),
     value: {
       identity,
       entry: state.document.recipeEntries[identity.recipeId] || null,
@@ -497,6 +599,7 @@ export function useRemoveRecipeItems() {
 export function useRestoreRecipeItems() {
   return useShoppingMutation((_state, entry: ShoppingRecipeEntryV2) => ({
     mutation: { type: 'upsertRecipe', entry },
+    observedSelections: { [entry.recipeId]: null },
     value: entry,
   }))
 }
@@ -549,24 +652,33 @@ export function useAddToShoppingList() {
 }
 
 export function useClearShoppingList() {
-  return useShoppingMutation((state, _variables: void) => ({
+  const { user } = useAuthContext()
+  return useShoppingMutation<void | { revision: number; undoRequired: boolean }, ShoppingClearResult | null>((state, confirmation) => ({
     mutation: { type: 'complete' },
-    value: {
-      recipeEntries: state.document.recipeEntries,
-      manualItems: state.document.manualItems,
-      itemOverrides: state.document.itemOverrides,
+    clearConfirmation: confirmation || {
+      revision: state.contentRevision, undoRequired: canUndoShoppingClear(state.document),
     },
-  }))
+    value: null,
+    committedValue: (before, committed, receipt) => ({
+      ownerUserId: user!.id,
+      postClearRevision: committed.contentRevision,
+      undoAvailable: receipt?.undoAvailable === true,
+      historical: receipt?.historical === true,
+      synchronizationFailed: receipt?.synchronizationFailed === true,
+      content: shoppingContent(before.document),
+    }),
+  }), { fenceOwner: true })
 }
 
 export function useRestoreShoppingContent() {
-  return useShoppingMutation((_state, content: Pick<
-    ShoppingDocumentV3,
-    'recipeEntries' | 'manualItems' | 'itemOverrides'
-  >) => ({
-    mutation: { type: 'restoreContent', content },
-    value: content,
-  }))
+  const { user } = useAuthContext()
+  return useShoppingMutation((state, result: ShoppingClearResult) => {
+    if (!result || result.ownerUserId !== user?.id || result.undoAvailable === false) throw new ShoppingClearUndoConflictError()
+    return {
+      mutation: { type: 'undoClear' }, observedRevision: result.postClearRevision,
+      value: undefined,
+    }
+  }, { fenceOwner: true })
 }
 
 export function useShoppingConfig() {
@@ -617,22 +729,77 @@ export function createShoppingConfigUpdateMutation(
 }
 
 export function useUpdateShoppingConfig() {
-  return useShoppingMutation((_state, updates: Partial<ShoppingConfig>) => {
+  const { user } = useAuthContext()
+  const owner = user?.id
+  const query = useShoppingDocumentState()
+  const update = useShoppingMutation((state, input: {
+    updates: Partial<ShoppingConfig>; observed: ShoppingDocumentStateV3 | undefined; owner: string | undefined
+  }) => {
+    if (!input.owner || input.owner !== getActivePrincipalId()) throw new ShoppingSettingsConflictError()
+    const { updates, observed } = input
+    const affectsSettings = updates.excluded_keywords !== undefined ||
+      updates.exclude_salt_variants !== undefined ||
+      updates.exclude_black_pepper_variants !== undefined
+    const validateReplay = affectsSettings
+      ? (fresh: ShoppingDocumentStateV3) => validateSettingsReplacement(observed, fresh)
+      : undefined
+    validateReplay?.(state)
     return {
       mutation: createShoppingConfigUpdateMutation(updates),
-      value: updates,
+      value: shoppingDocumentToConfig(state),
+      resolvedValue: (_before: ShoppingDocumentStateV3, after: ShoppingDocumentStateV3) =>
+        shoppingDocumentToConfig(after),
+      validateReplay,
     }
-  })
-}
-
-export function useUpdateExcludedKeywords() {
-  const update = useUpdateShoppingConfig()
+  }, { fenceOwner: true, settings: true })
   return {
     ...update,
-    mutate: (keywords: string[], options?: Parameters<typeof update.mutate>[1]) =>
-      update.mutate({ excluded_keywords: keywords }, options),
-    mutateAsync: (keywords: string[]) =>
-      update.mutateAsync({ excluded_keywords: keywords }),
+    mutate: (updates: Partial<ShoppingConfig>, options?: Parameters<typeof update.mutate>[1]) =>
+      update.mutate({ updates, observed: query.data, owner }, options),
+    mutateAsync: (updates: Partial<ShoppingConfig>) =>
+      update.mutateAsync({ updates, observed: query.data, owner }),
+  }
+}
+
+function useShoppingSettingMutation() {
+  const { user } = useAuthContext()
+  const owner = user?.id
+  const query = useShoppingDocumentState()
+  const update = useShoppingMutation((state, input: {
+    intent: ShoppingSettingIntent; observed: ShoppingDocumentStateV3 | undefined; owner: string | undefined
+  }) => {
+    if (!input.owner || input.owner !== getActivePrincipalId()) throw new ShoppingSettingsConflictError()
+    const validateReplay = (fresh: ShoppingDocumentStateV3) =>
+      validateSettingIntent(input.observed, fresh, input.intent)
+    if (state.document.schemaVersion !== 4) validateReplay(state)
+    const result = (before: ShoppingDocumentStateV3) =>
+      settingValue(before, input.intent) === input.intent.enabled ? 'unchanged' as const : 'applied' as const
+    return {
+      mutation: input.intent, value: result(state), validateReplay,
+      ...(input.observed?.document.schemaVersion === 4 ? { observedSettingVersion: organizationVersion(input.observed.document,
+        input.intent.type === 'setExclusion' ? `exclusion:${input.intent.key}` : `setting:${input.intent.setting}`) } : {}),
+      resolvedValue: (before: ShoppingDocumentStateV3, _after: ShoppingDocumentStateV3, outcome?: string) =>
+        outcome === 'Applied' ? 'applied' as const : outcome === 'Unchanged' ? 'unchanged' as const : result(before),
+    }
+  }, { fenceOwner: true, settings: true })
+  return {
+    ...update,
+    mutate: (intent: ShoppingSettingIntent, options?: Parameters<typeof update.mutate>[1]) =>
+      update.mutate({ intent, observed: query.data, owner }, options),
+    mutateAsync: (intent: ShoppingSettingIntent) =>
+      update.mutateAsync({ intent, observed: query.data, owner }),
+  }
+}
+
+export function useSetShoppingExclusion() {
+  const update = useShoppingSettingMutation()
+  return {
+    ...update,
+    mutateAsync: (input: { keyword: string; enabled: boolean }) => {
+      const key = createShoppingPurchaseKey(input.keyword)
+      if (!key) return Promise.reject(new Error('Enter an ingredient to exclude.'))
+      return update.mutateAsync({ type: 'setExclusion', key, enabled: input.enabled })
+    },
   }
 }
 
@@ -641,51 +808,17 @@ export type IngredientExclusionSetting =
   | 'exclude_black_pepper_variants'
 
 export function useUpdateIngredientExclusionSetting() {
-  const update = useUpdateShoppingConfig()
+  const update = useShoppingSettingMutation()
   return {
     ...update,
     mutate: (
       input: { setting: IngredientExclusionSetting; enabled: boolean },
       options?: Parameters<typeof update.mutate>[1]
-    ) => update.mutate({ [input.setting]: input.enabled }, options),
-  }
-}
-
-type PantryMoveRow = ShoppingDocumentRow & {
-  pantry_item: PantryItem | null
-  pantry_was_inserted: boolean
-}
-
-async function moveToPantryCas(
-  current: ShoppingDocumentStateV3,
-  next: ShoppingDocumentStateV3,
-  item: ShoppingItem
-): Promise<{ state: ShoppingDocumentStateV3; pantryItem: PantryItem | null; wasAdded: boolean } | null> {
-  const supabase = getSupabase()
-  const rpc = supabase as unknown as {
-    rpc: (name: 'move_shopping_document_item_to_pantry', args: {
-      p_expected_revision: number
-      p_document: unknown
-      p_item: string
-      p_pantry_qty: number | null
-      p_pantry_unit: string
-    }) => Promise<{ data: PantryMoveRow[] | null; error: { code?: string; message: string } | null }>
-  }
-  const { data, error } = await rpc.rpc('move_shopping_document_item_to_pantry', {
-    p_expected_revision: current.contentRevision,
-    p_document: next.document,
-    p_item: normalizePantryItemName(item.item),
-    p_pantry_qty: item.amount,
-    p_pantry_unit: item.unit || '',
-  })
-  if (error?.code === '40001') return null
-  if (error) throw error
-  const row = data?.[0]
-  if (!row) return null
-  return {
-    state: parseShoppingDocumentRow(row),
-    pantryItem: row.pantry_item,
-    wasAdded: row.pantry_was_inserted,
+    ) => update.mutate({
+      type: 'setFamilySetting',
+      setting: input.setting === 'exclude_salt_variants' ? 'excludeSaltVariants' : 'excludeBlackPepperVariants',
+      enabled: input.enabled,
+    }, options),
   }
 }
 
@@ -694,57 +827,41 @@ export function useAddToPantryAndRemove() {
   const { user } = useAuthContext()
   const ownerUserId = principalId(user?.id)
   const shoppingKey = shoppingKeys.detail(ownerUserId)
-  const pantryQuery = usePantryItems()
   const undoToast = useUndoToast()
 
   return useMutation({
     scope: { id: `${SHOPPING_DOCUMENT_WRITE_SCOPE}:${ownerUserId}` },
     mutationFn: async (item: ShoppingItem) => {
+      assertShoppingReadable(queryClient, shoppingKey)
       const initial = queryClient.getQueryData<ShoppingDocumentStateV3>(shoppingKey) ||
         await fetchShoppingDocumentState()
       const rowRef = requireShoppingRowRef(item)
-      const mutation: ShoppingDocumentMutation = rowRef.startsWith('derived:')
-        ? {
-            type: 'setBucketOverride',
-            aggregateKey: rowRef.slice('derived:'.length),
-            bucket: undefined,
-          }
-        : {
-            type: 'editManualItem',
-            id: rowRef.slice('manual:'.length),
-            changes: { bucket: 'already_have' },
-          }
-      let pantryResult: Awaited<ReturnType<typeof moveToPantryCas>> = null
-      const state = await persistShoppingMutationWithReplay({
-        initial,
-        mutation,
-        write: async (current, next) => {
-          pantryResult = await moveToPantryCas(current, next, item)
-          return pantryResult?.state || null
-        },
-        refetch: fetchShoppingDocumentState,
-        onRefetched: (fresh) => queryClient.setQueryData(shoppingKey, fresh),
-        forceWrite: true,
+      const result = await executeShoppingCommand(ownerUserId, {
+        protocol: 1, observedRevision: initial.contentRevision,
+        mutation: { type: 'pantry', rowRef },
       })
-      const completedPantryResult = pantryResult as Exclude<
-        Awaited<ReturnType<typeof moveToPantryCas>>,
-        null
-      > | null
+      let state: ShoppingDocumentStateV3 | null = null
+      try { state = await fetchShoppingDocumentState(ownerUserId) } catch {
+        if (getActivePrincipalId() !== ownerUserId) throw new ShoppingDocumentConflictError()
+        undoToast.show({ message: 'Pantry move confirmed. Could not refresh Shopping; try loading it again.' })
+        void queryClient.invalidateQueries({ queryKey: shoppingKey })
+      }
+      if (getActivePrincipalId() !== ownerUserId) throw new ShoppingDocumentConflictError()
       return {
-        state,
-        item,
-        pantryItem: completedPantryResult?.pantryItem || null,
-        wasAdded: completedPantryResult?.wasAdded || false,
+        state, item,
+        pantryItem: result.receipt?.pantryId ? {
+          id: result.receipt.pantryId, user_id: ownerUserId,
+          item: item.item, created_at: '',
+        } as PantryItem : null,
+        wasAdded: result.receipt?.pantryWasAdded || false,
       }
     },
     onSuccess: (result) => {
-      queryClient.setQueryData(shoppingKey, result.state)
-      if (result.pantryItem) {
-        const next = [...(pantryQuery.data || []).filter((item) =>
-          item.id !== result.pantryItem!.id), result.pantryItem]
-          .sort((left, right) => left.item.localeCompare(right.item))
-        queryClient.setQueryData(pantryKeys.list(ownerUserId), next)
-      }
+      const state = result.state
+      if (state) queryClient.setQueryData<ShoppingDocumentStateV3>(shoppingKey, (cached) =>
+        reconcileShoppingState(cached, state))
+      // A bridge result is one row, never an authoritative Pantry snapshot.
+      void queryClient.invalidateQueries({ queryKey: pantryKeys.list(ownerUserId) })
     },
     onError: (error) => {
       undoToast.show({

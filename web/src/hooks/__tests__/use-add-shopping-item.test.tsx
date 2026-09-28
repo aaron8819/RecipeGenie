@@ -1,3 +1,6 @@
+import { setActivePrincipalId } from '@/lib/principal-session'
+import { runHookCommand } from '@/test/shopping-hook-command-mock'
+import type { ShoppingCommand } from '@/lib/shopping-command'
 import type { ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -5,9 +8,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   useAddShoppingItem,
   useUpdateShoppingItem,
+  useShoppingList,
+  shoppingDocumentToList,
 } from '@/hooks/shopping/use-shopping-document'
 import {
   createEmptyShoppingDocument,
+  applyShoppingDocumentMutation,
   projectShoppingDocument,
   type ShoppingDocumentStateV3,
   type ShoppingDocumentV3,
@@ -37,6 +43,21 @@ const database = vi.hoisted(() => ({
   updateCalls: vi.fn(),
 }))
 
+vi.mock('@/lib/shopping-command-client', () => ({
+  executeShoppingCommand: async (_owner: string, command: ShoppingCommand) =>
+    runHookCommand(command, () => ({ document: database.shoppingRow!.document as ShoppingDocumentV3,
+      contentRevision: database.shoppingRow!.content_revision }), async (_before, next) => {
+      database.updateCalls({ document: next.document, content_revision: next.contentRevision })
+      if (database.updateError) throw database.updateError
+      if (database.conflictState) {
+        database.shoppingRow = { document: database.conflictState.document, content_revision: database.conflictState.contentRevision }
+        database.conflictState = null
+        return false
+      }
+      database.shoppingRow = { document: next.document, content_revision: next.contentRevision }
+      return true
+    }, database.pantryRows as PantryItem[]),
+}))
 vi.mock('@/lib/auth-context', () => ({
   useAuthContext: () => ({ user: { id: USER_ID }, loading: false }),
 }))
@@ -64,14 +85,18 @@ vi.mock('@/lib/supabase/client', () => ({
       }
 
       return {
-        select: () => ({
-          single: async () => {
-            database.shoppingSelectCalls()
-            return database.shoppingRow
-              ? { data: database.shoppingRow, error: null }
-              : { data: null, error: { message: 'Shopping document not found' } }
-          },
-        }),
+        select: () => {
+          const selection = {
+            eq: () => selection,
+            maybeSingle: async () => {
+              database.shoppingSelectCalls()
+              return database.shoppingRow
+                ? { data: database.shoppingRow, error: null }
+                : { data: null, error: { message: 'Shopping document not found' } }
+            },
+          }
+          return selection
+        },
         update: (values: { document: unknown; content_revision: number }) => {
           database.updateCalls(values)
           const chain = {
@@ -177,7 +202,7 @@ function setup(
     document: initial.document,
     content_revision: initial.contentRevision,
   }
-  if (pantryItems) queryClient.setQueryData(PANTRY_KEY, pantryItems)
+  if (pantryItems) { queryClient.setQueryData(PANTRY_KEY, pantryItems); database.pantryRows = pantryItems }
 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -217,7 +242,9 @@ async function addManualItem(
 async function updateManualItem(
   hook: ReturnType<typeof setup>,
   item: ShoppingItem,
-  itemName: string
+  itemName: string,
+  amount?: number,
+  unit?: string
 ): Promise<unknown> {
   let error: unknown
   const { result } = renderHook(() => useUpdateShoppingItem(), {
@@ -227,7 +254,7 @@ async function updateManualItem(
     try {
       await result.current.mutateAsync({
         item,
-        updates: { itemName },
+        updates: { itemName, amount, unit },
       })
     } catch (caught) {
       error = caught
@@ -238,6 +265,7 @@ async function updateManualItem(
 
 describe('useAddShoppingItem active-list duplicate behavior', () => {
   beforeEach(() => {
+  setActivePrincipalId(USER_ID)
     vi.clearAllMocks()
     database.pantryRows = []
     database.pantryResponse = null
@@ -442,7 +470,8 @@ describe('useAddShoppingItem active-list duplicate behavior', () => {
     })
     expect(database.updateCalls).not.toHaveBeenCalled()
 
-    resolvePantry({ data: [pantry('olive oil')], error: null })
+    database.pantryRows = [pantry('olive oil')]
+    resolvePantry({ data: database.pantryRows, error: null })
     await act(async () => {
       await pending
     })
@@ -461,6 +490,67 @@ describe('useAddShoppingItem active-list duplicate behavior', () => {
         message: 'Could not update the shopping list. Try again.',
         duration: 4000,
       })
+    })
+  })
+
+  it('edits a manual quantity after recipe addition without changing requirements or sources, including a fresh read', async () => {
+    const document = withManualOliveOil('lemons')
+    document.manualItems[0].quantity = { amount: 2, unit: 'count' }
+    document.manualItems[0].categoryKey = 'produce'
+    const recipe = withDerivedOliveOil('2 lemons').recipeEntries['recipe-olive']
+    const withRecipe = applyShoppingDocumentMutation(state(document), {
+      type: 'upsertRecipe', entry: recipe,
+    })
+    const hook = setup(withRecipe.document, [])
+    const before = shoppingDocumentToList(USER_ID, withRecipe)
+    const manual = before.items.find((item) => item.rowId?.startsWith('manual:'))!
+    const derived = before.items.find((item) => item.rowId?.startsWith('derived:'))!
+    expect(before.items).toHaveLength(2)
+    expect(await updateManualItem(hook, manual, 'lemon', 3.5, 'count')).toBeUndefined()
+    expect(database.shoppingRow?.document).toMatchObject({ recipeEntries: withRecipe.document.recipeEntries })
+    hook.queryClient.removeQueries({ queryKey: SHOPPING_KEY })
+    const reloaded = renderHook(() => useShoppingList(), { wrapper: hook.wrapper })
+    await waitFor(() => expect(reloaded.result.current.data?.items).toHaveLength(2))
+    expect(reloaded.result.current.data?.items.find((item) => item.rowId === manual.rowId))
+      .toMatchObject({ item: 'lemon', amount: 3.5, sources: [{ recipeName: 'Manual' }] })
+    expect(reloaded.result.current.data?.items.find((item) => item.rowId === derived.rowId)).toEqual(derived)
+  })
+
+  it('continues to edit an ordinary nonduplicate manual row', async () => {
+    const document = withManualOliveOil('yogurt')
+    const hook = setup(document, [])
+    const manual = shoppingDocumentToList(USER_ID, state(document)).items[0]
+    expect(await updateManualItem(hook, manual, 'yogurt', 1.5, 'cup')).toBeUndefined()
+    expect(database.shoppingRow?.document).toMatchObject({
+      manualItems: [{ displayName: 'yogurt', quantity: { amount: 1.5, unit: 'cup' } }],
+    })
+  })
+
+  it('rechecks canonical identity collisions before retrying an edit', async () => {
+    const document = withManualOliveOil('yogurt')
+    const hook = setup(document, [])
+    const manual = shoppingDocumentToList(USER_ID, state(document)).items[0]
+    database.conflictState = state({
+      ...document,
+      recipeEntries: withDerivedOliveOil('2 yellow onions').recipeEntries,
+    }, 8)
+    expect(await updateManualItem(hook, manual, 'onion', 3, 'count'))
+      .toEqual(new Error('Item already in shopping list'))
+    expect(database.updateCalls).toHaveBeenCalledTimes(1)
+    expect(database.shoppingRow?.document).toMatchObject({ manualItems: document.manualItems })
+  })
+
+  it('allows replay of an unchanged identity when another session adds a recipe requirement', async () => {
+    const document = withManualOliveOil('lemons')
+    document.manualItems[0].quantity = { amount: 2, unit: 'count' }
+    const hook = setup(document, [])
+    const manual = shoppingDocumentToList(USER_ID, state(document)).items[0]
+    const recipeEntries = withDerivedOliveOil('2 lemons').recipeEntries
+    database.conflictState = state({ ...document, recipeEntries }, 8)
+    expect(await updateManualItem(hook, manual, 'lemons', 4, 'count')).toBeUndefined()
+    expect(database.updateCalls).toHaveBeenCalledTimes(2)
+    expect(database.shoppingRow?.document).toMatchObject({
+      recipeEntries, manualItems: [{ quantity: { amount: 4, unit: 'count' } }],
     })
   })
 

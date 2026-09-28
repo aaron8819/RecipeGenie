@@ -113,6 +113,7 @@ function SortableCategoryRow({
         className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-1 -ml-1 flex-shrink-0"
         {...attributes}
         {...listeners}
+        aria-label={`Reorder ${category} category`}
       >
         <GripVertical className="h-4 w-4" />
       </button>
@@ -120,6 +121,7 @@ function SortableCategoryRow({
       {isEditing ? (
         <div className="flex items-center gap-2 flex-1">
           <Input
+            aria-label={`Name for ${category} category`}
             value={editName}
             onChange={(e) => onEditChange(e.target.value)}
             className="h-8 text-sm"
@@ -129,10 +131,10 @@ function SortableCategoryRow({
               if (e.key === "Escape") onEditCancel()
             }}
           />
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEditSave}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEditSave} aria-label={`Save ${category} category name`}>
             <Check className="h-4 w-4 text-green-600" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEditCancel}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEditCancel} aria-label={`Cancel editing ${category} category`}>
             <X className="h-4 w-4 text-muted-foreground" />
           </Button>
         </div>
@@ -147,6 +149,7 @@ function SortableCategoryRow({
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              aria-label={`Edit ${category} category`}
               onClick={onEditStart}
             >
               <Pencil className="h-4 w-4" />
@@ -155,6 +158,7 @@ function SortableCategoryRow({
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              aria-label={`Delete ${category} category`}
               onClick={onDelete}
               disabled={recipeCount > 0}
               title={recipeCount > 0 ? "Cannot delete category with recipes. Reassign recipes first." : "Delete category"}
@@ -602,6 +606,7 @@ export function RecipeSettingsModal({
               <div className="flex gap-2">
                 <Input
                   placeholder="Category name..."
+                  aria-label="New recipe category name"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   className="flex-1"
@@ -756,9 +761,9 @@ export function RecipeSettingsModal({
               Please select a category to reassign these recipes to before deleting.
             </p>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Target Category</label>
+              <label htmlFor="reassign-target-category" className="text-sm font-medium">Target Category</label>
               <Select value={targetCategory} onValueChange={setTargetCategory}>
-                <SelectTrigger>
+                <SelectTrigger id="reassign-target-category">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>

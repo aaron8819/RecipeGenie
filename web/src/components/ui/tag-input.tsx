@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { getTagClassName } from "@/lib/tag-colors"
 
 interface TagInputProps {
+  id?: string
   value: string[]
   onChange: (tags: string[]) => void
   suggestions?: string[]
@@ -22,6 +23,7 @@ interface TagInputProps {
 let tagInputIdCounter = 0
 
 export function TagInput({
+  id,
   value,
   onChange,
   suggestions = [],
@@ -147,6 +149,7 @@ export function TagInput({
       {/* Input Field */}
       <div className="relative">
         <Input
+          id={id}
           ref={inputRef}
           type="text"
           value={inputValue}

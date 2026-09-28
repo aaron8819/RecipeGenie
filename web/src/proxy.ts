@@ -16,6 +16,8 @@ export function proxy(request: NextRequest) {
   // Add security headers (nonce already on request for layout; set on response for CSP)
   const headers = new Headers(response.headers);
   const isDev = process.env.NODE_ENV === 'development';
+  // Normalized NextRequest headers cannot prove raw Host uniqueness. Only the
+  // separate loopback verification ingress may add a local production origin.
 
   // Content Security Policy with nonce-based script execution
   // Nonce allows only scripts with matching nonce attribute, blocking XSS
@@ -37,6 +39,10 @@ export function proxy(request: NextRequest) {
   ].join('; ');
 
   headers.set('Content-Security-Policy', csp);
+  if (process.env.RECIPE_GENIE_E2E_TARGET === 'local') {
+    headers.set('Cache-Control', 'private, no-store');
+    headers.append('Vary', 'Host, X-Forwarded-Host, Forwarded');
+  }
   headers.set('x-nonce', nonce); // Next.js reads this to apply nonce to inline scripts
   headers.set('X-Frame-Options', 'DENY');
   headers.set('X-Content-Type-Options', 'nosniff');

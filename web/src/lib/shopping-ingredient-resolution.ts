@@ -4,6 +4,7 @@ import type {
   QuantityV1,
   RationalV1,
   ShoppingItem,
+  ShoppingQuantity,
 } from "@/types/database"
 import { categorizeIngredient } from "./shopping-categories"
 import {
@@ -15,6 +16,7 @@ import {
   normalizeQuantityV1,
   normalizeScaleRatioV1,
   parseRationalLexeme,
+  parseQuantityV1,
   rationalToNumber,
   resolveIngredientQuantity,
   scalePackageV1,
@@ -35,13 +37,7 @@ import {
 export type PurchaseKey = string
 export type AggregateKey = string
 
-export type ShoppingQuantity = {
-  amount: number | null
-  unit: string
-  exactQuantityV1?: QuantityV1
-  exactPackageV1?: PackageV1
-  exactAuthoredUnit?: string
-}
+export type { ShoppingQuantity } from '@/types/database'
 
 export type ResolvedShoppingIngredient = {
   purchaseKey: PurchaseKey
@@ -162,7 +158,9 @@ export function resolveShoppingIngredient({
   const exactQuantity =
     structuredScale && structuredQuantity
       ? scaleQuantityV1(structuredQuantity, structuredScale)
-      : undefined
+      : structuredQuantity?.kind === 'qualitative' || structuredQuantity?.kind === 'unparsed'
+        ? structuredQuantity
+        : undefined
   const exactPackage =
     structuredScale && resolved.packageV1
       ? scalePackageV1(resolved.packageV1, structuredScale) || undefined
@@ -250,19 +248,29 @@ export function resolveShoppingIngredient({
       ? citrusPreparations[0]
       : undefined
 
+  // A normalization default is a purchase estimate, never recipe evidence.
+  // Recipe Detail uses "As needed" for a missing authored quantity too.
+  const sourceQuantity = exactQuantity ||
+    (purchase.originalQuantity == null && (purchase.purchaseQuantity == null ||
+        purchase.purchaseQuantityIsEstimate)
+      ? parseQuantityV1(semantics.preparation.filter(value =>
+        ['to taste', 'for garnish', 'for serving', 'for topping', 'plus more'].includes(value)
+      ).join(', ') || 'As needed', 'legacy-synthesized')
+      : undefined)
+
   return {
     purchaseKey,
     aggregateKey: createShoppingAggregateKey(purchaseKey, discriminator),
     displayName,
     quantity:
-      purchase.purchaseQuantity == null && !exactQuantity && !exactPackage
+      purchase.purchaseQuantity == null && !sourceQuantity && !exactPackage
         ? null
         : {
-            amount: exactQuantity && exactQuantity.kind !== 'exact'
+            amount: sourceQuantity && sourceQuantity.kind !== 'exact'
               ? null
               : amount,
             unit: purchaseUnit,
-            exactQuantityV1: exactQuantity,
+            exactQuantityV1: sourceQuantity,
             exactPackageV1: exactPackage,
             exactAuthoredUnit: resolved.authoredUnit || undefined,
           },

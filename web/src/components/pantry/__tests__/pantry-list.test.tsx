@@ -41,7 +41,9 @@ const removeKeywordMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
 const updateIngredientExclusionMutate = vi.fn()
 const pantryItemsState = {
-  data: [] as Array<{ id: string; item: string; user_id?: string; created_at?: string }>,
+  data: [] as Array<{ id: string; item: string; user_id?: string; created_at?: string }> | undefined,
+  isError: false,
+  refetch: vi.fn(),
   isLoading: false,
   isFetching: false,
 }
@@ -111,6 +113,7 @@ describe("PantryList", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     pantryItemsState.data = []
+    pantryItemsState.isError = false
     pantryItemsState.isLoading = false
     pantryItemsState.isFetching = false
     excludedKeywordsState.data = []
@@ -146,6 +149,27 @@ describe("PantryList", () => {
 
     expect(screen.getByDisplayValue("salt")).toBeInTheDocument()
     expect(screen.getByText(/Pantry items: Added: garlic\. Already existed: pepper\. Needs retry: salt\./i)).toBeInTheDocument()
+  })
+
+  it("preserves text edited while an exclusion save is pending", async () => {
+    let settle!: (result: { outcomes: []; unresolvedInput: string }) => void
+    addKeywordsMutateAsync.mockReturnValueOnce(new Promise((resolve) => { settle = resolve }))
+    render(<PantryList />)
+    const input = screen.getByPlaceholderText(/add excluded keyword/i)
+    fireEvent.change(input, { target: { value: "pepper" } })
+    fireEvent.submit(input.closest("form")!)
+    fireEvent.change(input, { target: { value: "cumin" } })
+    await act(async () => { settle({ outcomes: [], unresolvedInput: "pepper" }) })
+    expect(input).toHaveValue("cumin")
+  })
+
+  it("an unrelated family save does not discard a failed choice", () => {
+    render(<PantryList />)
+    fireEvent.click(screen.getByRole("checkbox", { name: "Salt variants" }))
+    act(() => updateIngredientExclusionMutate.mock.calls[0][1].onError())
+    fireEvent.click(screen.getByRole("checkbox", { name: "Black pepper variants" }))
+    act(() => updateIngredientExclusionMutate.mock.calls[1][1].onSuccess())
+    expect(screen.getByRole("alert")).toHaveTextContent("Salt variants could not be turned on.")
   })
 
   it("shows a Pantry header with current counts", () => {
@@ -187,7 +211,8 @@ describe("PantryList", () => {
     expect(screen.getByRole("heading", { name: "Always exclude" })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Excluded ingredients' }))
       .toBeInTheDocument()
-    expect(screen.getByText(/clear\/reset the shopping list, then regenerate/i)).toBeInTheDocument()
+    expect(screen.getByText(/no clearing or regeneration is needed/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/manual items and explicit row choices stay as set/i)).toHaveLength(2)
     expect(screen.getByText(/never uses substring matching/i)).toBeInTheDocument()
   })
 
@@ -254,7 +279,7 @@ describe("PantryList", () => {
     expect(excluded).toHaveAttribute("aria-pressed", "true")
   })
 
-  it("saves one family setting and shows a failure toast", () => {
+  it("retains a failed family choice for retry while the hook reports the error", () => {
     render(<PantryList />)
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Salt variants" }))
@@ -265,10 +290,11 @@ describe("PantryList", () => {
     )
     const options = updateIngredientExclusionMutate.mock.calls[0][1]
     act(() => options.onError())
-    expect(undoToastShow).toHaveBeenCalledWith({
-      message: "Could not save the shopping exclusion setting. Try again.",
-      duration: 4000,
-    })
+    expect(screen.getByRole("alert")).toHaveTextContent("Salt variants could not be turned on.")
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    expect(updateIngredientExclusionMutate.mock.calls[1][0]).toEqual(
+      { setting: "exclude_salt_variants", enabled: true }
+    )
   })
 
   it("disables family settings while their serialized write is pending", () => {
@@ -373,4 +399,15 @@ describe("PantryList", () => {
     expect(screen.getByRole("button", { name: "Actions for garlic" })).toBeDisabled()
     expect(screen.getByRole("button", { name: "Actions for tomato" })).toBeEnabled()
   })
+})
+
+
+it.each([false, true])('shows truthful Pantry read recovery (cached: %s)', (cached) => {
+  pantryItemsState.data = cached ? [{ id: 'rice', item: 'rice' }] : undefined
+  pantryItemsState.isError = true
+  render(<PantryList />)
+  expect(screen.queryByText('No pantry items yet')).not.toBeInTheDocument()
+  expect(screen.getByText(cached ? 'Couldn’t refresh pantry items. Showing the last loaded items.' : 'Couldn’t load pantry items. Try again.')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+  expect(pantryItemsState.refetch).toHaveBeenCalled()
 })
