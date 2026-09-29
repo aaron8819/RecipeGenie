@@ -144,4 +144,18 @@ describe("route navigation", () => {
     ).toHaveAttribute("aria-current", "page")
     expect(within(bottomNavigation).getAllByRole("link")).toHaveLength(4)
   })
+
+  it("highlights a tapped tab before the route changes", () => {
+    render(<BottomNav />)
+    const navigation = screen.getByRole("navigation", {
+      name: "Bottom navigation",
+    })
+    const shopping = within(navigation).getByRole("link", { name: "Shopping" })
+
+    fireEvent.click(shopping)
+
+    expect(shopping).toHaveClass("text-primary")
+    expect(within(shopping).getByText("Loading Shopping")).toBeInTheDocument()
+    expect(shopping).not.toHaveAttribute("aria-current", "page")
+  })
 })
