@@ -23,9 +23,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { AlertCircle, GripVertical, Plus, Trash2, X } from "lucide-react"
+import { AlertCircle, GripVertical, MoreVertical, Plus, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn, toFraction } from "@/lib/utils"
 import { parseIngredientAmountLexeme, parseIngredientLine } from "@/lib/recipe-parser"
 import {
@@ -137,6 +142,19 @@ function SortableIngredientRow({
   const [showCustomUnit, setShowCustomUnit] = useState(
     () => !!ingredient.unit && !COMMON_UNITS.includes(ingredient.unit)
   )
+  const [mobilePrepOpen, setMobilePrepOpen] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
+  useEffect(() => {
+    if (!actionsOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      setActionsOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape, true)
+    return () => window.removeEventListener('keydown', closeOnEscape, true)
+  }, [actionsOpen])
 
   const issues = validateIngredient(ingredient)
   const hasIssues = issues.length > 0
@@ -227,6 +245,7 @@ function SortableIngredientRow({
 
   const amountInput = (
     <Input
+      aria-label={`Amount for ingredient ${index + 1}`}
       className={cn(
         editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 text-center rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "w-16 text-center text-sm py-2 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 rounded-lg text-center bg-stone-50 dark:bg-zinc-800/50 border-none focus-visible:ring-0" : "w-20",
         documentInput && "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-center text-sm dark:border-zinc-800",
@@ -245,11 +264,12 @@ function SortableIngredientRow({
     />
   )
   const unitInputClass = cn(
-    editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : documentInput ? "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-sm dark:border-zinc-800" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none" : "w-24 border-input",
+    editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-2 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : documentInput ? "w-full min-w-0 truncate rounded-lg border-stone-200 bg-background px-2 py-2 text-xs dark:border-zinc-800" : compactInput ? "w-24 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "w-full min-w-0 text-sm py-1 px-2 rounded-lg bg-stone-50 dark:bg-zinc-800/50 border-none" : "w-24 border-input",
     issues.includes('amount-without-unit') && "border-amber-400 dark:border-amber-500"
   )
   const unitInput = showCustomUnit ? (
     <Input
+      aria-label={`Unit for ingredient ${index + 1}`}
       className={unitInputClass}
       placeholder="Unit"
       value={ingredient.unit}
@@ -258,6 +278,7 @@ function SortableIngredientRow({
     />
   ) : (
     <select
+      aria-label={`Unit for ingredient ${index + 1}`}
       className={cn("cursor-pointer bg-transparent text-foreground", unitInputClass)}
       value={ingredient.unit || ""}
       onChange={(e) => {
@@ -278,6 +299,7 @@ function SortableIngredientRow({
   )
   const itemInput = (
     <Input
+      aria-label={`Ingredient ${index + 1}`}
       className={cn(
         editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : compactInput ? "flex-1 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "flex-1",
         documentInput && "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-sm dark:border-zinc-800",
@@ -297,6 +319,7 @@ function SortableIngredientRow({
   )
   const modifierInput = (
     <Input
+      aria-label={`Prep for ingredient ${index + 1}`}
       className={editModeLayout ? "w-full min-w-0 text-sm py-2.5 px-3 rounded-xl border-stone-200 dark:border-zinc-700 bg-muted/50 dark:bg-zinc-900/50" : documentInput ? "w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 py-2 text-sm dark:border-zinc-800" : compactInput ? "w-24 min-w-0 text-sm py-2 px-3 rounded-lg bg-background border-stone-200 dark:border-zinc-800 flex-shrink-0" : addRecipeInput ? "flex-1 min-w-0 text-sm py-1 px-1 bg-transparent border-none focus-visible:ring-0 placeholder:text-stone-400" : "w-32"}
       placeholder="prep (e.g. diced)"
       value={ingredient.modifier || ""}
@@ -316,7 +339,7 @@ function SortableIngredientRow({
   )
   const semanticControls = (
     <div className="mt-3 space-y-2 border-t border-stone-100 pt-3 dark:border-zinc-800">
-      {sectionOptions && onMoveIngredient && currentSectionIndex !== undefined ? (
+      {!editDocumentLayout && sectionOptions && onMoveIngredient && currentSectionIndex !== undefined ? (
         <label className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="font-semibold">Section</span>
           <select
@@ -381,7 +404,7 @@ function SortableIngredientRow({
         </label>
       ))}
 
-      {onIngredientAlternativesChange ? (
+      {!editDocumentLayout && onIngredientAlternativesChange ? (
         <button
           type="button"
           onClick={() =>
@@ -456,52 +479,127 @@ function SortableIngredientRow({
   }
 
   if (editDocumentLayout) {
+    const actions = (
+      <DropdownMenu modal open={actionsOpen} onOpenChange={setActionsOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" size="icon"
+            aria-label={`Actions for ingredient ${index + 1}: ${ingredient.item || 'unnamed'}`}
+            className="h-10 w-10 shrink-0 text-muted-foreground">
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end"
+          className="z-[70] min-w-44 border-stone-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+          {onIngredientAlternativesChange && (
+            <DropdownMenuItem onSelect={() => onIngredientAlternativesChange(index, [...(ingredient.alternatives || []), ''])}>
+              Add alternative
+            </DropdownMenuItem>
+          )}
+          {sectionOptions && onMoveIngredient && currentSectionIndex !== undefined && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Move to section</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent
+                className="z-[70] max-h-64 overflow-y-auto border-stone-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+                {sectionOptions.map((option) => (
+                  <DropdownMenuItem key={option.value}
+                    disabled={option.value === currentSectionIndex}
+                    onSelect={() => onMoveIngredient(index, option.value)}>
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+                {includeNewUnsectionedOption && (
+                  <DropdownMenuItem onSelect={() => onMoveIngredient(index, null)}>
+                    Unsectioned (new)
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
+          <DropdownMenuItem disabled={index === 0}
+            onSelect={() => onKeyboardMoveIngredient(index, index - 1)}>Move up</DropdownMenuItem>
+          <DropdownMenuItem disabled={index === ingredients.length - 1}
+            onSelect={() => onKeyboardMoveIngredient(index, index + 1)}>Move down</DropdownMenuItem>
+          <DropdownMenuItem className="text-destructive focus:text-destructive"
+            onSelect={() => onRemoveIngredient(index)}>Delete ingredient</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    )
     return (
       <div
         ref={setNodeRef}
         style={style}
         data-has-issues={hasRowWarnings ? "true" : undefined}
         className={cn(
-          "group rounded-xl border border-stone-200 bg-background p-3 dark:border-zinc-800",
+          "group border-b border-stone-200 bg-background py-1.5 last:border-b-0 dark:border-zinc-800 sm:py-2",
           isDragging && "z-50",
           hasRowWarnings && "border-amber-300 bg-amber-50/60 ring-2 ring-amber-300/40 dark:border-amber-700 dark:bg-amber-950/20"
         )}
       >
         {stackedGroupBadge}
-        <div className="grid gap-2 lg:grid-cols-[36px_minmax(18rem,2fr)_88px_128px_minmax(16rem,1.4fr)_40px] lg:items-start">
-          <div className="flex items-center justify-between gap-2 lg:block">
-            {dragHandle}
-            <div className="lg:hidden">{deleteButton}</div>
+        <div className="grid min-w-0 grid-cols-[40px_minmax(0,1fr)_40px] items-center gap-x-1 gap-y-1 sm:grid-cols-[40px_minmax(0,2fr)_76px_120px_minmax(0,1.2fr)_40px] sm:gap-x-2 sm:gap-y-2">
+          <div className="row-start-1">{dragHandle}</div>
+          <div className="col-start-2 row-start-1 min-w-0">{itemInput}</div>
+          <div className="col-span-2 col-start-2 row-start-2 grid min-w-0 grid-cols-[64px_80px_minmax(0,1fr)] items-center gap-1.5 sm:contents">
+            <div className="min-w-0 sm:col-start-3 sm:row-start-1">{amountInput}</div>
+            <div className="min-w-0 sm:col-start-4 sm:row-start-1">{unitInput}</div>
+            <div className="hidden min-w-0 sm:col-start-5 sm:row-start-1 sm:block">{modifierInput}</div>
+            <button type="button"
+              aria-label={`Edit prep for ingredient ${index + 1}`}
+              title={ingredient.modifier || 'Add prep'}
+              onClick={() => setMobilePrepOpen(true)}
+              className={cn(
+                "flex h-11 min-w-0 items-center rounded-lg px-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:hidden",
+                ingredient.modifier ? "text-foreground" : "font-semibold text-primary"
+              )}
+            >
+              <span className="truncate">{ingredient.modifier ? `Prep: ${ingredient.modifier}` : '+ Prep'}</span>
+            </button>
           </div>
-          <div className="min-w-0">
-            <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
-              Ingredient
+          <div className="col-start-3 row-start-1 sm:col-start-6">{actions}</div>
+          {mobilePrepOpen && (
+            <div className="col-span-2 col-start-2 row-start-3 min-w-0 sm:hidden">
+              <Input
+                aria-label={`Prep for ingredient ${index + 1}`}
+                autoFocus
+                className="w-full min-w-0 rounded-lg border-stone-200 bg-background px-3 text-sm dark:border-zinc-800"
+                placeholder="Prep (e.g. finely chopped)"
+                value={ingredient.modifier || ''}
+                onChange={(event) => onIngredientChange(index, 'modifier', event.target.value || null)}
+                onBlur={() => setMobilePrepOpen(false)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setMobilePrepOpen(false)
+                  }
+                }}
+              />
             </div>
-            {itemInput}
-          </div>
-          <div className="grid grid-cols-2 gap-2 lg:contents">
-            <div>
-              <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
-                Amount
-              </div>
-              {amountInput}
-            </div>
-            <div>
-              <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
-                Unit
-              </div>
-              {unitInput}
-            </div>
-          </div>
-          <div className="min-w-0">
-            <div className="mb-1 text-[10px] font-bold uppercase text-muted-foreground lg:hidden">
-              Prep
-            </div>
-            {modifierInput}
-          </div>
-          <div className="hidden lg:block">{deleteButton}</div>
+          )}
         </div>
-        {semanticControls}
+        {ingredient.alternatives?.length ? (
+          <div className="ml-10 mt-1 space-y-1 border-l-2 border-primary/20 pl-3">
+            {ingredient.alternatives.map((alternative, alternativeIndex) => (
+              <div key={alternativeIndex} className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-[11px] font-semibold text-primary">OR</span>
+                <Input aria-label={`Alternative ${alternativeIndex + 1} for ingredient ${index + 1}`}
+                  value={alternative}
+                  onChange={(event) => {
+                    const next = [...(ingredient.alternatives || [])]
+                    next[alternativeIndex] = event.target.value
+                    onIngredientAlternativesChange?.(index, next)
+                  }}
+                  className="h-9 min-w-0 flex-1" />
+                <Button type="button" variant="ghost" size="icon"
+                  aria-label={`Remove alternative ${alternativeIndex + 1} from ingredient ${index + 1}`}
+                  onClick={() => onIngredientAlternativesChange?.(index, (ingredient.alternatives || []).filter((_, i) => i !== alternativeIndex))}
+                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive">
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
         {rowWarnings.length > 0 ? (
           <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-100/80 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
@@ -721,8 +819,8 @@ export function SortableIngredientList({
             ))}
           </div>
         ) : editDocumentLayout ? (
-          <div className="space-y-3">
-            <div className="hidden grid-cols-[36px_minmax(18rem,2fr)_88px_128px_minmax(16rem,1.4fr)_40px] gap-2 px-3 text-[10px] font-bold uppercase text-muted-foreground lg:grid">
+          <div>
+            <div className="hidden grid-cols-[40px_minmax(0,2fr)_76px_120px_minmax(0,1.2fr)_40px] gap-2 px-1 pb-1 text-[10px] font-bold uppercase text-muted-foreground sm:grid">
               <span aria-hidden="true" />
               <span>Ingredient</span>
               <span>Amount</span>

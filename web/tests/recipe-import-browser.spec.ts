@@ -596,9 +596,9 @@ test.describe('local recipe import browser verification', () => {
       })
       await expect(unsectioned.getByLabel('Alternative 1 for ingredient 2'))
         .toHaveValue('parsley')
-      await unsectioned.getByLabel('Section for ingredient 1').selectOption({
-        label: 'For Serving',
-      })
+      await unsectioned.getByRole('button', { name: /Actions for ingredient 1/ }).click()
+      await page.getByRole('menuitem', { name: 'Move to section' }).hover()
+      await page.getByRole('menuitem', { name: 'For Serving' }).click()
 
       let updateResponse = page.waitForResponse((response) =>
         response.request().method() === 'PATCH' &&
