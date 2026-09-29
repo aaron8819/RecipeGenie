@@ -286,12 +286,13 @@ describe("SortableIngredientList", () => {
       />
     )
 
-    fireEvent.click(screen.getByRole("button", { name: "Add alternative" }))
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Actions for ingredient 1/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole("menuitem", { name: "Add alternative" }))
     expect(onIngredientAlternativesChange).toHaveBeenCalledWith(0, [""])
 
-    fireEvent.change(screen.getByLabelText("Section for ingredient 1"), {
-      target: { value: "0" },
-    })
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Actions for ingredient 1/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Move to section" }), { key: "ArrowRight" })
+    fireEvent.click(screen.getByRole("menuitem", { name: "For Serving" }))
     expect(onMoveIngredient).toHaveBeenCalledWith(0, 0)
   })
 
@@ -309,9 +310,40 @@ describe("SortableIngredientList", () => {
       />
     )
 
-    const deleteButtons = screen.getAllByLabelText("Delete ingredient 1: feta")
-    expect(deleteButtons.every((button) => !button.hasAttribute("disabled"))).toBe(true)
-    fireEvent.click(deleteButtons[0])
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Actions for ingredient 1/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete ingredient" }))
     expect(onRemoveIngredient).toHaveBeenCalledWith(0)
+  })
+
+  it("moves by position when section labels are duplicate or empty", () => {
+    const onMoveIngredient = vi.fn()
+    render(
+      <SortableIngredientList
+        ingredients={[{ item: "basil", amount: 1, unit: "bunch" }]}
+        editDocumentLayout
+        currentSectionIndex={0}
+        sectionOptions={[
+          { value: 0, label: "Sauce (1)" },
+          { value: 1, label: "Sauce (2)" },
+          { value: 2, label: "Unsectioned (1)" },
+          { value: 3, label: "Unsectioned (2)" },
+        ]}
+        onMoveIngredient={onMoveIngredient}
+        onReorderIngredients={() => {}}
+        onBulkPasteIngredients={() => {}}
+        onRemoveIngredient={() => {}}
+        onIngredientChange={() => {}}
+        onIngredientParsed={() => {}}
+      />
+    )
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Actions for ingredient 1/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Move to section" }), { key: "ArrowRight" })
+    fireEvent.click(screen.getByRole("menuitem", { name: "Sauce (2)" }))
+    expect(onMoveIngredient).toHaveBeenCalledWith(0, 1)
+    fireEvent.pointerDown(screen.getByRole("button", { name: /Actions for ingredient 1/ }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Move to section" }), { key: "ArrowRight" })
+    fireEvent.click(screen.getByRole("menuitem", { name: "Unsectioned (2)" }))
+    expect(onMoveIngredient).toHaveBeenCalledWith(0, 3)
   })
 })
