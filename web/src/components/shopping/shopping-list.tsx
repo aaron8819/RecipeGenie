@@ -43,7 +43,6 @@ import {
   useRestoreRecipeItems,
   useClearShoppingList,
   useRestoreShoppingContent,
-  useCheckOffItem,
   useBulkCheckOff,
   useMoveToShoppingList,
   useMoveExcludedToShoppingList,
@@ -55,13 +54,14 @@ import {
 import { ShoppingSettingsModal } from "./shopping-settings-modal"
 import type { Recipe, ShoppingItem } from "@/types/database"
 import { cn, toFraction } from "@/lib/utils"
+import { useShoppingCheckIntents } from "@/hooks/use-shopping-check-intents"
+import { addShoppingDraft } from "@/lib/shopping-quick-add"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ShoppingCart } from "lucide-react"
 import { resolveShoppingDropIntent } from "@/lib/shopping-reorder"
 import { isAlreadyInShoppingListError } from "@/lib/shopping-feedback"
 import {
-  createShoppingManualItemId,
   requireShoppingRowRef,
 } from "@/lib/shopping-row-reference"
 import { openRecipeDetail } from "@/lib/recipe-detail-navigation"
@@ -114,10 +114,6 @@ type ManualEditDraft = {
   unit: string
 }
 
-type PendingCheckIntent = {
-  checked: boolean
-  version: number
-}
 
 function isManualOnlyItem(item: ShoppingItem) {
   const sources = item.sources || []
@@ -682,14 +678,9 @@ export function ShoppingListView() {
   })
   const [manualEditError, setManualEditError] = useState<string | null>(null)
   const [hideCompletedItems, setHideCompletedItems] = useState(false)
-  const [pendingCheckIntents, setPendingCheckIntents] = useState<
-    Map<string, PendingCheckIntent>
-  >(new Map())
-  const pendingCheckIntentsRef = useRef(pendingCheckIntents)
-  const nextCheckIntentVersionRef = useRef(0)
+  const { pendingCheckIntents, handleCheckOff } = useShoppingCheckIntents()
   const [pendingPantryItems, setPendingPantryItems] = useState<Set<string>>(new Set())
-  // Tracks items currently being added to prevent duplicate concurrent submissions
-  const [activeAdditions, setActiveAdditions] = useState<Set<string>>(new Set())
+  const quickAddLock = useRef(false)
   const [addFeedback, setAddFeedback] = useState<AddFeedback | null>(null)
   const { showSwipeHint } = useSwipeHint()
   const isManageMode = shoppingMode === "manage"
@@ -724,7 +715,6 @@ export function ShoppingListView() {
   const restoreRecipeItems = useRestoreRecipeItems()
   const clearList = useClearShoppingList()
   const restoreShoppingContent = useRestoreShoppingContent()
-  const checkOffItem = useCheckOffItem()
   const bulkCheckOff = useBulkCheckOff()
   const moveToList = useMoveToShoppingList()
   const moveExcludedToList = useMoveExcludedToShoppingList()
@@ -844,36 +834,6 @@ export function ShoppingListView() {
       },
     })
   }, [addToPantryAndRemove, undoToast])
-
-  const settleCheckIntent = useCallback((rowRef: string, version: number) => {
-    const current = pendingCheckIntentsRef.current
-    if (current.get(rowRef)?.version !== version) return
-
-    const next = new Map(current)
-    next.delete(rowRef)
-    pendingCheckIntentsRef.current = next
-    setPendingCheckIntents(next)
-  }, [])
-
-  // Keep the latest per-row intent visible while durable document writes run.
-  const handleCheckOff = useCallback((item: ShoppingItem) => {
-    const rowRef = requireShoppingRowRef(item, "check-off")
-
-    const current = pendingCheckIntentsRef.current
-    const checked = !(current.get(rowRef)?.checked ?? item.checked ?? false)
-    const version = nextCheckIntentVersionRef.current + 1
-    nextCheckIntentVersionRef.current = version
-
-    const next = new Map(current)
-    next.set(rowRef, { checked, version })
-    pendingCheckIntentsRef.current = next
-    setPendingCheckIntents(next)
-
-    void checkOffItem.mutateAsync({ rowRef, checked }).then(
-      () => settleCheckIntent(rowRef, version),
-      () => settleCheckIntent(rowRef, version)
-    )
-  }, [checkOffItem, settleCheckIntent])
 
   // Toggle recipes section collapse (mobile only)
   const toggleRecipeSection = useCallback(() => {
@@ -1111,107 +1071,20 @@ export function ShoppingListView() {
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (quickAddLock.current) return
     if (!newItem.trim()) {
-      setAddFeedback({
-        tone: "warning",
-        message: "Enter an item or paste a comma-separated list.",
-      })
+      setAddFeedback({ tone: "warning", message: "Enter an item or paste a comma-separated list." })
       addItemInputRef.current?.focus()
       return
     }
-
-    // Split by comma and filter empty strings
-    const items = newItem
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0)
-
-    if (items.length === 0) return
-
-    // Skip items that are already being added (prevents race condition duplicates)
-    const itemsToAdd = items.filter(item => !activeAdditions.has(item.toLowerCase().trim()))
-
-    if (itemsToAdd.length === 0) {
-      setAddFeedback({
-        tone: "warning",
-        message: items.length === 1 ? `"${items[0]}" is already being added` : "Those items are already being added",
-      })
-      return
-    }
-
+    quickAddLock.current = true
     try {
-      const addedItems: string[] = []
-      const duplicateItems: string[] = []
-      const failedItems: string[] = []
-
-      for (const item of itemsToAdd) {
-        const normalized = item.toLowerCase().trim()
-        setActiveAdditions(prev => new Set(prev).add(normalized))
-        try {
-          await addItem.mutateAsync({
-            itemName: item,
-            rowId: createShoppingManualItemId(),
-          })
-          addedItems.push(item)
-        } catch (error) {
-          if (isAlreadyInShoppingListError(error)) {
-            duplicateItems.push(item)
-          } else {
-            failedItems.push(item)
-            console.warn(`Failed to add item "${item}":`, error)
-          }
-        } finally {
-          setActiveAdditions(prev => {
-            const next = new Set(prev)
-            next.delete(normalized)
-            return next
-          })
-        }
-      }
-
-      setNewItem(failedItems.join(", "))
-      const nextFeedbackTone: AddFeedbackTone =
-        failedItems.length > 0 ? "error" : duplicateItems.length > 0 ? "warning" : "success"
+      const result = await addShoppingDraft(newItem, (item) => addItem.mutateAsync(item))
+      setNewItem(result.draft)
+      setAddFeedback({ tone: result.tone, message: result.message })
+    } finally {
+      quickAddLock.current = false
       addItemInputRef.current?.focus()
-
-      if (addedItems.length > 0 || duplicateItems.length > 0 || failedItems.length > 0) {
-        const messageParts: string[] = []
-
-        if (addedItems.length > 0) {
-          messageParts.push(
-            addedItems.length === 1
-              ? `Added "${addedItems[0]}" to shopping list`
-              : `Added ${addedItems.length} items to shopping list`
-          )
-        }
-
-        if (duplicateItems.length > 0) {
-          messageParts.push(
-            duplicateItems.length === 1
-              ? `"${duplicateItems[0]}" was already on the shopping list`
-              : `${duplicateItems.length} items were already on the shopping list`
-          )
-        }
-
-        if (failedItems.length > 0) {
-          messageParts.push(
-            failedItems.length === 1
-              ? `Could not add "${failedItems[0]}"`
-              : `Could not add ${failedItems.length} items`
-          )
-        }
-
-        setAddFeedback({
-          tone: nextFeedbackTone,
-          message: messageParts.join("; "),
-        })
-      }
-    } catch (error) {
-      console.error("Failed to add items:", error)
-      setAddFeedback({
-        tone: "error",
-        message: "Could not add those items right now. Try again.",
-      })
     }
   }
 

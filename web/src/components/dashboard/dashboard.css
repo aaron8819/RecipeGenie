@@ -1,0 +1,332 @@
+.dashboard {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.dashboard-heading {
+  margin: 8px 0 36px;
+}
+.dashboard-eyebrow {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 2.2px;
+  color: #6c7564;
+  margin-bottom: 10px;
+}
+.dashboard-heading h1 {
+  font-family: var(--font-cormorant-garamond), serif;
+  font-size: 54px;
+  font-weight: 600;
+  line-height: 1.05;
+}
+.dashboard-heading p {
+  color: #655f57;
+  margin-top: 10px;
+}
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(285px, 345px);
+  gap: 34px 30px;
+  align-items: start;
+}
+.dashboard-today {
+  grid-column: 1;
+  grid-row: 1;
+}
+.dashboard-shopping {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+.dashboard-week {
+  grid-column: 1;
+  grid-row: 2;
+}
+.dashboard-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.dashboard-section-heading h2 {
+  font-size: 22px;
+  font-weight: 500;
+}
+.dashboard-section-heading p {
+  font-size: 13px;
+  color: #655f57;
+  margin-top: 5px;
+}
+.dashboard-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.dashboard-meal-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.dashboard-meal-card {
+  background: white;
+  border: 1px solid #e4ddd4;
+  border-radius: 18px;
+  padding: 15px;
+  min-width: 0;
+}
+.dashboard-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: -5px;
+  margin-bottom: 7px;
+}
+.dashboard-card-top > span {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #59634f;
+}
+.dashboard-recipe-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 170px;
+  background: #e4e9db;
+  overflow: hidden;
+  border-radius: 11px;
+}
+.dashboard-recipe-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dashboard-card-title {
+  display: block;
+  font-family: var(--font-cormorant-garamond), serif;
+  font-size: 29px;
+  line-height: 1.05;
+  font-weight: 600;
+  padding: 16px 0 6px;
+  min-height: 79px;
+  overflow-wrap: anywhere;
+}
+.dashboard-meal-card > p {
+  font-size: 13px;
+  color: #655f57;
+  margin: 8px 0 15px;
+}
+.dashboard-plan-card {
+  grid-column: 1 / -1;
+  min-height: 110px;
+  height: auto;
+  border: 1px dashed #d4bfb2;
+  background: #f5e2d9;
+  gap: 14px;
+  padding: 20px;
+  white-space: normal;
+}
+.dashboard-plan-card small {
+  display: block;
+  margin-top: 5px;
+  font-weight: 400;
+}
+.dashboard-quick-add {
+  display: flex;
+  border: 1px solid #e4ddd4;
+  border-radius: 13px;
+  background: white;
+  padding: 5px;
+  gap: 4px;
+  margin-bottom: 15px;
+}
+.dashboard-quick-add input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.dashboard-shopping-items {
+  display: grid;
+  gap: 10px;
+}
+.dashboard-shopping-row {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  background: white;
+  border: 1px solid #e4ddd4;
+  border-radius: 13px;
+  padding: 18px 20px;
+  min-height: 80px;
+  cursor: pointer;
+}
+.dashboard-shopping-row input {
+  accent-color: #193c27;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.dashboard-shopping-row span {
+  overflow-wrap: anywhere;
+}
+.dashboard-shopping-row small {
+  display: block;
+  color: #655f57;
+  margin-top: 5px;
+  font-size: 12px;
+}
+.dashboard-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #cccfc0;
+  border-radius: 9px;
+  margin-top: 14px;
+  font-size: 13px;
+  min-height: 52px;
+}
+.dashboard-note {
+  font-size: 12px;
+  color: #655f57;
+  margin-top: 17px;
+  line-height: 1.5;
+}
+.dashboard-empty {
+  border: 1px dashed #d4bfb2;
+  border-radius: 15px;
+  background: #f5e2d9;
+  padding: 25px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.dashboard-week-heading {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.dashboard-week-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.dashboard-week-days {
+  margin-top: 18px;
+  border-top: 1px solid #e4ddd4;
+}
+.dashboard-day-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid #e4ddd4;
+  padding: 16px 0;
+  min-height: 94px;
+}
+.dashboard-is-today {
+  background: #efeee5;
+}
+.dashboard-day-date {
+  width: 56px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.dashboard-day-date > span {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #655f57;
+}
+.dashboard-day-date strong {
+  display: block;
+  font-family: var(--font-cormorant-garamond), serif;
+  font-size: 26px;
+}
+.dashboard-day-date small {
+  display: block;
+  font-size: 10px;
+}
+.dashboard-day-meals {
+  flex: 1;
+  min-width: 0;
+}
+.dashboard-week-meal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dashboard-meal-title {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.dashboard-meal-title small {
+  display: block;
+  margin-top: 3px;
+  color: #655f57;
+  font-size: 12px;
+}
+.dashboard-unplanned {
+  font-size: 13px;
+  color: #655f57;
+}
+.dashboard a:focus-visible,
+.dashboard input:focus-visible {
+  outline: 3px solid #8d6d37;
+  outline-offset: 3px;
+  border-radius: 5px;
+}
+@media (max-width: 1023px) {
+  .dashboard-heading {
+    margin: 12px 0 28px;
+  }
+  .dashboard-heading h1 {
+    font-size: 42px;
+  }
+  .dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+  }
+  .dashboard-today,
+  .dashboard-shopping,
+  .dashboard-week {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .dashboard-section-heading {
+    gap: 6px;
+  }
+  .dashboard-section-heading h2 {
+    font-size: 20px;
+  }
+  .dashboard-meal-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dashboard-recipe-image {
+    height: 200px;
+  }
+  .dashboard-card-title {
+    min-height: auto;
+    font-size: 29px;
+  }
+  .dashboard-plan-card {
+    min-height: 96px;
+  }
+  .dashboard-week-actions {
+    justify-content: flex-start;
+  }
+  .dashboard-day-row {
+    gap: 8px;
+  }
+  .dashboard-day-date {
+    width: 44px;
+  }
+}

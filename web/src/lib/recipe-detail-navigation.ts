@@ -1,4 +1,4 @@
-export type RecipeDetailSource = "recipes" | "planner" | "shopping"
+export type RecipeDetailSource = "recipes" | "planner" | "shopping" | "dashboard"
 
 interface RecipeDetailRouter {
   back: () => void
@@ -11,7 +11,8 @@ export function normalizeRecipeDetailSource(
 ): RecipeDetailSource | null {
   return source === "recipes" ||
     source === "planner" ||
-    source === "shopping"
+    source === "shopping" ||
+    source === "dashboard"
     ? source
     : null
 }

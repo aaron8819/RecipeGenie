@@ -54,7 +54,35 @@ and reusable Shopping preferences. Rendered `items`, `already_have`, and
 - Delete, clear, and recipe removal happen immediately. Undo is a new inverse
   document mutation; there is no delayed commit queue.
 
+## Planner ingredient selection
+
+Planner meal and week shopping actions open `ShoppingSelectionDialog` before
+writing. The shared dialog supports recipe inclusion, canonical yield/servings,
+and ingredient occurrences selected before aggregation. Cooked meals remain
+included in weekly shopping. Existing hook callers without `selections` retain
+all-ingredient behavior.
+
+`web/src/lib/shopping-selection.ts` validates selections against a fresh recipe
+snapshot and resolves filtered source ingredients through existing quantity and
+Shopping semantics. V3 stores the resulting contribution without a schema
+change. Re-adding replaces that recipe's contribution; other recipes, manual
+items, and surviving checked overrides remain intact. Saved subsets are restored
+only when their resolved ingredients match uniquely; otherwise the dialog asks
+for review with a fresh full selection.
+
+CAS replay preserves unrelated edits and check-off changes. A changed contribution
+for the same recipe or changed recipe snapshot stops the retry for review. Save
+failures keep the dialog and its current selection open.
+
 ## Projection and Pantry
+
+Dashboard uses `useShoppingList` for the same ordered, Pantry-aware projection.
+The wrapper exposes either document or Pantry query failures and retries both;
+Dashboard does not render empty results from failed queries. The preview uses
+the shared `useShoppingCheckIntents` hook, preserving versioned rapid-tap intent
+and serialized writes. Both quick-add entry points use `addShoppingDraft` for
+comma splitting, duplicate feedback, and retry drafts. Completion remains in
+the full Shopping screen; preview checkboxes never clear the list.
 
 Projection combines the document with live Pantry rows. Classification order
 is Pantry, excluded ingredient, enabled unanimous built-in family, then visible.

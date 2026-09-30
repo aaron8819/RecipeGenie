@@ -83,6 +83,7 @@ async function ensureRecipeAddedToShopping(
   const searchInput = page.getByPlaceholder(/search by recipe name or category/i)
   if (await searchInput.isVisible().catch(() => false)) {
     await searchInput.fill(smokeRecipe.name)
+    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(smokeRecipe.name)
   }
 
   let recipeCard = page
@@ -92,7 +93,9 @@ async function ensureRecipeAddedToShopping(
 
   if (!(await recipeHeading.isVisible().catch(() => false))) {
     await createSmokeRecipe(page, smokeRecipe)
+    await navigateToRoute('recipes')
     await searchInput.fill(smokeRecipe.name)
+    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(smokeRecipe.name)
     recipeCard = page
       .locator('[data-recipe-name]')
       .filter({ has: page.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') }) })
@@ -138,10 +141,13 @@ async function createSmokeRecipe(
   await dialog.waitFor({ state: 'visible', timeout: 10000 })
 
   await dialog.getByRole('textbox', { name: /e\.g\. grandma's roast chicken/i }).fill(smokeRecipe.name)
+  await dialog.getByRole('combobox').first().click()
+  await page.getByRole('option', { name: new RegExp(`^${smokeRecipe.category}$`, 'i') }).click()
+  await dialog.getByRole('spinbutton', { name: 'Scaling basis', exact: true }).fill(String(smokeRecipe.servings))
 
   const ingredientInputs = dialog.getByPlaceholder('Ingredient')
   while ((await ingredientInputs.count()) < smokeRecipe.ingredients.length) {
-    await dialog.getByRole('button', { name: /add row/i }).click()
+    await dialog.getByRole('button', { name: 'Add ingredient', exact: true }).click()
   }
 
   for (const [index, ingredient] of smokeRecipe.ingredients.entries()) {
@@ -149,7 +155,7 @@ async function createSmokeRecipe(
     await dialog.getByPlaceholder('Amt').nth(index).fill(ingredient.amount)
   }
 
-  await dialog.locator('textarea').first().fill(smokeRecipe.instructions)
+  await dialog.getByRole('textbox', { name: 'Instruction group 1 step 1', exact: true }).fill(smokeRecipe.instructions)
   await dialog.getByRole('button', { name: /^add recipe$/i }).click()
   await expect(dialog).toBeHidden({ timeout: 15000 })
 

@@ -54,6 +54,10 @@ These boundaries are partially enforced in `web/.eslintrc.json`:
 - `web/src/components/shopping/shopping-list.tsx` still owns UI orchestration, optimistic flows, DnD ownership, filtering/grouping orchestration, and undo/deferred-delete behavior.
 - Presentation-only shopping sections live in `web/src/components/shopping/shopping-list-components.tsx`.
 - Shared shopping optimistic helpers live in `web/src/hooks/shopping/shared.ts`.
+- Dashboard and Shopping share versioned checkbox intent through the narrow
+  `web/src/hooks/use-shopping-check-intents.ts` hook and quick-add parsing and
+  feedback through `web/src/lib/shopping-quick-add.ts`. The existing Shopping
+  document mutation seam remains the only persistence authority.
 
 ## Refactor Stopping Point
 

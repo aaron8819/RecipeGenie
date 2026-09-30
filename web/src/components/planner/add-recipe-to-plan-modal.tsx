@@ -34,6 +34,7 @@ interface AddRecipeToPlanModalProps {
   targetDayIndex?: number | null
   /** Week start day (0=Sunday, 1=Monday, etc.) for converting to day-of-week. */
   weekStartDay?: number
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 export function AddRecipeToPlanModal({
@@ -42,6 +43,7 @@ export function AddRecipeToPlanModal({
   weekDate,
   targetDayIndex = null,
   weekStartDay = 1,
+  onCloseAutoFocus,
 }: AddRecipeToPlanModalProps) {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
@@ -93,8 +95,8 @@ export function AddRecipeToPlanModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col" onCloseAutoFocus={onCloseAutoFocus}>
+        <DialogHeader className="pr-10">
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5" />
             Add Recipe to Plan
@@ -115,7 +117,7 @@ export function AddRecipeToPlanModal({
                 setSearch(e.target.value)
                 if (submissionError) clearSubmissionError()
               }}
-              className="pl-9"
+              className="h-11 pl-9"
             />
           </div>
           <Select
@@ -125,7 +127,7 @@ export function AddRecipeToPlanModal({
               if (submissionError) clearSubmissionError()
             }}
           >
-            <SelectTrigger className="w-[140px]">
+            <SelectTrigger className="h-11 w-[140px]">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
@@ -199,10 +201,11 @@ export function AddRecipeToPlanModal({
         ) : null}
 
         <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
+          <Button className="h-11" variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button
+            className="h-11"
             onClick={handleAddToPlan}
             disabled={!selectedRecipeId || addToPlan.isPending || isSubmitting}
           >

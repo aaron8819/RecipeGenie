@@ -1,9 +1,9 @@
 "use client"
 
-import { HelpCircle, LogOut } from "lucide-react"
+import { LogOut } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { OnboardingDialog } from "./onboarding-dialog"
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,17 +47,6 @@ export function Header({ userEmail, onSignOut }: HeaderProps) {
               />
             </div>
           </Link>
-          <OnboardingDialog
-            trigger={
-              <button
-                type="button"
-                className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-stone-100 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
-                aria-label="Help"
-              >
-                <HelpCircle className="h-4 w-4" aria-hidden />
-              </button>
-            }
-          />
         </div>
 
         <DropdownMenu>

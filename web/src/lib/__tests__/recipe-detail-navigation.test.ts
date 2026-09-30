@@ -39,7 +39,7 @@ describe("recipe detail navigation", () => {
     expect(router.replace).not.toHaveBeenCalled()
   })
 
-  it.each(["recipes", "planner", "shopping"] as const)(
+  it.each(["recipes", "planner", "shopping", "dashboard"] as const)(
     "returns to a known %s source through browser history",
     (source) => {
       returnFromRecipeDetail(router, source)

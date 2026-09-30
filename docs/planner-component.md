@@ -11,7 +11,43 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - `meal-planner.tsx` is intentionally still orchestration-heavy.
 - No planner hook extraction is recommended right now.
 
+## Shopping actions
+
+Meal and weekly shopping actions open the shared `ShoppingSelectionDialog`.
+Opening performs no write. Users choose recipes, yield/servings, and ingredients,
+then the existing Shopping mutation saves all selected contributions together.
+Weekly actions include cooked meals. Pending and success feedback remains owned
+by Planner; failed saves keep selections open for review. See
+[Shopping Domain Reference](./shopping-component.md#planner-ingredient-selection)
+for recovery and conflict behavior.
+
+## Explicit meal swap
+
+Planner's Swap recipe control opens `SwapMealDialog`. Users search recipes across
+categories and choose a scheduled day; already-planned recipes are disabled.
+"Surprise me" retains a random same-category choice through the same guarded save.
+Opening performs no write, pending saves prevent dismissal/duplicate taps, and
+failures remain visible inline with the dialog open.
+
+`useReplacePlannedRecipe` reads the owner-scoped current plan, rejects a missing,
+cooked, duplicate, or moved source, and performs one conditional UPDATE of UUID
+membership and assignments. The WHERE clause compares the read membership, made
+state, and assignments. A concurrent change aborts without a retry or a partial
+replacement. Existing UUID triggers enforce replacement ownership and maintain
+legacy mirrors; no new RPC or migration is required. Other meals, scale, history,
+and Shopping contributions remain intact. The hook refetches plan/recipe caches
+after success or failure. The older random hook remains exported for compatibility
+but Planner no longer uses its full-plan upsert path.
+
 ## Key Files
+
+Dashboard at `/dashboard` reuses these queries, grouping/made-state selectors,
+mutations, and dialogs. Its current local calendar date refreshes at midnight
+and on tab resume. Week links carry the displayed date in Planner URL state.
+Both screens honor Sunday (`0`) as a configured week start. Dashboard adds meals
+through the existing picker with a day prefilled and marks cooking history at
+the displayed assigned day's local noon. Move and removal reuse existing hooks
+and do not delete recipes or Shopping contributions.
 
 | File | Responsibility |
 |------|----------------|

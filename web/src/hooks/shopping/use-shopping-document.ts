@@ -5,7 +5,7 @@ import { useAuthContext } from '@/lib/auth-context'
 import { useUndoToast } from '@/hooks/use-undo-toast'
 import { usePantryItems } from '@/hooks/use-pantry'
 import { mapRecipeRows } from '@/lib/recipe-identity'
-import { pantryKeys, principalId, shoppingKeys } from '@/lib/query-keys'
+import { pantryKeys, principalId, shoppingKeys, recipeKeys } from '@/lib/query-keys'
 import {
   applyShoppingDocumentMutation,
   createEmptyShoppingDocument,
@@ -38,6 +38,12 @@ import { normalizePantryItemName } from '@/lib/pantry'
 import { isAlreadyInShoppingListError } from '@/lib/shopping-feedback'
 import { getSupabase } from '@/lib/supabase/client'
 import { requireShoppingRowRef } from '@/lib/shopping-row-reference'
+import {
+  createSelectedShoppingEntry,
+  getShoppingRecipeSnapshot,
+  serializeShoppingSelection,
+  type ShoppingRecipeSelection,
+} from '@/lib/shopping-selection'
 import type {
   PantryItem,
   RationalV1,
@@ -217,6 +223,15 @@ export function useShoppingList() {
       : undefined,
     isLoading: documentQuery.isLoading || pantryQuery.isLoading,
     isFetching: documentQuery.isFetching || pantryQuery.isFetching,
+    isError: documentQuery.isError || pantryQuery.isError,
+    error: documentQuery.error || pantryQuery.error,
+    refetch: async () => {
+      const [document] = await Promise.all([
+        documentQuery.refetch(),
+        pantryQuery.refetch(),
+      ]);
+      return document;
+    },
   }
 }
 
@@ -509,11 +524,15 @@ function resolveScale(scale: number, scaleV1?: RationalV1): RationalV1 {
 }
 
 export function useAddToShoppingList() {
+  const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const refreshRecipes = () => queryClient.invalidateQueries({ queryKey: recipeKeys.all(principalId(user?.id)) })
   return useShoppingMutation(async (state, input: {
     recipeIds: string[]
     scale?: number
     scaleV1?: RationalV1
     idempotencyKey?: string
+    selections?: ShoppingRecipeSelection[]
   }) => {
     const recipeIds = [...new Set(input.recipeIds)]
     const scale = input.scale ?? 1
@@ -526,11 +545,20 @@ export function useAddToShoppingList() {
     if (error) throw error
     const recipes = mapRecipeRows(data as never)
     if (recipes.length !== recipeIds.length) throw new Error('Recipe not found')
-    const entries = recipes.map((recipe: Recipe) => createShoppingRecipeEntry(
-      recipe,
-      recipe.servings * scale,
-      exactScale
-    ))
+    const selections = new Map(input.selections?.map(selection => [selection.recipeId, selection]))
+    if (input.selections && (selections.size !== input.selections.length ||
+        selections.size !== recipeIds.length || recipeIds.some(id => !selections.has(id)))) {
+      throw new Error('Select ingredients for each chosen recipe.')
+    }
+    if (input.selections && recipes.some(recipe => getShoppingRecipeSnapshot(recipe) !== selections.get(recipe.id)?.contentSnapshot)) {
+      await refreshRecipes()
+      throw new Error('A recipe changed. Close and reopen the dialog to review its latest ingredients.')
+    }
+    const entries = recipes.map((recipe: Recipe) => {
+      const selection = selections.get(recipe.id)
+      return selection ? createSelectedShoppingEntry(recipe, selection) :
+        createShoppingRecipeEntry(recipe, recipe.servings * scale, exactScale)
+    })
     const previousKeys = new Set(Object.values(state.document.recipeEntries)
       .flatMap((entry) => entry.ingredients.map((ingredient) => ingredient.aggregateKey)))
     const otherKeys = new Set(Object.values(state.document.recipeEntries)
@@ -540,6 +568,23 @@ export function useAddToShoppingList() {
       entry.ingredients.map((ingredient) => ingredient.aggregateKey)))
     return {
       mutation: { type: 'upsertRecipes', entries },
+      validateReplay: input.selections ? async (fresh) => {
+        for (const id of recipeIds) {
+          if (serializeShoppingSelection(fresh.document.recipeEntries[id]) !==
+              serializeShoppingSelection(state.document.recipeEntries[id])) {
+            throw new Error('Shopping selection changed in another session. Close and reopen the dialog to review it.')
+          }
+        }
+        const { data: latest, error: latestError } = await supabase
+          .from('recipes').select('*').in('recipe_uuid', recipeIds)
+        if (latestError) throw latestError
+        const currentRecipes = mapRecipeRows(latest as never)
+        if (currentRecipes.length !== recipeIds.length || currentRecipes.some(recipe =>
+          getShoppingRecipeSnapshot(recipe) !== selections.get(recipe.id)?.contentSnapshot)) {
+          await refreshRecipes()
+          throw new Error('A recipe changed. Close and reopen the dialog to review its latest ingredients.')
+        }
+      } : undefined,
       value: {
         added: [...incomingKeys].filter((key) => !previousKeys.has(key)).length,
         merged: [...incomingKeys].filter((key) => otherKeys.has(key)).length,

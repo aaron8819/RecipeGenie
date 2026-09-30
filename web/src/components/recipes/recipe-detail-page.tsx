@@ -106,6 +106,7 @@ const RECIPE_RETURN_LABELS: Record<RecipeDetailSource, string> = {
   planner: "Back to planner",
   recipes: "Back to recipes",
   shopping: "Back to shopping",
+  dashboard: "Back to dashboard",
 }
 
 function RecipeDetailState({

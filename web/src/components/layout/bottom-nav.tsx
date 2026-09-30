@@ -1,11 +1,12 @@
 "use client"
 
-import { UtensilsCrossed, CalendarDays, ShoppingCart, Package } from "lucide-react"
+import { UtensilsCrossed, LayoutDashboard, CalendarDays, ShoppingCart, Package } from "lucide-react"
 import Link, { useLinkStatus } from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
 const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/planner", label: "Planner", icon: CalendarDays },
   { href: "/recipes", label: "Recipes", icon: UtensilsCrossed },
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },
@@ -66,8 +67,8 @@ export function BottomNav() {
               href={item.href}
               aria-current={isActive ? "page" : undefined}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-150",
-                "min-w-[64px] rounded-lg",
+                "flex flex-col items-center justify-center gap-1 px-1 py-2 transition-all duration-150",
+                "min-h-11 min-w-0 flex-1 rounded-lg",
                 "active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset",
                 isActive
                   ? "text-primary"

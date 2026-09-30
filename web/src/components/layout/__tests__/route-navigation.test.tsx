@@ -67,6 +67,7 @@ describe("route navigation", () => {
       name: "Primary navigation",
     })
     const expectedDestinations = [
+      ["Dashboard", "/dashboard"],
       ["Planner", "/planner"],
       ["Recipes", "/recipes"],
       ["Shopping", "/shopping"],
@@ -92,7 +93,7 @@ describe("route navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }))
     expect(onSignOut).toHaveBeenCalledOnce()
 
-    expect(screen.queryByText("Dashboard")).not.toBeInTheDocument()
+    expect(screen.getByText("Dashboard")).toBeInTheDocument()
     expect(screen.queryByText("Settings")).not.toBeInTheDocument()
     expect(screen.queryByText("Create Recipe")).not.toBeInTheDocument()
   })
@@ -142,6 +143,6 @@ describe("route navigation", () => {
     expect(
       within(bottomNavigation).getByRole("link", { name: "Recipes" })
     ).toHaveAttribute("aria-current", "page")
-    expect(within(bottomNavigation).getAllByRole("link")).toHaveLength(4)
+    expect(within(bottomNavigation).getAllByRole("link")).toHaveLength(5)
   })
 })

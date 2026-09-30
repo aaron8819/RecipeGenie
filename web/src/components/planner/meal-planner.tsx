@@ -49,6 +49,10 @@ import { AddRecipeToPlanModal } from "./add-recipe-to-plan-modal"
 import { PlanSettingsModal } from "./plan-settings-modal"
 import { SaveTemplateDialog } from "./save-template-dialog"
 import { LoadTemplateDialog } from "./load-template-dialog"
+import { ShoppingSelectionDialog } from '@/components/shopping/shopping-selection-dialog'
+import type { ShoppingRecipeSelection } from '@/lib/shopping-selection'
+import { SwapMealDialog } from './swap-meal-dialog'
+import { useReplacePlannedRecipe } from '@/hooks/use-replace-planned-recipe'
 import {
   useWeeklyPlan,
   useWeeklyPlanRecipes,
@@ -56,7 +60,6 @@ import {
   useUpdateUserConfig,
   useGenerateMealPlan,
   useFetchRecipeIds,
-  useSwapRecipe,
   useMarkRecipeMade,
   useRemoveRecipeFromPlan,
   useAddRecipeToPlan,
@@ -805,6 +808,7 @@ function StitchRecipeCard({
               disabled={isSwapping}
               className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-500 transition-colors"
               title="Swap recipe"
+              aria-label={`Swap ${recipe.name}`}
             >
               {isSwapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
             </button>
@@ -1025,6 +1029,7 @@ function MobileRecipeCard({
                     isToday ? "text-primary dark:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800" : "text-slate-400 hover:text-primary"
                   )}
                   title="Swap"
+                  aria-label={`Swap ${recipe.name}`}
                 >
                   {isSwapping ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowLeftRight className="h-5 w-5" />}
                 </button>
@@ -1105,7 +1110,9 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const [addingToCartRecipeId, setAddingToCartRecipeId] = useState<string | null>(null)
   const [cartAddedRecipeId, setCartAddedRecipeId] = useState<string | null>(null)
   const [bulkCartJustAdded, setBulkCartJustAdded] = useState(false)
+  const [shoppingRequest, setShoppingRequest] = useState<{ ids: string[]; weekly: boolean } | null>(null)
   const [swappingRecipeId, setSwappingRecipeId] = useState<string | null>(null)
+  const [swapRequest, setSwapRequest] = useState<{ recipe: Recipe; weekDate: string; expectedDayOfWeek: number | null; dayOfWeek: number } | null>(null)
   const [removingRecipeId, setRemovingRecipeId] = useState<string | null>(null)
   const [plannerGenerationError, setPlannerGenerationError] = useState<string | null>(null)
   const [isAddRecipeModalOpen, setIsAddRecipeModalOpen] = useState(false)
@@ -1185,10 +1192,11 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     setPendingAssignmentOverlays({})
     setPendingAssignmentCounts({})
     setPlannerGenerationError(null)
+    setSwapRequest(null)
   }, [currentWeekDate])
 
   const currentWeekStart = useMemo(
-    () => getWeekStartDate(new Date(), config?.week_start_day || 1),
+    () => getWeekStartDate(new Date(), config?.week_start_day ?? 1),
     [config?.week_start_day]
   )
   const isCurrentWeek = currentWeekDate === currentWeekStart
@@ -1211,7 +1219,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   // Compute effective tab based on currentWeekDate to keep visual indicator in sync
   // This prevents tab/date desync when using chevron navigation beyond this/next week
   const effectiveTab = useMemo((): MobileWeekTab | null => {
-    return resolveEffectiveMobileWeekTab(mobileWeekTab, currentWeekDate, config?.week_start_day || 1)
+    return resolveEffectiveMobileWeekTab(mobileWeekTab, currentWeekDate, config?.week_start_day ?? 1)
   }, [currentWeekDate, mobileWeekTab, config?.week_start_day])
 
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
@@ -1223,7 +1231,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const hasAnyRecipes = (allRecipes?.length ?? 0) > 0
 
   const generatePlan = useGenerateMealPlan()
-  const swapRecipe = useSwapRecipe()
+  const replacePlannedRecipe = useReplacePlannedRecipe()
   const markMade = useMarkRecipeMade()
   const removeFromPlan = useRemoveRecipeFromPlan()
   const addRecipeToPlan = useAddRecipeToPlan()
@@ -1241,7 +1249,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   useEffect(() => {
     const defaultWeek = getWeekStartDate(
       new Date(),
-      config?.week_start_day || 1
+      config?.week_start_day ?? 1
     )
     setCurrentWeekDate(routeWeek ?? defaultWeek)
   }, [config?.week_start_day, routeWeek])
@@ -1249,7 +1257,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const navigateToWeek = useCallback((weekDate: string) => {
     const defaultWeek = getWeekStartDate(
       new Date(),
-      config?.week_start_day || 1
+      config?.week_start_day ?? 1
     )
     setCurrentWeekDate(weekDate)
     router.push(buildPlannerHref(weekDate, defaultWeek))
@@ -1265,7 +1273,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const handlePrevWeek = () => {
     const next = navigateWeek(currentWeekDate, "prev")
     navigateToWeek(next)
-    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
+    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day ?? 1)
     if (next === thisWeekStart) setMobileWeekTab("thisWeek")
     else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
   }
@@ -1273,7 +1281,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const handleNextWeek = () => {
     const next = navigateWeek(currentWeekDate, "next")
     navigateToWeek(next)
-    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
+    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day ?? 1)
     if (next === thisWeekStart) setMobileWeekTab("thisWeek")
     else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
   }
@@ -1281,7 +1289,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const handleMobileWeekTab = (tab: MobileWeekTab) => {
     setMobileWeekTab(tab)
     navigateToWeek(
-      resolveWeekDateForMobileTab(tab, config?.week_start_day || 1)
+      resolveWeekDateForMobileTab(tab, config?.week_start_day ?? 1)
     )
   }
 
@@ -1307,32 +1315,13 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     }
   }
 
-  const handleGenerateShoppingList = async () => {
+  const handleGenerateShoppingList = () => {
     if (!weeklyPlan?.recipe_ids || weeklyPlan.recipe_ids.length === 0) return
-    try {
-      const result = await addToShoppingList.mutateAsync({
-        recipeIds: weeklyPlan.recipe_ids,
-        scale: weeklyPlan.scale || 1,
-      })
-
-      undoToast.show({
-        message: formatShoppingAddMessage(result, {
-          itemLabel: SHOPPING_ITEM_LABEL,
-          zeroMessage: "Everything in this plan is already on the shopping list",
-        }),
-        duration: 4000,
-      })
-      if (result.added > 0) {
-        setBulkCartJustAdded(true)
-        setTimeout(() => setBulkCartJustAdded(false), 1500)
-      }
-    } catch (error) {
-      console.error("Failed to add to shopping list:", error)
-      undoToast.show({
-        message: getErrorMessage(error, "Failed to add this plan to shopping list"),
-        duration: 4000,
-      })
+    if (!recipes || weeklyPlan.recipe_ids.some(id => !recipes.some(recipe => recipe.id === id))) {
+      undoToast.show({ message: 'Recipes are still loading. Try again.', duration: 4000 })
+      return
     }
+    setShoppingRequest({ ids: weeklyPlan.recipe_ids, weekly: true })
   }
 
   const handleLoadTemplate = async (template: PlanTemplate) => {
@@ -1364,20 +1353,26 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     }
   }
 
-  const handleSwapRecipe = async (recipe: Recipe) => {
+  const handleSwapRecipe = (recipe: Recipe) => {
     if (!currentWeekDate) return
-    setSwappingRecipeId(recipe.id)
+    setSwapRequest({
+      recipe,
+      weekDate: currentWeekDate,
+      expectedDayOfWeek: weeklyPlan?.day_assignments?.[recipe.id] ?? null,
+      dayOfWeek: recipeDayAssignments[recipe.id] ?? weekDays[0].date.getDay(),
+    })
+  }
+
+  const handleExplicitSwap = async (replacementRecipeId: string, dayOfWeek: number) => {
+    if (!swapRequest) return
+    setSwappingRecipeId(swapRequest.recipe.id)
     try {
-      await swapRecipe.mutateAsync({
-        weekDate: currentWeekDate,
-        oldRecipeId: recipe.id,
-        category: recipe.category,
-        excludeIds: weeklyPlan?.recipe_ids || [],
-      })
-    } catch (error) {
-      undoToast.show({
-        message: getErrorMessage(error, `Failed to swap "${recipe.name}"`),
-        duration: 4000,
+      await replacePlannedRecipe.mutateAsync({
+        weekDate: swapRequest.weekDate,
+        oldRecipeId: swapRequest.recipe.id,
+        replacementRecipeId,
+        dayOfWeek,
+        expectedDayOfWeek: swapRequest.expectedDayOfWeek,
       })
     } finally {
       setSwappingRecipeId(null)
@@ -1481,10 +1476,16 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     )
   }, [addRecipeToPlan, currentWeekDate, recipeDayAssignments, removeFromPlan, removingRecipeId, undoToast])
 
-  const handleAddRecipeToCart = async (recipeId: string) => {
-    setAddingToCartRecipeId(recipeId)
+  const handleAddRecipeToCart = (recipeId: string) => {
+    setShoppingRequest({ ids: [recipeId], weekly: false })
+  }
+
+  const handleShoppingSelectionSubmit = async (selections: ShoppingRecipeSelection[]) => {
+    const weekly = shoppingRequest?.weekly ?? false
+    const recipeId = weekly ? null : selections[0]?.recipeId
+    setAddingToCartRecipeId(recipeId ?? null)
     try {
-      const result = await addToShoppingList.mutateAsync({ recipeIds: [recipeId] })
+      const result = await addToShoppingList.mutateAsync({ recipeIds: selections.map(selection => selection.recipeId), selections })
       const recipeName = displayedRecipes?.find((recipe) => recipe.id === recipeId)?.name
       undoToast.show({
         message: formatShoppingAddMessage(result, {
@@ -1497,8 +1498,13 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
         duration: 4000,
       })
       if (result.added > 0) {
-        setCartAddedRecipeId(recipeId)
-        setTimeout(() => setCartAddedRecipeId(null), 1500)
+        if (weekly) {
+          setBulkCartJustAdded(true)
+          setTimeout(() => setBulkCartJustAdded(false), 1500)
+        } else if (recipeId) {
+          setCartAddedRecipeId(recipeId)
+          setTimeout(() => setCartAddedRecipeId(null), 1500)
+        }
       }
     } catch (error) {
       console.error("Failed to add recipe to shopping list:", error)
@@ -1506,6 +1512,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
         message: getErrorMessage(error, "Failed to add recipe to shopping list"),
         duration: 4000,
       })
+      throw error
     } finally {
       setAddingToCartRecipeId(null)
     }
@@ -1697,10 +1704,10 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                       selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                       onSelect={(date) => {
                         if (date) {
-                          const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
+                          const weekStart = getWeekStartDate(date, config?.week_start_day ?? 1)
                           navigateToWeek(weekStart)
                           setIsDatePickerOpenMobile(false)
-                          const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day || 1)
+                          const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day ?? 1)
                           if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
                           else if (weekStart === nextWeekStart) setMobileWeekTab("nextWeek")
                         }
@@ -1774,7 +1781,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                     selected={currentWeekDate ? parseLocalDate(currentWeekDate) : undefined}
                     onSelect={(date) => {
                       if (date) {
-                        const weekStart = getWeekStartDate(date, config?.week_start_day || 1)
+                        const weekStart = getWeekStartDate(date, config?.week_start_day ?? 1)
                         navigateToWeek(weekStart)
                         setIsDatePickerOpenDesktop(false)
                       }
@@ -2172,6 +2179,23 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
           </>
         )}
       {/* Add Recipe to Plan Modal */}
+      {swapRequest && <SwapMealDialog
+        open
+        onOpenChange={open => { if (!open) setSwapRequest(null) }}
+        recipe={swapRequest.recipe}
+        plannedRecipeIds={weeklyPlan?.recipe_ids || []}
+        days={weekDays}
+        initialDayOfWeek={swapRequest.dayOfWeek}
+        onSubmit={handleExplicitSwap}
+      />}
+      <ShoppingSelectionDialog
+        open={shoppingRequest !== null}
+        onOpenChange={open => { if (!open && !addToShoppingList.isPending) setShoppingRequest(null) }}
+        recipes={(recipes || []).filter(recipe => shoppingRequest?.ids.includes(recipe.id))}
+        defaultScale={shoppingRequest?.weekly ? weeklyPlan?.scale || 1 : 1}
+        weekLabel={shoppingRequest?.weekly ? formatWeekLabel(currentWeekDate) : undefined}
+        onSubmit={handleShoppingSelectionSubmit}
+      />
       <AddRecipeToPlanModal
         open={isAddRecipeModalOpen}
         onOpenChange={(open) => { setIsAddRecipeModalOpen(open); if (!open) setAddRecipeTargetDayIndex(null); }}
