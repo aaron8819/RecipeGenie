@@ -78,6 +78,21 @@ enforce those ownership boundaries.
 - `supabase/migrations/029_shopping_manual_field_versions.sql`
 - `supabase/migrations/030_shopping_trip_visibility.sql`
 - `supabase/migrations/031_planner_history_swap_guard.sql`
+- `supabase/migrations/032_planner_mutation_lock_order.sql`
+
+Migration 032 is a forward correction; 031 remains byte-for-byte unchanged.
+Swap, weekly cooking and recipe deletion acquire the same owner-scoped
+transaction advisory lock before row locks. History INSERT/UPDATE/DELETE take
+it in a BEFORE STATEMENT trigger, before a history UPDATE can lock its row.
+This prevents recipe/plan and recipe/history lock cycles while retaining the
+existing invoker/RLS swap, ownership checks, stale-state fences, recipe row
+guard and atomic Shopping/history cleanup. Other owners run independently.
+Privileged writes without an authenticated principal retain the existing row
+guard and are outside this application concurrency contract.
+
+Apply both 031 and 032 through the authorized migration runbook before releasing
+the Dashboard app. App rollback alone leaves both sets of locking behavior
+installed; any schema repair remains a separately authorized operation.
 
 Migration 031 adds an owner/RLS-scoped atomic explicit-swap RPC and a history
 source-lock trigger. Swaps compare inspected plan membership, cooked state and
@@ -940,7 +955,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 031, and the
+instructions. The current authoritative chain ends at migration 032, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

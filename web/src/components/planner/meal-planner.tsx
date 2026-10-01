@@ -2215,11 +2215,9 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
       <AddRecipeToPlanModal
         onCloseAutoFocus={restoreDialogFocus}
         onAdded={() => {
-          // Empty slots disappear when the new recipe query finishes. Choose
-          // the persistent fallback before that delayed render removes focus.
-          if (dialogTrigger.current?.hasAttribute('data-planner-empty-slot')) {
-            dialogTrigger.current = null
-          }
+          // Successful Add can remove or replace its initiating control after
+          // delayed reads. Use the persistent originating Planner section.
+          dialogTrigger.current = null
         }}
         open={isAddRecipeModalOpen}
         onOpenChange={(open) => { setIsAddRecipeModalOpen(open); if (!open) setAddRecipeTargetDayIndex(null); }}

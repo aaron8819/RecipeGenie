@@ -30,7 +30,9 @@ Opening performs no write, pending saves prevent dismissal/duplicate taps, and
 failures remain visible inline with the dialog open.
 
 `useReplacePlannedRecipe` reads the owner-scoped plan, then calls migration 031's
-`replace_planned_recipe` RPC. The RPC locks the plan and source recipe, compares
+`replace_planned_recipe` RPC. Migration 032 serializes swap, weekly cooking,
+deletion and history writes by authenticated owner before row locks (history
+uses a statement trigger to precede UPDATE row locks). The RPC compares
 inspected membership/made state/assignments, and rejects current-week cooking in
 recipe history as well as explicit made state. History writes share the source
 recipe lock, so a concurrent history insert cannot slip past the mutation guard.
@@ -40,12 +42,14 @@ The hook refetches caches after success or failure. The old random hook remains
 exported for compatibility; Planner uses the guarded path.
 
 Meal and weekly Shopping dialogs initialize from saved selection yield first,
-otherwise recipe servings multiplied by the saved plan scale. Add, Swap and
-Shopping return keyboard focus to their initiating control, with the Planner
-content as a fallback when a successful operation removes that control.
-Successful empty-slot additions select the fallback before the asynchronous
-recipe refresh removes the slot. Shopping's success animation keeps its control
-enabled after the write settles, so focus can return while feedback is visible.
+otherwise recipe servings multiplied by the saved plan scale. Swap and Shopping
+return keyboard focus to their initiating control, with the Planner content as
+a fallback when a successful operation removes that control. Successful Add
+selects the stable originating section before asynchronous
+plan/recipe refreshes disable or replace the trigger. Cancel/Escape return to
+the initiating control while it remains available. Shopping's success animation
+keeps its control enabled after the write settles, so focus can return while
+feedback is visible.
 
 ## Key Files
 

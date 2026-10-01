@@ -364,12 +364,17 @@ function DashboardWeek({
   const locks = useRef(new Set<string>());
   const dialogTrigger = useRef<HTMLButtonElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const todayHeading = useRef<HTMLHeadingElement>(null);
+  const addSucceeded = useRef(false);
+  const addFocusFallback = useRef<HTMLHeadingElement | null>(null);
   function restoreDialogFocus(event: Event) {
     event.preventDefault();
     if (dialogTrigger.current?.isConnected && !dialogTrigger.current.disabled) dialogTrigger.current.focus();
     else heading.current?.focus();
   }
   function openAdd(day: number, trigger: HTMLButtonElement) {
+    addSucceeded.current = false;
+    addFocusFallback.current = trigger.closest('section')?.querySelector('h2') ?? null;
     dialogTrigger.current = trigger;
     setAddDay(day);
   }
@@ -570,7 +575,7 @@ function DashboardWeek({
           aria-labelledby="dashboard-today-title"
         >
           <div className="dashboard-section-heading">
-            <h2 id="dashboard-today-title">Today’s meals</h2>
+            <h2 id="dashboard-today-title" ref={todayHeading} tabIndex={-1}>Today’s meals</h2>
             <Button
               variant="ghost"
               className={`min-h-11 ${ready && !todayMeals.length ? 'hidden' : ''}`}
@@ -668,7 +673,7 @@ function DashboardWeek({
         >
           <div className="dashboard-section-heading dashboard-week-heading">
             <div>
-              <h2 id="dashboard-week-title">This week</h2>
+              <h2 id="dashboard-week-title" tabIndex={-1}>This week</h2>
               <p>{range}</p>
             </div>
             <div className="dashboard-week-actions">
@@ -769,7 +774,20 @@ function DashboardWeek({
         </section>
       </div>
       <AddRecipeToPlanModal
-        onCloseAutoFocus={restoreDialogFocus}
+        onAdded={() => { addSucceeded.current = true; }}
+        onCloseAutoFocus={(event) => {
+          // Success can replace an empty slot or disable the old trigger during
+          // the plan/recipe refetch. The section heading survives both renders.
+          if (addSucceeded.current) {
+            event.preventDefault();
+            (addFocusFallback.current ?? todayHeading.current)?.focus();
+          } else if (dialogTrigger.current?.isConnected && !dialogTrigger.current.disabled) {
+            restoreDialogFocus(event);
+          } else {
+            event.preventDefault();
+            (addFocusFallback.current ?? todayHeading.current)?.focus();
+          }
+        }}
         open={addDay !== null}
         onOpenChange={(open) => {
           if (!open) setAddDay(null);
