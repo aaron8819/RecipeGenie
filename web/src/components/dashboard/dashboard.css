@@ -67,6 +67,31 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+  align-items: start;
+}
+.dashboard-recipe-heading {
+  min-width: 0;
+}
+.dashboard-no-photo .dashboard-recipe-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 0 16px;
+}
+.dashboard-recipe-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: #e4e9db;
+}
+.dashboard-no-photo .dashboard-card-title {
+  min-height: 0;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
 }
 .dashboard-meal-card {
   background: white;
@@ -118,7 +143,7 @@
   margin: 8px 0 15px;
 }
 .dashboard-plan-card {
-  grid-column: 1 / -1;
+  grid-column: auto;
   min-height: 110px;
   height: auto;
   border: 1px dashed #d4bfb2;
@@ -222,7 +247,7 @@
 }
 .dashboard-day-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
   border-bottom: 1px solid #e4ddd4;
   padding: 16px 0;
@@ -232,9 +257,21 @@
   background: #efeee5;
 }
 .dashboard-day-date {
-  width: 56px;
+  width: 100px;
+  display: grid;
+  grid-template-columns: 56px 44px;
   flex-shrink: 0;
   text-align: center;
+}
+.dashboard-day-date > span,
+.dashboard-day-date > strong,
+.dashboard-day-date > small {
+  grid-column: 1;
+}
+.dashboard-day-date > button {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  align-self: center;
 }
 .dashboard-day-date > span {
   display: block;
@@ -318,15 +355,31 @@
     font-size: 29px;
   }
   .dashboard-plan-card {
-    min-height: 96px;
+    display: none;
   }
   .dashboard-week-actions {
     justify-content: flex-start;
   }
   .dashboard-day-row {
     gap: 8px;
+    flex-direction: column;
   }
   .dashboard-day-date {
-    width: 44px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    padding: 0 8px;
+  }
+  .dashboard-day-date > button {
+    margin-left: auto;
+  }
+  .dashboard-day-date strong {
+    font-size: 24px;
+  }
+  .dashboard-day-meals {
+    width: 100%;
+    padding: 0 8px;
   }
 }

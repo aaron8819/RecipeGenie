@@ -13,6 +13,27 @@ and explicit authorization under `AGENTS.md`.
 
 ## Implementation progress
 
+Focused layout polish is complete locally after integration commit `8acf0b2`.
+No-photo meals use compact illustrated headings; photo cards retain their images.
+Mobile populated Today uses the heading action without a second add card, and
+weekly date headers own the add action so meal titles have room to wrap. Shared
+Add and Swap pickers keep controls and actions visible around independently
+scrolling results. Add shows the selected calendar date and existing week-wide
+duplicate status with the assigned day, without changing selection rules.
+
+Polish verification: Chromium browser inspection at 1440×900 and 390×844 covered
+photo/no-photo cards, one/multiple meals, long weekly titles and multiple meals
+per day, empty Today, Shopping counts zero/one/three, scrolling Add/Swap results,
+selected-date context, duplicate indicators, keyboard Escape/return focus, and
+44px action targets. In the same one-meal/no-photo mobile case, Shopping's top
+moved from 856.04px to 561.49px (294.55px earlier). All 107 files / 1,635 unit tests
+pass with two workers; the two focused dialog files / eight tests, lint, type
+checking, repository guards, dependency checks, and webpack production build pass.
+Screenshots and logs are ignored local artifacts; disposable local fixtures were
+removed. Safari and a physical iPhone/onscreen keyboard remain unverified. Local
+HTTP storage photos encounter the existing CSP restriction, so photo layout was
+verified using a temporary same-origin image; no security policy was changed.
+
 Slice 1 is implemented locally: Planner meal/week actions use the shared Shopping
 selection dialog, including per-recipe yield and ingredient subsets. Existing V3
 contributions and CAS replay remain the persistence authority. No migration is

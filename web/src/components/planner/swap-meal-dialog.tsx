@@ -82,8 +82,11 @@ function OpenSwapMealDialog({
         if (!lock.current) onOpenChange(open);
       }}
     >
-      <DialogContent className="max-w-xl bg-shell p-6 sm:p-8" onCloseAutoFocus={onCloseAutoFocus}>
-        <DialogHeader className="pr-10">
+      <DialogContent
+        className="max-w-xl max-h-[90dvh] flex flex-col overflow-hidden bg-shell p-6 sm:p-8"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
+        <DialogHeader className="shrink-0 pr-10">
           <DialogTitle className="font-display text-3xl font-semibold">
             Swap meal
           </DialogTitle>
@@ -91,7 +94,7 @@ function OpenSwapMealDialog({
             Choose a recipe to replace {recipe.name}.
           </DialogDescription>
         </DialogHeader>
-        <label className="space-y-2 text-sm">
+        <label className="shrink-0 space-y-2 text-sm">
           <span>Scheduled day</span>
           <select
             aria-label="Scheduled day"
@@ -117,53 +120,60 @@ function OpenSwapMealDialog({
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           disabled={pending !== null}
-          className="h-11"
+          className="h-11 shrink-0"
         />
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
-        {isLoading ? (
-          <p role="status">Loading recipes…</p>
-        ) : isError ? (
-          <div role="alert">
-            <p>Could not load recipes.</p>
-            <Button className="h-11" onClick={() => void refetch()}>Retry</Button>
-          </div>
-        ) : (
-          <div className="divide-y divide-border-warm">
-            {!matches.length && (
-              <p className="py-4 text-sm">No recipes match your search.</p>
-            )}
-            {matches.map((candidate) => (
-              <button
-                key={candidate.id}
-                type="button"
-                disabled={planned.has(candidate.id) || pending !== null}
-                onClick={() => void submit(candidate.id)}
-                aria-label={`Swap with ${candidate.name}`}
-                className="flex min-h-16 w-full items-center gap-3 py-3 text-left hover:bg-muted disabled:opacity-50"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium">{candidate.name}</span>
-                  <span className="block text-xs text-foreground/80">
-                    {candidate.servings} servings · {candidate.category}
-                    {planned.has(candidate.id)
-                      ? ' · Already planned this week'
-                      : ''}
+        <div
+          className="min-h-0 flex-1 overflow-y-auto"
+          data-testid="swap-meal-results"
+        >
+          {isLoading ? (
+            <p role="status">Loading recipes…</p>
+          ) : isError ? (
+            <div role="alert">
+              <p>Could not load recipes.</p>
+              <Button className="h-11" onClick={() => void refetch()}>
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border-warm">
+              {!matches.length && (
+                <p className="py-4 text-sm">No recipes match your search.</p>
+              )}
+              {matches.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  disabled={planned.has(candidate.id) || pending !== null}
+                  onClick={() => void submit(candidate.id)}
+                  aria-label={`Swap with ${candidate.name}`}
+                  className="flex min-h-16 w-full items-center gap-3 py-3 text-left hover:bg-muted disabled:opacity-50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{candidate.name}</span>
+                    <span className="block text-xs text-foreground/80">
+                      {candidate.servings} servings · {candidate.category}
+                      {planned.has(candidate.id)
+                        ? ' · Already planned this week'
+                        : ''}
+                    </span>
                   </span>
-                </span>
-                {pending === candidate.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="sticky -bottom-6 flex flex-wrap justify-end gap-2 border-t border-border-warm bg-shell py-4 sm:-bottom-8">
+                  {pending === candidate.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t border-border-warm bg-shell pt-4">
           <Button
             variant="ghost"
             className="h-11 text-foreground"

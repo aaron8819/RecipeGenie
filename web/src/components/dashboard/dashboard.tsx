@@ -174,7 +174,8 @@ function ShoppingPreview() {
         !item.checked || (item.rowId && pendingCheckIntents.has(item.rowId)),
     )
     .slice(0, 5);
-  const hiddenCount = remaining.length - preview.filter((item) => !item.checked).length;
+  const hiddenCount =
+    remaining.length - preview.filter((item) => !item.checked).length;
   const ready = !shopping.isLoading && !shopping.isError && !!shopping.data;
 
   async function quickAdd(event: React.FormEvent) {
@@ -208,7 +209,12 @@ function ShoppingPreview() {
       <div className="dashboard-section-heading">
         <div>
           <h2 id="dashboard-shopping-title">Shopping</h2>
-          {ready && <p>{remaining.length} items remaining</p>}
+          {ready && (
+            <p>
+              {remaining.length} {remaining.length === 1 ? 'item' : 'items'}{' '}
+              remaining
+            </p>
+          )}
         </div>
         <Link className="dashboard-link" href="/shopping">
           View all →
@@ -279,9 +285,7 @@ function ShoppingPreview() {
               + {hiddenCount} more items · View list
             </Link>
           )}
-          <p className="dashboard-note">
-            Your list updates when you add meals or check off items.
-          </p>
+          <p className="dashboard-note">Add items or check them off here.</p>
         </>
       )}
     </section>
@@ -558,7 +562,7 @@ function DashboardWeek({
             <h2 id="dashboard-today-title">Today’s meals</h2>
             <Button
               variant="ghost"
-              className="min-h-11"
+              className={`min-h-11 ${ready && !todayMeals.length ? 'hidden' : ''}`}
               disabled={!ready}
               onClick={(event) => openAdd(todayIndex, event.currentTarget)}
             >
@@ -584,7 +588,7 @@ function DashboardWeek({
                 const image = getRecipeImageUrl(recipe.image_url);
                 return (
                   <article
-                    className="dashboard-meal-card"
+                    className={`dashboard-meal-card ${image ? '' : 'dashboard-no-photo'}`}
                     key={recipe.id}
                     aria-label={recipe.name}
                   >
@@ -594,29 +598,35 @@ function DashboardWeek({
                       </span>
                       {menu(recipe)}
                     </div>
-                    <Link
-                      className="dashboard-recipe-image"
-                      href={buildRecipeDetailHref(recipe.id, 'dashboard')}
-                      aria-label={`Open ${recipe.name}`}
-                    >
-                      {image ? (
-                        <Image
-                          src={image}
-                          alt=""
-                          width={500}
-                          height={330}
-                          unoptimized={image.includes('supabase')}
-                        />
-                      ) : (
-                        <UtensilsCrossed className="h-10 w-10" />
-                      )}
-                    </Link>
-                    <Link
-                      className="dashboard-card-title"
-                      href={buildRecipeDetailHref(recipe.id, 'dashboard')}
-                    >
-                      {recipe.name}
-                    </Link>
+                    <div className="dashboard-recipe-heading">
+                      <Link
+                        className={
+                          image
+                            ? 'dashboard-recipe-image'
+                            : 'dashboard-recipe-fallback'
+                        }
+                        href={buildRecipeDetailHref(recipe.id, 'dashboard')}
+                        aria-label={`Open ${recipe.name}`}
+                      >
+                        {image ? (
+                          <Image
+                            src={image}
+                            alt=""
+                            width={500}
+                            height={330}
+                            unoptimized={image.includes('supabase')}
+                          />
+                        ) : (
+                          <UtensilsCrossed className="h-7 w-7" aria-hidden />
+                        )}
+                      </Link>
+                      <Link
+                        className="dashboard-card-title"
+                        href={buildRecipeDetailHref(recipe.id, 'dashboard')}
+                      >
+                        {recipe.name}
+                      </Link>
+                    </div>
                     <p>
                       {recipe.total_time_minutes
                         ? `${recipe.total_time_minutes} min · `
@@ -635,16 +645,18 @@ function DashboardWeek({
                   </article>
                 );
               })}
-              <Button
-                variant="outline"
-                className="dashboard-plan-card"
-                onClick={(event) => openAdd(todayIndex, event.currentTarget)}
-              >
-                <Plus className="h-6 w-6" />
-                <span>
-                  Plan a meal<small>Add a recipe to today’s plan</small>
-                </span>
-              </Button>
+              {todayMeals.length % 2 === 1 && (
+                <Button
+                  variant="outline"
+                  className="dashboard-plan-card"
+                  onClick={(event) => openAdd(todayIndex, event.currentTarget)}
+                >
+                  <Plus className="h-6 w-6" />
+                  <span>
+                    Plan a meal<small>Add a recipe to today’s plan</small>
+                  </span>
+                </Button>
+              )}
             </div>
           )}
         </section>
@@ -705,6 +717,14 @@ function DashboardWeek({
                       <span>{day.dayName.slice(0, 3)}</span>
                       <strong>{day.dayNumber}</strong>
                       {index === todayIndex && <small>Today</small>}
+                      <Button
+                        variant="ghost"
+                        className="h-11 w-11 shrink-0 p-0"
+                        aria-label={`Add meal for ${day.dayName}`}
+                        onClick={(event) => openAdd(index, event.currentTarget)}
+                      >
+                        <Plus className="h-5 w-5" />
+                      </Button>
                     </div>
                     <div className="dashboard-day-meals">
                       {grouped[index].map((recipe) => (
@@ -740,14 +760,6 @@ function DashboardWeek({
                         </span>
                       )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      className="h-11 w-11 shrink-0 p-0"
-                      aria-label={`Add meal for ${day.dayName}`}
-                      onClick={(event) => openAdd(index, event.currentTarget)}
-                    >
-                      <Plus className="h-5 w-5" />
-                    </Button>
                   </div>
                 ))}
               </div>
