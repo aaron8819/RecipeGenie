@@ -128,7 +128,7 @@ describe("DropdownMenu", () => {
   it("cleans up after a shopping row action removes the row and the user changes tabs", async () => {
     render(<ShoppingRowShell />)
 
-    openMenu(screen.getByRole("button", { name: "Item actions" }))
+    openMenu(screen.getByRole("button", { name: "Actions for avocado oil" }))
     fireEvent.click(await screen.findByRole("menuitem", { name: /remove from list/i }))
 
     expect(await screen.findByText("Row removed")).toBeInTheDocument()

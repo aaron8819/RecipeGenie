@@ -3,6 +3,7 @@
 import { UtensilsCrossed, LayoutDashboard, CalendarDays, ShoppingCart, Package } from "lucide-react"
 import Link, { useLinkStatus } from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -16,13 +17,15 @@ const navItems = [
 function BottomNavItem({
   item,
   isActive,
+  isSelected,
 }: {
   item: (typeof navItems)[number]
   isActive: boolean
+  isSelected: boolean
 }) {
   const { pending } = useLinkStatus()
   const Icon = item.icon
-  const isHighlighted = isActive || pending
+  const isHighlighted = isSelected || pending
 
   return (
     <>
@@ -30,7 +33,7 @@ function BottomNavItem({
         className={cn(
           "h-5 w-5 transition-transform duration-150",
           isHighlighted && "scale-110",
-          pending && "animate-pulse"
+          (pending || (isSelected && !isActive)) && "animate-pulse"
         )}
         aria-hidden
       />
@@ -42,13 +45,20 @@ function BottomNavItem({
       >
         {item.label}
       </span>
-      {pending && <span className="sr-only">Loading {item.label}</span>}
+      {(pending || (isSelected && !isActive)) && (
+        <span className="sr-only">Loading {item.label}</span>
+      )}
     </>
   )
 }
 
 export function BottomNav() {
   const pathname = usePathname()
+  const [selectedHref, setSelectedHref] = useState<string | null>(null)
+
+  useEffect(() => {
+    setSelectedHref(null)
+  }, [pathname])
 
   return (
     <nav
@@ -60,22 +70,30 @@ export function BottomNav() {
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(`${item.href}/`)
+          const isSelected = selectedHref
+            ? selectedHref === item.href
+            : isActive
 
           return (
             <Link
               key={item.href}
               href={item.href}
               aria-current={isActive ? "page" : undefined}
+              onClick={() => setSelectedHref(isActive ? null : item.href)}
               className={cn(
                 "flex flex-col items-center justify-center gap-1 px-1 py-2 transition-all duration-150",
                 "min-h-11 min-w-0 flex-1 rounded-lg",
                 "active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset",
-                isActive
+                isSelected
                   ? "text-primary"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              <BottomNavItem item={item} isActive={isActive} />
+              <BottomNavItem
+                item={item}
+                isActive={isActive}
+                isSelected={isSelected}
+              />
             </Link>
           )
         })}

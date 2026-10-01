@@ -108,11 +108,13 @@ describe("AddRecipeToPlanModal", () => {
     const pendingAdd = deferred<unknown>()
     addToPlanMutateAsync.mockReturnValueOnce(pendingAdd.promise)
     const onOpenChange = vi.fn()
+    const onAdded = vi.fn()
 
     render(
       <AddRecipeToPlanModal
         open
         onOpenChange={onOpenChange}
+        onAdded={onAdded}
         weekDate="2026-03-09"
         targetDayIndex={2}
         weekStartDay={1}
@@ -132,6 +134,7 @@ describe("AddRecipeToPlanModal", () => {
 
     expect(addToPlanMutateAsync).toHaveBeenCalledTimes(1)
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(onAdded).not.toHaveBeenCalled()
 
     await act(async () => {
       pendingAdd.resolve(undefined)
@@ -141,6 +144,7 @@ describe("AddRecipeToPlanModal", () => {
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false)
     })
+    expect(onAdded).toHaveBeenCalledTimes(1)
 
     expect(addToPlanMutateAsync).toHaveBeenCalledWith({
       weekDate: "2026-03-09",

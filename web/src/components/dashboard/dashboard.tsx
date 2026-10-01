@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import Image from 'next/image';
+import { DashboardMealImage } from './dashboard-meal-image';
 import Link from 'next/link';
 import { Check, MoreHorizontal, Plus, UtensilsCrossed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -103,6 +103,7 @@ function MealMenu({
   ) => void;
 }) {
   const trigger = useRef<HTMLButtonElement>(null);
+  const selectedAction = useRef<Parameters<typeof onAction>[0] | null>(null);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -116,30 +117,40 @@ function MealMenu({
           <MoreHorizontal className="h-5 w-5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          const action = selectedAction.current;
+          selectedAction.current = null;
+          if (action) {
+            event.preventDefault();
+            onAction(action, recipe, trigger.current);
+          }
+        }}
+      >
         <DropdownMenuItem
           className="min-h-11"
           disabled={cooked}
-          onSelect={() => onAction('swap', recipe, trigger.current)}
+          onSelect={() => { selectedAction.current = 'swap'; }}
         >
           Swap meal
         </DropdownMenuItem>
         <DropdownMenuItem
           className="min-h-11"
           disabled={cooked}
-          onSelect={() => onAction('shopping', recipe, trigger.current)}
+          onSelect={() => { selectedAction.current = 'shopping'; }}
         >
           Add to shopping
         </DropdownMenuItem>
         <DropdownMenuItem
           className="min-h-11"
-          onSelect={() => onAction('move', recipe, trigger.current)}
+          onSelect={() => { selectedAction.current = 'move'; }}
         >
           Move to another day
         </DropdownMenuItem>
         <DropdownMenuItem
           className="min-h-11 text-destructive"
-          onSelect={() => onAction('remove', recipe, trigger.current)}
+          onSelect={() => { selectedAction.current = 'remove'; }}
         >
           Remove from plan
         </DropdownMenuItem>
@@ -355,7 +366,7 @@ function DashboardWeek({
   const heading = useRef<HTMLHeadingElement>(null);
   function restoreDialogFocus(event: Event) {
     event.preventDefault();
-    if (dialogTrigger.current?.isConnected) dialogTrigger.current.focus();
+    if (dialogTrigger.current?.isConnected && !dialogTrigger.current.disabled) dialogTrigger.current.focus();
     else heading.current?.focus();
   }
   function openAdd(day: number, trigger: HTMLButtonElement) {
@@ -608,17 +619,7 @@ function DashboardWeek({
                         href={buildRecipeDetailHref(recipe.id, 'dashboard')}
                         aria-label={`Open ${recipe.name}`}
                       >
-                        {image ? (
-                          <Image
-                            src={image}
-                            alt=""
-                            width={500}
-                            height={330}
-                            unoptimized={image.includes('supabase')}
-                          />
-                        ) : (
-                          <UtensilsCrossed className="h-7 w-7" aria-hidden />
-                        )}
+                        <DashboardMealImage src={image} />
                       </Link>
                       <Link
                         className="dashboard-card-title"
@@ -767,18 +768,16 @@ function DashboardWeek({
           )}
         </section>
       </div>
-      {addDay !== null && (
-        <AddRecipeToPlanModal
-          onCloseAutoFocus={restoreDialogFocus}
-          open
-          onOpenChange={(open) => {
-            if (!open) setAddDay(null);
-          }}
-          weekDate={week}
-          weekStartDay={weekStartDay}
-          targetDayIndex={addDay}
-        />
-      )}
+      <AddRecipeToPlanModal
+        onCloseAutoFocus={restoreDialogFocus}
+        open={addDay !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddDay(null);
+        }}
+        weekDate={week}
+        weekStartDay={weekStartDay}
+        targetDayIndex={addDay}
+      />
       {swap && (
         <SwapMealDialog
           onCloseAutoFocus={restoreDialogFocus}

@@ -41,6 +41,24 @@ as $$
   ) from unresolved;
 $$;
 
+-- Test-only authenticated endpoint analogue. The production endpoint derives
+-- this same owner with getUser; the migration grants these RPCs to service only.
+create function public.test_delete_recipe(p_recipe uuid) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare v_owner uuid := auth.uid(); v_operation uuid := gen_random_uuid(); v_admission jsonb; v_context jsonb;
+begin
+  if v_owner is null then raise exception 'authentication required' using errcode = '42501'; end if;
+  v_admission := public.shopping_admit(v_owner,v_operation,repeat('d',64),false);
+  v_context := public.shopping_command_context(v_owner,(v_admission->>'sequence')::bigint,v_operation,repeat('d',64));
+  perform public.shopping_commit(v_owner,(v_admission->>'sequence')::bigint,v_operation,repeat('d',64),
+    (v_context#>>'{row,content_revision}')::bigint,(v_context->>'dependencyRevision')::bigint,
+    '{"schemaVersion":3,"recipeEntries":{},"manualItems":[],"itemOverrides":{},"preferences":{"categoryByIngredient":{},"customCategories":[],"categoryOrder":[],"ingredientOrderByCategory":{},"excludedIngredientKeys":[],"excludeSaltVariants":false,"excludeBlackPepperVariants":false}}',
+    'Applied','deleteRecipe',null,p_recipe);
+  return p_recipe;
+end;
+$$;
+revoke all on function public.test_delete_recipe(uuid) from public, anon;
+grant execute on function public.test_delete_recipe(uuid) to authenticated;
 insert into auth.users(id, email) values
   ('71000000-0000-4000-8000-000000000001', 'deletion-owner-a@example.test'),
   ('72000000-0000-4000-8000-000000000002', 'deletion-owner-b@example.test');
@@ -133,7 +151,7 @@ alter table public.weekly_plans enable trigger sync_weekly_plan_recipe_uuids;
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000001', true);
 select extensions.is(
-  public.delete_recipe('71111111-1111-4111-8111-111111111111'),
+  public.test_delete_recipe('71111111-1111-4111-8111-111111111111'),
   '71111111-1111-4111-8111-111111111111'::uuid,
   'atomic deletion succeeds for the same owner'
 );
@@ -229,7 +247,7 @@ select extensions.is(
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '71000000-0000-4000-8000-000000000001', true);
 select extensions.throws_ok($$
-  select public.delete_recipe('72444444-4444-4444-8244-444444444444')
+  select public.test_delete_recipe('72444444-4444-4444-8244-444444444444')
 $$, '23503', 'recipe UUID is unresolved or belongs to another user',
   'cross-owner deletion remains non-disclosing'
 );

@@ -1,126 +1,58 @@
-"use client"
+'use client';
 
-import { useCallback, useMemo } from "react"
-import { parsePantryCandidates, normalizePantryItemName, getPantryFailureInput } from "@/lib/pantry"
-import {
-  useUpdateExcludedKeywords,
-  useShoppingConfig,
-} from "@/hooks/use-shopping"
+import { parsePantryCandidates, getPantryFailureInput } from '@/lib/pantry';
+import { createShoppingPurchaseKey } from '@/lib/shopping-list-normalization';
+import { useSetShoppingExclusion, useShoppingConfig } from '@/hooks/use-shopping';
 
-export type PantryKeywordOutcomeStatus = "success" | "duplicate" | "failure"
-
+export type PantryKeywordOutcomeStatus = 'success' | 'duplicate' | 'failure';
 export interface PantryKeywordOutcome {
-  input: string
-  normalizedKeyword: string
-  status: PantryKeywordOutcomeStatus
-  error?: string
+  input: string;
+  normalizedKeyword: string;
+  status: PantryKeywordOutcomeStatus;
+  error?: string;
 }
-
 export interface PantryKeywordMutationResult {
-  outcomes: PantryKeywordOutcome[]
-  unresolvedInput: string
+  outcomes: PantryKeywordOutcome[];
+  unresolvedInput: string;
 }
 
 export function usePantryExcludedKeywords() {
-  const configQuery = useShoppingConfig()
-  const updateExcludedKeywords = useUpdateExcludedKeywords()
-
-  const excludedKeywords = useMemo(
-    () => configQuery.data?.excluded_keywords ?? [],
-    [configQuery.data]
-  )
-
-  const addKeywordsMutateAsync = useCallback(
-    async (rawInput: string): Promise<PantryKeywordMutationResult> => {
-      const candidates = parsePantryCandidates(rawInput)
-      const currentKeywords = new Set(excludedKeywords)
-      const outcomes: PantryKeywordOutcome[] = []
-      const nextKeywords = [...excludedKeywords]
-
-      for (const candidate of candidates) {
-        const normalizedKeyword = normalizePantryItemName(candidate)
-        if (currentKeywords.has(normalizedKeyword)) {
-          outcomes.push({
-            input: candidate,
-            normalizedKeyword,
-            status: "duplicate",
-          })
-          continue
-        }
-
-        currentKeywords.add(normalizedKeyword)
-        nextKeywords.push(normalizedKeyword)
-        outcomes.push({
-          input: candidate,
-          normalizedKeyword,
-          status: "success",
-        })
+  const config = useShoppingConfig();
+  const update = useSetShoppingExclusion();
+  const add = async (rawInput: string): Promise<PantryKeywordMutationResult> => {
+    const outcomes: PantryKeywordOutcome[] = [];
+    // Capture this mutation closure for the whole submission, including its owner.
+    for (const input of parsePantryCandidates(rawInput)) {
+      const normalizedKeyword = createShoppingPurchaseKey(input);
+      try {
+        const result = await update.mutateAsync({ keyword: input, enabled: true });
+        outcomes.push({ input, normalizedKeyword, status: result === 'applied' ? 'success' : 'duplicate' });
+      } catch (error) {
+        // The document hook owns the visible error toast; retain failed input.
+        outcomes.push({ input, normalizedKeyword, status: 'failure',
+          error: error instanceof Error ? error.message : 'Could not save this exclusion.' });
       }
-
-      const didChange = outcomes.some((outcome) => outcome.status === "success")
-      if (didChange) {
-        try {
-          await updateExcludedKeywords.mutateAsync(nextKeywords)
-        } catch (error) {
-          return {
-            outcomes: outcomes.map((outcome) =>
-              outcome.status === "success"
-                ? {
-                    ...outcome,
-                    status: "failure",
-                    error: error instanceof Error ? error.message : "Failed to update excluded keywords",
-                  }
-                : outcome
-            ),
-            unresolvedInput: getPantryFailureInput(
-              outcomes.map((outcome) =>
-                outcome.status === "success"
-                  ? { ...outcome, status: "failure" }
-                  : outcome
-              )
-            ),
-          }
-        }
-      }
-
-      return {
-        outcomes,
-        unresolvedInput: getPantryFailureInput(outcomes),
-      }
-    },
-    [excludedKeywords, updateExcludedKeywords]
-  )
-
-  const removeKeywordMutateAsync = useCallback(
-    async (keyword: string) => {
-      const normalizedKeyword = normalizePantryItemName(keyword)
-      const nextKeywords = excludedKeywords.filter(
-        (currentKeyword) => currentKeyword !== normalizedKeyword
-      )
-
-      await updateExcludedKeywords.mutateAsync(nextKeywords)
-      return normalizedKeyword
-    },
-    [excludedKeywords, updateExcludedKeywords]
-  )
-
+    }
+    return { outcomes, unresolvedInput: getPantryFailureInput(outcomes) };
+  };
+  const remove = async (keyword: string) => {
+    await update.mutateAsync({ keyword, enabled: false });
+    return createShoppingPurchaseKey(keyword);
+  };
   return {
-    data: excludedKeywords,
-    isLoading: configQuery.isLoading,
-    isFetching: configQuery.isFetching,
+    data: config.data?.excluded_keywords ?? [],
+    isLoading: config.isLoading,
+    isFetching: config.isFetching,
     addKeywords: {
-      mutateAsync: addKeywordsMutateAsync,
-      mutate: (rawInput: string) => {
-        void addKeywordsMutateAsync(rawInput)
-      },
-      isPending: updateExcludedKeywords.isPending,
+      mutateAsync: add,
+      mutate: (input: string) => { void add(input); },
+      isPending: update.isPending,
     },
     removeKeyword: {
-      mutateAsync: removeKeywordMutateAsync,
-      mutate: (keyword: string) => {
-        void removeKeywordMutateAsync(keyword)
-      },
-      isPending: updateExcludedKeywords.isPending,
+      mutateAsync: remove,
+      // The mutation hook reports the error; fire-and-forget callers need no rejection.
+      mutate: (keyword: string) => { void remove(keyword).catch(() => {}); },
+      isPending: update.isPending,
     },
-  }
+  };
 }

@@ -79,6 +79,9 @@ interface PantryPanelProps {
   items: PantryItem[]
   isLoading: boolean
   isFetching: boolean
+  readError?: boolean
+  hasData?: boolean
+  onRetry?: () => void
   newItem: string
   query: string
   feedback: InlineFeedback | null
@@ -97,6 +100,9 @@ function PantryPanel({
   isLoading,
   isFetching,
   newItem,
+  readError,
+  hasData,
+  onRetry,
   query,
   feedback,
   isAdding,
@@ -123,12 +129,12 @@ function PantryPanel({
           <Package className="h-5 w-5" />
           Pantry Items
           <span className="rounded-full bg-sage-100 px-2 py-0.5 text-xs font-medium text-sage-700">
-            {items.length}
+            {hasData === false ? "—" : items.length}
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Items you already have at home. These will be excluded from shopping
-          lists.
+          Pantry changes apply to matching recipe ingredients in your current
+          shopping list. Manual items and explicit row choices stay as set.
         </p>
       </CardHeader>
       <CardContent>
@@ -181,7 +187,13 @@ function PantryPanel({
           </p>
         ) : null}
 
-        {showLoading ? (
+        {readError ? (
+          <div role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <p>{hasData ? 'Couldn’t refresh pantry items. Showing the last loaded items.' : 'Couldn’t load pantry items. Try again.'}</p>
+            <Button variant="outline" onClick={onRetry} disabled={isFetching}>Try again</Button>
+          </div>
+        ) : null}
+        {readError && !hasData ? null : showLoading ? (
           <p className="py-4 text-center text-muted-foreground">
             Loading pantry items...
           </p>
@@ -292,8 +304,8 @@ function ExcludedIngredientsPanel({
           </span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Keep common staples and exact ingredient names out of newly generated
-          shopping lists.
+          Keep common staples and matching recipe ingredients out of your
+          current shopping list.
         </p>
       </CardHeader>
       <CardContent>
@@ -306,8 +318,8 @@ function ExcludedIngredientsPanel({
               Always exclude
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              Clear/reset the shopping list, then regenerate it to reliably
-              rebuild with current settings.
+              Changes apply to your current shopping list. Manual items and
+              explicit row choices stay as set; no clearing or regeneration is needed.
             </p>
           </div>
           {familySettingsLoading ? (
@@ -504,6 +516,8 @@ export function PantryList() {
     data: pantryItems,
     isLoading: pantryLoading,
     isFetching: pantryFetching,
+    isError: pantryReadError,
+    refetch: retryPantry,
   } = usePantryItems()
   const {
     data: excludedKeywords,
@@ -519,22 +533,20 @@ export function PantryList() {
   const undoToast = useUndoToast()
   const userConfig = useShoppingConfig()
   const updateIngredientExclusion = useUpdateIngredientExclusionSetting()
+  const [failedFamilyChange, setFailedFamilyChange] = useState<{
+    setting: IngredientExclusionSetting; enabled: boolean
+  } | null>(null)
 
   const handleIngredientExclusionChange = useCallback(
     (setting: IngredientExclusionSetting, enabled: boolean) => {
-      updateIngredientExclusion.mutate(
-        { setting, enabled },
-        {
-          onError: () => {
-            undoToast.show({
-              message: "Could not save the shopping exclusion setting. Try again.",
-              duration: 4000,
-            })
-          },
-        }
-      )
+      updateIngredientExclusion.mutate({ setting, enabled }, {
+        onSuccess: () => setFailedFamilyChange((pending) =>
+          pending?.setting === setting ? null : pending),
+        // The mutation owns the conflict toast. Retain the requested choice.
+        onError: () => setFailedFamilyChange({ setting, enabled }),
+      })
     },
-    [undoToast, updateIngredientExclusion]
+    [updateIngredientExclusion]
   )
 
   const handleRemovePantryItem = useCallback(
@@ -634,10 +646,12 @@ export function PantryList() {
   const handleAddKeyword = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!newKeyword.trim()) return
+    const submittedInput = newKeyword
 
     try {
-      const result = await addKeywords.mutateAsync(newKeyword)
-      setNewKeyword(result.unresolvedInput)
+      const result = await addKeywords.mutateAsync(submittedInput)
+      setNewKeyword((current) =>
+        current === submittedInput ? result.unresolvedInput : current)
       const message = summarizeOutcomes("Excluded keywords", result.outcomes)
       setKeywordFeedback(message ? { message, tone: "neutral" } : null)
     } catch (error) {
@@ -649,11 +663,21 @@ export function PantryList() {
     }
   }
 
-  const pantryCount = displayedPantryItems.length
+  const pantryCount = pantryItems === undefined ? "—" : displayedPantryItems.length
   const keywordCount = displayedKeywords.length
 
   return (
     <div className="space-y-6">
+      {failedFamilyChange && (
+        <div role="alert" className="rounded-lg border p-3 text-sm">
+          {failedFamilyChange.setting === "exclude_salt_variants" ? "Salt variants" : "Black pepper variants"}
+          {" could not be turned "}{failedFamilyChange.enabled ? "on" : "off"}{". "}
+          <Button variant="outline" size="sm" disabled={updateIngredientExclusion.isPending}
+            onClick={() => handleIngredientExclusionChange(failedFamilyChange.setting, failedFamilyChange.enabled)}>
+            Try again
+          </Button>
+        </div>
+      )}
       <div className="space-y-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -716,6 +740,9 @@ export function PantryList() {
           items={displayedPantryItems}
           isLoading={pantryLoading}
           isFetching={pantryFetching}
+          readError={pantryReadError}
+          hasData={pantryItems !== undefined}
+          onRetry={() => void retryPantry()}
           newItem={newItem}
           query={pantryQuery}
           feedback={pantryFeedback}

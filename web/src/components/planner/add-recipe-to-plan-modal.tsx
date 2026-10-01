@@ -36,6 +36,7 @@ interface AddRecipeToPlanModalProps {
   /** Week start day (0=Sunday, 1=Monday, etc.) for converting to day-of-week. */
   weekStartDay?: number
   onCloseAutoFocus?: (event: Event) => void
+  onAdded?: () => void
 }
 
 export function AddRecipeToPlanModal({
@@ -45,6 +46,7 @@ export function AddRecipeToPlanModal({
   targetDayIndex = null,
   weekStartDay = 1,
   onCloseAutoFocus,
+  onAdded,
 }: AddRecipeToPlanModalProps) {
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState<string | null>(null)
@@ -92,6 +94,7 @@ export function AddRecipeToPlanModal({
         recipeId: selectedRecipeId,
         dayOfWeek: targetDayIndex != null ? (weekStartDay + targetDayIndex) % 7 : undefined,
       })
+      onAdded?.()
       handleOpenChange(false)
     })
   }

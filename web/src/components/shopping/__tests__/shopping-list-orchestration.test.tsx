@@ -8,6 +8,15 @@ import type { ShoppingConfig, ShoppingItem, ShoppingList } from "@/types/databas
 
 globalThis.React = React
 
+// This suite exercises the pre-initialization list orchestration; the activated
+// controls are covered through real authenticated Slice 7 browser workflows.
+vi.mock('@/hooks/shopping/use-shopping-document', async importOriginal => ({
+  ...await importOriginal<typeof import('@/hooks/shopping/use-shopping-document')>(),
+  useOrganizeShopping: () => ({ mutateAsync: vi.fn() }),
+  useShoppingDocumentState: () => ({ data: undefined }),
+  useShoppingFoundationCommand: () => ({ isPending: false }),
+}))
+
 type ResolveFn = () => void
 
 type CheckIntent = {
@@ -27,6 +36,7 @@ const removeRecipeItemsMutate = vi.fn<
   (recipe: { recipeId?: string; recipeName: string }) => void
 >()
 const clearListMutate = vi.fn()
+const restoreContentMutate = vi.fn()
 let removedRecipeRows: ShoppingItem[] = []
 let clearedList: ShoppingList | null = null
 const moveToListMutate = vi.fn<
@@ -47,6 +57,7 @@ const checkOffMutateAsync = vi.fn<
   (intent: CheckIntent) => Promise<CheckIntent>
 >()
 const pendingCheckMutations: PendingCheckMutation[] = []
+let dndOnDragStart: ((event: { active: { id: string } }) => void) | null = null
 let dndOnDragEnd: ((event: {
   active: { id: string }
   over: { id: string } | null
@@ -65,6 +76,8 @@ vi.mock("next/navigation", () => ({
   }),
 }))
 
+let currentSelections: { recipeId: string; recipeName: string; label: string; selectedServings: number }[] = []
+let currentReadState: Record<string, unknown> = {}
 let currentShoppingList: ShoppingList
 let currentConfig: ShoppingConfig
 let consoleErrorSpy: ReturnType<typeof vi.spyOn>
@@ -171,14 +184,14 @@ function expectCategoryExpanded(categoryKey: string, expanded: boolean) {
 function toggleCategory(categoryKey: string) {
   const section = screen.getByTestId(`shopping-category-${categoryKey}`)
   const label = section.querySelector('[role="button"][aria-expanded="true"]')
-    ? "Collapse category"
-    : "Expand category"
+    ? /^Collapse .* category$/
+    : /^Expand .* category$/
   fireEvent.click(within(section).getByRole("button", { name: label }))
 }
 
 function chooseRowAction(name: string, rowIndex = 0) {
   fireEvent.pointerDown(
-    screen.getAllByRole("button", { name: "Item actions" })[rowIndex]
+    screen.getAllByRole("button", { name: /^Actions for / })[rowIndex]
   )
   fireEvent.click(screen.getByRole("menuitem", { name }))
 }
@@ -187,7 +200,7 @@ function getItemCheckbox(itemName: string) {
   const row = screen.getByText(itemName).closest('[data-testid="shopping-item-row"]')
   if (!row) throw new Error(`Shopping row not found for ${itemName}`)
   return within(row as HTMLElement).getByRole("button", {
-    name: /^(Check off|Uncheck) item$/,
+    name: `Check off ${itemName}`,
   })
 }
 
@@ -276,10 +289,12 @@ vi.mock("next/image", () => ({
 }))
 
 vi.mock("@dnd-kit/core", () => ({
-  DndContext: ({ children, onDragEnd }: {
+  DndContext: ({ children, onDragEnd, onDragStart }: {
     children: React.ReactNode
+    onDragStart: typeof dndOnDragStart
     onDragEnd: typeof dndOnDragEnd
   }) => {
+    dndOnDragStart = onDragStart
     dndOnDragEnd = onDragEnd
     return <>{children}</>
   },
@@ -330,8 +345,11 @@ vi.mock("@/hooks/use-recipes", () => ({
 }))
 
 vi.mock("@/hooks/use-shopping", () => ({
+  SHOPPING_CLEAR_UNDO_UNAVAILABLE: 'Undo is available for 10 minutes unless content changes or a source is deleted.',
   useShoppingList: () => ({
     data: useSyncExternalStore(subscribeShoppingList, () => currentShoppingList),
+    selections: currentSelections,
+    ...currentReadState,
     isLoading: false,
     isFetching: false,
   }),
@@ -378,7 +396,7 @@ vi.mock("@/hooks/use-shopping", () => ({
     isPending: false,
   }),
   useRestoreShoppingContent: () => ({
-    mutate: () => { if (clearedList) setShoppingList(clearedList) },
+    mutate: restoreContentMutate,
     isPending: false,
   }),
   useCheckOffItem: () => ({
@@ -601,6 +619,8 @@ vi.mock("@/hooks/use-shopping", () => ({
   pendingCheckMutations.length = 0
   moveExcludedResolvers.length = 0
   dndOnDragEnd = null
+  currentSelections = []
+  currentReadState = {}
   currentConfig = makeConfig()
   currentShoppingList = makeList()
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((message, ...args) => {
@@ -634,26 +654,27 @@ vi.mock("@/hooks/use-shopping", () => ({
   })
 
   removeRecipeItemsMutate.mockImplementation((recipe, options?: { onSuccess?: (value: { entry: object }) => void }) => {
-    const recipeName = recipe.recipeName
+    const recipeId = recipe.recipeId
     removedRecipeRows = currentShoppingList.items.filter(
-      (item) => (item.sources || []).some((source) => source.recipeName === recipeName)
+      (item) => (item.sources || []).some((source) => source.recipeId === recipeId)
     )
     updateShoppingList((prev) => ({
       ...prev,
       items: prev.items.filter(
-        (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
+        (item) => !(item.sources || []).some((source) => source.recipeId === recipeId)
       ),
       already_have: prev.already_have.filter(
-        (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
+        (item) => !(item.sources || []).some((source) => source.recipeId === recipeId)
       ),
       excluded: prev.excluded.filter(
-        (item) => !(item.sources || []).some((source) => source.recipeName === recipeName)
+        (item) => !(item.sources || []).some((source) => source.recipeId === recipeId)
       ),
     }))
     options?.onSuccess?.({ entry: {} })
   })
 
-  clearListMutate.mockImplementation((_value?: unknown, options?: { onSuccess?: (value: object) => void }) => {
+  restoreContentMutate.mockImplementation(() => { if (clearedList) setShoppingList(clearedList) })
+  clearListMutate.mockImplementation((_value?: unknown, options?: { onSuccess?: (value: object | null) => void }) => {
     clearedList = cloneList(currentShoppingList)
     updateShoppingList((prev) => ({
       ...prev,
@@ -665,7 +686,11 @@ vi.mock("@/hooks/use-shopping", () => ({
       total_servings: 0,
       custom_order: false,
     }))
-    options?.onSuccess?.({})
+    options?.onSuccess?.({
+      ownerUserId: 'user-1',
+      postClearRevision: 8, undoAvailable: true,
+      content: { recipeEntries: Object.fromEntries((clearedList.source_recipes || []).map((id) => [id, {}])) },
+    })
   })
 
   moveToListMutate.mockImplementation((item: ShoppingItem, options) => {
@@ -915,7 +940,7 @@ describe("ShoppingListView orchestration", () => {
     })
 
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Quick add to pantry" }))
+      fireEvent.click(screen.getByRole("button", { name: /^Add .* to pantry$/ }))
     })
 
     expect(addToPantryAndRemoveMutate).toHaveBeenCalledWith(
@@ -935,7 +960,7 @@ describe("ShoppingListView orchestration", () => {
 
     renderShoppingList()
 
-    expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Reorder / })).not.toBeInTheDocument()
     expect(screen.queryByText("Manage Mode")).not.toBeInTheDocument()
 
     act(() => {
@@ -946,14 +971,14 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(screen.getByText("Manage Mode")).toBeInTheDocument()
-    expect(screen.getAllByRole("button", { name: "Drag to reorder" }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole("button", { name: /^Reorder / }).length).toBeGreaterThan(0)
 
     act(() => {
       fireEvent.click(screen.getByRole("button", { name: "Done" }))
     })
 
     expect(screen.queryByText("Manage Mode")).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Drag to reorder" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /^Reorder / })).not.toBeInTheDocument()
   })
 
   it("routes mouse, touch, and keyboard drops through one reusable reorder intent", async () => {
@@ -976,6 +1001,7 @@ describe("ShoppingListView orchestration", () => {
     expect(dndOnDragEnd).not.toBeNull()
 
     await act(async () => {
+      dndOnDragStart?.({ active: { id: "manual:apple" } })
       await dndOnDragEnd?.({
         active: { id: "manual:apple" },
         over: { id: "manual:milk" },
@@ -999,6 +1025,7 @@ describe("ShoppingListView orchestration", () => {
       ],
     })
 
+    currentSelections = [{ recipeId: '11111111-1111-4111-8111-111111111111', recipeName: 'Stew', label: 'Stew', selectedServings: 4 }]
     renderShoppingList()
 
     const recipeContext = screen.getByTestId("shopping-recipe-context")
@@ -1023,6 +1050,7 @@ describe("ShoppingListView orchestration", () => {
       items: [makeItem("apples", { sources: [{ recipeName: "Stew" }] })],
     })
 
+    currentSelections = [{ recipeId: '11111111-1111-4111-8111-111111111111', recipeName: 'Stew', label: 'Stew', selectedServings: 4 }]
     renderShoppingList()
 
     expect(screen.getByTestId("shopping-recipe-context")).toBeInTheDocument()
@@ -1115,7 +1143,7 @@ describe("ShoppingListView orchestration", () => {
       value: scrollIntoView,
     })
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Collapse category" })[1])
+    fireEvent.click(screen.getAllByRole("button", { name: /^Collapse .* category$/ })[1])
     expect(screen.queryByText("rice")).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "Jump to Pantry" }))
@@ -1133,7 +1161,7 @@ describe("ShoppingListView orchestration", () => {
 
     fireEvent.click(getItemCheckbox("apples"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
     expect(getItemCheckbox("apples")).not.toBeDisabled()
     expect(checkOffMutateAsync).toHaveBeenCalledWith({
@@ -1152,7 +1180,7 @@ describe("ShoppingListView orchestration", () => {
 
     fireEvent.click(getItemCheckbox("apples"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
     expect(checkOffMutateAsync).toHaveBeenCalledWith({
       rowRef: "manual:apples",
@@ -1170,9 +1198,9 @@ describe("ShoppingListView orchestration", () => {
     fireEvent.click(getItemCheckbox("bananas"))
     fireEvent.click(getItemCheckbox("carrots"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
-    expect(getItemCheckbox("bananas")).toHaveAccessibleName("Uncheck item")
-    expect(getItemCheckbox("carrots")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
+    expect(getItemCheckbox("bananas")).toHaveAttribute("aria-pressed", "true")
+    expect(getItemCheckbox("carrots")).toHaveAttribute("aria-pressed", "true")
     expect(pendingCheckMutations).toHaveLength(3)
 
     await resolveNextCheckMutation()
@@ -1181,7 +1209,7 @@ describe("ShoppingListView orchestration", () => {
     toggleCategory("produce")
 
     for (const itemName of ["apples", "bananas", "carrots"]) {
-      expect(getItemCheckbox(itemName)).toHaveAccessibleName("Uncheck item")
+      expect(getItemCheckbox(itemName)).toHaveAttribute("aria-pressed", "true")
       expect(getItemCheckbox(itemName)).not.toHaveAttribute("aria-busy")
     }
   })
@@ -1199,12 +1227,12 @@ describe("ShoppingListView orchestration", () => {
       const checkbox = getItemCheckbox(`benchmark item ${index}`)
       const startedAt = nodePerformance.now()
       fireEvent.click(checkbox)
-      expect(checkbox).toHaveAccessibleName("Uncheck item")
+      expect(checkbox).toHaveAttribute("aria-pressed", "true")
       return nodePerformance.now() - startedAt
     })
 
     expect(pendingCheckMutations).toHaveLength(12)
-    expect(screen.getAllByRole("button", { name: "Uncheck item" })).toHaveLength(12)
+    expect(screen.getAllByRole("button", { name: /^Check off /, pressed: true })).toHaveLength(12)
 
     if (process.env.RG_PERF_LOG === "1") {
       const sorted = [...durations].sort((left, right) => left - right)
@@ -1229,16 +1257,16 @@ describe("ShoppingListView orchestration", () => {
 
     expect(checkOffMutateAsync.mock.calls.map(([intent]) => intent.checked))
       .toEqual([true, false])
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
 
     await resolveNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
 
     await resolveNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
   })
 
@@ -1251,12 +1279,12 @@ describe("ShoppingListView orchestration", () => {
 
     await rejectNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).toHaveAttribute("aria-busy", "true")
 
     await resolveNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
   })
 
@@ -1265,16 +1293,16 @@ describe("ShoppingListView orchestration", () => {
     renderShoppingList()
 
     fireEvent.click(getItemCheckbox("apples"))
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
 
     await rejectNextCheckMutation()
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Check off item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "false")
     expect(getItemCheckbox("apples")).not.toHaveAttribute("aria-busy")
 
     fireEvent.click(getItemCheckbox("apples"))
 
-    expect(getItemCheckbox("apples")).toHaveAccessibleName("Uncheck item")
+    expect(getItemCheckbox("apples")).toHaveAttribute("aria-pressed", "true")
     expect(checkOffMutateAsync).toHaveBeenCalledTimes(2)
   })
 
@@ -1294,7 +1322,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByRole("button", { name: "Complete Shopping" })).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByLabelText("0 left")).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByRole("button", { name: "Hide 2 done" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Expand .* category$/ })).toBeInTheDocument()
 
     resolveNextBulkMutation()
 
@@ -1302,7 +1330,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByText("All items checked!")).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByLabelText("0 left")).toBeInTheDocument()
     expect(within(screen.getByTestId("shopping-progress-summary")).getByRole("button", { name: "Hide 2 done" })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Expand category" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /^Expand .* category$/ })).toBeInTheDocument()
   })
 
   it("hides an item immediately, then restores it in the same category when undo is clicked", async () => {
@@ -1420,6 +1448,7 @@ describe("ShoppingListView orchestration", () => {
       ],
     })
 
+    currentSelections = [{ recipeId: '11111111-1111-4111-8111-111111111111', recipeName: 'Stew', label: 'Stew', selectedServings: 4 }]
     renderShoppingList()
 
     act(() => {
@@ -1439,7 +1468,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getAllByText("Stew").length).toBeGreaterThan(0)
   })
 
-  it("clears the list optimistically and restores the full snapshot on undo", async () => {
+  it("clears immediately and passes the committed manual-only result unchanged to Undo", async () => {
     currentShoppingList = makeList({
       items: [makeItem("garlic")],
       already_have: [makeItem("rice")],
@@ -1463,10 +1492,67 @@ describe("ShoppingListView orchestration", () => {
     })
 
     expect(clearListMutate).toHaveBeenCalledTimes(1)
+    expect(restoreContentMutate).toHaveBeenCalledWith({
+      ownerUserId: 'user-1', postClearRevision: 8, undoAvailable: true, content: { recipeEntries: {} },
+    })
     expect(screen.getByText("garlic")).toBeInTheDocument()
     expectCategoryExpanded("produce", true)
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
+  })
+
+  it('offers recipe-bearing Undo only after the committed capability confirms it', () => {
+    currentShoppingList = makeList({ items: [makeItem('garlic')], source_recipes: ['recipe-soup'] })
+    const preferences = structuredClone(currentConfig)
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is available for 10 minutes')
+    expect(clearListMutate).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear list' }))
+    expect(screen.getByText('Shopping list cleared')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeInTheDocument()
+    expect(currentShoppingList.items).toEqual([])
+    expect(currentShoppingList.source_recipes).toEqual([])
+    expect(currentConfig).toEqual(preferences)
+    expect(restoreContentMutate).not.toHaveBeenCalled()
+  })
+
+  it('reports an already-empty Clear without an Undo action', () => {
+    currentShoppingList = makeList({ items: [makeItem('garlic')] })
+    clearListMutate.mockImplementation((_value, options) => {
+      setShoppingList(makeList())
+      options.onSuccess(null)
+    })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByText('Shopping list is already clear')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(currentShoppingList.items).toEqual([])
+    expect(restoreContentMutate).not.toHaveBeenCalled()
+  })
+
+  it('withholds Undo when the committed Clear reports no capability', () => {
+    currentShoppingList = makeList({ items: [makeItem('garlic')] })
+    clearListMutate.mockImplementation((_value, options) => {
+      setShoppingList(makeList())
+      options.onSuccess({ ownerUserId: 'user-1', postClearRevision: 9, undoAvailable: false,
+        content: { recipeEntries: { hidden: {} } } })
+    })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByText('Shopping list cleared. Undo is unavailable for this Clear.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    expect(restoreContentMutate).not.toHaveBeenCalled()
+  })
+
+  it('can cancel a Clear containing only hidden recipe selections', () => {
+    currentShoppingList = makeList({ source_recipes: ['hidden-recipe'] })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is available for 10 minutes')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(clearListMutate).not.toHaveBeenCalled()
+    expect(currentShoppingList.source_recipes).toEqual(['hidden-recipe'])
   })
 
   it("moves an excluded item back into its category immediately without duplicate rendering", async () => {
@@ -1521,10 +1607,10 @@ describe("ShoppingListView orchestration", () => {
     expectCategoryExpanded("produce", false)
 
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Restore milk 1 cup In pantry" }))
+      fireEvent.click(screen.getByRole("button", { name: "Restore milk In pantry" }))
     })
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "Restore salt 1 tsp Excluded: salt" }))
+      fireEvent.click(screen.getAllByRole("button", { name: "Restore salt Excluded: salt" })[0])
     })
 
     expect(moveToListMutate).toHaveBeenCalledWith(
@@ -1557,7 +1643,8 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.queryByText("No shopping list yet")).not.toBeInTheDocument()
     expect(screen.getAllByText("In Pantry").length).toBeGreaterThan(0)
     expect(screen.getAllByText("Excluded").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("2 cups").length).toBeGreaterThan(0)
+    expect(screen.queryByText("2 cups")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Restore rice In pantry" })).toBeInTheDocument()
     expect(screen.getByText("Excluded: cilantro")).toBeInTheDocument()
   })
 
@@ -1647,7 +1734,7 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.queryByText("Edit manual item")).not.toBeInTheDocument()
     const updatedRow = screen.getByText("shallots").closest("li")
     expect(updatedRow).not.toBeNull()
-    expect(updatedRow).toHaveTextContent(/(1\/2|½)\s*lb/i)
+    expect(updatedRow).not.toHaveTextContent(/(1\/2|½)\s*lb/i)
   })
 
   it("keeps manual edits inline when the rename would create a duplicate", async () => {
@@ -1675,9 +1762,57 @@ describe("ShoppingListView orchestration", () => {
     const editor = screen.getByText("Edit manual item").closest("form")
     expect(editor).not.toBeNull()
     expect(within(editor as HTMLFormElement).getByRole("alert")).toHaveTextContent(
-      '"milk" is already on the shopping list.'
+      '"milk" is already on the shopping list. Choose a different ingredient name or cancel this edit.'
     )
     expect(screen.getByText("Edit manual item")).toBeInTheDocument()
     expect(screen.getByText("garlic")).toBeInTheDocument()
   })
+  it('targets duplicate Soup selections and a recipe named Manual by UUID even without rows', () => {
+    currentSelections = [
+      { recipeId: 'soup-a', recipeName: 'Soup', label: 'Soup (1)', selectedServings: 4 },
+      { recipeId: 'soup-b', recipeName: 'Soup', label: 'Soup (2)', selectedServings: 4 },
+      { recipeId: 'manual-recipe', recipeName: 'Manual', label: 'Manual', selectedServings: 4 },
+    ]
+    currentShoppingList = makeList({ source_recipes: currentSelections.map(entry => entry.recipeId) })
+    renderShoppingList()
+    const panel = within(screen.getByTestId('shopping-recipe-context'))
+    expect(screen.getByText(/Nothing left to buy/)).toBeVisible()
+    fireEvent.click(panel.getByRole('button', { name: 'View Soup (2)' }))
+    expect(routerPush).toHaveBeenLastCalledWith('/recipes/soup-b?from=shopping')
+    fireEvent.click(panel.getByRole('button', { name: 'View Manual' }))
+    expect(routerPush).toHaveBeenLastCalledWith('/recipes/manual-recipe?from=shopping')
+    fireEvent.click(panel.getByRole('button', { name: 'Remove all items from Soup (2)' }))
+    expect(removeRecipeItemsMutate).toHaveBeenCalledWith({ recipeId: 'soup-b', recipeName: 'Soup (2)' }, expect.anything())
+  })
+
+  it.each(['shopping', 'pantry'])('shows %s read recovery instead of empty success', (dependency) => {
+    const retry = vi.fn()
+    currentReadState = dependency === 'shopping'
+      ? { data: undefined, hasDocument: false, documentError: new Error('offline'), retryDocument: retry }
+      : { data: undefined, hasDocument: true, hasPantry: false, pantryError: new Error('offline'), retryPantry: retry }
+    renderShoppingList()
+    expect(screen.queryByText('Your shopping list is clear')).not.toBeInTheDocument()
+    expect(screen.getByText(dependency === 'shopping' ? 'Couldn’t load your shopping list. Try again.' : 'Couldn’t load pantry items. Try again.')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(retry).toHaveBeenCalledTimes(1)
+    for (const add of screen.queryAllByRole('button', { name: 'Add item' })) expect(add).toBeDisabled()
+  })
+
+  it('labels cached Pantry availability and keeps unrelated selection removal available', () => {
+    currentSelections = [{ recipeId: 'hidden', recipeName: 'Hidden', label: 'Hidden', selectedServings: 4 }]
+    currentReadState = { hasDocument: true, hasPantry: true, pantryError: new Error('offline'), retryPantry: vi.fn() }
+    renderShoppingList()
+    expect(screen.getByText(/Showing the last loaded availability/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Remove all items from Hidden' })).toBeEnabled()
+  })
+
+  it('keeps recipe-bearing Clear confirmation when Pantry cannot be loaded', () => {
+    currentSelections = [{ recipeId: 'hidden', recipeName: 'Hidden', label: 'Hidden', selectedServings: 4 }]
+    currentReadState = { data: undefined, hasDocument: true, hasPantry: false, pantryError: new Error('offline'), retryPantry: vi.fn() }
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('Undo is available for 10 minutes')
+    expect(clearListMutate).not.toHaveBeenCalled()
+  })
+
 })

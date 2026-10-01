@@ -10,6 +10,17 @@ function ToastHarness() {
     <div>
       <button
         type="button"
+        onClick={() => show({
+          message: "Shopping cleared",
+          onUndo: () => {
+            setTimeout(() => show({ message: "Undo was not applied", duration: 4000 }), 50)
+          },
+        })}
+      >
+        Clear shopping
+      </button>
+      <button
+        type="button"
         onClick={() => {
           show({
             message: "Saved changes",
@@ -39,6 +50,18 @@ function ToastHarness() {
 describe("UndoToastProvider", () => {
   afterEach(() => {
     vi.useRealTimers()
+  })
+
+  it("keeps an asynchronous Undo conflict visible past the old hide timer", () => {
+    vi.useFakeTimers()
+    render(<UndoToastProvider><ToastHarness /></UndoToastProvider>)
+    fireEvent.click(screen.getByRole("button", { name: "Clear shopping" }))
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }))
+    act(() => { vi.advanceTimersByTime(50) })
+    act(() => { vi.advanceTimersByTime(200) })
+    expect(screen.getByText("Undo was not applied")).toBeInTheDocument()
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(screen.getByText("Undo was not applied")).toBeInTheDocument()
   })
 
   it("dedupes repeated informational toasts instead of extending them", () => {

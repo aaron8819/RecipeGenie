@@ -262,10 +262,11 @@ meal, verifies ownership of the replacement, rejects duplicate membership, and
 updates membership plus day assignment together without changing unrelated
 meals, made state, or scale. Surface stale-state failures and refetch the plan.
 
-The implementation uses an owner-scoped conditional UPDATE guarded by current
-membership, made state, and assignments. Existing UUID synchronization triggers
-validate replacement ownership atomically. It changes only membership and
-assignments, with no full-plan upsert or remove/add sequence.
+The implementation uses migration 031's owner-scoped invoker RPC. It locks the
+plan and source recipe, compares current membership, made state and assignments,
+and checks current-week history after any concurrent history writer commits.
+History writes share the source lock. RLS and UUID synchronization validate
+ownership. Only membership and assignments change.
 
 Assess reuse of an existing atomic command first. If none supports these guards,
 prepare a narrowly scoped additive database function under the existing migration
@@ -334,3 +335,44 @@ mockup and existing uncommitted work are preserved on `codex/dashboard-mockup`.
 - `web/src/lib/{shopping-document,shopping-ingredient-resolution,recipe-detail-navigation,planner-route-state,planner-utils}.ts`
 - `docs/{planner-component,shopping-component,recipes-component,ARCHITECTURE_GUARDRAILS}.md`
 - `supabase/SCHEMA.md`, `web/public/manifest.json`, `web/src/app/page.tsx`
+
+## Independent-review corrections — October 1, 2026
+
+Integrated current `origin/main` at
+`624a97f9a39f6cc444b58dc13c07b49f58c3172e` into `codex/dashboard-mockup`.
+Shopping conflicts retain main's authoritative V4 screen and command admission.
+The earlier conditional UPDATE description above is superseded by migration 031's
+owner-scoped invoker RPC and shared recipe/history lock. The user authorized
+applying migrations only to a new disposable local stack (API 55321, DB 55322).
+Shared local and production databases were not migrated.
+
+The six review findings are corrected through authoritative partial-source
+reconstruction, shared check evidence, per-image failure fallback/direct loading
+for external hosts, atomic history-aware swaps, saved-scale yield initialization,
+and explicit dialog focus restoration. Dashboard menu actions now open dialogs
+only after the menu closes, avoiding an Escape/focus layer race. No approved
+visual layout or global CSP/image allowlist was changed.
+
+Browser regressions also exposed focus loss after successful saves: Planner's
+Shopping trigger now stays enabled during success feedback, successful empty-slot
+Add selects the persistent Planner fallback before that slot disappears, and
+Dashboard keeps its Add dialog mounted while closing so Radix can complete focus
+restoration. Cancel and Escape still restore the initiating control.
+
+Regression coverage lives in `dashboard-shopping-contract.test.ts`,
+`shopping-check-intents.test.tsx`, `dashboard-meal-image.test.tsx`, the updated
+Shopping selection/swap hook tests, and `planner_history_swap_guard.sql`.
+`test-dashboard-history-race.mjs` verifies a real concurrent history transaction;
+`verify-dashboard-corrections-local.mjs` verifies both requested browser sizes
+using disposable users and actual persistence. These are new candidate checks,
+not claims that modified review-only fixtures prove the unchanged product works.
+The final finding-to-fix handoff records exact commit/tree IDs and verification.
+Safari and physical iPhone remain unverified.
+
+Candidate verification: 133 unit test files / 2,066 tests pass with two workers;
+lint, type checking, webpack production build, migration reference integrity,
+staged artifact/secret/skip/type-error/UUID guards, and dependency checks pass.
+The disposable database passes 218 SQL tests across seven files and generated
+type parity. The two-transaction history race passes. Actual browser flows pass
+at 1440×900 and 390×844, including persistence, cross-view checks, image cases,
+stale-history rejection, dismissal, success and failed-save retry focus.

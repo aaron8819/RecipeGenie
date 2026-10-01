@@ -1651,7 +1651,7 @@ function RecipeFormContent({
     (section) => section.label === null
   )
   const ingredientEditor = (
-    <div className="space-y-5" data-testid="ingredient-sections-editor">
+    <div className={isEditing ? "space-y-4" : "space-y-5"} data-testid="ingredient-sections-editor">
       {ingredientSections.map((section, sectionIndex) => {
         const ingredientOffset = ingredientSections
           .slice(0, sectionIndex)
@@ -1672,10 +1672,12 @@ function RecipeFormContent({
         return (
           <section
             key={`ingredient-section-${sectionIndex}`}
-            className="rounded-2xl border border-stone-200 bg-muted/20 p-3 dark:border-zinc-800 sm:p-4"
+            className={isEditing
+              ? "rounded-xl border border-stone-200 bg-background px-3 py-2 dark:border-zinc-800 sm:px-4"
+              : "rounded-2xl border border-stone-200 bg-muted/20 p-3 dark:border-zinc-800 sm:p-4"}
             aria-label={`Ingredient section ${sectionIndex + 1}`}
           >
-            <div className="mb-3 flex items-center gap-2">
+            <div className={isEditing ? "mb-1 flex items-center gap-2 border-b border-stone-200 pb-1 dark:border-zinc-800" : "mb-3 flex items-center gap-2"}>
               <Input
                 aria-label={`Ingredient section ${sectionIndex + 1} label`}
                 value={section.label ?? ""}
@@ -1686,7 +1688,7 @@ function RecipeFormContent({
                   )
                 }
                 placeholder="Unsectioned"
-                className="min-w-0 flex-1 font-semibold"
+                className={isEditing ? "h-9 min-w-0 flex-1 border-0 bg-transparent px-1 text-sm font-bold uppercase tracking-wide shadow-none" : "min-w-0 flex-1 font-semibold"}
               />
               <Button
                 type="button"
@@ -1696,6 +1698,7 @@ function RecipeFormContent({
                 aria-label={`Delete ingredient section ${sectionIndex + 1}`}
                 title="Delete this section when it is empty"
                 className="shrink-0 text-muted-foreground hover:text-destructive"
+                disabled={isEditing && !isIngredientSectionEmpty(section)}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -1750,7 +1753,7 @@ function RecipeFormContent({
             <button
               type="button"
               onClick={() => onAddIngredient(sectionIndex)}
-              className="mt-3 inline-flex min-h-10 items-center gap-1 text-xs font-semibold text-primary transition-opacity hover:opacity-80"
+              className="mt-1 inline-flex min-h-10 items-center gap-1 text-xs font-semibold text-primary transition-opacity hover:opacity-80"
             >
               <Plus className="h-3.5 w-3.5" />
               Add ingredient

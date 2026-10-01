@@ -312,6 +312,30 @@ describe("Shopping document projection", () => {
     expect(document).toEqual(original)
   })
 
+  it('keeps explicit row choices while live Pantry and exclusions reclassify recipe requirements', () => {
+    const document = createEmptyShoppingDocument()
+    document.recipeEntries.a = entry('a', 'kosher salt', 1, { unit: 'tsp' })
+    document.manualItems.push({
+      id: 'manual-salt', displayName: 'kosher salt',
+      quantity: { amount: 2, unit: 'tsp' }, categoryKey: 'pantry',
+      bucket: 'items', checked: false,
+    })
+    const entries = structuredClone(document.recipeEntries)
+    const pantry = [{ item: 'kosher salt' } as PantryItem]
+    expect(projectShoppingDocument(document, pantry).alreadyHave).toHaveLength(1)
+    expect(projectShoppingDocument(document).alreadyHave).toHaveLength(0)
+    document.preferences.excludedIngredientKeys = ['kosher salt']
+    expect(projectShoppingDocument(document).excluded).toHaveLength(1)
+    document.preferences.excludedIngredientKeys = []
+    document.preferences.excludeSaltVariants = true
+    expect(projectShoppingDocument(document).excluded).toHaveLength(1)
+    const key = document.recipeEntries.a.ingredients[0].aggregateKey
+    document.itemOverrides[key] = { bucket: 'items' }
+    expect(projectShoppingDocument(document, pantry).items).toHaveLength(2)
+    expect(projectShoppingDocument(document).items).toHaveLength(2)
+    expect(document.recipeEntries).toEqual(entries)
+  })
+
   it("keeps bare pepper visible under black-pepper exclusion", () => {
     const document = createEmptyShoppingDocument()
     document.recipeEntries.a = entry("a", "pepper", 1, { unit: "tsp" })

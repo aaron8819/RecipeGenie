@@ -45,6 +45,8 @@ test.describe('Recipe Genie branding', () => {
     const manifestResponse = await page.request.get('/manifest.json')
     expect(manifestResponse.ok()).toBe(true)
     await expect(manifestResponse.json()).resolves.toMatchObject({
+      id: '/',
+      start_url: '/shopping',
       background_color: '#F7F3EA',
       theme_color: '#2F4B34',
       icons: [

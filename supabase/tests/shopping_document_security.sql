@@ -238,61 +238,39 @@ select extensions.ok(
   )) from shopping_v3_regression_fixture),
   'unexpected persisted V3 ingredient fields reject'
 );
-select extensions.lives_ok($$
-  update public.shopping_list set
-    document = (select document from shopping_v3_regression_fixture),
-    content_revision = 1
-  where user_id = auth.uid() and content_revision = 0
-$$, 'the V2-to-V3 lazy-upgrade persistence path accepts the production shape');
-select extensions.ok(
-  (select public.is_shopping_document_v3(document) from public.shopping_list),
-  'the compatibility schema accepts V3 application writes'
-);
-select extensions.is((select content_revision from public.shopping_list), 1::bigint, 'a write advances the revision once');
-select extensions.throws_ok($$ update public.shopping_list set content_revision = 3 where user_id = auth.uid() $$,
-  '40001', 'Shopping content revision must advance exactly once', 'skipped revisions reject');
-select extensions.throws_ok($$ update public.shopping_list set document = '{"schemaVersion":2}'::jsonb, content_revision = 2 where user_id = auth.uid() $$,
-  '23514', null, 'malformed documents reject');
-select extensions.throws_ok($$
-  update public.shopping_list
-  set document = jsonb_set(
-        document,
-        '{preferences,customCategories}',
-        '[{"key":"household","label":"Household"}]'::jsonb
-      ),
-      content_revision = 2
-  where user_id = auth.uid()
-$$, '23514', null, 'nested application-invalid documents reject');
-select extensions.lives_ok($$
-  update public.shopping_list set content_revision = 1
-  where user_id = '32000000-0000-4000-8000-000000000002'
-$$, 'a cross-owner update is safely filtered by RLS');
-select set_config('request.jwt.claim.sub', '32000000-0000-4000-8000-000000000002', true);
-select extensions.lives_ok($$
-  select * from public.move_shopping_document_item_to_pantry(0,
-    (select document from public.shopping_list where user_id = auth.uid()),
-    'V2 bridge item', 1, 'count')
-$$, 'the Pantry bridge continues to accept V2 documents');
-select extensions.ok(
-  (select content_revision = 1 from public.shopping_list)
-  and exists (select 1 from public.pantry_items where user_id = auth.uid() and item = 'v2 bridge item'),
-  'the V2 Pantry bridge advances once without changing the document version'
-);
-select set_config('request.jwt.claim.sub', '31000000-0000-4000-8000-000000000001', true);
-select extensions.lives_ok($$
-  select * from public.move_shopping_document_item_to_pantry(1,
-    (select document from public.shopping_list where user_id = auth.uid()), 'Apples', 2, 'count')
-$$, 'the Pantry move accepts the current revision');
-select extensions.ok((select content_revision = 2 from public.shopping_list)
-  and exists (select 1 from public.pantry_items where user_id = auth.uid() and item = 'apples'),
-  'the Pantry move advances Shopping and inserts Pantry atomically');
-select extensions.throws_ok($$
-  select * from public.move_shopping_document_item_to_pantry(1,
-    (select document from public.shopping_list where user_id = auth.uid()), 'bananas', 1, 'count')
-$$, '40001', 'Shopping content revision conflict', 'a stale Pantry move fails closed');
-select extensions.ok(not exists (select 1 from public.pantry_items where user_id = auth.uid() and item = 'bananas'),
-  'a conflicted Pantry move has no partial write');
-
+select extensions.throws_ok($$ update public.shopping_list set content_revision = content_revision + 1 $$,
+  '42501', 'permission denied for table shopping_list', 'old direct updates are fenced');
+select extensions.throws_ok($$ select public.shopping_admit(auth.uid(), gen_random_uuid(), repeat('a',64), false) $$,
+  '42501', null, 'authenticated users cannot allocate trusted metadata');
+select extensions.throws_ok($$ select public.shopping_command_context(auth.uid(), 1, gen_random_uuid(), repeat('a',64)) $$,
+  '42501', null, 'authenticated users cannot read service snapshots');
+select extensions.throws_ok($$ select public.shopping_commit(auth.uid(), 1, gen_random_uuid(), repeat('a',64),0,0,'{}','Applied','mutation',null,null) $$,
+  '42501', null, 'authenticated users cannot replace state through commit');
+select extensions.throws_ok($$ delete from public.recipes where user_id = auth.uid() $$,
+  '42501', null, 'direct recipe deletion cannot bypass Shopping coordination');
+select extensions.throws_ok($$ select public.delete_recipe(gen_random_uuid()) $$,
+  'P0001', 'Shopping protocol updated. Refresh the application before changing recipes.', 'old deletion reports refresh required');
+select extensions.throws_ok($$ select * from private.shopping_admissions $$,
+  '42501', null, 'private receipts are inaccessible to callers');
+select extensions.throws_ok($$ select public.move_shopping_document_item_to_pantry(0,'{}','milk',1,'count') $$,
+  '42501', null, 'the legacy Pantry replacement RPC is fenced');
+select extensions.throws_ok($$ update public.shopping_list set content_revision = 1 where user_id = '32000000-0000-4000-8000-000000000002' $$,
+  '42501', null, 'cross-owner direct replacement is denied');
+reset role;
+grant select on shopping_v3_regression_fixture to service_role;
+set local role service_role;
+select extensions.is(public.shopping_admit('31000000-0000-4000-8000-000000000001',
+  '33000000-0000-4000-8000-000000000003',repeat('a',64),false)->>'status','Admitted','service admission allocates one ticket');
+select extensions.is(public.shopping_commit('31000000-0000-4000-8000-000000000001',1,
+  '33000000-0000-4000-8000-000000000003',repeat('a',64),0,
+  (public.shopping_command_context('31000000-0000-4000-8000-000000000001',1,
+    '33000000-0000-4000-8000-000000000003',repeat('a',64))->>'dependencyRevision')::bigint,
+  (select document from shopping_v3_regression_fixture),'Applied','initialize',null,null)->>'status',
+  'Applied','trusted initialization preserves the V3 regression shape, including historical sources');
+select extensions.is((select content_revision from public.shopping_list where user_id = '31000000-0000-4000-8000-000000000001'),
+  1::bigint,'trusted commit advances revision exactly once');
+select extensions.is(public.shopping_command_context('31000000-0000-4000-8000-000000000001',1,
+  '33000000-0000-4000-8000-000000000003',repeat('a',64))->>'status','AlreadyApplied','receipt recognizes committed execution');
 set local role anon;
 select set_config('request.jwt.claim.sub', '', true);
 select extensions.throws_ok($$ select count(*) from public.shopping_list $$,

@@ -1,5 +1,7 @@
 # Recipe Genie - Supabase Database Schema Documentation
 
+> Slice 6 supersedes legacy Shopping write paths described below. See [Shopping command boundary](../docs/shopping-slice6.md) for the current service-only commit, receipts, writer fence and rollout constraints. Historical sections retain their original migration context.
+
 > **When to read:** You're adding/modifying tables, columns, indexes, RLS policies, triggers, migrations, or storage buckets.
 
 *Last updated: 2026-08-09*
@@ -66,9 +68,35 @@ enforce those ownership boundaries.
 - `supabase/migrations/019_personalized_shopping_order.sql`
 - `supabase/migrations/020_shopping_document_v3.sql`
 - `supabase/migrations/021_fix_shopping_v3_family_policy_validation.sql`
+- `supabase/migrations/022_shopping_authoritative_commands.sql`
+- `supabase/migrations/023_shopping_slice6_corrections.sql`
+- `supabase/migrations/024_shopping_identity_extras.sql`
+- `supabase/migrations/025_shopping_placement_recovery.sql`
+- `supabase/migrations/026_shopping_trip_lifecycle.sql`
+- `supabase/migrations/027_shopping_coverage_constraints.sql`
+- `supabase/migrations/028_shopping_organization_versions.sql`
+- `supabase/migrations/029_shopping_manual_field_versions.sql`
+- `supabase/migrations/030_shopping_trip_visibility.sql`
+- `supabase/migrations/031_planner_history_swap_guard.sql`
+
+Migration 031 adds an owner/RLS-scoped atomic explicit-swap RPC and a history
+source-lock trigger. Swaps compare inspected plan membership, cooked state and
+assignments, then reject current-week history under the shared source lock.
+No existing data is rewritten. This migration is tested only on the disposable
+Dashboard backend; shared and production application remains separately authorized.
+
+Migration 030 adds optional purchase-keyed trip visibility, includes it in content
+epochs and bounded Clear inverses, and captures proven retained choices before
+coordinated recipe deletion. Existing rows are not rewritten. Missing or
+contradictory historical choices are not reconstructed.
+
+Migration 029 extends V4 structural validation with optional manual wording,
+quantity and shared guard versions. Existing documents and row metadata are not
+rewritten. The service-only command planner remains the sole mutation authority;
+no grants or public writer paths are added.
 
 The active chain is the complete set of regular SQL files currently tracked
-directly in `supabase/migrations/`. Fresh resets apply all 21 in filename order.
+directly in `supabase/migrations/`. Fresh resets apply all 31 in filename order.
 Archived files are not replacement migrations and are not part of that chain.
 
 ### Current Recipe Identity and Compatibility
@@ -623,6 +651,10 @@ auth.users (Supabase Auth)
 
 ## Migration History
 
+25. **025_shopping_placement_recovery.sql** — Add service-only initialization receipt provenance to the existing command context. No document rewrites or new grants. See `docs/shopping-slice7.md`.
+
+24. **024_shopping_identity_extras.sql** — Add strict initialized-document validation through the existing service-only commit boundary. Existing rows are unchanged; conversion requires an explicit owner/revision-bound command. See `docs/shopping-slice7.md`.
+
 The repository now uses a baseline-first bootstrap strategy:
 
 1. **001_baseline.sql** - Canonical full schema snapshot for deterministic fresh bootstrap through the pantry row-id baseline cut on 2026-03-09.
@@ -645,12 +677,16 @@ The repository now uses a baseline-first bootstrap strategy:
 18. **018_shopping_document_cutover.sql** - Atomically converted Shopping state to `ShoppingDocumentV1`, installed the single-revision CAS contract and Pantry bridge, and removed contribution-era tables, columns, RPCs, and Shopping fields from `user_config`.
 19. **019_personalized_shopping_order.sql** - Upgraded Shopping state to `ShoppingDocumentV2`, seeded reusable ingredient order from V1 row order plus deterministic fallback, absorbed derived category overrides, and installed strict V2 validation.
 20. **020_shopping_document_v3.sql** - Added strict V3 semantic validation, preserved V2 compatibility and the V2 database default for a schema-first rollout, and updated the Pantry bridge to accept either version.
+
 21. **021_fix_shopping_v3_family_policy_validation.sql** - Corrected operator grouping in the V3 family-policy key validator so non-empty V3 documents persist while retaining the approved V2/V3 contract and V2 default.
+22. **022_shopping_authoritative_commands.sql** - Service-only atomic Shopping commits, bounded admission/receipts, dependency epochs, conditional manual Clear inverse, and client writer fencing. No existing document rewrite. See `docs/shopping-slice6.md`.
+
+23. **023_shopping_slice6_corrections.sql** - Revoke recipe TRUNCATE and assert effective privileges; expose read-only, RLS-filtered Clear eligibility and use the same actual inverse/full-document byte limits in owner-locked context and atomic receipts. No data rewrite.
 
 Historical baseline notes:
 - Historical migrations are preserved under `supabase/migrations/archive/2026-03-09-pre-028-squash/` for context and backward auditability.
 - Fresh environments apply the baseline and every tracked active incremental
-  migration through `021`. The archived pre-baseline sequence is not replayed.
+  migration through `028`. The archived pre-baseline sequence is not replayed.
 - Historical numbering describes the schema evolution incorporated into the
   baseline; it does not identify missing active migrations.
 
@@ -904,7 +940,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 021, and the
+instructions. The current authoritative chain ends at migration 031, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant
@@ -968,3 +1004,12 @@ generated-type drift, Stage 2A parity audit, active-reference audit, application
 verification, and preview checks. Production must remain on 001-008 during PR
 repair. Stage 2B is blocked until migration 009 is deployed separately and its
 production parity audit passes.
+
+### Slice 8 lifecycle
+
+Migration 026 adds read-only trip UUID, trip-start revision and content epoch to the existing Shopping row. The private protocol retains one content inverse with post-Clear trip/epoch and ten-minute expiry. Optional V4 acknowledgements store exact obtained bases and monotonic acknowledgement versions. The existing owner lock coordinates recipe deletion, dependency validation, source existence, restoration and receipts. Organization-only writes do not advance content epoch. See [Slice 8](../docs/shopping-slice8.md). Historical migrations and existing documents are preserved.
+
+
+## Shopping organization history (Slice 9)
+
+Migration 028 extends V4 validation with optional nonnegative safe-integer `organizationVersions`. Existing documents, revision/trip metadata, sources, acknowledgements, private receipts, grants and writer fencing are unchanged. Runtime commands own version updates in the existing atomic commit. See [Slice 9](../docs/shopping-slice9.md).

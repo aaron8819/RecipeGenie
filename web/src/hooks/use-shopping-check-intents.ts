@@ -34,7 +34,11 @@ export function useShoppingCheckIntents() {
     next.set(rowRef, { checked, version: intentVersion });
     current.current = next;
     setPending(next);
-    void mutation.mutateAsync({ rowRef, checked }).then(
+    void mutation.mutateAsync({
+      rowRef, checked,
+      inspectedCoverage: item.inspectedCoverage,
+      inspectedRevision: item.inspectedRevision,
+    }).then(
       () => settle(rowRef, intentVersion),
       () => settle(rowRef, intentVersion),
     );

@@ -172,9 +172,9 @@ vi.mock("@/hooks/use-shopping", () => ({
     isPending: false,
   }),
   useShoppingList: () => ({
-    data: {
-      source_recipes: currentShoppingSourceRecipes,
-    },
+    // Pantry projection can be unavailable while Shopping selections are known.
+    data: undefined,
+    selections: currentShoppingSourceRecipes.map((recipeId) => ({ recipeId })),
   }),
 }))
 
@@ -695,6 +695,19 @@ describe("MealPlanner interactions", () => {
     })
 
     expect(screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })).toBeEnabled()
+  })
+
+  it.each([true, false])("keeps the Shopping trigger enabled during success feedback (desktop=%s)", async (desktop) => {
+    setDesktopMatchMedia(desktop)
+    addToShoppingListMutateAsync.mockResolvedValueOnce({ added: 1, merged: 0 })
+    render(<MealPlanner />)
+    const trigger = screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })
+    fireEvent.click(trigger)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add selected ingredients' }))
+    })
+    expect(undoToastShow).toHaveBeenCalled()
+    expect(trigger).toBeEnabled()
   })
 
   it("opens planned recipes on the canonical full-page route", () => {

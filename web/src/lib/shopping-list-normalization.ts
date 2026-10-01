@@ -66,6 +66,7 @@ export type ShoppingPurchaseNormalization = {
   purchaseName: string
   purchaseUnit: string | null
   purchaseQuantity: number | null
+  purchaseQuantityIsEstimate?: boolean
   originalName: string
   originalUnit: string | null
   originalQuantity: number | null
@@ -157,6 +158,8 @@ function normalizeWholeProduce(
     purchaseName,
     purchaseUnit: "count",
     purchaseQuantity: quantity,
+    ...(options?.quantity == null && input.amount == null && quantity != null
+      ? { purchaseQuantityIsEstimate: true } : {}),
     originalName: input.item.trim(),
     originalUnit: input.unit ?? null,
     originalQuantity: input.amount ?? null,

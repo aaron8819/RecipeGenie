@@ -238,6 +238,7 @@ function EmptySlot({ onAdd, desktop }: { onAdd: () => void; desktop?: boolean })
     return (
       <button
         type="button"
+        data-planner-empty-slot
         onClick={onAdd}
         className="h-[230px] w-full border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-primary dark:hover:border-emerald-500 hover:bg-white dark:hover:bg-slate-800 transition-all group cursor-pointer text-slate-400"
       >
@@ -251,6 +252,7 @@ function EmptySlot({ onAdd, desktop }: { onAdd: () => void; desktop?: boolean })
   return (
     <button
       type="button"
+      data-planner-empty-slot
       onClick={onAdd}
       className="h-32 w-full border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-primary hover:bg-white dark:hover:bg-slate-900 transition-all group cursor-pointer"
     >
@@ -815,7 +817,7 @@ function StitchRecipeCard({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-              disabled={isAddingToCart || isJustAddedToCart}
+              disabled={isAddingToCart}
               className={cn(
                 "p-1 rounded transition-colors",
                 isJustAddedToCart
@@ -1039,7 +1041,7 @@ function MobileRecipeCard({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onAddToCart() }}
-              disabled={isAddingToCart || isJustAddedToCart}
+              disabled={isAddingToCart}
               className={cn(
                 "flex flex-col items-center gap-1 transition-colors",
                 isJustAddedToCart ? "text-emerald-500" : "text-slate-400 hover:text-primary"
@@ -1126,6 +1128,18 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>(
     "thisWeek"
   )
+  const dialogTrigger = useRef<HTMLElement | null>(null)
+  const plannerFocusFallback = useRef<HTMLDivElement>(null)
+  function rememberDialogTrigger() {
+    dialogTrigger.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement : null
+  }
+  function restoreDialogFocus(event: Event) {
+    event.preventDefault()
+    const trigger = dialogTrigger.current
+    if (trigger?.isConnected && !trigger.matches(':disabled')) trigger.focus()
+    else plannerFocusFallback.current?.focus()
+  }
   const mobileDaysContainerRef = useRef<HTMLDivElement>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
   const [pendingAssignmentOverlays, setPendingAssignmentOverlays] = useState<Record<string, Record<string, number>>>({})
@@ -1155,7 +1169,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const { data: config } = useUserConfig()
   const updateConfig = useUpdateUserConfig()
   const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
-  const { data: shoppingList } = useShoppingList()
+  const { selections: shoppingSelections } = useShoppingList()
 
   const clearPendingAssignmentOverlay = useCallback((weekDate: string) => {
     setPendingAssignmentCounts((prev) => {
@@ -1321,6 +1335,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
       undoToast.show({ message: 'Recipes are still loading. Try again.', duration: 4000 })
       return
     }
+    rememberDialogTrigger()
     setShoppingRequest({ ids: weeklyPlan.recipe_ids, weekly: true })
   }
 
@@ -1355,6 +1370,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
 
   const handleSwapRecipe = (recipe: Recipe) => {
     if (!currentWeekDate) return
+    rememberDialogTrigger()
     setSwapRequest({
       recipe,
       weekDate: currentWeekDate,
@@ -1477,6 +1493,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   }, [addRecipeToPlan, currentWeekDate, recipeDayAssignments, removeFromPlan, removingRecipeId, undoToast])
 
   const handleAddRecipeToCart = (recipeId: string) => {
+    rememberDialogTrigger()
     setShoppingRequest({ ids: [recipeId], weekly: false })
   }
 
@@ -1557,8 +1574,8 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
 
   const displayedRecipes = recipes
   const shoppingRecipeIds = useMemo(
-    () => new Set(shoppingList?.source_recipes || []),
-    [shoppingList?.source_recipes]
+    () => new Set(shoppingSelections.map((selection) => selection.recipeId)),
+    [shoppingSelections]
   )
   const activeRecipeOverlay = useMemo(() => deriveActiveRecipeOverlay({
     recipes: displayedRecipes,
@@ -1660,7 +1677,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   ])
 
   const plannerContent = (
-    <div className="space-y-6 pb-6">
+    <div className="space-y-6 pb-6" ref={plannerFocusFallback} tabIndex={-1} aria-label="Meal planner">
       {/* Mobile: compact schedule (planner_mobile_redesign) */}
       {!isDesktop && (
       <PlannerMobileHeader
@@ -1806,9 +1823,6 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                 style={{ width: `${progress.percentage}%` }}
               />
             </div>
-            <p className="text-xs text-slate-400">
-              You&apos;re on track to hit your nutrition goals!
-            </p>
           </div>
         </PlannerSectionShell>
 
@@ -1904,7 +1918,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
         ) : undefined}
       >
           <Button
-            onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
+            onClick={() => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
             disabled={!hasAnyRecipes}
             variant="default"
             size="default"
@@ -2040,7 +2054,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                 </div>
                 <div className="flex flex-wrap gap-3 justify-center">
                   <Button
-                    onClick={() => { setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
+                    onClick={() => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
                     disabled={!hasAnyRecipes}
                     variant="outline"
                     size="sm"
@@ -2088,7 +2102,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                         onAddToCart={handleAddRecipeToCart}
                         onRemoveRecipe={handleRemoveFromPlan}
                         onMoveToDay={handleMoveToDay}
-                        onAddMeal={(d) => { setAddRecipeTargetDayIndex(d ?? null); setIsAddRecipeModalOpen(true); }}
+                        onAddMeal={(d) => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(d ?? null); setIsAddRecipeModalOpen(true); }}
                         weekDays={weekDays}
                         currentDayIndex={recipeDayAssignments}
                         isToday={isToday}
@@ -2128,7 +2142,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                       onAddToCart={handleAddRecipeToCart}
                       onRemoveRecipe={handleRemoveFromPlan}
                       onMoveToDay={handleMoveToDay}
-                      onAddMeal={(dayIndex) => { setAddRecipeTargetDayIndex(dayIndex ?? null); setIsAddRecipeModalOpen(true); }}
+                      onAddMeal={(dayIndex) => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(dayIndex ?? null); setIsAddRecipeModalOpen(true); }}
                       weekDays={weekDays}
                       currentDayIndex={recipeDayAssignments}
                       isToday={isToday}
@@ -2165,7 +2179,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                       onAddToCart={handleAddRecipeToCart}
                       onRemoveRecipe={handleRemoveFromPlan}
                       onMoveToDay={handleMoveToDay}
-                      onAddMeal={(dayIndex) => { setAddRecipeTargetDayIndex(dayIndex ?? null); setIsAddRecipeModalOpen(true); }}
+                      onAddMeal={(dayIndex) => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(dayIndex ?? null); setIsAddRecipeModalOpen(true); }}
                       weekDays={weekDays}
                       currentDayIndex={recipeDayAssignments}
                       statsMap={statsMap}
@@ -2180,6 +2194,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
         )}
       {/* Add Recipe to Plan Modal */}
       {swapRequest && <SwapMealDialog
+        onCloseAutoFocus={restoreDialogFocus}
         open
         onOpenChange={open => { if (!open) setSwapRequest(null) }}
         recipe={swapRequest.recipe}
@@ -2189,14 +2204,23 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
         onSubmit={handleExplicitSwap}
       />}
       <ShoppingSelectionDialog
+        onCloseAutoFocus={restoreDialogFocus}
         open={shoppingRequest !== null}
         onOpenChange={open => { if (!open && !addToShoppingList.isPending) setShoppingRequest(null) }}
         recipes={(recipes || []).filter(recipe => shoppingRequest?.ids.includes(recipe.id))}
-        defaultScale={shoppingRequest?.weekly ? weeklyPlan?.scale || 1 : 1}
+        defaultScale={weeklyPlan?.scale ?? 1}
         weekLabel={shoppingRequest?.weekly ? formatWeekLabel(currentWeekDate) : undefined}
         onSubmit={handleShoppingSelectionSubmit}
       />
       <AddRecipeToPlanModal
+        onCloseAutoFocus={restoreDialogFocus}
+        onAdded={() => {
+          // Empty slots disappear when the new recipe query finishes. Choose
+          // the persistent fallback before that delayed render removes focus.
+          if (dialogTrigger.current?.hasAttribute('data-planner-empty-slot')) {
+            dialogTrigger.current = null
+          }
+        }}
         open={isAddRecipeModalOpen}
         onOpenChange={(open) => { setIsAddRecipeModalOpen(open); if (!open) setAddRecipeTargetDayIndex(null); }}
         weekDate={currentWeekDate}

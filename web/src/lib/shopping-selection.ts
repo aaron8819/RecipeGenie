@@ -129,6 +129,15 @@ export function initialShoppingSelection(
   ) {
     return { selection };
   }
+  if (saved.sourceEvidence?.history === 'captured') {
+    const ordinals = saved.sourceEvidence.occurrences.map(source => source.ordinal);
+    try {
+      const recovered = { ...selection, ingredientOrdinals: ordinals };
+      const expected = createSelectedShoppingEntry(recipe, recovered);
+      if (serializeShoppingSelection(expected.ingredients) === serializeShoppingSelection(saved.ingredients) &&
+        saved.sourceEvidence.sourceRevision === recipe.updated_at) return { selection: recovered };
+    } catch { /* Changed sources use the explicit review fallback below. */ }
+  }
   const matched: number[] = [];
   for (const ingredient of saved.ingredients) {
     const matches = full.ingredients.flatMap((candidate, index) =>
@@ -154,4 +163,16 @@ export function initialShoppingSelection(
     };
   }
   return { selection: { ...selection, ingredientOrdinals: matched } };
+}
+
+/** Reconstruct commands from owner-scoped recipe inputs; never trust resolved ingredients. */
+export function reconstructShoppingEntry(
+  recipe: Recipe,
+  entry: ShoppingRecipeEntryV2,
+  selections?: ShoppingRecipeSelection[],
+): ShoppingRecipeEntryV2 {
+  if (!selections) return createShoppingRecipeEntry(recipe, entry.selectedServings, entry.scaleV1);
+  const selection = selections.find(s => s.recipeId === recipe.id);
+  if (!selection) throw new Error('Missing source selection.');
+  return createSelectedShoppingEntry(recipe, selection);
 }

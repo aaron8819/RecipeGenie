@@ -123,7 +123,28 @@ export type RecipeInstructionGroup = {
   steps: string[]
 }
 
+export type ShoppingQuantity = {
+  amount: number | null
+  unit: string
+  exactQuantityV1?: QuantityV1
+  exactPackageV1?: PackageV1
+  exactAuthoredUnit?: string
+}
+
 export type ShoppingItem = {
+  organizationVersions?: Record<string, number>
+  inspectedCoverage?: Record<string, { version: number; basis: import('../lib/shopping-coverage').ShoppingCoverageBasis | null }>
+  inspectedRevision?: number
+  requirementChanged?: boolean
+  coverageNeedsRecheck?: boolean
+  coveragePending?: boolean
+  manualVersion?: number
+  legacyAmount?: boolean
+  previousChecked?: boolean
+  requirementBreakdown?: { label: string; quantity: ShoppingQuantity | null; hidden: boolean; manualId?: string; source?: NonNullable<ShoppingItem['sources']>[number] }[]
+  // Complete ordered display requirements. When present, includes the primary
+  // exactly once and supersedes the legacy quantity fields below.
+  quantityParts?: ShoppingQuantity[]
   rowId?: string
   orderingKey?: string
   item: string
@@ -137,6 +158,8 @@ export type ShoppingItem = {
   categoryOrder: number
   sources?: {
     recipeId?: string
+    manualId?: string
+    label?: string
     legacyRecipeId?: string
     recipeName: string
     originalItem?: string

@@ -29,15 +29,23 @@ categories and choose a scheduled day; already-planned recipes are disabled.
 Opening performs no write, pending saves prevent dismissal/duplicate taps, and
 failures remain visible inline with the dialog open.
 
-`useReplacePlannedRecipe` reads the owner-scoped current plan, rejects a missing,
-cooked, duplicate, or moved source, and performs one conditional UPDATE of UUID
-membership and assignments. The WHERE clause compares the read membership, made
-state, and assignments. A concurrent change aborts without a retry or a partial
-replacement. Existing UUID triggers enforce replacement ownership and maintain
-legacy mirrors; no new RPC or migration is required. Other meals, scale, history,
-and Shopping contributions remain intact. The hook refetches plan/recipe caches
-after success or failure. The older random hook remains exported for compatibility
-but Planner no longer uses its full-plan upsert path.
+`useReplacePlannedRecipe` reads the owner-scoped plan, then calls migration 031's
+`replace_planned_recipe` RPC. The RPC locks the plan and source recipe, compares
+inspected membership/made state/assignments, and rejects current-week cooking in
+recipe history as well as explicit made state. History writes share the source
+recipe lock, so a concurrent history insert cannot slip past the mutation guard.
+Ownership remains enforced through invoker permissions and RLS. Only membership
+and assignments change; other meals, scale, history, and Shopping remain intact.
+The hook refetches caches after success or failure. The old random hook remains
+exported for compatibility; Planner uses the guarded path.
+
+Meal and weekly Shopping dialogs initialize from saved selection yield first,
+otherwise recipe servings multiplied by the saved plan scale. Add, Swap and
+Shopping return keyboard focus to their initiating control, with the Planner
+content as a fallback when a successful operation removes that control.
+Successful empty-slot additions select the fallback before the asynchronous
+recipe refresh removes the slot. Shopping's success animation keeps its control
+enabled after the write settles, so focus can return while feedback is visible.
 
 ## Key Files
 

@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "021_fix_shopping_v3_family_policy_validation"
+export const EXPECTED_LATEST_MIGRATION = "031_planner_history_swap_guard"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {

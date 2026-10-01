@@ -81,7 +81,7 @@ for (const required of [
   /\.eq\("recipe_uuid", id\)/,
   /recipeUuidWrite\(recipeUuid\)/,
   /mapRecipeRow/,
-  /deleteRecipeByUuid\([\s\S]*getSupabase\(\),[\s\S]*id,[\s\S]*user!\.id/,
+  /executeShoppingCommand\(user!\.id,[\s\S]*type: 'deleteRecipe', recipeId: id/,
 ]) {
   if (!required.test(recipeHooks)) failures.push(`recipe hook UUID seam missing: ${required}`)
 }

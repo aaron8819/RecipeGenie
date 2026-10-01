@@ -21,9 +21,14 @@ let plan: {
   scale: number;
 };
 let conflict: boolean;
+let rpcError: { message: string; code: string } | null;
 const updates = vi.fn();
 const filters = vi.fn();
 const client = {
+  rpc: async (_name: string, args: Record<string, unknown>) => {
+    updates(args);
+    return { data: conflict ? null : { ...plan, recipe_uuids: ['other', 'new'], day_assignment_recipe_uuids: { other: 3, new: 4 } }, error: rpcError };
+  },
   from: () => {
     let payload: Record<string, unknown> | undefined;
     const chain = {
@@ -54,6 +59,7 @@ beforeEach(() => {
   updates.mockClear();
   filters.mockClear();
   conflict = false;
+  rpcError = null;
   plan = {
     user_id: 'owner',
     week_date: input.weekDate,
@@ -68,18 +74,14 @@ describe('guarded planned recipe replacement', () => {
   it('writes membership and chosen day together, preserving unrelated data', async () => {
     const result = await replacePlannedRecipe(client, 'owner', input);
     expect(updates).toHaveBeenCalledExactlyOnceWith({
-      recipe_uuids: ['other', 'new'],
-      day_assignment_recipe_uuids: { other: 3, new: 4 },
+      p_week_date: input.weekDate, p_old_recipe: 'old', p_replacement_recipe: 'new',
+      p_day: 4, p_expected_day: 1, p_expected_recipes: ['other', 'old'],
+      p_expected_made: ['other'], p_expected_assignments: { old: 1, other: 3 },
+      p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
     expect(result.made_recipe_ids).toEqual(['other']);
     expect(result.scale).toBe(2);
     expect(filters).toHaveBeenCalledWith('user_id', 'owner');
-    expect(filters).toHaveBeenCalledWith('recipe_uuids', '{other,old}');
-    expect(filters).toHaveBeenCalledWith('made_recipe_uuids', '{other}');
-    expect(filters).toHaveBeenCalledWith(
-      'day_assignment_recipe_uuids',
-      JSON.stringify({ old: 1, other: 3 }),
-    );
   });
   it('stops when any guarded plan state changes before the write', async () => {
     conflict = true;
@@ -87,6 +89,10 @@ describe('guarded planned recipe replacement', () => {
       'plan changed',
     );
     expect(updates).toHaveBeenCalledTimes(1);
+  });
+  it('preserves the database cooked rejection message for the dialog', async () => {
+    rpcError = { message: 'A cooked meal cannot be swapped.', code: 'P0001' };
+    await expect(replacePlannedRecipe(client, 'owner', input)).rejects.toThrow('A cooked meal cannot be swapped.');
   });
   it('rejects a cooked source without writing', async () => {
     plan.made_recipe_uuids.push('old');

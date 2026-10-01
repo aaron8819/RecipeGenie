@@ -56,32 +56,20 @@ export async function replacePlannedRecipe(
       'This meal moved to another day. Close and reopen Swap meal.',
     );
   }
-  const { [input.oldRecipeId]: _removed, ...remainingAssignments } =
-    assignments;
-  // One guarded UPDATE, never remove/add or an upsert. Existing UUID triggers
-  // validate replacement ownership and maintain the legacy mirrors in SQL.
-  const { data: saved, error: saveError } = await supabase
-    .from('weekly_plans')
-    .update({
-      recipe_uuids: plan.recipe_uuids.map((id) =>
-        id === input.oldRecipeId ? input.replacementRecipeId : id,
-      ),
-      day_assignment_recipe_uuids: {
-        ...remainingAssignments,
-        [input.replacementRecipeId]: input.dayOfWeek,
-      },
-    })
-    .eq('user_id', userId)
-    .eq('week_date', input.weekDate)
-    .filter('recipe_uuids', 'eq', `{${plan.recipe_uuids.join(',')}}`)
-    .filter('made_recipe_uuids', 'eq', `{${plan.made_recipe_uuids.join(',')}}`)
-    .eq(
-      'day_assignment_recipe_uuids',
-      JSON.stringify(plan.day_assignment_recipe_uuids),
-    )
-    .select('*')
-    .maybeSingle();
-  if (saveError) throw saveError;
+  // The RPC compares the same inspected plan fields under lock and serializes
+  // with history writes, including cooking from another view.
+  const { data: saved, error: saveError } = await supabase.rpc('replace_planned_recipe', {
+    p_week_date: input.weekDate,
+    p_old_recipe: input.oldRecipeId,
+    p_replacement_recipe: input.replacementRecipeId,
+    p_day: input.dayOfWeek,
+    p_expected_day: input.expectedDayOfWeek,
+    p_expected_recipes: plan.recipe_uuids,
+    p_expected_made: plan.made_recipe_uuids,
+    p_expected_assignments: plan.day_assignment_recipe_uuids,
+    p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
+  if (saveError) throw new Error(saveError.message);
   if (!saved)
     throw new Error(
       'The plan changed while saving. Close and reopen Swap meal to review it.',

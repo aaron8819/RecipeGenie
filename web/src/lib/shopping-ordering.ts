@@ -34,7 +34,7 @@ function uniqueStrings(values: readonly string[]): string[] {
 }
 
 /** Unicode-code-point order; SQL migration 019 uses the matching C collation. */
-function compareShoppingText(left: string, right: string): number {
+export function compareShoppingText(left: string, right: string): number {
   const leftCodePoints = [...left].map((value) => value.codePointAt(0)!)
   const rightCodePoints = [...right].map((value) => value.codePointAt(0)!)
   const length = Math.min(leftCodePoints.length, rightCodePoints.length)
