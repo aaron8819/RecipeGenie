@@ -14,7 +14,7 @@ let authState = {
 }
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/recipes",
+  usePathname: () => window.location.pathname,
 }))
 
 vi.mock("@/lib/auth-context", () => ({
@@ -75,6 +75,24 @@ describe("AuthenticatedShell", () => {
 
     expect(screen.queryByText("Private route")).not.toBeInTheDocument()
     expect(screen.queryByText("Sign in form")).not.toBeInTheDocument()
+  })
+
+  it("keeps a Dashboard launch at Dashboard after signing in", () => {
+    window.history.replaceState({}, "", "/dashboard")
+    const { rerender } = render(
+      <AuthenticatedShell><div>Dashboard content</div></AuthenticatedShell>
+    )
+    expect(screen.getByText(/Sign in form/)).toBeInTheDocument()
+    expect(screen.queryByText("Dashboard content")).not.toBeInTheDocument()
+
+    authState = {
+      user: { email: "cook@example.com" },
+      loading: false,
+      isAuthenticated: true,
+    }
+    rerender(<AuthenticatedShell><div>Dashboard content</div></AuthenticatedShell>)
+    expect(screen.getByText("Dashboard content")).toBeInTheDocument()
+    expect(window.location.pathname).toBe("/dashboard")
   })
 
   it("renders sanitized callback errors for unauthenticated users", async () => {

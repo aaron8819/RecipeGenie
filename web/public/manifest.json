@@ -3,7 +3,7 @@
   "short_name": "Recipe Genie",
   "description": "Meal planning and recipe management made easy",
   "id": "/",
-  "start_url": "/shopping",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "background_color": "#F7F3EA",
