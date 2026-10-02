@@ -4,7 +4,7 @@ import { NextResponse } from "next/server"
 export const dynamic = "force-dynamic"
 
 // Allowed redirect paths (must start with these)
-const ALLOWED_REDIRECT_PATHS = ["/", "/recipes", "/planner", "/shopping", "/pantry"]
+const ALLOWED_REDIRECT_PATHS = ["/", "/dashboard", "/recipes", "/planner", "/shopping", "/pantry"]
 
 /**
  * Validate that the redirect path is safe (not an open redirect)
