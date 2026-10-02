@@ -14,6 +14,7 @@ export type ShoppingCommand = {
   observedSettingVersion?: number;
   observedSetting?: boolean;
   observedManual?: ShoppingManualItemV1;
+  sourceSelections?: import('./shopping-selection').ShoppingRecipeSelection[];
   observedSelections?: Record<string, number | null>;
 };
 
@@ -48,7 +49,7 @@ const fields: Record<string, string[]> = {
 export function readShoppingCommand(value: unknown): ShoppingCommand | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const command = value as Record<string, unknown>;
-  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedSettingVersion', 'observedManual', 'observedSelections', 'clearUndoRequired', 'tripId', 'inspectedCoverage'].includes(key)) ||
+  if (Object.keys(command).some((key) => !['protocol', 'observedRevision', 'mutation', 'observedSetting', 'observedSettingVersion', 'observedManual', 'observedSelections', 'sourceSelections', 'clearUndoRequired', 'tripId', 'inspectedCoverage'].includes(key)) ||
     command.protocol !== SHOPPING_PROTOCOL || !Number.isSafeInteger(command.observedRevision) ||
     Number(command.observedRevision) < 0 ||
     (command.observedSetting !== undefined && typeof command.observedSetting !== 'boolean') ||
@@ -82,6 +83,19 @@ export function readShoppingCommand(value: unknown): ShoppingCommand | null {
     typeof mutation.categoryKey !== 'string' || !mutation.categoryKey || (mutation.anchor !== null && typeof mutation.anchor !== 'string'))) return null;
   if (command.observedSelections !== undefined && (!command.observedSelections || typeof command.observedSelections !== 'object' ||
     Array.isArray(command.observedSelections) || Object.values(command.observedSelections).some(v => v !== null && (!Number.isSafeInteger(v) || Number(v) < 0)))) return null;
+  if (command.sourceSelections !== undefined) {
+    const selections = command.sourceSelections;
+    if (!['upsertRecipes', 'upsertRecipe', 'rescaleRecipe'].includes(mutation.type) ||
+      !Array.isArray(selections) || selections.length > 100 ||
+      new Set(selections.map(s => s?.recipeId)).size !== selections.length ||
+      selections.some(s => !s || typeof s !== 'object' || Array.isArray(s) ||
+        Object.keys(s).some(k => !['recipeId', 'selectedYield', 'ingredientOrdinals', 'contentSnapshot'].includes(k)) ||
+        typeof s.recipeId !== 'string' || !s.recipeId || typeof s.contentSnapshot !== 'string' ||
+        !Number.isFinite(s.selectedYield) || s.selectedYield <= 0 ||
+        !Array.isArray(s.ingredientOrdinals) || !s.ingredientOrdinals.length ||
+        new Set(s.ingredientOrdinals).size !== s.ingredientOrdinals.length ||
+        s.ingredientOrdinals.some((i: unknown) => !Number.isSafeInteger(i) || Number(i) < 0))) return null;
+  }
   const stringFields = ['key', 'setting', 'recipeId', 'rowRef', 'id', 'aggregateKey',
     'draggedRowRef', 'draggedOrderingKey', 'sourceCategoryKey', 'targetRowRef',
     'targetOrderingKey', 'targetCategoryKey', 'placement'];

@@ -388,6 +388,37 @@ export type Database = {
         Args: { p_new_tag: string; p_old_tag: string }
         Returns: undefined
       }
+      replace_planned_recipe: {
+        Args: {
+          p_day: number
+          p_expected_assignments: Json
+          p_expected_day: number
+          p_expected_made: string[]
+          p_expected_recipes: string[]
+          p_old_recipe: string
+          p_replacement_recipe: string
+          p_timezone: string
+          p_week_date: string
+        }
+        Returns: {
+          day_assignment_recipe_uuids: Json
+          day_assignments: Json | null
+          generated_at: string | null
+          made_recipe_ids: string[] | null
+          made_recipe_uuids: string[]
+          recipe_ids: string[]
+          recipe_uuids: string[]
+          scale: number | null
+          user_id: string
+          week_date: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "weekly_plans"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       resolve_recipe_identity: {
         Args: { p_legacy_id?: string; p_recipe_uuid?: string }
         Returns: string

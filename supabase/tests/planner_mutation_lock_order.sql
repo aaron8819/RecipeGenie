@@ -1,0 +1,14 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select extensions.plan(9);
+select extensions.ok(not has_function_privilege('anon', 'public.replace_planned_recipe(date,uuid,uuid,integer,integer,uuid[],uuid[],jsonb,text)', 'execute'), 'anonymous swap denied');
+select extensions.ok(not has_function_privilege('service_role', 'public.replace_planned_recipe(date,uuid,uuid,integer,integer,uuid[],uuid[],jsonb,text)', 'execute'), 'service swap denied');
+select extensions.ok(has_function_privilege('authenticated', 'public.replace_planned_recipe(date,uuid,uuid,integer,integer,uuid[],uuid[],jsonb,text)', 'execute'), 'authenticated swap remains callable');
+select extensions.ok(not has_function_privilege('authenticated', 'private.lock_planner_history_owner()', 'execute'), 'owner trigger cannot be invoked directly');
+select extensions.ok(not has_function_privilege('service_role', 'private.lock_planner_history_owner()', 'execute'), 'service cannot invoke owner trigger directly');
+select extensions.ok(not has_function_privilege('anon', 'private.lock_planner_history_owner()', 'execute'), 'anonymous cannot invoke owner trigger directly');
+select extensions.ok(not (select prosecdef from pg_proc where oid='private.lock_planner_history_owner()'::regprocedure), 'statement guard remains invoker');
+select extensions.is((select tgtype::integer from pg_trigger where tgrelid='public.recipe_history'::regclass and tgname='aa_lock_planner_history_owner'), 30, 'history owner guard is BEFORE STATEMENT for insert/update/delete');
+select extensions.ok(not has_function_privilege('authenticated', 'private.shopping_delete_recipe_internal(uuid)', 'execute'), 'internal deletion remains inaccessible to app callers');
+select * from extensions.finish();
+rollback;

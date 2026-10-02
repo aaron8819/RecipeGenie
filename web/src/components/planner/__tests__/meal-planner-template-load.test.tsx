@@ -18,6 +18,10 @@ const saveDayAssignmentsMutate = vi.fn<
 const undoToastShow = vi.fn<(args: { message: string; duration?: number }) => void>()
 const routerPush = vi.fn()
 
+vi.mock('@/hooks/use-replace-planned-recipe', () => ({
+  useReplacePlannedRecipe: () => ({ mutateAsync: vi.fn() }),
+}))
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: routerPush,

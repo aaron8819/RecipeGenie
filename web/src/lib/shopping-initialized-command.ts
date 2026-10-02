@@ -1,7 +1,8 @@
+import { reconstructShoppingEntry } from './shopping-selection';
 import { applyOrganization, inspectOrganization, organizationVersion, purchaseOrganization } from './shopping-organization';
 import { shoppingRowCoverage } from './shopping-coverage-runtime';
 import { planShoppingAcknowledgement } from './shopping-coverage';
-import { applyShoppingDocumentMutation, createShoppingRecipeEntry, projectShoppingDocument, validateShoppingDocumentV3,
+import { applyShoppingDocumentMutation, projectShoppingDocument, validateShoppingDocumentV3,
   type ShoppingDocumentV3, type ShoppingManualItemV1 } from './shopping-document';
 import { appendDocumentPurchases, initializeShoppingDocument, legacyQuantity, readInitializedDocument,
   SHOPPING_IDENTITY_POLICY, resolveShoppingPlacement } from './shopping-initialization';
@@ -137,11 +138,12 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
     } else if (mutation.type === 'upsertRecipe' || mutation.type === 'upsertRecipes' || mutation.type === 'rescaleRecipe') {
       const entries = mutation.type === 'upsertRecipes' ? mutation.entries : [mutation.entry];
       if (!Array.isArray(entries) || entries.length > 100 || new Set(entries.map(entry => entry.recipeId)).size !== entries.length) return result('InvalidInput');
+      if (command.sourceSelections && (command.sourceSelections.length !== entries.length || command.sourceSelections.some(s => !entries.some(e => e.recipeId === s.recipeId)))) return result('InvalidInput');
       const keys: string[] = [];
       for (const entry of entries) {
         const recipe = recipes.find(recipe => recipe.id === entry.recipeId);
         if (!recipe) return result('TargetGone');
-        const expected = createShoppingRecipeEntry(recipe, entry.selectedServings, entry.scaleV1);
+        const expected = reconstructShoppingEntry(recipe, entry, command.sourceSelections);
         const { sourceEvidence: _provided, ...payload } = entry;
         if (canonicalShoppingPayload(expected) !== canonicalShoppingPayload(payload)) return result('Conflict');
         const old = document.recipeEntries[entry.recipeId];
@@ -154,6 +156,11 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
             ordinal: ordinal++, raw: structuredClone(ingredient),
           }))),
         };
+        const selected = command.sourceSelections?.find(selection => selection.recipeId === recipe.id);
+        if (selected) {
+          const ordinals = new Set(selected.ingredientOrdinals);
+          sourceEvidence.occurrences = sourceEvidence.occurrences.filter(source => ordinals.has(source.ordinal));
+        }
         const captured = { ...expected, sourceEvidence };
         // The owner revision survives removal and Clear. Mint from it, never
         // from a counter that disappears with the selection (including ABA).

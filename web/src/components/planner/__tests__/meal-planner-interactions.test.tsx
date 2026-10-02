@@ -28,6 +28,20 @@ const removeFromPlanMutate = vi.fn()
 const addRecipeToPlanMutate = vi.fn()
 const routerPush = vi.fn()
 
+vi.mock('@/components/shopping/shopping-selection-dialog', () => ({
+  ShoppingSelectionDialog: ({ open, recipes, onSubmit }: {
+    open: boolean; recipes: Recipe[];
+    onSubmit: (selections: import('@/lib/shopping-selection').ShoppingRecipeSelection[]) => Promise<void>
+  }) => open ? <button onClick={() => void onSubmit(recipes.map(recipe => ({
+    recipeId: recipe.id, selectedYield: recipe.servings,
+    ingredientOrdinals: [0], contentSnapshot: 'fixture',
+  })))}>Add selected ingredients</button> : null,
+}))
+
+vi.mock('@/hooks/use-replace-planned-recipe', () => ({
+  useReplacePlannedRecipe: () => ({ mutateAsync: swapRecipeMutateAsync }),
+}))
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: routerPush,
@@ -516,9 +530,12 @@ describe("MealPlanner interactions", () => {
     const pendingSwap = deferred<unknown>()
     swapRecipeMutateAsync.mockReturnValueOnce(pendingSwap.promise)
 
+    currentRecipes = [...currentRecipes, { ...currentRecipes[0], id: 'replacement', name: 'Replacement Recipe' }]
     render(<MealPlanner />)
 
     fireEvent.click(screen.getByTitle("Swap recipe"))
+    expect(swapRecipeMutateAsync).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Surprise me' }))
 
     await waitFor(() => {
       expect(screen.getByTitle("Swap recipe")).toBeDisabled()
@@ -532,13 +549,19 @@ describe("MealPlanner interactions", () => {
     })
 
     await waitFor(() => {
-      expect(undoToastShow).toHaveBeenCalledWith({
-        message: 'No more Dinner recipes available',
-        duration: 4000,
-      })
+      expect(screen.getByRole('alert')).toHaveTextContent('No more Dinner recipes available')
     })
 
     expect(screen.getByTitle("Swap recipe")).toBeEnabled()
+  })
+
+  it("closes the swap dialog when browser navigation changes the displayed week", async () => {
+    const view = render(<MealPlanner routeWeek="2026-08-10" />)
+    fireEvent.click(screen.getByTitle("Swap recipe"))
+    expect(screen.getByRole('heading', { name: 'Swap meal' })).toBeInTheDocument()
+    view.rerender(<MealPlanner routeWeek="2026-08-17" />)
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Swap meal' })).not.toBeInTheDocument())
+    expect(swapRecipeMutateAsync).not.toHaveBeenCalled()
   })
 
   it("shows remove undo only after confirmed success", async () => {
@@ -611,6 +634,8 @@ describe("MealPlanner interactions", () => {
 
     const cartButton = screen.getByRole("button", { name: "Add planned meal ingredients to Shopping" })
     fireEvent.click(cartButton)
+    expect(addToShoppingListMutateAsync).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected ingredients' }))
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
@@ -644,6 +669,8 @@ describe("MealPlanner interactions", () => {
 
     const addToCartButton = screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })
     fireEvent.click(addToCartButton)
+    expect(addToShoppingListMutateAsync).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected ingredients' }))
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })).toBeDisabled()
@@ -668,6 +695,19 @@ describe("MealPlanner interactions", () => {
     })
 
     expect(screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })).toBeEnabled()
+  })
+
+  it.each([true, false])("keeps the Shopping trigger enabled during success feedback (desktop=%s)", async (desktop) => {
+    setDesktopMatchMedia(desktop)
+    addToShoppingListMutateAsync.mockResolvedValueOnce({ added: 1, merged: 0 })
+    render(<MealPlanner />)
+    const trigger = screen.getByRole("button", { name: "Add Planner Recipe ingredients to Shopping" })
+    fireEvent.click(trigger)
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add selected ingredients' }))
+    })
+    expect(undoToastShow).toHaveBeenCalled()
+    expect(trigger).toBeEnabled()
   })
 
   it("opens planned recipes on the canonical full-page route", () => {

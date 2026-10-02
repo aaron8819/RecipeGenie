@@ -31,6 +31,9 @@ vi.mock("@/hooks/use-recipes", () => ({
 }))
 
 vi.mock("@/hooks/use-planner", () => ({
+  useWeeklyPlan: () => ({ data: {
+    recipe_ids: ['recipe-1'], day_assignments: { 'recipe-1': 5 },
+  } }),
   useAddRecipeToPlan: () => ({
     mutateAsync: addToPlanMutateAsync,
     isPending: false,
@@ -61,6 +64,23 @@ describe("AddRecipeToPlanModal", () => {
     recipes = [recipeFixture(), recipeFixture({ id: "recipe-2", name: "Second Recipe" })]
   })
 
+  it('shows the selected calendar date and week-wide duplicates without restricting selection', () => {
+    render(<AddRecipeToPlanModal open onOpenChange={vi.fn()}
+      weekDate="2026-03-09" targetDayIndex={2} weekStartDay={1} />)
+    expect(screen.getByText('Choose a recipe for Wednesday, Mar 11, 2026.')).toBeVisible()
+    expect(screen.getByText('Already planned this week · Fri, Mar 13')).toBeVisible()
+    const planned = screen.getByRole('button', { name: /^Planner Recipe/ })
+    expect(planned).toBeEnabled()
+    fireEvent.click(planned)
+    expect(screen.getByRole('button', { name: 'Add to Plan' })).toBeEnabled()
+  })
+
+  it('shows a selected date across a Sunday week and year boundary', () => {
+    render(<AddRecipeToPlanModal open onOpenChange={vi.fn()}
+      weekDate="2026-12-27" targetDayIndex={5} weekStartDay={0} />)
+    expect(screen.getByText('Choose a recipe for Friday, Jan 1, 2027.')).toBeVisible()
+  })
+
   it("keeps the selected recipe and error context visible when adding fails", async () => {
     addToPlanMutateAsync.mockRejectedValueOnce(new Error("Recipe is already in this week's meal plan"))
     const onOpenChange = vi.fn()
@@ -88,11 +108,13 @@ describe("AddRecipeToPlanModal", () => {
     const pendingAdd = deferred<unknown>()
     addToPlanMutateAsync.mockReturnValueOnce(pendingAdd.promise)
     const onOpenChange = vi.fn()
+    const onAdded = vi.fn()
 
     render(
       <AddRecipeToPlanModal
         open
         onOpenChange={onOpenChange}
+        onAdded={onAdded}
         weekDate="2026-03-09"
         targetDayIndex={2}
         weekStartDay={1}
@@ -112,6 +134,7 @@ describe("AddRecipeToPlanModal", () => {
 
     expect(addToPlanMutateAsync).toHaveBeenCalledTimes(1)
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
+    expect(onAdded).not.toHaveBeenCalled()
 
     await act(async () => {
       pendingAdd.resolve(undefined)
@@ -121,6 +144,7 @@ describe("AddRecipeToPlanModal", () => {
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(false)
     })
+    expect(onAdded).toHaveBeenCalledTimes(1)
 
     expect(addToPlanMutateAsync).toHaveBeenCalledWith({
       weekDate: "2026-03-09",

@@ -1,11 +1,12 @@
 'use client';
+import { initialShoppingSelection, createSelectedShoppingEntry } from '@/lib/shopping-selection';
 
 import { useRef, useState, type RefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { usePantryItems } from '@/hooks/use-pantry';
 import { useAddShoppingItem, useShoppingDocumentState, useShoppingFoundationCommand } from '@/hooks/shopping/use-shopping-document';
-import { createShoppingRecipeEntry, type ShoppingDocumentStateV3, type ShoppingManualItemV1 } from '@/lib/shopping-document';
+import { type ShoppingDocumentStateV3, type ShoppingManualItemV1 } from '@/lib/shopping-document';
 import { formatShoppingQuantityPart } from '@/lib/shopping-quantity-display';
 import { parseQuantityV1, parseRationalLexeme, divideRationals, getScalingBasis, getAuthoredYieldText } from '@/lib/recipe-quantity';
 import { sumShoppingRequirements } from '@/lib/shopping-extra-quantities';
@@ -170,9 +171,12 @@ export function SelectionYield({ recipe, state }: { recipe: Recipe; state: Shopp
     const scale = mode === 'batches' ? quantity : quantity && authored ? divideRationals(quantity, authored) : null;
     if (!scale || scale.numerator === '0') { setError('Enter a positive total yield or batch multiplier.'); return; }
     try {
-      const result = await command.mutateAsync({ observedRevision: observed.revision,
+      const recovered = initialShoppingSelection(recipe, entry);
+      if (recovered.notice) throw new Error('Review ingredients in Planner before changing this saved selection.');
+      const selection = { ...recovered.selection, selectedYield: basis * Number(scale.numerator) / Number(scale.denominator) };
+      const result = await command.mutateAsync({ sourceSelections: [selection], observedRevision: observed.revision,
         observedSelections: { [recipe.id]: observed.version }, mutation: { type: 'upsertRecipe',
-          entry: createShoppingRecipeEntry(recipe, recipe.servings * Number(scale.numerator) / Number(scale.denominator), scale) } });
+          entry: createSelectedShoppingEntry(recipe, selection) } });
       if (!result.confirmedCurrent) {
         setError('Your change was confirmed, but the selection may have changed afterwards. Reload before starting another yield edit.');
         return;

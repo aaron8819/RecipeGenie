@@ -24,7 +24,7 @@ import { getActivePrincipalId } from '@/lib/principal-session'
 import { useUndoToast } from '@/hooks/use-undo-toast'
 import { usePantryItems } from '@/hooks/use-pantry'
 import { mapRecipeRows } from '@/lib/recipe-identity'
-import { pantryKeys, principalId, shoppingKeys } from '@/lib/query-keys'
+import { pantryKeys, principalId, shoppingKeys, recipeKeys } from '@/lib/query-keys'
 import {
   applyShoppingDocumentMutation,
   createEmptyShoppingDocument,
@@ -51,6 +51,12 @@ import {
 import { isAlreadyInShoppingListError } from '@/lib/shopping-feedback'
 import { getSupabase } from '@/lib/supabase/client'
 import { requireShoppingRowRef } from '@/lib/shopping-row-reference'
+import {
+  createSelectedShoppingEntry,
+  getShoppingRecipeSnapshot,
+  initialShoppingSelection,
+  type ShoppingRecipeSelection,
+} from '@/lib/shopping-selection'
 import type {
   PantryItem,
   RationalV1,
@@ -73,6 +79,7 @@ type MutationPlan<TResult> = {
   observedSettingVersion?: number
   observedRevision?: number
   observedManual?: ShoppingManualItemV1
+  sourceSelections?: ShoppingRecipeSelection[]
   observedSelections?: Record<string, number | null>
   inspectedCoverage?: ShoppingCommand['inspectedCoverage']
   clearConfirmation?: { revision: number; undoRequired: boolean }
@@ -196,6 +203,15 @@ export function useShoppingList() {
     retryPantry: () => pantryQuery.refetch(),
     isLoading: documentQuery.isLoading || pantryQuery.isLoading,
     isFetching: documentQuery.isFetching || pantryQuery.isFetching,
+    isError: documentQuery.isError || pantryQuery.isError,
+    error: documentQuery.error || pantryQuery.error,
+    refetch: async () => {
+      const [document] = await Promise.all([
+        documentQuery.refetch(),
+        pantryQuery.refetch(),
+      ]);
+      return document;
+    },
   }
 }
 
@@ -255,6 +271,7 @@ function useShoppingMutation<TVariables, TResult>(
         observedRevision: plan.observedRevision ?? plan.clearConfirmation?.revision ?? initial.contentRevision,
         ...(plan.clearConfirmation ? { clearUndoRequired: plan.clearConfirmation.undoRequired } : {}),
         mutation: plan.mutation,
+        ...(plan.sourceSelections ? { sourceSelections: plan.sourceSelections } : {}),
         ...(isShoppingContentCommand(plan.mutation.type) && initial.tripId ? { tripId: initial.tripId } : {}),
         ...(plan.inspectedCoverage ? { inspectedCoverage: plan.inspectedCoverage } : {}),
         ...(initial.document.schemaVersion === 4 && (plan.mutation.type === 'removeRecipe' || plan.mutation.type === 'upsertRecipes' || plan.mutation.type === 'upsertRecipe' || plan.mutation.type === 'rescaleRecipe') ? {
@@ -414,8 +431,8 @@ export function useAddShoppingItem() {
 }
 
 export function useShoppingFoundationCommand() {
-  return useShoppingMutation((state, input: { mutation: ShoppingDocumentMutation; observedRevision: number; observedManual?: ShoppingManualItemV1; observedSelections?: Record<string, number | null> }) => ({
-    mutation: input.mutation, observedRevision: input.observedRevision, observedManual: input.observedManual, observedSelections: input.observedSelections,
+  return useShoppingMutation((state, input: { mutation: ShoppingDocumentMutation; observedRevision: number; observedManual?: ShoppingManualItemV1; observedSelections?: Record<string, number | null>; sourceSelections?: ShoppingRecipeSelection[] }) => ({
+    mutation: input.mutation, sourceSelections: input.sourceSelections, observedRevision: input.observedRevision, observedManual: input.observedManual, observedSelections: input.observedSelections,
     value: { ...state, confirmedCurrent: false },
     resolvedValue: (_before, after, _outcome, receiptRevision) => ({
       ...after, confirmedCurrent: after.contentRevision === receiptRevision,
@@ -597,11 +614,19 @@ export function useRemoveRecipeItems() {
 }
 
 export function useRestoreRecipeItems() {
-  return useShoppingMutation((_state, entry: ShoppingRecipeEntryV2) => ({
-    mutation: { type: 'upsertRecipe', entry },
-    observedSelections: { [entry.recipeId]: null },
-    value: entry,
-  }))
+  return useShoppingMutation(async (_state, entry: ShoppingRecipeEntryV2) => {
+    const { data, error } = await getSupabase().from('recipes').select('*').eq('recipe_uuid', entry.recipeId).single()
+    if (error) throw error
+    const recipe = mapRecipeRows([data] as never)[0]
+    const recovered = initialShoppingSelection(recipe, entry)
+    if (recovered.notice) throw new Error('This saved selection changed. Review ingredients in Planner before restoring it.')
+    return {
+      mutation: { type: 'upsertRecipe', entry },
+      sourceSelections: [recovered.selection],
+      observedSelections: { [entry.recipeId]: null },
+      value: entry,
+    }
+  })
 }
 
 function resolveScale(scale: number, scaleV1?: RationalV1): RationalV1 {
@@ -612,11 +637,15 @@ function resolveScale(scale: number, scaleV1?: RationalV1): RationalV1 {
 }
 
 export function useAddToShoppingList() {
+  const queryClient = useQueryClient()
+  const { user } = useAuthContext()
+  const refreshRecipes = () => queryClient.invalidateQueries({ queryKey: recipeKeys.all(principalId(user?.id)) })
   return useShoppingMutation(async (state, input: {
     recipeIds: string[]
     scale?: number
     scaleV1?: RationalV1
     idempotencyKey?: string
+    selections?: ShoppingRecipeSelection[]
   }) => {
     const recipeIds = [...new Set(input.recipeIds)]
     const scale = input.scale ?? 1
@@ -629,11 +658,20 @@ export function useAddToShoppingList() {
     if (error) throw error
     const recipes = mapRecipeRows(data as never)
     if (recipes.length !== recipeIds.length) throw new Error('Recipe not found')
-    const entries = recipes.map((recipe: Recipe) => createShoppingRecipeEntry(
-      recipe,
-      recipe.servings * scale,
-      exactScale
-    ))
+    const selections = new Map(input.selections?.map(selection => [selection.recipeId, selection]))
+    if (input.selections && (selections.size !== input.selections.length ||
+        selections.size !== recipeIds.length || recipeIds.some(id => !selections.has(id)))) {
+      throw new Error('Select ingredients for each chosen recipe.')
+    }
+    if (input.selections && recipes.some(recipe => getShoppingRecipeSnapshot(recipe) !== selections.get(recipe.id)?.contentSnapshot)) {
+      await refreshRecipes()
+      throw new Error('A recipe changed. Close and reopen the dialog to review its latest ingredients.')
+    }
+    const entries = recipes.map((recipe: Recipe) => {
+      const selection = selections.get(recipe.id)
+      return selection ? createSelectedShoppingEntry(recipe, selection) :
+        createShoppingRecipeEntry(recipe, recipe.servings * scale, exactScale)
+    })
     const previousKeys = new Set(Object.values(state.document.recipeEntries)
       .flatMap((entry) => entry.ingredients.map((ingredient) => ingredient.aggregateKey)))
     const otherKeys = new Set(Object.values(state.document.recipeEntries)
@@ -643,6 +681,7 @@ export function useAddToShoppingList() {
       entry.ingredients.map((ingredient) => ingredient.aggregateKey)))
     return {
       mutation: { type: 'upsertRecipes', entries },
+      sourceSelections: input.selections,
       value: {
         added: [...incomingKeys].filter((key) => !previousKeys.has(key)).length,
         merged: [...incomingKeys].filter((key) => otherKeys.has(key)).length,

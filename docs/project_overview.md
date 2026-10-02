@@ -45,6 +45,13 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 
 ## Major Domains
 
+### Dashboard
+
+- Dashboard orchestration lives in `web/src/components/dashboard/dashboard.tsx`.
+- It mounts only its own queries and uses existing Planner and Shopping hooks, selectors, mutations, and dialogs. There is no Dashboard persistence model.
+- Desktop places Today and This week on the left and Shopping on the right. Mobile uses Today, Shopping, This week.
+- The standalone approved fixture mockup remains under `web/mockup/` for reference and is never imported by the integrated route.
+
 ### Planner
 
 - Main orchestration lives in `web/src/components/planner/meal-planner.tsx`.
@@ -92,10 +99,10 @@ Current boundary rules are defined in [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTUR
 
 ## Navigation And Route State
 
-- `/` redirects to `/recipes`; `/recipes`, `/planner`, `/pantry`, and `/shopping` are the primary authenticated routes.
+- `/` redirects to `/recipes`; `/dashboard`, `/recipes`, `/planner`, `/pantry`, and `/shopping` are the primary authenticated routes. Dashboard is an explicit destination; the default and PWA launch URL are unchanged.
 - The shared authenticated layout owns auth gating, onboarding, the desktop header, and mobile bottom navigation. Each route owns exactly one mounted screen.
 - Recipe search, filters, sort, and view mode are canonical query parameters. Planner week selection is the canonical `week=YYYY-MM-DD` query parameter.
-- Cross-feature recipe links use `/recipes/[id]?from=recipes|planner|shopping`. Known sources return through browser history; direct or shared detail URLs replace to `/recipes`.
+- Cross-feature recipe links use `/recipes/[id]?from=recipes|planner|shopping|dashboard`. Known sources return through browser history; direct or shared detail URLs replace to `/recipes`.
 
 ## Data And Backend
 

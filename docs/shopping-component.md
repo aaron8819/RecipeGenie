@@ -143,3 +143,15 @@ teaspoons are not purchase quantities. Expanded View sources retains exact
 authored recipe wording and all mixed known/unknown requirements. Persisted
 quantities and command behavior are unchanged. Disclosure and form interactions
 are separate from check-off and drag handles.
+
+## Dashboard and Planner partial source selections
+
+Authoritative recipe commands accept optional `sourceSelections`: recipe identity,
+snapshot revision, selected yield and original ingredient ordinals. Both legacy
+V3 and initialized V4 planners rebuild the contribution from the owner recipe and
+compare it with the submitted entry. V4 retains original source occurrence
+identity and coverage requirements. Extra selections, stale snapshots and forged
+amounts fail closed. Reopening, re-adding, changing yield and Undo retain a saved
+subset rather than expanding it to the whole recipe. Shared check intents pass
+the inspected coverage and revision for each acknowledgement, including retries
+and rapid reversals; stale evidence still rejects at admission.

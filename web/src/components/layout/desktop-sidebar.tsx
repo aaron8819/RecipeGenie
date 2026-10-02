@@ -1,7 +1,7 @@
 "use client"
 
 import {
-  CalendarDays,
+  LayoutDashboard, CalendarDays,
   HelpCircle,
   LogOut,
   Package,
@@ -15,6 +15,7 @@ import { OnboardingDialog } from "./onboarding-dialog"
 import { cn } from "@/lib/utils"
 
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/planner", label: "Planner", icon: CalendarDays },
   { href: "/recipes", label: "Recipes", icon: UtensilsCrossed },
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },

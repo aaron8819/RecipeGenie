@@ -1,5 +1,6 @@
+import { reconstructShoppingEntry } from './shopping-selection';
 import {
-  applyShoppingDocumentMutation, createEmptyShoppingDocument, createShoppingRecipeEntry,
+  applyShoppingDocumentMutation, createEmptyShoppingDocument,
   projectShoppingDocument, validateShoppingDocumentV3,
   type ShoppingDocumentStateV3, type ShoppingDocumentV3,
 } from './shopping-document';
@@ -107,10 +108,11 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
       const entries = mutation.type === 'upsertRecipes' ? mutation.entries : [mutation.entry];
       if (!Array.isArray(entries) || entries.length > 100) return result('InvalidInput');
       const recipes = mapRecipeRows(context.recipes as never);
+      if (command.sourceSelections && (command.sourceSelections.length !== entries.length || command.sourceSelections.some(s => !entries.some(e => e.recipeId === s.recipeId)))) return result('InvalidInput');
       for (const entry of entries) {
         const recipe = recipes.find((r) => r.id === entry.recipeId);
         if (!recipe) return result('TargetGone');
-        const expected = createShoppingRecipeEntry(recipe, entry.selectedServings, entry.scaleV1);
+        const expected = reconstructShoppingEntry(recipe, entry, command.sourceSelections);
         if (canonicalShoppingPayload(expected) !== canonicalShoppingPayload(entry)) return result('Conflict');
       }
     }

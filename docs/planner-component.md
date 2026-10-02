@@ -11,7 +11,55 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - `meal-planner.tsx` is intentionally still orchestration-heavy.
 - No planner hook extraction is recommended right now.
 
+## Shopping actions
+
+Meal and weekly shopping actions open the shared `ShoppingSelectionDialog`.
+Opening performs no write. Users choose recipes, yield/servings, and ingredients,
+then the existing Shopping mutation saves all selected contributions together.
+Weekly actions include cooked meals. Pending and success feedback remains owned
+by Planner; failed saves keep selections open for review. See
+[Shopping Domain Reference](./shopping-component.md#planner-ingredient-selection)
+for recovery and conflict behavior.
+
+## Explicit meal swap
+
+Planner's Swap recipe control opens `SwapMealDialog`. Users search recipes across
+categories and choose a scheduled day; already-planned recipes are disabled.
+"Surprise me" retains a random same-category choice through the same guarded save.
+Opening performs no write, pending saves prevent dismissal/duplicate taps, and
+failures remain visible inline with the dialog open.
+
+`useReplacePlannedRecipe` reads the owner-scoped plan, then calls migration 031's
+`replace_planned_recipe` RPC. Migration 032 serializes swap, weekly cooking,
+deletion and history writes by authenticated owner before row locks (history
+uses a statement trigger to precede UPDATE row locks). The RPC compares
+inspected membership/made state/assignments, and rejects current-week cooking in
+recipe history as well as explicit made state. History writes share the source
+recipe lock, so a concurrent history insert cannot slip past the mutation guard.
+Ownership remains enforced through invoker permissions and RLS. Only membership
+and assignments change; other meals, scale, history, and Shopping remain intact.
+The hook refetches caches after success or failure. The old random hook remains
+exported for compatibility; Planner uses the guarded path.
+
+Meal and weekly Shopping dialogs initialize from saved selection yield first,
+otherwise recipe servings multiplied by the saved plan scale. Swap and Shopping
+return keyboard focus to their initiating control, with the Planner content as
+a fallback when a successful operation removes that control. Successful Add
+selects the stable originating section before asynchronous
+plan/recipe refreshes disable or replace the trigger. Cancel/Escape return to
+the initiating control while it remains available. Shopping's success animation
+keeps its control enabled after the write settles, so focus can return while
+feedback is visible.
+
 ## Key Files
+
+Dashboard at `/dashboard` reuses these queries, grouping/made-state selectors,
+mutations, and dialogs. Its current local calendar date refreshes at midnight
+and on tab resume. Week links carry the displayed date in Planner URL state.
+Both screens honor Sunday (`0`) as a configured week start. Dashboard adds meals
+through the existing picker with a day prefilled and marks cooking history at
+the displayed assigned day's local noon. Move and removal reuse existing hooks
+and do not delete recipes or Shopping contributions.
 
 | File | Responsibility |
 |------|----------------|

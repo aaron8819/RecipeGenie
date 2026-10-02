@@ -28,5 +28,7 @@
   "027_shopping_coverage_constraints.sql": "54cb53e407982b4d21fd754fb42f2162bf09e433c24bb5480a0c3b50a23deb02",
   "028_shopping_organization_versions.sql": "e4737af276c0f1492fb57b4b0fd431f72af3eb47367b60d1771cad7109207a05",
   "029_shopping_manual_field_versions.sql": "fc4036fc764f0473b1a9f96d9c828cb515ed8b94ebec47dd43e9a5e009fc88cb",
-  "030_shopping_trip_visibility.sql": "f20dfda9fb35472825722decd8c6be879f2b7f6fb46234cf9290d3e039c46cad"
+  "030_shopping_trip_visibility.sql": "f20dfda9fb35472825722decd8c6be879f2b7f6fb46234cf9290d3e039c46cad",
+  "031_planner_history_swap_guard.sql": "1cc2f1c4993fe9dc543b5809b335995da8ef19ba98a8006e8f0b46718f67e9ca",
+  "032_planner_mutation_lock_order.sql": "e9d53362ac555eebb079ee4692ad22765d3d6c82c4a38139d18bd33c2e587b40"
 }

@@ -22,7 +22,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   `ingredients`, `instructions`, and `instruction_groups` columns. Canonical
   sections are the only persisted recipe structure.
 - `/recipes/[id]` is the canonical, query-backed full-page detail route.
-  Recipes, Planner, and Shopping all navigate to the same detail component.
+  Dashboard, Recipes, Planner, and Shopping all navigate to the same detail component.
 - Recipe detail is action-complete for common follow-up actions:
   - favorite toggle
   - add to plan

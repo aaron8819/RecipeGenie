@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "030_shopping_trip_visibility"
+export const EXPECTED_LATEST_MIGRATION = "032_planner_mutation_lock_order"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {
