@@ -34,6 +34,13 @@ Use the direct PostgreSQL endpoint. Transaction-pooler endpoints (port 6543) are
 
 The verifier prints one concise `PASS`, `FAIL`, or `SKIP` line per check and exits nonzero on failure. It verifies HTTP availability, the public deployment manifest, the exact expected SHA and project identity, read-only connectivity, migration history, the expected latest migration, critical catalog objects, retired objects, and representative reads.
 
+The Shopping constraint check requires
+`public.shopping_list.shopping_list_document_v4_compatibility_check` with the
+reviewed V2 OR V3 OR V4 document-validator predicate. A matching name on another
+table, a different constraint type, or an incorrect predicate fails. PostgreSQL
+whitespace and optional `public` qualification are accepted; the reviewed
+`NOT VALID` form is accepted without validating or changing existing data.
+
 ## Data integrity audit
 
 ```bash
