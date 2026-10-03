@@ -431,8 +431,8 @@ export function useAddShoppingItem() {
 }
 
 export function useShoppingFoundationCommand() {
-  return useShoppingMutation((state, input: { mutation: ShoppingDocumentMutation; observedRevision: number; observedManual?: ShoppingManualItemV1; observedSelections?: Record<string, number | null>; sourceSelections?: ShoppingRecipeSelection[] }) => ({
-    mutation: input.mutation, sourceSelections: input.sourceSelections, observedRevision: input.observedRevision, observedManual: input.observedManual, observedSelections: input.observedSelections,
+  return useShoppingMutation((state, input: { mutation: ShoppingDocumentMutation; observedRevision: number; inspectedCoverage?: ShoppingItem['inspectedCoverage']; observedManual?: ShoppingManualItemV1; observedSelections?: Record<string, number | null>; sourceSelections?: ShoppingRecipeSelection[] }) => ({
+    mutation: input.mutation, inspectedCoverage: input.inspectedCoverage, sourceSelections: input.sourceSelections, observedRevision: input.observedRevision, observedManual: input.observedManual, observedSelections: input.observedSelections,
     value: { ...state, confirmedCurrent: false },
     resolvedValue: (_before, after, _outcome, receiptRevision) => ({
       ...after, confirmedCurrent: after.contentRevision === receiptRevision,
@@ -525,6 +525,7 @@ export function useCheckOffItem() {
 }
 
 export function useBulkCheckOff() {
+  const pantry = usePantryItems();
   return useShoppingMutation((_state, items: ShoppingItem[]) => ({
     inspectedCoverage: Object.assign({}, ...items.map(item => item.inspectedCoverage)),
     observedRevision: items[0]?.inspectedRevision,
@@ -533,7 +534,15 @@ export function useBulkCheckOff() {
       rowRefs: items.map((item) => requireShoppingRowRef(item)),
       checked: true,
     },
-    value: { count: items.length },
+    value: { count: items.length, undo: undefined as { rows: ShoppingItem[]; revision: number } | undefined },
+    resolvedValue: (_before, after, _outcome, receiptRevision) => {
+      const refs = new Set(items.filter(item => !item.checked).map(item => item.rowId));
+      const rows = after.document.schemaVersion === 4 && after.contentRevision === receiptRevision && pantry.isSuccess
+        ? shoppingDocumentToList('', after, pantry.data).items.filter(item => refs.has(item.rowId) && item.checked)
+        : [];
+      return { count: items.length, undo: rows.length === refs.size && rows.length > 0
+        ? { rows, revision: after.contentRevision } : undefined };
+    },
   }))
 }
 

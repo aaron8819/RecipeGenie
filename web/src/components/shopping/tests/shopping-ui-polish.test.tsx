@@ -34,7 +34,9 @@ describe('Shopping presentation and relocated controls', () => {
     current.document.recipeEntries[recipe.id] = createShoppingRecipeEntry(recipe, 4, { numerator: '1', denominator: '1' });
     const value = shoppingDocumentToList('user-1', current).items[0];
     row(value);
-    expect(screen.getByText(counted ? 'onions (estimate)' : 'onion (estimate)').parentElement).toHaveTextContent(counted ? '3' : '1');
+    expect(screen.getByText('estimate')).toBeVisible();
+    expect(screen.getByText(counted ? '3' : '1')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /^View sources for/ }));
     expect(`${formatShoppingPurchaseAmount(value)} ${shoppingPurchaseDisplayName(value)}`).toBe(counted ? '3 onions (estimate)' : '1 onion (estimate)');
     expect(screen.getByText('As needed onion')).toBeInTheDocument();
     if (counted) expect(screen.getByText('2 onions')).toBeInTheDocument();
@@ -67,7 +69,7 @@ describe('Shopping presentation and relocated controls', () => {
     expect(current.document).toEqual(original);
   });
 
-  it('keeps all source occurrences and extras in one collapsed disclosure below the ingredient', () => {
+  it('opens all source occurrences and extras from the separate name target', () => {
     const check = row(item({ requirementBreakdown: [
       { label: 'Salad', quantity: { amount: 1, unit: 'count' }, hidden: false },
       { label: 'Chicken', quantity: { amount: 2, unit: 'count' }, hidden: false },
@@ -75,13 +77,12 @@ describe('Shopping presentation and relocated controls', () => {
       { label: 'Hidden soup', quantity: { amount: 3, unit: 'count' }, hidden: true },
     ] }));
     const disclosure = screen.getByLabelText('View sources for lemons');
-    expect(disclosure.parentElement).not.toHaveAttribute('open');
-    expect(screen.getByText('lemons').compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     fireEvent.click(disclosure);
     expect(check).not.toHaveBeenCalled();
     expect(screen.getByText('1 lemon')).toBeInTheDocument();
     expect(screen.getAllByText('2 lemons')).toHaveLength(2);
-    expect(screen.getByText('Added manually')).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByText('Added manually')).toBeInTheDocument();
     expect(screen.getByText(/not included above/)).toBeInTheDocument();
     expect(screen.queryByText(/Needs:|From |Recipe and extra breakdown/)).not.toBeInTheDocument();
   });
@@ -91,8 +92,9 @@ describe('Shopping presentation and relocated controls', () => {
     const value = item({ item: 'basil', amount: null, unit: '', quantityParts: [quantity], requirementBreakdown: [{ label: 'Pasta', quantity, hidden: false }] });
     row(value);
     const primary = screen.getByText('basil').parentElement!;
-    expect(primary.textContent).toBe('basil');
+    expect(primary.textContent).toContain('basil');
     expect(formatShoppingItemAmount(value)).toBe(wording ?? 'amount unspecified');
+    fireEvent.click(screen.getByRole('button', { name: /^View sources for/ }));
     expect(screen.getByText(`${wording ?? 'amount unspecified'} basil`)).toBeInTheDocument();
   });
 
@@ -113,7 +115,7 @@ describe('Shopping presentation and relocated controls', () => {
       requirementBreakdown: [{ label: 'Beef and Broccoli', quantity: { amount: 3, unit: 'cup' }, hidden: false }] }));
     expect(screen.getByText('broccoli').parentElement).toHaveTextContent('broccoli');
     expect(screen.getByText('broccoli').parentElement).not.toHaveTextContent('144 tsp');
-    fireEvent.click(screen.getByText('View sources'));
+    fireEvent.click(screen.getByRole('button', { name: /^View sources for/ }));
     expect(screen.getByText('3 cup broccoli')).toBeVisible();
   });
 
@@ -124,6 +126,16 @@ describe('Shopping presentation and relocated controls', () => {
     expect(screen.getByText('cheddar cheese').parentElement).not.toHaveTextContent('96 tsp');
     expect(screen.getByText('4')).toBeVisible();
     expect(screen.getByText('1 lb')).toBeVisible();
+  });
+
+  it('retains precise extra quantities with a trailing comma', async () => {
+    render(<ShoppingAddItem state={state()} />);
+    fireEvent.change(screen.getByLabelText('Item name'), { target: { value: 'onions,' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }));
+    fireEvent.change(screen.getByLabelText('Extra amount'), { target: { value: '1/2' } });
+    fireEvent.change(screen.getByLabelText('Extra unit'), { target: { value: 'bags' } });
+    fireEvent.submit(screen.getByRole('form', { name: 'Add shopping item' }));
+    await waitFor(() => expect(addItem.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ itemName: 'onions', amount: 0.5, unit: 'bags' })));
   });
 
   it('adds a name without an amount control and returns focus', async () => {

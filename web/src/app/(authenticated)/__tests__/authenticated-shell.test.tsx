@@ -132,7 +132,7 @@ describe("AuthenticatedShell", () => {
     })
   })
 
-  it("renders the shared shell, route, onboarding, and sign-out behavior", () => {
+  it("renders the shared shell and route without automatic onboarding, preserving sign-out", () => {
     authState = {
       user: { email: "cook@example.com" },
       loading: false,
@@ -148,7 +148,7 @@ describe("AuthenticatedShell", () => {
     expect(screen.getByText("Private route")).toBeInTheDocument()
     expect(screen.getByText("Desktop shell navigation")).toBeInTheDocument()
     expect(screen.getByText("Shell navigation")).toBeInTheDocument()
-    expect(screen.getByText("First-run onboarding")).toBeInTheDocument()
+    expect(screen.queryByText("First-run onboarding")).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "Shell sign out" }))
     expect(signOut).toHaveBeenCalledOnce()
