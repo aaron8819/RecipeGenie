@@ -14,9 +14,12 @@ const EXPECTED_COLUMNS = [
   "pantry_items.item",
 ]
 
+const SHOPPING_DOCUMENT_CONSTRAINT = "shopping_list_document_v4_compatibility_check"
+const SHOPPING_DOCUMENT_CHECK = "(is_shopping_document_v2(document) OR is_shopping_document_v3(document) OR is_shopping_document_v4(document))"
+
 const EXPECTED_CONSTRAINTS = [
   "recipes_pkey", "recipes_recipe_uuid_key", "shopping_list_pkey",
-  "pantry_items_user_id_item_key", "shopping_list_document_v3_compatibility_check",
+  "pantry_items_user_id_item_key", SHOPPING_DOCUMENT_CONSTRAINT,
 ]
 
 const EXPECTED_INDEXES = [
@@ -53,6 +56,18 @@ async function loadCatalog(query) {
       'constraints', (select jsonb_agg(con.conname order by con.conname)
         from pg_constraint con join pg_class c on c.oid = con.conrelid
         join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public'),
+      'shoppingDocumentConstraint', (select jsonb_build_object(
+          'table', c.relname, 'type', con.contype, 'noInherit', con.connoinherit,
+          'expression', pg_get_expr(con.conbin, con.conrelid),
+          'validators', (select jsonb_agg(n.nspname || '.' || p.proname order by p.proname)
+            from pg_depend d join pg_proc p on p.oid = d.refobjid
+            join pg_namespace n on n.oid = p.pronamespace
+            where d.classid = 'pg_constraint'::regclass and d.objid = con.oid
+              and d.refclassid = 'pg_proc'::regclass))
+        from pg_constraint con join pg_class c on c.oid = con.conrelid
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname = 'public' and c.relname = 'shopping_list'
+          and con.conname = '${SHOPPING_DOCUMENT_CONSTRAINT}'),
       'indexes', (select jsonb_agg(indexname order by indexname)
         from pg_indexes where schemaname = 'public'),
       'functions', (select jsonb_agg(distinct p.proname order by p.proname)
@@ -70,6 +85,24 @@ function requireCatalogGroup(label, expected, actual) {
   const absent = missing(expected, actual || [])
   if (absent.length) throw new Error(`missing ${label}: ${absent.join(", ")}`)
   return `${expected.length} required ${label} present`
+}
+
+function requireShoppingDocumentConstraint(constraint) {
+  // pg_get_expr qualifies public functions when they are outside search_path.
+  const normalize = (expression) => expression.replace(/\bpublic\./g, "").replace(/\s+/g, "")
+  if (
+    constraint?.table !== "shopping_list"
+    || constraint.type !== "c"
+    || constraint.noInherit !== false
+    || typeof constraint.expression !== "string"
+    || normalize(constraint.expression) !== normalize(SHOPPING_DOCUMENT_CHECK)
+    || JSON.stringify(constraint.validators) !== JSON.stringify([
+      "public.is_shopping_document_v2", "public.is_shopping_document_v3", "public.is_shopping_document_v4",
+    ])
+  ) {
+    throw new Error(`incorrect constraints: public.shopping_list.${SHOPPING_DOCUMENT_CONSTRAINT} must check Shopping V2/V3/V4 compatibility`)
+  }
+  // Migration 030 intentionally uses NOT VALID; do not require convalidated.
 }
 
 export function createApplicationChecks({
@@ -173,6 +206,7 @@ export function createDatabaseChecks(expectedMigration) {
       run: async ({ query }) => {
         catalog ||= await loadCatalog(query)
         requireCatalogGroup("constraints", EXPECTED_CONSTRAINTS, catalog.constraints)
+        requireShoppingDocumentConstraint(catalog.shoppingDocumentConstraint)
         requireCatalogGroup("indexes", EXPECTED_INDEXES, catalog.indexes)
         return `${EXPECTED_CONSTRAINTS.length} constraints and ${EXPECTED_INDEXES.length} indexes present`
       },
