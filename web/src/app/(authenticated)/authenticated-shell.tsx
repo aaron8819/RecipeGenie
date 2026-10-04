@@ -7,10 +7,8 @@ import { AuthForm } from "@/components/auth/auth-form"
 import {
   BottomNav,
   DesktopSidebar,
-  FirstRunOnboarding,
   Header,
 } from "@/components/layout"
-import { useFirstRunOnboarding } from "@/components/layout/first-run-onboarding"
 import { useAuthContext } from "@/lib/auth-context"
 import { getSupabase } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
@@ -48,7 +46,6 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
   const [authError, setAuthError] = useState<string | null>(null)
   const pathname = usePathname()
   const { user, loading, signOut, isAuthenticated } = useAuthContext()
-  const { showOnboarding, completeOnboarding } = useFirstRunOnboarding()
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -107,16 +104,16 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="min-h-screen bg-background pb-[var(--bottom-nav-safe-height)] lg:bg-canvas lg:pb-0">
+    <div className={cn('min-h-screen bg-background pb-[var(--bottom-nav-safe-height)] lg:bg-canvas lg:pb-0', pathname === '/shopping' && 'shopping-shell')}>
       <div className="recipe-detail-print-hidden">
-        <DesktopSidebar
+        {pathname !== '/shopping' && <DesktopSidebar
           userEmail={user?.email}
           onSignOut={() => void signOut()}
-        />
-        <Header userEmail={user?.email} onSignOut={() => void signOut()} />
+        />}
+        <Header userEmail={user?.email} onSignOut={() => void signOut()} shopping={pathname === '/shopping'} />
       </div>
 
-      <main className="lg:pl-64">
+      <main className={pathname === '/shopping' ? '' : 'lg:pl-64'}>
         <div
           className={cn(
             "mx-auto w-full max-w-full lg:p-8",
@@ -132,10 +129,6 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
         <BottomNav />
       </div>
 
-      <FirstRunOnboarding
-        open={showOnboarding}
-        onComplete={completeOnboarding}
-      />
     </div>
   )
 }

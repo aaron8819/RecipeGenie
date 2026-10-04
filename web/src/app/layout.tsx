@@ -86,7 +86,7 @@ export default async function RootLayout({
         cormorantGaramond.variable
       )}
     >
-      <body className={cn(outfit.className, "min-h-screen overflow-x-hidden")}>
+      <body className={cn(outfit.className, "min-h-screen")}>
         <div className="min-h-screen min-w-0">
           <Providers>{children}</Providers>
         </div>

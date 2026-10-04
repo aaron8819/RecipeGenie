@@ -106,12 +106,13 @@
   }
   html {
     min-height: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
   body {
     @apply bg-background text-foreground;
     min-height: var(--app-height);
-    overflow-x: hidden;
+    /* Clip horizontal overflow without becoming a sticky scroll ancestor. */
+    overflow-x: clip;
   }
 }
 

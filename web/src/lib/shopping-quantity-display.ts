@@ -3,8 +3,11 @@ import { getIngredientDisplayUnit } from './ingredient-units'
 import { toFraction } from './utils'
 import { formatStructuredRecipeQuantity } from './recipe-quantity'
 import { categorizeIngredient } from './shopping-categories'
-import { sumShoppingRequirements } from './shopping-extra-quantities'
+import { addShoppingRationals, sumShoppingRequirements } from './shopping-extra-quantities'
 import { pluralizeShoppingPurchaseName } from './shopping-ingredient-semantics'
+import { normalizeUnit } from './shopping-list-normalization'
+
+const SOURCE_QUANTITIES = 'See sources for quantities'
 
 /** The existing high-confidence whole-produce default, display only.
  * One item per qualitative occurrence, stable at every selected yield.
@@ -31,7 +34,8 @@ export function shoppingPurchaseDisplayName(item: ShoppingItem): string {
   const name = count && Math.abs(count) !== 1
     ? pluralizeShoppingPurchaseName(item.item) : item.item
   const estimated = (item.quantityParts ?? [item]).some(part => isWholeItemEstimate(item, part))
-  return estimated && formatShoppingPurchaseAmount(item) ? `${name} (estimate)` : name
+  const amount = formatShoppingPurchaseAmount(item)
+  return estimated && amount && amount !== SOURCE_QUANTITIES ? `${name} (estimate)` : name
 }
 
 const DISPLAY_UNIT_PLURALS: Record<string, string> = {
@@ -145,7 +149,44 @@ export function formatShoppingItemAmount(item: ShoppingItem): string {
   return [...primary, ...formatAdditionalAmountParts(item.additionalAmounts)].join(' + ')
 }
 
-/** Purchase-facing amounts only; exact recipe requirements remain in View sources. */
+/** Sum only exact counts with the same captured package descriptor and size.
+ * Unsized packages, ranges, qualifiers and unsupported arithmetic stay separate.
+ * These display-only copies never change the captured source operands.
+ */
+function combinePurchasePackages(parts: ShoppingQuantity[]): ShoppingQuantity[] {
+  const result: ShoppingQuantity[] = []
+  const packages = new Map<string, number>()
+  for (const part of parts) {
+    const pack = part.exactPackageV1
+    if (!pack || pack.count.kind !== 'exact' || pack.count.qualifier) {
+      result.push(part)
+      continue
+    }
+    const key = JSON.stringify([pack.type, pack.size.value, normalizeUnit(pack.size.unit)])
+    const index = packages.get(key)
+    if (index === undefined) {
+      packages.set(key, result.length)
+      result.push(part)
+      continue
+    }
+    const previous = result[index].exactPackageV1!
+    const count = previous.count
+    const total = count.kind === 'exact' ? addShoppingRationals(count.value, pack.count.value) : null
+    if (!total) {
+      result.push(part)
+      continue
+    }
+    const lexeme = total.denominator === '1' ? total.numerator : `${total.numerator}/${total.denominator}`
+    const quantity = { ...count, kind: 'exact' as const, value: total,
+      authored: lexeme, lexeme, source: 'legacy-synthesized' as const }
+    result[index] = { ...result[index],
+      amount: Number(total.numerator) / Number(total.denominator),
+      exactQuantityV1: quantity, exactPackageV1: { ...previous, count: quantity } }
+  }
+  return result
+}
+
+/** Purchase-facing amounts only; never advertise a partial total. */
 export function formatShoppingPurchaseAmount(item: ShoppingItem): string {
   const [category] = categorizeIngredient(item.item)
   const parts = purchaseParts(item)
@@ -161,7 +202,9 @@ export function formatShoppingPurchaseAmount(item: ShoppingItem): string {
     'can', 'cans', 'clove', 'cloves', 'head', 'heads', 'jar', 'jars',
     'package', 'packages', 'stalk', 'stalks',
   ])
-  return parts.filter(part => {
+  const purchasable = parts.map(part => {
+    // Structured package semantics outrank the author's unit word order.
+    if (part.exactPackageV1) return true
     if (part.amount == null && (!part.exactQuantityV1 ||
       part.exactQuantityV1.kind === 'qualitative')) return false
     const unit = getIngredientDisplayUnit(part.exactAuthoredUnit ?? part.unit).toLowerCase()
@@ -169,5 +212,12 @@ export function formatShoppingPurchaseAmount(item: ShoppingItem): string {
     if ((category === 'produce' || /^(?:large )?eggs?$/.test(item.item)) &&
       (!unit || unit === 'count')) return true
     return category === 'protein' && ['lb', 'lbs', 'pound', 'pounds'].includes(unit)
-  }).map(formatShoppingQuantityPart).join(' + ')
+  })
+  if (!purchasable.some(Boolean)) return ''
+  const amounts = combinePurchasePackages(parts).map(formatShoppingQuantityPart)
+  if (!amounts.every(Boolean)) return SOURCE_QUANTITIES
+  if (!purchasable.every(Boolean) && (item.sources?.some(source => source.recipeId) ||
+    item.requirementBreakdown?.some(part => part.source?.recipeId))) return SOURCE_QUANTITIES
+  // Manual-only Dashboard rows have no Sources disclosure; keep all their amounts visible.
+  return amounts.join(' + ')
 }

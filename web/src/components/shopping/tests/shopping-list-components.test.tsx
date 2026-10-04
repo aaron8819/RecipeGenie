@@ -187,7 +187,9 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.queryByText("2 lb")).not.toBeInTheDocument()
     expect(screen.getByText("apples")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /^View sources for/ }));
     expect(screen.getAllByText("Autumn Soup")).toHaveLength(2)
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.getByRole("button", { name: "Reorder apples" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /^Actions for / })).toBeInTheDocument()
 
@@ -220,7 +222,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    expect(screen.getByTestId("shopping-item-row").className).toContain("items-start")
+    expect(screen.getByTestId("shopping-item-row").className).toContain("shopping-purchase-row")
     expect(screen.getByText("Swipe left to delete")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).toHaveAttribute("aria-busy", "true")
     expect(screen.getByRole("button", { name: "Check off milk", pressed: true })).not.toBeDisabled()
@@ -250,7 +252,7 @@ describe("ShoppingItemRow", () => {
       />
     )
 
-    fireEvent.click(screen.getByText("View sources"))
+    fireEvent.click(screen.getByRole("button", { name: /^View sources for/ }))
     fireEvent.click(screen.getByRole("button", { name: "Weeknight Pasta" }))
     expect(onViewRecipe).toHaveBeenCalledWith(undefined, "Weeknight Pasta")
   })
@@ -278,6 +280,7 @@ describe("ShoppingItemRow", () => {
     )
 
     expect(screen.getByLabelText('View sources for apples').parentElement).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByRole("button", { name: /^View sources for/ }));
     expect(screen.getByText('Sunday Chili')).toBeInTheDocument()
     expect(screen.getByText('Lunch Bowl')).toBeInTheDocument()
   })
@@ -306,6 +309,7 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.getByText("3 cloves + 1 head")).toBeInTheDocument()
     expect(screen.queryByText("Also: 1 head")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /^View sources for/ }));
     expect(screen.getByText("Roast Chicken")).toBeInTheDocument()
   })
 
@@ -336,6 +340,7 @@ describe("ShoppingItemRow", () => {
 
     expect(screen.queryByText("4")).not.toBeInTheDocument()
     expect(screen.getByText("limes")).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /^View sources for/ }));
     expect(screen.getByText("juice of 2 limes")).toBeInTheDocument()
     expect(screen.getByText("lime wedges")).toBeInTheDocument()
     expect(screen.getByText("Shredded Chipotle Beef")).toBeInTheDocument()
@@ -408,6 +413,7 @@ describe("ShoppingItemRow", () => {
     )
 
     expect(screen.getByText(purchaseItem)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: /^View sources for/ }));
     expect(screen.getByText(expected)).toBeInTheDocument()
   })
 
@@ -709,7 +715,7 @@ it('keeps UUID source buttons distinct, including a recipe titled Manual', () =>
   ] })} isDesktop={false} sourceDisplay="tags" isCheckingOff={false}
     isRemoving={false} isAddingToPantry={false} recipeColorMap={new Map()}
     onViewRecipe={onViewRecipe} onCheckOff={vi.fn()} onAddToPantry={vi.fn()} onRemove={vi.fn()} />)
-  fireEvent.click(screen.getByText('View sources'))
+  fireEvent.click(screen.getByRole('button', { name: /^View sources for/ }))
   expect(screen.getAllByRole('button', { name: 'Soup (1)' })).toHaveLength(2)
   fireEvent.click(screen.getByRole('button', { name: 'Soup (2)' }))
   expect(onViewRecipe).toHaveBeenLastCalledWith('soup-b', 'Soup')

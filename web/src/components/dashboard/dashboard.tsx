@@ -22,7 +22,7 @@ import {
 import { AddRecipeToPlanModal } from '@/components/planner/add-recipe-to-plan-modal';
 import { SwapMealDialog } from '@/components/planner/swap-meal-dialog';
 import { ShoppingSelectionDialog } from '@/components/shopping/shopping-selection-dialog';
-import { formatShoppingItemAmount } from '@/components/shopping/shopping-list-components';
+import { DashboardShoppingRow } from './dashboard-shopping-row';
 import {
   groupRecipesByPlannerDay,
   isRecipeMadeForWeek,
@@ -60,6 +60,7 @@ import { buildPlannerHref } from '@/lib/planner-route-state';
 import { buildRecipeDetailHref } from '@/lib/recipe-detail-navigation';
 import { getRecipeImageUrl } from '@/lib/supabase/storage';
 import { addShoppingDraft } from '@/lib/shopping-quick-add';
+import { resolveShoppingIngredientSemantics } from '@/lib/shopping-ingredient-semantics';
 import { formatShoppingAddMessage } from '@/lib/shopping-feedback';
 import type { ShoppingRecipeSelection } from '@/lib/shopping-selection';
 import { getErrorMessage } from '@/lib/utils';
@@ -200,9 +201,14 @@ function ShoppingPreview() {
     lock.current = true;
     setAdding(true);
     try {
-      const result = await addShoppingDraft(draft, (item) =>
-        add.mutateAsync(item),
-      );
+      const purchases = new Set(items.map((item) => item.orderingKey ??
+        resolveShoppingIngredientSemantics({ item: item.item }).purchaseKey));
+      const result = await addShoppingDraft(draft, async (item) => {
+        const purchaseKey = resolveShoppingIngredientSemantics({ item: item.itemName }).purchaseKey;
+        if (purchases.has(purchaseKey)) throw new Error('Item already in shopping list');
+        await add.mutateAsync(item);
+        purchases.add(purchaseKey);
+      });
       setDraft(result.draft);
       setFeedback(result.message);
     } finally {
@@ -263,20 +269,11 @@ function ShoppingPreview() {
           )}
           <div className="dashboard-shopping-items">
             {preview.map((item) => (
-              <label key={item.rowId} className="dashboard-shopping-row">
-                <input
-                  type="checkbox"
-                  checked={!!item.checked}
-                  onChange={() => handleCheckOff(item)}
-                  aria-label={`Check off ${item.item}`}
-                />
-                <span>
-                  <span className={item.checked ? 'line-through' : ''}>
-                    {item.item}
-                  </span>
-                  <small>{formatShoppingItemAmount(item) || 'As needed'}</small>
-                </span>
-              </label>
+              <DashboardShoppingRow
+                key={item.rowId}
+                item={item}
+                onCheckOff={handleCheckOff}
+              />
             ))}
           </div>
           {!remaining.length && (

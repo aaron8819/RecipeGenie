@@ -123,26 +123,33 @@ establish hosted health. Foundation acceptance requires independent review.
 
 ## Shopping presentation
 
-Initialized lists use the normal Add item form for name-only manual reminders.
-Comma-separated names add separate purchases in input order; empty segments are
-ignored. Precise manual amounts can still be entered in the row's View sources
-editor when needed.
-If a batch stops after a failed or uncertain command, the form reports confirmed
-additions and retains the unresolved names for review before retrying.
-Each ingredient has one collapsed View sources disclosure containing every
-recipe occurrence and manual contribution; contributions outside the displayed
-bucket are explicitly marked. Manual edit/remove and legacy-meaning controls
-live in that ingredient's disclosure, including In Pantry and Excluded rows.
-Yield controls sit with Recipes in list, which includes hidden-only selections.
-Unresolved placement controls appear on affected rows; dormant placement
-evidence without a row retains a conditional recovery control.
+Initialized Shopping uses a flat purchase list with a desktop section rail and
+mobile sticky add/jump controls. Settled checked rows live in Completed; pending
+checks remain actionable. Shopping uses horizontal desktop navigation; Dashboard
+retains its existing shell.
 
-Purchase rows and Copy show useful store quantities only: whole produce counts,
-package counts, and protein pounds. Recipe volume measures such as cups or
-teaspoons are not purchase quantities. Expanded View sources retains exact
-authored recipe wording and all mixed known/unknown requirements. Persisted
-quantities and command behavior are unchanged. Disclosure and form interactions
-are separate from check-off and drag handles.
+Single and comma-separated additions retain synchronous submission protection.
+Details accepts a precise manual amount/unit for one item; batch quantities are
+rejected rather than ambiguously applied. Manual amounts remain extra demand.
+Sections use remembered placement and can be changed with Organize. Failed or
+uncertain batches retain unresolved names and command identity for safe retry.
+
+Each ingredient name opens a source dialog containing captured recipe occurrences
+and manual contributions, including contributions outside the displayed bucket.
+Manual editing, removal, legacy meaning and placement recovery retain existing
+revision checks. Recipes in list opens selection/yield controls and includes
+hidden-only selections. Dormant placement evidence remains above the workspace.
+
+Shared purchase/source presentation renders authoritative store quantities,
+separate estimate labels and source counts. Source dialogs retain exact authored
+wording and mixed known/unknown requirements. Copy uses the same purchase rules.
+No document contracts or migrations changed.
+
+Bulk check Undo captures the acknowledged coverage versions for newly checked
+rows and submits their conditional inverse through the existing command protocol.
+Intervening acknowledgements reject that Undo. Clear and organization retain their
+existing conditional inverses. Rapid opposing taps can encounter the existing
+stale-coverage conflict; the UI reports it and a fresh tap uses current evidence.
 
 ## Dashboard and Planner partial source selections
 

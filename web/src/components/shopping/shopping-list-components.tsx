@@ -1,3 +1,5 @@
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { ShoppingPurchaseAmount, ShoppingSourceHint } from './shopping-purchase-presentation'
 import { shoppingSourceControls as dedupeSources, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
 import { formatShoppingPurchaseAmount, shoppingPurchaseDisplayName, formatEncodedRangeAmount, formatShoppingQuantityPart } from '@/lib/shopping-quantity-display'
 export { formatShoppingItemAmount, formatAmountPart, formatEncodedRangeAmount, formatAdditionalAmountParts } from '@/lib/shopping-quantity-display'
@@ -148,19 +150,17 @@ function rowAmount(item: ShoppingItem): string {
   return formatShoppingPurchaseAmount(item)
 }
 
-function ShoppingSources({ item, onViewRecipe, children }: {
+export function ShoppingSources({ item, onViewRecipe, children, inline = false }: {
   item: ShoppingItem
   onViewRecipe?: (recipeId: string | undefined, recipeName: string) => void
   children?: ReactNode
+  inline?: boolean
 }) {
   const sources = item.requirementBreakdown ?? (item.sources ?? []).map(source => ({
     label: source.manualId || isManualShoppingItem(item) ? 'Added manually' : shoppingSourceLabel(source),
     source, quantity: source.manualId ? item : null, hidden: false,
   }))
-  if (!sources.length && !children) return null
-  return <details className="text-sm" data-shopping-sources="true">
-    <summary aria-label={`View sources for ${getDisplayItemName(item)}`} className="min-h-11 cursor-pointer content-center text-muted-foreground underline-offset-4 hover:underline focus-visible:outline-primary">View sources</summary>
-    <div className="space-y-2 pb-2" onTouchStart={event => event.stopPropagation()}>
+  const details = <div className="space-y-2 pb-2" onTouchStart={event => event.stopPropagation()}>
       {sources.map((part, index) => <div key={index} className="break-words text-sm text-muted-foreground">
         <span>{(part.source && formatSourceIngredientLabel(part.source)) ||
           `${formatShoppingQuantityPart(part.quantity ?? { amount: null, unit: '' })} ${getDisplayItemName({ ...item, amount: part.quantity?.amount ?? null, unit: part.quantity?.unit ?? '' })}`}</span>
@@ -170,7 +170,23 @@ function ShoppingSources({ item, onViewRecipe, children }: {
       </div>)}
       {children}
     </div>
+  if (inline) return <details data-shopping-sources="true">
+    <summary aria-label={`View sources for ${getDisplayItemName(item)}`}>Sources</summary>
+    {details}
   </details>
+  return <Dialog>
+    <DialogTrigger asChild>
+      <button type="button" aria-label={`View sources for ${getDisplayItemName(item)}`} className="shopping-name-target" data-shopping-sources="true">
+        <span>{shoppingPurchaseDisplayName(item).replace(/ \(estimate\)$/, '')}</span>
+        <ShoppingSourceHint item={item} />
+      </button>
+    </DialogTrigger>
+    <DialogContent className="shopping-sources-dialog">
+      <DialogTitle className="pr-10 font-display text-2xl">{shoppingPurchaseDisplayName(item)}</DialogTitle>
+      <DialogDescription>Requirements and extras · exact captured sources</DialogDescription>
+    {details}
+    </DialogContent>
+  </Dialog>
 }
 
 export function SourceTag({
@@ -252,14 +268,14 @@ export function ShoppingItemRow({
   onRemove: () => void
 }) {
   const isChecked = item.checked || false
-  const amountLabel = rowAmount(item)
   const displayItemName = shoppingPurchaseDisplayName(item)
 
   return (
     <div
       data-testid="shopping-item-row"
+      data-shopping-row-id={item.rowId}
       className={cn(
-        "group swipeable-content flex min-h-[64px] items-start justify-between px-3 py-1.5 transition-transform duration-200 ease-out hover:bg-stone-50/70 sm:px-4 md:min-h-[64px] md:px-5 md:py-1.5",
+        "shopping-purchase-row group swipeable-content",
         showSwipeHint && "animate-swipe-hint"
       )}
       style={{
@@ -278,7 +294,7 @@ export function ShoppingItemRow({
         </div>
       ) : null}
 
-      <div className="flex min-w-0 flex-1 items-start gap-2 sm:gap-3">
+      <div className="shopping-row-main">
         {showDragHandle ? (
           <button
             type="button"
@@ -305,7 +321,7 @@ export function ShoppingItemRow({
         >
           <span
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-[7px] border-2 bg-white shadow-[0_1px_2px_rgba(63,52,43,0.05)] transition-all active:scale-95 md:h-7 md:w-7",
+              "flex h-6 w-6 items-center justify-center rounded-md border-[1.5px] bg-white transition-all active:scale-95",
               isChecked
                 ? "border-sage-500 bg-sage-500 text-white"
                 : "border-sage-300 hover:border-sage-500 hover:bg-sage-100 active:bg-sage-200"
@@ -315,27 +331,7 @@ export function ShoppingItemRow({
           </span>
         </button>
 
-        <div className={cn("flex min-h-11 min-w-0 flex-1 flex-col pt-2.5", isChecked && "opacity-60")}>
-          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            {amountLabel ? (
-              <span
-                className={cn(
-                  "min-w-0 break-words text-[17px] font-bold leading-6 text-foreground md:text-lg",
-                  isChecked && "text-gray-500 line-through"
-                )}
-              >
-                {amountLabel}
-              </span>
-            ) : null}
-            <span
-              className={cn(
-                "min-w-0 break-words text-[17px] font-medium leading-6 text-slate-700 md:text-lg md:text-slate-700",
-                isChecked && "text-gray-500 line-through"
-              )}
-            >
-              {displayItemName}
-            </span>
-          </div>
+        <div className={cn("shopping-row-name", isChecked && "opacity-60")}>
           {item.legacyAmount && <p className="text-sm">Choose what this saved amount means in View sources.</p>}
           {item.coverageNeedsRecheck ? <p className="text-sm">Please recheck the current amount.</p> : item.requirementChanged && <p className="text-sm">Requirement changed</p>}
           {item.previousChecked && <p className="text-sm">Previously checked; confirm current need.</p>}
@@ -345,6 +341,7 @@ export function ShoppingItemRow({
         </div>
       </div>
 
+      <ShoppingPurchaseAmount item={item} />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
@@ -709,7 +706,7 @@ export function ShoppingCategorySection({
   const remainingCount = categoryData.uncheckedCount
   const completedCount = categoryData.checkedCount
 
-  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return
     event.preventDefault()
     onToggleCategory()
@@ -728,34 +725,29 @@ export function ShoppingCategorySection({
   return (
     <Card
       className={cn(
-        "animate-fade-in overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_10px_28px_rgba(63,52,43,0.06)] transition-all duration-200",
+        "shopping-category transition-colors",
         compact && "shadow-[0_9px_24px_rgba(63,52,43,0.055)] md:rounded-none md:border-0 md:shadow-none",
         isDragTarget && "border-2 border-dashed border-primary bg-primary/5"
       )}
     >
       <CardHeader
-        role="button"
-        tabIndex={0}
-        aria-expanded={!isCollapsed}
         className={cn(
-          "flex cursor-pointer flex-row items-center justify-between bg-[#fcfbf8] transition-colors hover:bg-stone-100/70",
+          "shopping-category-heading flex cursor-pointer flex-row items-center justify-between",
           !isCollapsed && "border-b border-stone-100/80",
-          compact ? "px-4 py-3.5 md:px-6 md:py-4" : "px-4 py-3.5 md:px-6 md:py-4"
+          "px-0 py-0"
         )}
-        onClick={onToggleCategory}
-        onKeyDown={handleHeaderKeyDown}
       >
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5 pr-2">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sage-100 text-primary md:h-9 md:w-9">
+          <span className="hidden">
             <CategoryIcon className={cn(compact ? "h-4 w-4" : "h-5 w-5")} />
           </span>
-          <CardTitle className={cn(
-            "min-w-0 font-display font-semibold text-foreground",
+          <h2 className={cn(
+            "min-w-0 font-semibold text-foreground",
             categoryData.key === "__unknown_category__" ? "whitespace-normal break-words" : "truncate",
-            compact ? "text-lg md:text-xl" : "text-lg md:text-xl"
+            "text-[15px] md:text-[17px]"
           )}>
-            {categoryData.name}
-          </CardTitle>
+            <button type="button" role="button" aria-expanded={!isCollapsed} onClick={onToggleCategory} onKeyDown={handleHeaderKeyDown} className="min-h-11 text-left">{categoryData.name}</button>
+          </h2>
           {categoryData.isCustom ? (
             <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
               Custom
@@ -778,7 +770,7 @@ export function ShoppingCategorySection({
               onClick={handleBulkClick}
               disabled={isBulkCheckOffPending}
               className={cn(
-                "flex min-h-[40px] min-w-[44px] touch-manipulation items-center justify-center rounded-full px-2 text-xs text-primary hover:bg-primary/10",
+                "flex min-h-[44px] min-w-[44px] touch-manipulation items-center justify-center rounded-full px-2 text-xs text-primary hover:bg-primary/10",
                 compact ? "h-10 md:h-8" : "h-10 md:h-9"
               )}
               title={`Check all items in ${categoryData.name}`}
@@ -803,12 +795,13 @@ export function ShoppingCategorySection({
           </button>
         </div>
       </CardHeader>
-      {isCollapsed ? null : <CardContent className="p-0">{children}</CardContent>}
+      {isCollapsed ? null : <CardContent className="p-0"><div className="shopping-column-labels" aria-hidden="true"><span>Item</span><span>Buy</span></div>{children}</CardContent>}
     </Card>
   )
 }
 
 export function ShoppingStateSection({
+  id,
   title,
   count,
   icon,
@@ -822,6 +815,7 @@ export function ShoppingStateSection({
   mobileContent,
   desktopContent,
 }: {
+  id?: string
   title: string
   count: number
   icon?: ReactNode
@@ -835,7 +829,7 @@ export function ShoppingStateSection({
   mobileContent: ReactNode
   desktopContent: ReactNode
 }) {
-  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleHeaderKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return
     event.preventDefault()
     onToggle()
@@ -847,22 +841,16 @@ export function ShoppingStateSection({
   }
 
   return (
-    <Card className="mb-4 animate-fade-in overflow-hidden rounded-xl border border-stone-100 shadow-sm">
+    <Card id={id} className="mb-4 animate-fade-in overflow-hidden rounded-xl border border-stone-100 shadow-sm">
       <CardHeader
-        role="button"
-        tabIndex={0}
         className={cn(
           "flex flex-row items-center justify-between border-b border-stone-100 bg-stone-50/50 px-4 py-3 cursor-pointer hover:bg-stone-100/50 transition-colors",
           isDesktop && "hidden"
         )}
-        onClick={onToggle}
-        onKeyDown={handleHeaderKeyDown}
       >
         <div className="flex items-center gap-2">
           {icon}
-          <CardTitle className="font-display text-sm font-semibold uppercase tracking-wide text-foreground">
-            {title}
-          </CardTitle>
+          <h2 className="text-sm font-semibold text-foreground"><button type="button" aria-expanded={!isCollapsed} onClick={onToggle} onKeyDown={handleHeaderKeyDown} className="min-h-11 text-left">{title}</button></h2>
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-tighter",
@@ -891,9 +879,7 @@ export function ShoppingStateSection({
       >
         <div className="flex items-center gap-2 md:gap-3">
           {icon}
-          <CardTitle className="font-display text-sm font-semibold uppercase tracking-wide text-foreground md:text-lg">
-            {title}
-          </CardTitle>
+          <h2 className="text-sm font-semibold text-foreground md:text-lg">{title}</h2>
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[10px] font-medium",

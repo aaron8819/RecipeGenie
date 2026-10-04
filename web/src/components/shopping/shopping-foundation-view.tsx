@@ -209,6 +209,9 @@ export function ShoppingAddItem({ inputRef }: {
   const [error, setError] = useState('');
   const submitting = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [unit, setUnit] = useState('');
   return <form className="grid gap-2" aria-label="Add shopping item" onSubmit={async event => {
     event.preventDefault();
     if (submitting.current) return;
@@ -217,7 +220,10 @@ export function ShoppingAddItem({ inputRef }: {
     try {
       const items = name.split(',').map(item => item.trim()).filter(Boolean);
       if (!items.length) { setError('Enter an item or paste a comma-separated list.'); input.current?.focus(); return; }
-      if (name.includes(',')) {
+      const parsedAmount = amount.trim() ? parseRationalLexeme(amount) : null;
+      if (amount.trim() && !parsedAmount) { setError('Enter a non-negative amount, such as 2 or 1/2.'); return; }
+      if (items.length > 1 && (amount.trim() || unit.trim())) { setError('Add quantities one item at a time. Clear Amount and Unit to add a comma-separated list.'); return; }
+      if (name.includes(',') && !parsedAmount && !unit.trim()) {
         const added: string[] = [];
         const duplicates: string[] = [];
         let failed: string | null = null;
@@ -242,8 +248,11 @@ export function ShoppingAddItem({ inputRef }: {
         input.current?.focus();
         return;
       }
-      await addItem.mutateAsync({ itemName: items[0], rowId: createShoppingManualItemId() });
-      setName(''); setError(''); input.current?.focus();
+      await addItem.mutateAsync({ itemName: items[0], rowId: createShoppingManualItemId(),
+        ...(parsedAmount ? { amount: Number(parsedAmount.numerator) / Number(parsedAmount.denominator) } : {}),
+        ...(unit.trim() ? { unit: unit.trim() } : {}),
+      });
+      setName(''); setAmount(''); setUnit(''); setError(''); input.current?.focus();
     } catch (error) {
       setError(errorText(error));
     } finally {
@@ -253,9 +262,15 @@ export function ShoppingAddItem({ inputRef }: {
   }}>
     <div className="flex gap-2">
       <Input ref={input} aria-label="Item name" placeholder="Add an item…" value={name} onChange={e => setName(e.target.value)} className="h-12 min-w-0 rounded-xl bg-white" />
-      <Button className="h-12 shrink-0 rounded-xl" type="submit" disabled={isSubmitting || addItem.isPending || !name.trim() || !pantry.isSuccess}>Add item</Button>
+      <Button variant="ghost" className="h-12 shrink-0 px-2" type="button" aria-expanded={detailsOpen} aria-controls="shopping-add-details" onClick={() => setDetailsOpen(open => !open)}>Details</Button>
+      <Button className="h-12 shrink-0 rounded-lg px-3" aria-label="Add item" type="submit" disabled={isSubmitting || addItem.isPending || !name.trim() || !pantry.isSuccess}><span aria-hidden="true">＋</span><span className="hidden md:inline">Add</span></Button>
     </div>
-    {error && <p role="alert">{error}</p>}
+    {detailsOpen && <div id="shopping-add-details" className="grid grid-cols-2 gap-2 text-sm">
+      <label>Amount<Input aria-label="Extra amount" value={amount} onChange={event => setAmount(event.target.value)} placeholder="e.g. 2 or 1/2" inputMode="decimal" /></label>
+      <label>Unit<Input aria-label="Extra unit" value={unit} onChange={event => setUnit(event.target.value)} placeholder="e.g. bags" /></label>
+      <p className="col-span-2 text-xs text-muted-foreground">Amounts add extra demand. Sections use remembered placement; change them with Organize.</p>
+    </div>}
+    {error && <p role="alert" className="line-clamp-3 break-words text-sm" title={error}>{error}</p>}
   </form>;
 }
 

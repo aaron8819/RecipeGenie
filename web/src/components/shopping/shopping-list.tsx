@@ -3,11 +3,14 @@
 import { shoppingSourceControls, shoppingSourceLabel, isManualShoppingItem } from '@/lib/shopping-sources'
 import type { ShoppingDocumentStateV3 } from '@/lib/shopping-document'
 import { ShoppingDocumentReadError } from '@/hooks/shopping/use-shopping-document'
-import { useOrganizeShopping, useShoppingDocumentState } from '@/hooks/shopping/use-shopping-document'
+import { useOrganizeShopping, useShoppingDocumentState, useShoppingFoundationCommand } from '@/hooks/shopping/use-shopping-document'
 import { ShoppingAddItem, ShoppingDormantRecovery, SelectionYield, ShoppingInitializationNotice } from './shopping-foundation-view'
 
 import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect, memo, type ReactNode } from "react"
 import Image from "next/image"
+import { useIsDesktop } from '@/hooks/use-is-desktop'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import './shopping-workspace.css'
 import { useRouter } from "next/navigation"
 import { Plus, Trash2, Package, Ban, CheckCheck, Copy, GripVertical, X, Loader2, Sparkles, UtensilsCrossed, ChevronDown } from "lucide-react"
 import {
@@ -97,7 +100,6 @@ import {
   ManualShoppingItemEditor,
   ShoppingCategorySection,
   ShoppingItemRow,
-  ShoppingProgressSummary,
   ShoppingRestoreChip,
   ShoppingStateSection,
   SourceTag,
@@ -693,12 +695,10 @@ function ShoppingListContent() {
   const organizationQuery = useShoppingDocumentState()
   const foundationState = !organizationQuery.error && organizationQuery.data?.document.schemaVersion === 4 ? organizationQuery.data : undefined
   const organizePurchase = useOrganizeShopping()
+  const restoreChecks = useShoppingFoundationCommand()
   const dragSnapshot = useRef<ShoppingItem[]>([])
   const router = useRouter()
-  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true
-    return window.matchMedia("(min-width: 768px)").matches
-  })
+  const isDesktop = useIsDesktop()
   const [newItem, setNewItem] = useState("")
   const addItemInputRef = useRef<HTMLInputElement>(null)
   const [activeItem, setActiveItem] = useState<ShoppingItem | null>(null)
@@ -715,7 +715,7 @@ function ShoppingListContent() {
     unit: "",
   })
   const [manualEditError, setManualEditError] = useState<string | null>(null)
-  const [hideCompletedItems, setHideCompletedItems] = useState(false)
+  const [hideCompletedItems] = useState(true)
   const { pendingCheckIntents, handleCheckOff } = useShoppingCheckIntents()
   const [pendingPantryItems, setPendingPantryItems] = useState<Set<string>>(new Set())
   const quickAddLock = useRef(false)
@@ -726,17 +726,16 @@ function ShoppingListContent() {
   const previousCategoryContentRef = useRef(deriveCategoryContent([]))
 
   // Mobile UX improvements - collapsible sections and scroll-to-top FAB
-  const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(true)
+  const [recipeSectionCollapsed, setRecipeSectionCollapsed] = useState(false)
+  const [recipesOpen, setRecipesOpen] = useState(false)
+  const [selectedSection, setSelectedSection] = useState("")
+  const stickyRef = useRef<HTMLDivElement>(null)
+  const workspaceRef = useRef<HTMLDivElement>(null)
+  const completedRef = useRef<HTMLDetailsElement>(null)
+  const checkAnchor = useRef<{ rowId: string; nextId: string; top: number; restoring: boolean } | null>(null)
   const [pantryCollapsed, setPantryCollapsed] = useState(true) // Default: collapsed
   const [excludedCollapsed, setExcludedCollapsed] = useState(true) // Default: collapsed
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const mq = window.matchMedia("(min-width: 768px)")
-    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
-    setIsDesktop(mq.matches)
-    mq.addEventListener("change", handler)
-    return () => mq.removeEventListener("change", handler)
-  }, [])
+
 
   const shoppingQuery = useShoppingList()
   const { data: shoppingList, isLoading, isFetching } = shoppingQuery
@@ -852,7 +851,17 @@ function ShoppingListContent() {
     if (items.length === 0) return
 
     // Perform the bulk check-off immediately (with optimistic update)
-    bulkCheckOff.mutate(items)
+    bulkCheckOff.mutate(items, { onSuccess: result => {
+      if (!result.undo) return;
+      const undo = result.undo;
+      undoToast.show({ message: `Checked ${result.count} items`, onUndo: () => {
+        // mutate routes rejection through the hook's existing error toast.
+        restoreChecks.mutate({ observedRevision: undo.revision,
+          inspectedCoverage: Object.assign({}, ...undo.rows.map(item => item.inspectedCoverage)),
+          mutation: { type: 'setCheckedMany', rowRefs: undo.rows.map(item => requireShoppingRowRef(item)), checked: false },
+        });
+      } });
+    } })
 
     // Show confirmation toast
     const message = items.length === 1
@@ -862,7 +871,7 @@ function ShoppingListContent() {
       message,
       duration: 3000,
     })
-  }, [bulkCheckOff, undoToast])
+  }, [bulkCheckOff, undoToast, restoreChecks])
 
   // Handle adding item to pantry with per-item pending tracking
   const handleAddToPantry = useCallback((item: ShoppingItem) => {
@@ -1088,9 +1097,43 @@ function ShoppingListContent() {
     return hideCompletedItems ? activeCategories : [...activeCategories, ...completedCategories]
   }, [categoryViewModels, hideCompletedItems, isManageMode, pendingCheckIntents])
 
+  useLayoutEffect(() => {
+    const sticky = stickyRef.current;
+    if (!sticky || typeof ResizeObserver === 'undefined') return;
+    const resize = new ResizeObserver(() => workspaceRef.current?.style.setProperty('--shopping-add-height', `${sticky.getBoundingClientRect().height}px`));
+    resize.observe(sticky);
+    return () => resize.disconnect();
+  }, [foundationState]);
+  useEffect(() => {
+    if (!activeCategoryJumpTargets.some(category => category.key === selectedSection)) setSelectedSection(activeCategoryJumpTargets[0]?.key ?? '');
+  }, [activeCategoryJumpTargets, selectedSection]);
+
   const allItemIds = useMemo(() => {
     return deriveSortableItemIds(filteredItems)
   }, [filteredItems])
+
+  const handlePresentedCheck = (item: ShoppingItem) => {
+    const rows = Array.from(workspaceRef.current?.querySelectorAll<HTMLElement>('[data-shopping-row-id]') ?? []);
+    const index = rows.findIndex(row => row.dataset.shoppingRowId === item.rowId);
+    const neighbor = item.checked ? rows[index] : rows[index + 1] ?? rows[index - 1];
+    if (item.rowId && neighbor?.dataset.shoppingRowId) checkAnchor.current = {
+      rowId: item.rowId, nextId: neighbor.dataset.shoppingRowId,
+      top: neighbor.getBoundingClientRect().top, restoring: !!item.checked,
+    };
+    handleCheckOff(item);
+  };
+  useLayoutEffect(() => {
+    const anchor = checkAnchor.current;
+    if (!anchor || pendingCheckIntents.has(anchor.rowId)) return;
+    const rows = Array.from(workspaceRef.current?.querySelectorAll<HTMLElement>('[data-shopping-row-id]') ?? []);
+    const target = rows.find(row => row.dataset.shoppingRowId === (anchor.restoring ? anchor.rowId : anchor.nextId));
+    checkAnchor.current = null;
+    if (target) {
+      target.querySelector<HTMLButtonElement>('[data-checkbox]')?.focus({ preventScroll: true });
+      if (anchor.restoring) target.scrollIntoView({ block: 'nearest' });
+      else window.scrollBy(0, target.getBoundingClientRect().top - anchor.top);
+    }
+  }, [filteredItems, pendingCheckIntents]);
 
   const recipesById = useMemo(() => new Map((allRecipes ?? []).map((recipe) => [recipe.id, recipe])), [allRecipes])
   const recipeColorMap = useMemo(() => new Map(selections.map((entry) =>
@@ -1193,6 +1236,7 @@ function ShoppingListContent() {
   }, [])
 
   const handleJumpToCategory = useCallback((categoryKey: string) => {
+    setSelectedSection(categoryKey)
     setCategoryExpanded(categoryKey, true)
 
     window.requestAnimationFrame(() => {
@@ -1382,7 +1426,7 @@ function ShoppingListContent() {
                   const sharedProps = {
                     item,
                     isDesktop,
-                    onCheckOff: () => handleCheckOff(item),
+                    onCheckOff: () => handlePresentedCheck(item),
                     onRemove: () => handleRemoveItem(item),
                     onAddToPantry: () => handleAddToPantry(item),
                     foundationState,
@@ -1432,7 +1476,7 @@ function ShoppingListContent() {
 
   return (
     <>
-    <div className="mx-auto flex min-h-0 w-full max-w-[1500px] flex-1 flex-col">
+    <div ref={workspaceRef} className="shopping-workspace mx-auto flex min-h-0 w-full flex-1 flex-col">
       {foundationState && <ShoppingDormantRecovery state={foundationState} items={[...(shoppingList?.items ?? []), ...(shoppingList?.already_have ?? []), ...(shoppingList?.excluded ?? [])]} />}
       {recoveryNotice}
       {shoppingQuery.pantryError ? (
@@ -1443,9 +1487,27 @@ function ShoppingListContent() {
           <Button variant="outline" onClick={() => void shoppingQuery.retryPantry()} disabled={isFetching}>Try again</Button>
         </div>
       ) : null}
-      {/* Mobile sticky add item - always accessible at top */}
-      <div className={cn("sticky top-0 z-30 -mx-1 mb-3 bg-background/95 px-1 pb-2 backdrop-blur-md", isDesktop && "hidden")}>
-        {foundationState ? (isDesktop ? null : <ShoppingAddItem state={foundationState} inputRef={addItemInputRef} />) : <form onSubmit={handleAddItem} className="relative">
+      <header className="shopping-heading">
+        <div><p className="shopping-eyebrow">Shopping</p><h1 className="font-display font-bold">Shopping List</h1>
+          <p className="shopping-subtitle" data-testid="shopping-progress-summary">{shoppingProgress.uncheckedCount} items to buy · {shoppingProgress.checkedCount} completed</p>
+        </div>
+        <div className="shopping-top-actions">
+          <Button variant="ghost" onClick={() => setRecipesOpen(true)}>{selections.length} recipes ↗</Button>
+          <span className="hidden md:inline-flex">{renderOrganizeMenu("flex min-h-11 items-center gap-2 px-3")}</span>
+          <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" aria-label="List actions">•••</Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleCopyList}>Copy list</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleEnterManageMode} disabled={documentUnavailable}>Organize items</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowSettings(true)} disabled={documentUnavailable}>Shopping settings</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setPantryCollapsed(false); document.getElementById('shopping-pantry')?.scrollIntoView(); }}>In Pantry</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { setExcludedCollapsed(false); document.getElementById('shopping-excluded')?.scrollIntoView(); }}>Excluded</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleRequestClear} disabled={documentUnavailable}>Clear list</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+      <div ref={stickyRef} className="shopping-sticky-add">
+        {foundationState ? <ShoppingAddItem state={foundationState} inputRef={addItemInputRef} /> : <form onSubmit={handleAddItem} className="relative">
           <Input
             ref={addItemInputRef}
             placeholder="Add milk, apples, basil..."
@@ -1466,80 +1528,13 @@ function ShoppingListContent() {
           </Button>
         </form>}
       </div>
-
-      {/* Mobile header - compact title and actions */}
-      <div className={cn("mb-3 flex items-center justify-between", isDesktop && "hidden")}>
-        <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">Shopping List</h1>
-        <div className="flex gap-1">
-          {renderOrganizeMenu(
-            "flex h-11 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-xs font-medium text-stone-600 shadow-sm transition-colors hover:border-sage-300 hover:text-primary",
-            "hidden min-[375px]:inline"
-          )}
-          <button
-            type="button"
-            onClick={handleRequestClear}
-            disabled={documentUnavailable}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
-            aria-label="Clear list"
-          >
-            <Trash2 className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Desktop header - full layout with add item */}
-      <header className={cn("mb-5", !isDesktop && "hidden")}>
-        {/* Desktop: title, subtitle, Organize + Copy + Clear */}
-        <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="mb-1 font-display text-4xl font-bold tracking-tight text-foreground">Shopping List</h1>
-            <p className="text-sm text-muted-foreground">Everything you need, organized for a faster trip.</p>
-          </div>
-          <div className="flex gap-2 flex-shrink-0">
-            {renderOrganizeMenu("flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-medium text-stone-700 transition-colors hover:bg-stone-50 hover:text-foreground")}
-            <Button
-              variant="outline"
-              onClick={handleCopyList}
-              className="flex h-10 items-center gap-2 rounded-xl border-stone-200 bg-white px-4 text-sm font-medium hover:bg-stone-50 hover:text-foreground"
-            >
-              <Copy className="h-4 w-4" />
-              Copy
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleRequestClear}
-              disabled={documentUnavailable}
-              className="flex h-10 items-center gap-2 rounded-xl border-red-100 bg-red-50 px-4 text-sm font-medium text-red-600 hover:bg-red-100 hover:text-red-700"
-            >
-              <Trash2 className="h-4 w-4" />
-              Clear
-            </Button>
-          </div>
-        </div>
-
-        {/* Desktop add item form - stays in header */}
-        {foundationState ? (isDesktop ? <ShoppingAddItem state={foundationState} inputRef={addItemInputRef} /> : null) : <form onSubmit={handleAddItem} className="relative">
-          <Input
-            ref={addItemInputRef}
-            placeholder="Add tomatoes, milk..."
-            value={newItem}
-            onChange={(e) => {
-              setNewItem(e.target.value)
-              if (addFeedback) setAddFeedback(null)
-            }}
-            className="h-[52px] w-full rounded-2xl border border-stone-200 bg-white py-3 pl-5 pr-36 text-base shadow-[0_8px_24px_rgba(63,52,43,0.07)] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-0"
-          />
-          <Button
-            type="submit"
-            disabled={addItem.isPending || documentUnavailable || pantryUnavailable}
-            aria-label="Add item"
-            className="absolute right-1.5 top-1/2 flex h-10 w-auto -translate-y-1/2 items-center justify-center gap-2 rounded-xl bg-primary px-5 font-medium text-primary-foreground shadow-sm hover:opacity-90"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Add Item</span>
-          </Button>
-        </form>}
-      </header>
+      {!isManageMode && <div className="shopping-mobile-sections">
+        <label htmlFor="shopping-section-select">Jump to</label>
+        <select id="shopping-section-select" value={selectedSection} onChange={event => handleJumpToCategory(event.target.value)}>
+          {activeCategoryJumpTargets.map(category => <option key={category.key} value={category.key}>{category.name} · {category.remainingCount}</option>)}
+        </select>
+        <Button variant="ghost" onClick={() => { if (completedRef.current) { completedRef.current.open = true; completedRef.current.scrollIntoView(); } }}>Done {shoppingProgress.checkedCount}</Button>
+      </div>}
 
       {/* Shopping List */}
       <div className="flex-1 min-h-0 flex flex-col">
@@ -1597,32 +1592,26 @@ function ShoppingListContent() {
           )}
           <div
             className={cn(
-              "grid grid-cols-1 gap-3 pb-[calc(72px+env(safe-area-inset-bottom))] md:items-start md:gap-4 md:pb-0",
-              isManageMode ? "md:grid-cols-1" : "md:grid-cols-[minmax(0,1fr)_17rem]"
+              "shopping-workspace-grid",
+              isManageMode && "shopping-manage"
             )}
             style={{
               WebkitOverflowScrolling: 'touch',
               overscrollBehavior: 'contain',
             }}
           >
-            {!isManageMode && filteredItems.length > 0 ? (
-              <div className="min-w-0 md:col-span-2 md:row-start-1">
-                <ShoppingProgressSummary
-                  isDesktop={isDesktop}
-                  remainingCount={shoppingProgress.uncheckedCount}
-                  completedCount={shoppingProgress.checkedCount}
-                  totalCount={shoppingProgress.totalCount}
-                  activeCategoryCount={activeCategoryJumpTargets.length}
-                  hideCompletedItems={hideCompletedItems}
-                  onToggleCompleted={() => setHideCompletedItems((prev) => !prev)}
-                  activeCategories={activeCategoryJumpTargets}
-                  onJumpToCategory={handleJumpToCategory}
-                />
+            {!isManageMode && <aside className="shopping-section-rail">
+              <p className="shopping-eyebrow">Sections</p>
+              <nav aria-label="Shopping sections">{activeCategoryJumpTargets.map(category =>
+                <button type="button" key={category.key} aria-current={selectedSection === category.key ? 'location' : undefined} onClick={() => handleJumpToCategory(category.key)}><span>{category.name}</span><span>{category.remainingCount}</span></button>)}</nav>
+              <div className="shopping-rail-secondary">
+                <button onClick={() => { if (completedRef.current) { completedRef.current.open = true; completedRef.current.scrollIntoView(); } }}>Completed <span>{shoppingProgress.checkedCount}</span></button>
+                <button onClick={() => { setPantryCollapsed(false); document.getElementById('shopping-pantry')?.scrollIntoView(); }}>In Pantry <span>{mergedAlreadyHave.length}</span></button>
+                <button onClick={() => { setExcludedCollapsed(false); document.getElementById('shopping-excluded')?.scrollIntoView(); }}>Excluded <span>{projectedShoppingList.excluded.length}</span></button>
               </div>
-            ) : null}
+            </aside>}
             <div className={cn(
-              "min-w-0 md:col-start-1",
-              isManageMode ? "md:row-start-1" : "md:row-start-2"
+              "shopping-list-column min-w-0"
             )}>
             {isManageMode ? (
               <DndContext
@@ -1644,71 +1633,24 @@ function ShoppingListContent() {
                 </DragOverlay>
               </DndContext>
             ) : (
-              <div className="space-y-3 md:space-y-0 md:overflow-hidden md:rounded-2xl md:border md:border-stone-200/80 md:bg-white md:shadow-[0_12px_32px_rgba(63,52,43,0.06)]">
+              <div className="shopping-active-sections">
                 {shoppingListContent}
               </div>
             )}
             </div>
 
-            {!isManageMode && selections.length > 0 && (
-              <Card
-                className="overflow-hidden rounded-2xl border border-stone-200/80 bg-white shadow-[0_10px_28px_rgba(63,52,43,0.055)] md:sticky md:top-24 md:col-start-2 md:row-start-2 md:row-end-[span_6]"
-                data-testid="shopping-recipe-context"
-              >
-                <CardContent className="p-0">
-                  <div className="flex items-center justify-between gap-3 px-4 py-4 md:px-5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
-                        Recipes in list
-                      </p>
-                      <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-500">
-                        {selections.length}
-                      </span>
-                    </div>
-                    {!isDesktop ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={toggleRecipeSection}
-                        className="h-11 shrink-0 gap-1 rounded-full px-3 text-xs font-medium text-primary hover:bg-sage-50 hover:text-primary"
-                        aria-expanded={!recipeSectionCollapsed}
-                        aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
-                      >
-                        {recipeSectionCollapsed ? "Show" : "Hide"}
-                        <ChevronDown className={cn("h-4 w-4 transition-transform", !recipeSectionCollapsed && "rotate-180")} />
-                      </Button>
-                    ) : null}
-                  </div>
-                  {(isDesktop || !recipeSectionCollapsed) ? (
-                    <div className="flex flex-col gap-2 border-t border-stone-100 px-3 pb-3 pt-3 md:px-3.5 md:pb-3.5">
-                      {selections.map(({ recipeId, label, selectedServings, selectionVersion }) => {
-                        return (
-                          <div key={recipeId}>
-                          <RecipeTag
-                            recipeName={label}
-                            selectedServings={selectedServings}
-                            recipe={recipesById.get(recipeId)}
-                            onRemove={() => handleRemoveRecipeItems(recipeId, label, selectionVersion)}
-                            onViewRecipe={() => handleRecipeTagClick(recipeId, label)}
-                            isRemoving={documentUnavailable}
-                          />
-                          {foundationState && recipesById.has(recipeId) && <details className="px-2 text-sm">
-                            <summary className="min-h-11 cursor-pointer content-center text-muted-foreground" aria-label={`Change yield for ${label}`}>Change yield</summary>
-                            <SelectionYield recipe={recipesById.get(recipeId)!} state={foundationState} />
-                          </details>}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            )}
+            {!isManageMode && <details ref={completedRef} className="shopping-completed">
+              <summary>Completed · {shoppingProgress.checkedCount}</summary>
+              <ul>{filteredItems.filter(item => item.checked && (!item.rowId || !pendingCheckIntents.has(item.rowId))).map(item => <StaticShoppingItem
+                key={item.rowId} item={item} isDesktop={isDesktop} foundationState={foundationState}
+                readOnly={documentUnavailable} isCheckingOff={false} isRemoving={false} isAddingToPantry={pendingPantryItems.has(item.rowId || '')}
+                recipeColorMap={recipeColorMap} onViewRecipe={handleRecipeTagClick}
+                onCheckOff={() => handlePresentedCheck(item)} onRemove={() => handleRemoveItem(item)} onAddToPantry={() => handleAddToPantry(item)}
+              />)}</ul>
+            </details>}
 
           <div className={cn(
-            "space-y-3 md:col-start-1",
-            isManageMode ? "md:row-start-2" : "md:row-start-3"
+            "shopping-secondary-sections space-y-3"
           )}>
 
           {/* Complete Shopping Button - appears when all items are checked */}
@@ -1740,7 +1682,7 @@ function ShoppingListContent() {
           {/* In Pantry — Collapsible on mobile, always expanded on desktop */}
           {mergedAlreadyHave && mergedAlreadyHave.length > 0 && (
             <ShoppingStateSection
-              title="In Pantry"
+              id="shopping-pantry" title="In Pantry"
               count={mergedAlreadyHave.length}
               icon={<Package className="h-5 w-5 text-primary" />}
               isDesktop={isDesktop}
@@ -1794,7 +1736,7 @@ function ShoppingListContent() {
           {/* Excluded — Collapsible on mobile, always expanded on desktop */}
           {projectedShoppingList.excluded && projectedShoppingList.excluded.length > 0 && (
             <ShoppingStateSection
-              title="Excluded"
+              id="shopping-excluded" title="Excluded"
               count={projectedShoppingList.excluded.length}
               icon={<Ban className="h-5 w-5 text-red-500" />}
               isDesktop={isDesktop}
@@ -1851,6 +1793,62 @@ function ShoppingListContent() {
         </div>
       )}
         </div>
+
+            {recipesOpen && (
+              <Dialog open={recipesOpen} onOpenChange={setRecipesOpen}><DialogContent><DialogTitle>Recipes in list</DialogTitle><DialogDescription>Captured recipe selections and total yield.</DialogDescription><Button variant="outline" onClick={() => router.push("/recipes")}>Choose recipes</Button><Card
+                className="border-0 shadow-none"
+                data-testid="shopping-recipe-context"
+              >
+                <CardContent className="p-0">
+                  <div className="flex items-center justify-between gap-3 px-4 py-4 md:px-5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-600">
+                        Recipes in list
+                      </p>
+                      <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-semibold text-stone-500">
+                        {selections.length}
+                      </span>
+                    </div>
+                    {!isDesktop ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleRecipeSection}
+                        className="h-11 shrink-0 gap-1 rounded-full px-3 text-xs font-medium text-primary hover:bg-sage-50 hover:text-primary"
+                        aria-expanded={!recipeSectionCollapsed}
+                        aria-label={recipeSectionCollapsed ? "Show recipes in list" : "Hide recipes in list"}
+                      >
+                        {recipeSectionCollapsed ? "Show" : "Hide"}
+                        <ChevronDown className={cn("h-4 w-4 transition-transform", !recipeSectionCollapsed && "rotate-180")} />
+                      </Button>
+                    ) : null}
+                  </div>
+                  {(isDesktop || !recipeSectionCollapsed) ? (
+                    <div className="flex flex-col gap-2 border-t border-stone-100 px-3 pb-3 pt-3 md:px-3.5 md:pb-3.5">
+                      {selections.map(({ recipeId, label, selectedServings, selectionVersion }) => {
+                        return (
+                          <div key={recipeId}>
+                          <RecipeTag
+                            recipeName={label}
+                            selectedServings={selectedServings}
+                            recipe={recipesById.get(recipeId)}
+                            onRemove={() => handleRemoveRecipeItems(recipeId, label, selectionVersion)}
+                            onViewRecipe={() => handleRecipeTagClick(recipeId, label)}
+                            isRemoving={documentUnavailable}
+                          />
+                          {foundationState && recipesById.has(recipeId) && <details className="px-2 text-sm">
+                            <summary className="min-h-11 cursor-pointer content-center text-muted-foreground" aria-label={`Change yield for ${label}`}>Change yield</summary>
+                            <SelectionYield recipe={recipesById.get(recipeId)!} state={foundationState} />
+                          </details>}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card></DialogContent></Dialog>
+            )}
 
       {/* Shopping Settings Modal */}
       <AlertDialog open={showClearConfirmation && !documentUnavailable} onOpenChange={setShowClearConfirmation}>
