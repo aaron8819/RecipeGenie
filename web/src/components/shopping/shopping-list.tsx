@@ -854,8 +854,9 @@ function ShoppingListContent() {
     bulkCheckOff.mutate(items, { onSuccess: result => {
       if (!result.undo) return;
       const undo = result.undo;
-      undoToast.show({ message: `Checked ${result.count} items`, onUndo: async () => {
-        await restoreChecks.mutateAsync({ observedRevision: undo.revision,
+      undoToast.show({ message: `Checked ${result.count} items`, onUndo: () => {
+        // mutate routes rejection through the hook's existing error toast.
+        restoreChecks.mutate({ observedRevision: undo.revision,
           inspectedCoverage: Object.assign({}, ...undo.rows.map(item => item.inspectedCoverage)),
           mutation: { type: 'setCheckedMany', rowRefs: undo.rows.map(item => requireShoppingRowRef(item)), checked: false },
         });

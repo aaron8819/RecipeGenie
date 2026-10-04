@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ShoppingListView } from "../shopping-list"
 import { UndoToastProvider, useUndoToast } from "@/components/ui/undo-toast"
+import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query'
 import type { ShoppingConfig, ShoppingItem, ShoppingList } from "@/types/database"
 
 globalThis.React = React
@@ -14,7 +15,13 @@ vi.mock('@/hooks/shopping/use-shopping-document', async importOriginal => ({
   ...await importOriginal<typeof import('@/hooks/shopping/use-shopping-document')>(),
   useOrganizeShopping: () => ({ mutateAsync: vi.fn() }),
   useShoppingDocumentState: () => ({ data: undefined }),
-  useShoppingFoundationCommand: () => ({ isPending: false }),
+  useShoppingFoundationCommand: () => {
+    const toast = useUndoToast()
+    return useMutation({
+      mutationFn: restoreChecksMutation,
+      onError: (error: Error) => toast.show({ message: error.message }),
+    })
+  },
 }))
 
 type ResolveFn = () => void
@@ -36,6 +43,7 @@ const removeRecipeItemsMutate = vi.fn<
   (recipe: { recipeId?: string; recipeName: string }) => void
 >()
 const clearListMutate = vi.fn()
+const restoreChecksMutation = vi.fn()
 const restoreContentMutate = vi.fn()
 let removedRecipeRows: ShoppingItem[] = []
 let clearedList: ShoppingList | null = null
@@ -166,12 +174,14 @@ function makeConfig(overrides: Partial<ShoppingConfig> = {}): ShoppingConfig {
 }
 
 function renderShoppingList() {
+  const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
   return render(
     <div data-testid="shopping-route">
       <UndoToastProvider>
         <ShoppingListView />
       </UndoToastProvider>
-    </div>
+    </div>,
+    { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> }
   )
 }
 
@@ -421,7 +431,8 @@ vi.mock("@/hooks/use-shopping", () => ({
 
     return {
       isPending,
-      mutate: (items: ShoppingItem[]) => {
+      mutate: (items: ShoppingItem[], options?: { onSuccess?: (result: object) => void }) => {
+        const newlyChecked = items.filter(item => !item.checked)
         bulkMutationEvents.push("mutate")
         setIsPending(true)
         updateShoppingList((prev) => ({
@@ -436,6 +447,9 @@ vi.mock("@/hooks/use-shopping", () => ({
         bulkMutationResolvers.push(() => {
           bulkMutationEvents.push("resolve")
           setIsPending(false)
+          options?.onSuccess?.({ count: newlyChecked.length, undo: {
+            revision: 2, rows: newlyChecked,
+          } })
         })
       },
     }
@@ -629,6 +643,11 @@ vi.mock("@/hooks/use-shopping", () => ({
   HTMLElement.prototype.scrollIntoView = vi.fn()
   window.scrollBy = vi.fn()
   vi.clearAllMocks()
+  restoreChecksMutation.mockImplementation(async ({ mutation }) => {
+    updateShoppingList(prev => ({ ...prev, items: prev.items.map(item =>
+      mutation.rowRefs.includes(item.rowId) ? { ...item, checked: false } : item
+    ) }))
+  })
   bulkMutationEvents.length = 0
   bulkMutationResolvers.length = 0
   pendingCheckMutations.length = 0
@@ -1286,6 +1305,43 @@ describe("ShoppingListView orchestration", () => {
     expect(screen.getByTestId("shopping-progress-summary")).toHaveTextContent("0 items to buy")
     expect(screen.getByText("Completed · 2")).toBeInTheDocument()
     expect(screen.getByText("Completed · 2").closest("details")).not.toHaveAttribute("open")
+  })
+
+  it('bulk Undo restores only newly checked rows using the captured revision and coverage', async () => {
+    currentShoppingList = makeList({ items: [
+      makeItem('apples', { inspectedCoverage: { 'manual:apples': { version: 2, basis: null } } }),
+      makeItem('pears'),
+      makeItem('bananas', { checked: true }),
+    ] })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Check all items in Fresh Produce' }))
+    resolveNextBulkMutation()
+    await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+    expect(restoreChecksMutation).toHaveBeenCalledTimes(1)
+    expect(restoreChecksMutation.mock.calls[0][0]).toEqual({
+      observedRevision: 2, inspectedCoverage: { 'manual:apples': { version: 2, basis: null } },
+      mutation: { type: 'setCheckedMany', rowRefs: ['manual:apples', 'manual:pears'], checked: false },
+    })
+    expect(currentShoppingList.items.map(item => item.checked)).toEqual([false, false, true])
+  })
+
+  it('rejected bulk Undo shows existing mutation feedback without escaping or retrying', async () => {
+    const message = 'Shopping changed in another session. Review the latest list and try again.'
+    restoreChecksMutation.mockRejectedValue(new Error(message))
+    currentShoppingList = makeList({ items: [makeItem('apples'), makeItem('bananas')] })
+    renderShoppingList()
+    fireEvent.click(screen.getByRole('button', { name: 'Check all items in Fresh Produce' }))
+    resolveNextBulkMutation()
+    await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+    const retained = structuredClone(currentShoppingList)
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Checked')
+    expect(restoreChecksMutation).toHaveBeenCalledTimes(1)
+    expect(currentShoppingList).toEqual(retained)
   })
 
   it("hides an item immediately, then restores it in the same category when undo is clicked", async () => {
