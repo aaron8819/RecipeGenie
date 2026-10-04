@@ -66,7 +66,7 @@ function Fixture($name, [string]$selectedMigrationPath=$migrationPath, [string[]
     if ($ledgerVersions.Count -eq 0) { $ledgerVersions = $definition.ExpectedAppliedMigrationVersions }
     $externalEvidence = $definition.PSObject.Properties['AllowExternalEvidenceCommit'] -and $definition.AllowExternalEvidenceCommit -eq $true
     $boundRestoreEvidence = $null -ne $definition.PSObject.Properties['RestoreAssertionPath']
-    $evidenceCommit = if ($externalEvidence) { $migration016Commit } else { $headCommit }
+    $evidenceCommit = if ($externalEvidence) { [string]$definition.ExpectedEvidenceCommitSha } else { $headCommit }
     $selectedPreflightPath = if ($definition.PSObject.Properties['PreflightPath']) { [string]$definition.PreflightPath } else { 'scripts/database/preflight/' + [IO.Path]::GetFileName($selectedMigrationPath) }
     $selectedMigrationHash = EvidenceHash $selectedMigrationPath $evidenceCommit
     $selectedPreflightHash = EvidenceHash $selectedPreflightPath $evidenceCommit
@@ -140,6 +140,7 @@ function AddMigration017RestoreEvidence($dir) {
         $m.restoreVerification | Add-Member -NotePropertyName canonicalColumnsPresent -NotePropertyValue $true
         $m.restoreVerification | Add-Member -NotePropertyName canonicalConstraintsPresent -NotePropertyValue $true
         $m.restoreVerification | Add-Member -NotePropertyName recipesCanonical -NotePropertyValue $true
+        $m.restoreVerification | Add-Member -NotePropertyName recipeHistoryIdGenerationPresent -NotePropertyValue $true
     }
 }
 function Verify($dir,$expected=$ref,$age=60) {
@@ -354,6 +355,9 @@ try {
         Must ($definition.RestoreAssertionPath -ceq $restore017Path)
         Must ($definition.RestorePreparationPath -ceq $restore017PreparationPath)
         Must ($definition.RestoreFinalizationPath -ceq $restore017FinalizationPath)
+        Must ($definition.AllowExternalEvidenceCommit -eq $true)
+        Must ($definition.ExpectedEvidenceCommitSha -ceq 'afcd8dc331b0d928cb2ef8ea96667c8f52096744')
+        Must ($definition.RestoreProcedureUpgradeBaseCommitSha -ceq 'afcd8dc331b0d928cb2ef8ea96667c8f52096744')
     }
     Case 'unsupported future migration definition fails closed' { Throws { Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/018_unknown.sql' } 'not supported' }
 
@@ -525,6 +529,7 @@ try {
     }
     Case 'missing native exit code fails closed' { Throws { Assert-NativeExitCode ([pscustomobject]@{x=1}) 'test' } 'did not provide' }
     Case 'archive list command failure fails' { Throws { Assert-NativeExitCode ([pscustomobject]@{ExitCode=2}) 'pg_restore --list' } 'exit code 2' }
+    Case 'unexpected clean restore failure remains fatal' { Throws { Assert-NativeExitCode ([pscustomobject]@{ExitCode=1}) 'pg_restore --clean --exit-on-error' } 'exit code 1' }
     Case 'TOC markers require ledger table and function' {
         $toc=@('1; TABLE public recipes postgres','2; TABLE DATA supabase_migrations schema_migrations postgres','3; FUNCTION public delete_recipe(uuid) postgres') -join [Environment]::NewLine
         $m=Test-ArchiveTableOfContents $toc; Must ($m.MigrationLedgerFound -and $m.ExpectedApplicationMarkersFound)
@@ -694,13 +699,25 @@ try {
         Must ($assertion -match '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016')
         Must ($assertion -match 'canonicalColumnsPresent')
         Must ($assertion -match 'canonicalConstraintsPresent')
+        Must ($assertion -match 'recipeHistoryIdGenerationPresent')
         Must ($assertion -notmatch '(?i)select\s+.*(?:name|ingredient_sections|instruction_sections|source_recipe_snapshot|user_id|recipient)\s+from')
         Must ($prepare -match '001,002,003,004,005,006,007,008,009,010,011,012,013,014,015,016,017')
         Must ($prepare -match 'drop trigger on_auth_user_created')
+        Must ($prepare -match 'attidentity\s*=\s*''a''')
+        Must ($prepare -match 'alter table public\.recipe_history alter column id drop identity;')
+        Must ($prepare -notmatch 'drop identity if exists')
         Must ($finalize -match 'restored post-016 ledger')
+        Must ($finalize -match 'pg_get_serial_sequence')
+        Must ($finalize -match 'recipe_history_id_seq')
         Must ($finalize -match 'create trigger on_auth_user_created')
         Must ($confirmation -match 'Only migration 017 restore evidence is supported')
         Must ($confirmation -notmatch '(?i)pg_restore|RECIPE_GENIE_PRODUCTION_DATABASE_URL|supabase(?:\.exe)?\s+(?:db|migration)|\bdb\s+push\b')
+    }
+    Case 'migration 016 recovery procedure remains unchanged by identity handling' {
+        $base='afcd8dc331b0d928cb2ef8ea96667c8f52096744'
+        Must ((Get-GitBlobSha256 $repo $headCommit $restore016PreparationPath $gitExecutable) -ceq
+            (Get-GitBlobSha256 $repo $base $restore016PreparationPath $gitExecutable))
+        Must (([IO.File]::ReadAllText((Join-Path $repo $restore016PreparationPath))) -notmatch '(?i)drop identity')
     }
 
     Case 'valid fixture passes' { Must ((Verify (Fixture 'valid')).ExitCode -eq 0) }
@@ -808,7 +825,32 @@ try {
     Case 'migration 017 gate accepts complete bound restore evidence' {
         $d=Fixture 'migration-017-gate' $migration017Path $ledger017
         AddMigration017RestoreEvidence $d
-        Must ((Gate $d @('-MigrationPath',$migration017Path)).ExitCode -eq 0)
+        Must ((Gate $d @('-MigrationPath',$migration017Path,'-EvidenceCommitSha','afcd8dc331b0d928cb2ef8ea96667c8f52096744')).ExitCode -eq 0)
+    }
+    Case 'migration 017 gate accepts the exact backup with descendant recovery tooling' {
+        $base='afcd8dc331b0d928cb2ef8ea96667c8f52096744'
+        $d=Fixture 'migration-017-procedure-upgrade' $migration017Path $ledger017
+        Edit $d {
+            param($m)
+            $m.toolingCommitSha=$base
+            $m.restoreAssertion.commitSha=$base
+            $m.restoreAssertion.sha256=Get-GitBlobSha256 $repo $base $restore017Path $gitExecutable
+            $m.restoreProcedure.preparation.commitSha=$base
+            $m.restoreProcedure.preparation.sha256=Get-GitBlobSha256 $repo $base $restore017PreparationPath $gitExecutable
+            $m.restoreProcedure.finalization.commitSha=$base
+            $m.restoreProcedure.finalization.sha256=Get-GitBlobSha256 $repo $base $restore017FinalizationPath $gitExecutable
+        }
+        AddMigration017RestoreEvidence $d
+        Edit $d {
+            param($m)
+            $m.restoreVerification.assertionCommitSha=$headCommit
+            $m.restoreVerification.assertionSha256=Get-GitBlobSha256 $repo $headCommit $restore017Path $gitExecutable
+            $m.restoreVerification.preparationSha256=Get-GitBlobSha256 $repo $headCommit $restore017PreparationPath $gitExecutable
+            $m.restoreVerification.finalizationSha256=Get-GitBlobSha256 $repo $headCommit $restore017FinalizationPath $gitExecutable
+            $m.restoreVerification | Add-Member -NotePropertyName recoveryToolingCommitSha -NotePropertyValue $headCommit
+        }
+        Must ((Verify $d).ExitCode -eq 0)
+        Must ((Gate $d @('-MigrationPath',$migration017Path,'-EvidenceCommitSha',$base)).ExitCode -eq 0)
     }
     Case 'restore gate fails when false' { Must ((Gate (Fixture 'restore-false') @('-RequireRestoreVerification')).ExitCode -ne 0) }
     Case 'restore gate passes only when true' { $d=Fixture 'restore-true' $migration012Path $ledger012;Edit $d {param($m)$m.restoreVerified=$true;$m.restoreVerification=[pscustomobject]@{verifiedAtUtc=[DateTimeOffset]::UtcNow.ToString('o')}};Must ((Gate $d @('-MigrationPath',$migration012Path,'-RequireRestoreVerification')).ExitCode -eq 0) }

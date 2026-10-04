@@ -72,8 +72,21 @@ if ($rootResult.ExitCode -ne 0 -or -not $rootResult.Output) { throw 'Git reposit
 $repositoryRoot = $rootResult.Output.Trim()
 $headResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'rev-parse', 'HEAD')
 $toolingCommitSha = if ($headResult.Output) { $headResult.Output.Trim() } else { '' }
-if ($headResult.ExitCode -ne 0 -or $toolingCommitSha -notmatch '^[0-9a-f]{40}$' -or $manifest.toolingCommitSha -ne $toolingCommitSha) {
-    throw 'Current recovery tooling does not match the backup tooling commit.'
+if ($headResult.ExitCode -ne 0 -or $toolingCommitSha -notmatch '^[0-9a-f]{40}$') {
+    throw 'Current recovery tooling commit could not be established.'
+}
+$procedureUpgrade = $manifest.toolingCommitSha -ne $toolingCommitSha
+if ($procedureUpgrade) {
+    $upgradeBase = if ($definition.PSObject.Properties['RestoreProcedureUpgradeBaseCommitSha']) {
+        [string]$definition.RestoreProcedureUpgradeBaseCommitSha
+    } else { '' }
+    if ($upgradeBase -notmatch '^[0-9a-f]{40}$' -or $manifest.toolingCommitSha -cne $upgradeBase) {
+        throw 'Current recovery tooling does not match the backup tooling commit.'
+    }
+    $ancestorResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'merge-base', '--is-ancestor', $upgradeBase, $toolingCommitSha)
+    if ($ancestorResult.ExitCode -ne 0) {
+        throw 'Migration 017 recovery tooling is not descended from the backup tooling commit.'
+    }
 }
 $statusResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'status', '--porcelain')
 if ($statusResult.ExitCode -ne 0 -or -not [string]::IsNullOrWhiteSpace($statusResult.Output)) {
@@ -83,11 +96,14 @@ if ($statusResult.ExitCode -ne 0 -or -not [string]::IsNullOrWhiteSpace($statusRe
 $assertionPath = [string]$definition.RestoreAssertionPath
 $assertionFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $assertionPath)
 $assertionHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $assertionPath -GitExecutablePath $gitExecutablePath
-if ($manifest.restoreAssertion.path -ne $assertionPath -or
-    $manifest.restoreAssertion.commitSha -ne $toolingCommitSha -or
-    $manifest.restoreAssertion.sha256 -ne $assertionHash -or
-    -not (Test-Path -LiteralPath $assertionFullPath -PathType Leaf) -or
+if (-not (Test-Path -LiteralPath $assertionFullPath -PathType Leaf) -or
     -not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $assertionPath -GitExecutablePath $gitExecutablePath)) {
+    throw 'Restore assertion does not match the current recovery-tooling commit.'
+}
+if (-not $procedureUpgrade -and
+    ($manifest.restoreAssertion.path -ne $assertionPath -or
+     $manifest.restoreAssertion.commitSha -ne $toolingCommitSha -or
+     $manifest.restoreAssertion.sha256 -ne $assertionHash)) {
     throw 'Restore assertion does not match the backup recovery-tooling commit.'
 }
 $procedureHashes = [ordered]@{}
@@ -98,9 +114,12 @@ foreach ($stage in @(
     $stageHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $stage.Path -GitExecutablePath $gitExecutablePath
     $stageFullPath = Get-NormalizedFullPath (Join-Path $repositoryRoot $stage.Path)
     $entry = $manifest.restoreProcedure.($stage.Name)
-    if ($entry.path -ne $stage.Path -or $entry.commitSha -ne $toolingCommitSha -or $entry.sha256 -ne $stageHash -or
-        -not (Test-Path -LiteralPath $stageFullPath -PathType Leaf) -or
+    if (-not (Test-Path -LiteralPath $stageFullPath -PathType Leaf) -or
         -not (Test-GitPathMatchesCommit -RepositoryRoot $repositoryRoot -CommitSha $toolingCommitSha -RepositoryRelativePath $stage.Path -GitExecutablePath $gitExecutablePath)) {
+        throw "Restore $($stage.Name) does not match the current recovery-tooling commit."
+    }
+    if (-not $procedureUpgrade -and
+        ($entry.path -ne $stage.Path -or $entry.commitSha -ne $toolingCommitSha -or $entry.sha256 -ne $stageHash)) {
         throw "Restore $($stage.Name) does not match the backup recovery-tooling commit."
     }
     $procedureHashes[$stage.Name] = $stageHash
@@ -142,7 +161,7 @@ try {
     try { $assertionResult = $assertionLines[0] | ConvertFrom-Json -ErrorAction Stop } catch { throw 'Restore assertion output is malformed.' }
     foreach ($propertyName in @(
         'ledgerBaselineExact','legacyColumnsPresent','canonicalColumnsPresent',
-        'requiredFunctionsPresent','canonicalConstraintsPresent','authTriggerPresent',
+        'requiredFunctionsPresent','canonicalConstraintsPresent','recipeHistoryIdGenerationPresent','authTriggerPresent',
         'recipeCountMatched','shareCountMatched','recipesCanonical','shareSnapshotsValid'
     )) {
         if ($assertionResult.$propertyName -ne $true) { throw "Restore assertion did not confirm $propertyName." }
@@ -167,6 +186,10 @@ try {
         canonicalColumnsPresent = $true
         canonicalConstraintsPresent = $true
         recipesCanonical = $true
+        recipeHistoryIdGenerationPresent = $true
+    }
+    if ($procedureUpgrade) {
+        $manifest.restoreVerification.recoveryToolingCommitSha = $toolingCommitSha
     }
     Write-SanitizedFile -Path $manifestPath -Content ($manifest | ConvertTo-Json -Depth 12) -LiteralSecrets $literalSecrets
 
