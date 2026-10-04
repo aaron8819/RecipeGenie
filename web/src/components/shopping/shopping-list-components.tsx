@@ -150,15 +150,30 @@ function rowAmount(item: ShoppingItem): string {
   return formatShoppingPurchaseAmount(item)
 }
 
-export function ShoppingSources({ item, onViewRecipe, children }: {
+export function ShoppingSources({ item, onViewRecipe, children, inline = false }: {
   item: ShoppingItem
   onViewRecipe?: (recipeId: string | undefined, recipeName: string) => void
   children?: ReactNode
+  inline?: boolean
 }) {
   const sources = item.requirementBreakdown ?? (item.sources ?? []).map(source => ({
     label: source.manualId || isManualShoppingItem(item) ? 'Added manually' : shoppingSourceLabel(source),
     source, quantity: source.manualId ? item : null, hidden: false,
   }))
+  const details = <div className="space-y-2 pb-2" onTouchStart={event => event.stopPropagation()}>
+      {sources.map((part, index) => <div key={index} className="break-words text-sm text-muted-foreground">
+        <span>{(part.source && formatSourceIngredientLabel(part.source)) ||
+          `${formatShoppingQuantityPart(part.quantity ?? { amount: null, unit: '' })} ${getDisplayItemName({ ...item, amount: part.quantity?.amount ?? null, unit: part.quantity?.unit ?? '' })}`}</span>
+        {' — '}
+        {part.source && !part.source.manualId && !isManualShoppingItem(item) && onViewRecipe ? <button type="button" className="min-h-11 text-left underline underline-offset-4" onClick={() => onViewRecipe(part.source?.recipeId, part.source?.recipeName ?? part.label)}>{part.label}</button> : <span>{part.label}</span>}
+        {part.hidden && <span> (not included above: hidden or in Pantry)</span>}
+      </div>)}
+      {children}
+    </div>
+  if (inline) return <details data-shopping-sources="true">
+    <summary aria-label={`View sources for ${getDisplayItemName(item)}`}>Sources</summary>
+    {details}
+  </details>
   return <Dialog>
     <DialogTrigger asChild>
       <button type="button" aria-label={`View sources for ${getDisplayItemName(item)}`} className="shopping-name-target" data-shopping-sources="true">
@@ -169,16 +184,7 @@ export function ShoppingSources({ item, onViewRecipe, children }: {
     <DialogContent className="shopping-sources-dialog">
       <DialogTitle className="pr-10 font-display text-2xl">{shoppingPurchaseDisplayName(item)}</DialogTitle>
       <DialogDescription>Requirements and extras · exact captured sources</DialogDescription>
-    <div className="space-y-2 pb-2" onTouchStart={event => event.stopPropagation()}>
-      {sources.map((part, index) => <div key={index} className="break-words text-sm text-muted-foreground">
-        <span>{(part.source && formatSourceIngredientLabel(part.source)) ||
-          `${formatShoppingQuantityPart(part.quantity ?? { amount: null, unit: '' })} ${getDisplayItemName({ ...item, amount: part.quantity?.amount ?? null, unit: part.quantity?.unit ?? '' })}`}</span>
-        {' — '}
-        {part.source && !part.source.manualId && !isManualShoppingItem(item) && onViewRecipe ? <button type="button" className="min-h-11 text-left underline underline-offset-4" onClick={() => onViewRecipe(part.source?.recipeId, part.source?.recipeName ?? part.label)}>{part.label}</button> : <span>{part.label}</span>}
-        {part.hidden && <span> (not included above: hidden or in Pantry)</span>}
-      </div>)}
-      {children}
-    </div>
+    {details}
     </DialogContent>
   </Dialog>
 }
