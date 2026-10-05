@@ -125,8 +125,9 @@ establish hosted health. Foundation acceptance requires independent review.
 
 Initialized Shopping uses a flat purchase list with a desktop section rail and
 mobile sticky add/jump controls. Settled checked rows live in Completed; pending
-checks remain actionable. Shopping uses horizontal desktop navigation; Dashboard
-retains its existing shell.
+checks remain actionable. Shopping uses the same desktop sidebar, mobile header,
+and bottom navigation as Dashboard, Recipes, Planner, and Pantry. The section
+rail and sticky add/jump controls belong to Shopping content inside that shell.
 
 Single and comma-separated additions retain synchronous submission protection.
 Details accepts a precise manual amount/unit for one item; batch quantities are

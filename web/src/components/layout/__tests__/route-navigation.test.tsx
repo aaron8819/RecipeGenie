@@ -146,6 +146,23 @@ describe("route navigation", () => {
     expect(within(bottomNavigation).getAllByRole("link")).toHaveLength(5)
   })
 
+  it("uses shared navigation with Shopping active and no alternate header navigation", () => {
+    pathname = "/shopping"
+    render(<>
+      <DesktopSidebar onSignOut={vi.fn()} />
+      <Header onSignOut={vi.fn()} />
+      <BottomNav />
+    </>)
+
+    expect(screen.getByRole("banner")).toHaveClass("lg:hidden")
+    expect(screen.queryByRole("navigation", { name: "Application" })).not.toBeInTheDocument()
+    for (const name of ["Primary navigation", "Bottom navigation"]) {
+      const navigation = screen.getByRole("navigation", { name })
+      expect(within(navigation).getByRole("link", { name: "Shopping" })).toHaveAttribute("aria-current", "page")
+      expect(navigation.querySelectorAll('[aria-current="page"]')).toHaveLength(1)
+    }
+  })
+
   it("highlights a tapped tab before the route changes", () => {
     render(<BottomNav />)
     const navigation = screen.getByRole("navigation", {

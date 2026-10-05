@@ -153,4 +153,23 @@ describe("AuthenticatedShell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Shell sign out" }))
     expect(signOut).toHaveBeenCalledOnce()
   })
+
+  it.each(["/dashboard", "/recipes", "/planner", "/pantry", "/shopping"])(
+    "keeps %s inside the established application shell",
+    (route) => {
+      window.history.replaceState({}, "", route)
+      authState = {
+        user: { email: "cook@example.com" },
+        loading: false,
+        isAuthenticated: true,
+      }
+
+      render(<AuthenticatedShell><div>Route content</div></AuthenticatedShell>)
+
+      expect(screen.getAllByText("Desktop shell navigation")).toHaveLength(1)
+      expect(screen.getAllByText("Shell navigation")).toHaveLength(1)
+      expect(screen.getByRole("main")).toHaveClass("lg:pl-64")
+      expect(screen.getByRole("main")).toContainElement(screen.getByText("Route content"))
+    }
+  )
 })
