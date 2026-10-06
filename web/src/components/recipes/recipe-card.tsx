@@ -79,7 +79,9 @@ function RecipeCard({ recipe, viewMode = "grid", onToggleFavorite, onAddToPlan, 
               <MoreHorizontal className="h-5 w-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onCloseAutoFocus={(event) => {
+          <DropdownMenuContent align="end" collisionPadding={8}
+            className="max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-[min(20rem,var(--radix-dropdown-menu-content-available-width))] overflow-x-hidden overflow-y-auto"
+            onCloseAutoFocus={(event) => {
             const action = selectedActionRef.current
             selectedActionRef.current = null
             if (action) {
@@ -97,7 +99,9 @@ function RecipeCard({ recipe, viewMode = "grid", onToggleFavorite, onAddToPlan, 
             {onShare && <DropdownMenuItem className="min-h-11" disabled={isSharing} onSelect={() => { selectedActionRef.current = () => onShare(recipe) }}>
               {isSharing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}Share Recipe
             </DropdownMenuItem>}
-            {onTagClick && recipe.tags?.map((tag) => <DropdownMenuItem className="min-h-11" key={tag} onSelect={() => { selectedActionRef.current = () => onTagClick(tag) }}>Filter by {tag}</DropdownMenuItem>)}
+            {onTagClick && recipe.tags?.map((tag) => <DropdownMenuItem className="min-h-11" key={tag} onSelect={() => { selectedActionRef.current = () => onTagClick(tag) }}>
+              <span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">Filter by {tag}</span>
+            </DropdownMenuItem>)}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

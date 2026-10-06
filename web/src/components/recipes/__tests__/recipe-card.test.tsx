@@ -57,6 +57,30 @@ function makeRecipe(): Recipe {
 }
 
 describe("RecipeCard", () => {
+  it("retains every long-tag filter and returns focus before handing off actions", () => {
+    const tags = ["Menu regression", ...Array.from({ length: 18 }, (_, i) => `Tag ${i + 1}`), "W".repeat(50)]
+    const recipe = { ...makeRecipe(), tags }
+    const navigate = vi.fn()
+    const tag = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    const shop = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    const plan = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    const share = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    render(<RecipeCard recipe={recipe} onClick={navigate} onTagClick={tag} onAddToShoppingList={shop} onAddToPlan={plan} onShare={share} />)
+    for (const label of tags) {
+      fireEvent.click(screen.getByRole("button", { name: `Filter by ${label}` }))
+      fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+      expect(tag).toHaveBeenLastCalledWith(label)
+    }
+    expect(tag).toHaveBeenCalledTimes(20)
+    for (const [name, callback] of [["Add to Shopping List", shop], ["Add to Meal Plan", plan], ["Share Recipe", share]] as const) {
+      fireEvent.click(screen.getByRole("button", { name }))
+      expect(callback).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+      expect(callback).toHaveBeenCalledExactlyOnceWith(recipe)
+    }
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   it("opens recipe detail without exposing cooking controls on the card", () => {
     const onClick = vi.fn()
     render(
