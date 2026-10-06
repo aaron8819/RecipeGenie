@@ -1,5 +1,5 @@
 import React from "react"
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeList } from "../recipe-list"
 import type { RecipeRouteState } from "@/lib/recipe-route-state"
@@ -32,6 +32,8 @@ let isDesktopViewport = true
 const addToShoppingListMutateAsync = vi.fn()
 const deleteRecipeMutateAsync = vi.fn()
 const undoToastShow = vi.fn()
+let recipeError: Error | null = null
+const refetchRecipes = vi.fn()
 const routerPush = vi.fn()
 const routerReplace = vi.fn()
 
@@ -81,6 +83,8 @@ vi.mock("@/hooks/use-recipes", () => ({
       data,
       isLoading: false,
       isFetching: false,
+      error: recipeError,
+      refetch: refetchRecipes,
     }
   },
   useCategories: () => ({
@@ -126,6 +130,7 @@ vi.mock("@/components/ui/button", () => ({
     className,
     title,
     variant,
+    ...props
   }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
     <button
       type="button"
@@ -134,6 +139,7 @@ vi.mock("@/components/ui/button", () => ({
       className={className}
       title={title}
       data-variant={variant}
+      {...props}
     >
       {children}
     </button>
@@ -164,7 +170,7 @@ vi.mock("@/components/ui/select", () => ({
 }))
 
 vi.mock("@/components/ui/multi-select", () => ({
-  MultiSelect: ({ placeholder }: { placeholder?: string }) => <button type="button">{placeholder}</button>,
+  MultiSelect: ({ placeholder, onChange }: { placeholder?: string; onChange: (value: string[]) => void }) => <button type="button" onClick={() => onChange(["Quick"])}>{placeholder}</button>,
 }))
 
 vi.mock("@/components/ui/empty-state", () => ({
@@ -257,6 +263,8 @@ function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
 describe("RecipeList", () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    recipeError = null
+    refetchRecipes.mockReset()
     lastRecipeOptions = undefined
     baseRecipes = [recipeFixture()]
     isDesktopViewport = true
@@ -273,8 +281,8 @@ describe("RecipeList", () => {
   it("aligns the search copy with the actual search scope", () => {
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
-    expect(screen.getByPlaceholderText("Search by recipe name or category...")).toBeInTheDocument()
-    expect(screen.getByText("Search matches recipe names and categories.")).toBeInTheDocument()
+    expect(screen.getByLabelText("Search recipes by name or category")).toBeInTheDocument()
+
   })
 
   it("shows active route search clearly and sends it to data fetching", () => {
@@ -287,7 +295,7 @@ describe("RecipeList", () => {
     expect(lastRecipeOptions?.search).toBe("chicken")
     expect(screen.getByText('Search: "chicken"')).toBeInTheDocument()
     expect(screen.getByText("1 recipe shown")).toBeInTheDocument()
-    expect(screen.getByText("Search checks names and categories. Category, tag, and favorites filters narrow further.")).toBeInTheDocument()
+
   })
 
   it("does not overwrite newer typing when an older route query arrives", async () => {
@@ -329,20 +337,58 @@ describe("RecipeList", () => {
     expect(screen.getByRole("button", { name: "Clear Filters" })).toBeInTheDocument()
   })
 
-  it("keeps mobile filters compact while surfacing shared and settings utilities", () => {
+  it("keeps newer submitted search when an earlier cleared URL arrives late", async () => {
+    const view = render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, query: "missing" }} />)
+    const input = screen.getByLabelText("Search recipes by name or category")
+    fireEvent.change(input, { target: { value: "shawarma" } })
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith("/recipes?q=shawarma", { scroll: false }))
+    view.rerender(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, sortBy: "name" }} />)
+    expect(input).toHaveValue("shawarma")
+  })
+
+  it("does not restore stale filters when the pending search settles after clearing", () => {
+    vi.useFakeTimers()
+    try {
+      render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, query: "missing", category: "Dinner", tags: ["Quick"], favoritesOnly: true }} />)
+      fireEvent.click(screen.getByRole("button", { name: "Clear Filters" }))
+      expect(routerReplace).toHaveBeenCalledWith("/recipes", { scroll: false })
+      act(() => vi.advanceTimersByTime(300))
+      expect(routerReplace).toHaveBeenCalledOnce()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("composes tag and favorite changes before the preceding URL has rendered", () => {
+    render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, query: "chicken", category: "Dinner" }} />)
+    fireEvent.click(screen.getByRole("button", { name: "Filters (1)" }))
+    fireEvent.click(screen.getByRole("button", { name: "Filter by tags" }))
+    fireEvent.click(screen.getByRole("button", { name: "Favorites" }))
+    expect(routerReplace).toHaveBeenLastCalledWith("/recipes?q=chicken&category=Dinner&tags=Quick&favorite=true", { scroll: false })
+  })
+
+  it("keeps filters and collection utilities reachable on mobile", () => {
     isDesktopViewport = false
-
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
-
     expect(screen.queryByLabelText("Recipe browse filters")).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Filters" }))
-    expect(screen.getByLabelText("Recipe browse filters")).toBeInTheDocument()
-    const utilitiesRow = screen.getByLabelText("Recipe mobile utilities")
-    expect(utilitiesRow).toBeInTheDocument()
-    expect(within(utilitiesRow).getByRole("button", { name: "Shared" })).toBeInTheDocument()
-    expect(within(utilitiesRow).getByRole("button", { name: "Settings" })).toBeInTheDocument()
-    expect(screen.getAllByRole("button", { name: "Favorites" }).length).toBeGreaterThan(0)
-    expect(screen.queryByText("Search matches recipe names and categories.")).not.toBeInTheDocument()
+    const filters = screen.getByLabelText("Recipe browse filters")
+    expect(within(filters).getByRole("button", { name: "Favorites" })).toBeInTheDocument()
+    fireEvent.keyDown(filters, { key: "Escape" })
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Collection actions" }), { button: 0, ctrlKey: false })
+    // Menu opening/keyboard behavior is verified with real Radix in the browser journey.
+    expect(screen.getByRole("button", { name: "Collection actions" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Add recipe" })).toBeInTheDocument()
+  })
+
+  it("shows a recoverable recipe read error rather than empty results", () => {
+    recipeError = new Error("Recipe service unavailable")
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(screen.getByRole("alert")).toHaveTextContent("Recipe service unavailable")
+    expect(screen.getByText("Chicken Soup")).toBeInTheDocument()
+    expect(screen.queryByText("No recipes yet")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    expect(refetchRecipes).toHaveBeenCalledOnce()
   })
 
   it("reports update-only shopping results without claiming new additions", async () => {

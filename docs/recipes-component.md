@@ -78,7 +78,19 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 ### Recipe browsing UX
 
 - Recipe search currently matches recipe `name` and `category`.
-- Mobile recipes browsing intentionally separates primary browse controls from utility actions so `Shared` and `Settings` remain visible without horizontal scrolling.
+- The collection uses compact search, filter and sort controls, with category,
+  OR tags and favorites in the Filters popover. Shared recipes, Export and
+  Settings remain available in the named Collection actions menu on all widths.
+- Cards keep full titles, equal photo/fallback frames, authored yield and
+  optional timing/tag metadata. Favorite and the existing Shopping/Plan/Share
+  callbacks are sibling controls of the canonical detail link. Tag filtering
+  remains available in the card menu. Expanded card actions and the Recipe
+  Shopping selector wiring belong to later integration slices.
+- Mobile defaults to list view; its optional grid keeps two columns with full
+  title wrapping. Desktop uses four columns at 1360px and above. Styles are
+  scoped in `recipe-collection.css`; the shared authenticated shell is unchanged.
+- Recipe read errors expose Retry and keep cached cards available. Clearing
+  filters cancels the pending search update so stale filters cannot reappear.
 
 ### Recipe detail navigation
 

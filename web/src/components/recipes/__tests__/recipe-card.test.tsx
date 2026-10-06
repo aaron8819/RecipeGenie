@@ -27,13 +27,13 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => (
     <>{children}</>
   ),
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children, onCloseAutoFocus }: { children: React.ReactNode; onCloseAutoFocus?: (event: Event) => void }) => <div>{children}<button type="button" onClick={() => onCloseAutoFocus?.(new Event("close", { cancelable: true }))}>Close menu</button></div>,
   DropdownMenuItem: ({
     children,
-    onClick,
+    onSelect,
     disabled,
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" onClick={onClick} disabled={disabled}>
+  }: { children: React.ReactNode; onSelect?: () => void; disabled?: boolean }) => (
+    <button type="button" onClick={() => onSelect?.()} disabled={disabled}>
       {children}
     </button>
   ),
@@ -59,7 +59,7 @@ function makeRecipe(): Recipe {
 describe("RecipeCard", () => {
   it("opens recipe detail without exposing cooking controls on the card", () => {
     const onClick = vi.fn()
-    const { container } = render(
+    render(
       <RecipeCard
         recipe={makeRecipe()}
         isDesktopViewport
@@ -76,7 +76,34 @@ describe("RecipeCard", () => {
     expect(screen.queryByText(/cook mode/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/start cooking/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/mark as made/i)).not.toBeInTheDocument()
-    expect(container.querySelector(".grid-cols-3")).toBeInTheDocument()
+    const link = screen.getByRole("link", { name: /Card Recipe/ })
+    expect(link).toHaveAttribute("href", "/recipes/recipe-1?from=recipes")
+    expect(link.querySelector("button")).toBeNull()
+  })
+
+  it("keeps favorite, pending menu actions, and tag filters separate from navigation", () => {
+    const open = vi.fn()
+    const favorite = vi.fn()
+    const tag = vi.fn()
+    const shop = vi.fn()
+    render(<RecipeCard recipe={makeRecipe()} viewMode="list" onClick={open} onToggleFavorite={favorite} onTagClick={tag} onAddToShoppingList={shop} isAddingToShoppingList />)
+    fireEvent.click(screen.getByRole("button", { name: "Add Card Recipe to favorites" }))
+    fireEvent.click(screen.getByRole("button", { name: "Filter by Quick" }))
+    expect(tag).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
+    expect(favorite).toHaveBeenCalledOnce()
+    expect(tag).toHaveBeenCalledWith("Quick")
+    expect(shop).not.toHaveBeenCalled()
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it("recovers a broken photo without dropping the recipe link", () => {
+    const recipe = { ...makeRecipe(), image_url: "https://example.com/broken.jpg" }
+    const { container } = render(<RecipeCard recipe={recipe} />)
+    fireEvent.error(container.querySelector("img")!)
+    expect(container.querySelector("img")).toBeNull()
+    expect(screen.getByRole("link", { name: /Card Recipe/ })).toBeInTheDocument()
   })
 
   it("keeps mobile card utilities in a touch-sized overflow menu", () => {
