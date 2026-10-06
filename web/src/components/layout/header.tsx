@@ -21,12 +21,11 @@ function getInitials(email: string | undefined): string {
 interface HeaderProps {
   userEmail?: string
   onSignOut: () => void
-  shopping?: boolean
 }
 
-export function Header({ userEmail, onSignOut, shopping = false }: HeaderProps) {
+export function Header({ userEmail, onSignOut }: HeaderProps) {
   return (
-    <header className={`z-50 border-b border-stone-200 bg-white/80 px-4 py-4 backdrop-blur-md sm:px-6 ${shopping ? 'lg:px-12' : 'lg:hidden'}`}>
+    <header className="z-50 border-b border-stone-200 bg-white/80 px-4 py-4 backdrop-blur-md sm:px-6 lg:hidden">
       <div className="flex w-full items-center justify-between">
         <div className="flex flex-shrink-0 items-center gap-2">
           <Link
@@ -47,13 +46,8 @@ export function Header({ userEmail, onSignOut, shopping = false }: HeaderProps) 
                 data-slot="recipe-genie-mark"
               />
             </div>
-            {shopping && <span className="text-lg font-semibold">Recipe <span className="text-primary">Genie</span></span>}
           </Link>
         </div>
-
-        {shopping && <nav aria-label="Application" className="hidden items-center gap-7 md:flex">
-          {['Dashboard', 'Planner', 'Recipes', 'Shopping', 'Pantry'].map(label => <Link key={label} href={`/${label.toLowerCase()}`} aria-current={label === 'Shopping' ? 'page' : undefined} className={label === 'Shopping' ? 'border-b-2 border-primary py-2 text-primary' : 'py-2 text-sm text-stone-600'}>{label}</Link>)}
-        </nav>}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

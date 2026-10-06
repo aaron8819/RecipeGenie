@@ -104,16 +104,16 @@ export function AuthenticatedShell({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className={cn('min-h-screen bg-background pb-[var(--bottom-nav-safe-height)] lg:bg-canvas lg:pb-0', pathname === '/shopping' && 'shopping-shell')}>
+    <div className="min-h-screen bg-background pb-[var(--bottom-nav-safe-height)] lg:bg-canvas lg:pb-0">
       <div className="recipe-detail-print-hidden">
-        {pathname !== '/shopping' && <DesktopSidebar
+        <DesktopSidebar
           userEmail={user?.email}
           onSignOut={() => void signOut()}
-        />}
-        <Header userEmail={user?.email} onSignOut={() => void signOut()} shopping={pathname === '/shopping'} />
+        />
+        <Header userEmail={user?.email} onSignOut={() => void signOut()} />
       </div>
 
-      <main className={pathname === '/shopping' ? '' : 'lg:pl-64'}>
+      <main className="lg:pl-64">
         <div
           className={cn(
             "mx-auto w-full max-w-full lg:p-8",
