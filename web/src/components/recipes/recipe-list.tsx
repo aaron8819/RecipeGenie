@@ -138,6 +138,11 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false)
   const [shareRecipeId, setShareRecipeId] = useState<string | null>(null)
   const [skeletonDelayed, setSkeletonDelayed] = useState(false)
+  const pendingUndoRef = useRef(new Set<number>())
+  const [pendingUndoIds, setPendingUndoIds] = useState(new Set<number>())
+  const [failedUndos, setFailedUndos] = useState<{
+    historyId: number; message: string; retry: () => Promise<void>
+  }[]>([])
 
   const restoreDialogFocus = useCallback((event?: Event) => {
     event?.preventDefault()
@@ -342,8 +347,30 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   }, [toggleFavorite, showToast])
   const handleMarkMade = async (recipe: Recipe) => {
     try {
-      await markMade.mutateAsync(recipe.id)
-      showToast({ message: `"${recipe.name}" marked as made`, onUndo: () => unmarkMade.mutate(recipe.id), onExpire: () => undefined })
+      const { historyId } = await markMade.mutateAsync(recipe.id)
+      let undone = false
+      const undo = async () => {
+        if (undone || pendingUndoRef.current.has(historyId)) return
+        pendingUndoRef.current.add(historyId)
+        setPendingUndoIds(new Set(pendingUndoRef.current))
+        try {
+          await unmarkMade.mutateAsync({ recipeId: recipe.id, historyId })
+          undone = true
+          setFailedUndos(previous => previous.filter(item => item.historyId !== historyId))
+          showToast({ message: `"${recipe.name}" mark as made undone` })
+        } catch (error) {
+          const message = `Could not undo "${recipe.name}". ${getErrorMessage(error, "Try again.")}`
+          setFailedUndos(previous => [
+            ...previous.filter(item => item.historyId !== historyId),
+            { historyId, message, retry: undo },
+          ])
+          showToast({ message })
+        } finally {
+          pendingUndoRef.current.delete(historyId)
+          setPendingUndoIds(new Set(pendingUndoRef.current))
+        }
+      }
+      showToast({ message: `"${recipe.name}" marked as made`, onUndo: () => { void undo() } })
     } catch (error) {
       showToast({ message: getErrorMessage(error, "Failed to mark recipe as made") })
     }
@@ -473,6 +500,15 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
       {isFiltered && <div className="recipe-collection-active-filters" aria-label="Active recipe filters">{activeFilters.map((filter) => <span key={filter}>{filter}</span>)}</div>}
       {/* Recipe Grid/List */}
       <div className="pb-8" aria-busy={isFetching}>
+      {failedUndos.map(item => (
+        <div key={item.historyId} role="alert" className="mb-4 rounded-xl border p-4">
+          <p className="text-sm">{item.message}</p>
+          <Button variant="outline" className="mt-3 min-h-11"
+            disabled={pendingUndoIds.has(item.historyId)} onClick={() => { void item.retry() }}>
+            {pendingUndoIds.has(item.historyId) ? "Retrying Undo…" : "Retry Undo"}
+          </Button>
+        </div>
+      ))}
       {error && (
         <div role="alert" className="mb-4 rounded-xl border p-6">
           <h2 className="font-semibold">Could not load recipes</h2>

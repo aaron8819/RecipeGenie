@@ -746,13 +746,21 @@ export function useMarkRecipeAsMade() {
       const supabase = getSupabase()
       const historyInsert = supabase.from("recipe_history") as unknown as {
         insert: (values: { user_id: string; recipe_uuid: string; date_made: string }) =>
-          Promise<{ error: { message: string } | null }>
+          { select: (columns: "id") => {
+            single: () => Promise<{
+              data: { id: number } | null
+              error: { message: string } | null
+            }>
+          } }
       }
-      const { error: insertError } = await historyInsert
+      const { data: history, error: insertError } = await historyInsert
         .insert({ user_id: user!.id, recipe_uuid: recipeId, date_made: new Date().toISOString() })
+        .select("id")
+        .single()
 
       if (insertError) throw insertError
-      return { recipeId }
+      if (!history) throw new Error("Could not confirm recipe history entry")
+      return { recipeId, historyId: history.id }
     },
     // Optimistic update
     onMutate: async (recipeId) => {
@@ -801,7 +809,7 @@ export function useMarkRecipeAsMade() {
 }
 
 /**
- * Hook to remove the most recent history entry for a recipe
+ * Hook to remove a specific history entry, or the most recent one for a recipe
  * Implements optimistic updates for instant UI feedback
  */
 export function useUnmarkRecipeAsMade() {
@@ -812,9 +820,18 @@ export function useUnmarkRecipeAsMade() {
   const historyStatsKey = historyKeys.stats(ownerUserId)
 
   return useMutation({
-    mutationFn: async (recipeId: string) => {
+    mutationFn: async (target: string | { recipeId: string; historyId: number }) => {
+      const recipeId = typeof target === "string" ? target : target.recipeId
       const supabase = getSupabase()
-      
+
+      // Card Undo binds all attempts to the entry created by Mark made.
+      if (typeof target !== "string") {
+        const { error } = await supabase.from("recipe_history").delete()
+          .eq("user_id", user!.id).eq("id", target.historyId)
+        if (error) throw error
+        return { recipeId }
+      }
+
       // Get the most recent history entry for this recipe
       const { data: recentHistory, error: historyError } = await supabase
         .from("recipe_history")
@@ -842,7 +859,8 @@ export function useUnmarkRecipeAsMade() {
       return { recipeId }
     },
     // Optimistic update
-    onMutate: async (recipeId) => {
+    onMutate: async (target) => {
+      const recipeId = typeof target === "string" ? target : target.recipeId
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: historyKey })
 
@@ -850,15 +868,16 @@ export function useUnmarkRecipeAsMade() {
       const previousHistory = queryClient.getQueryData<RecipeHistory[]>(historyKey)
       const previousStats = queryClient.getQueryData<RecipeHistoryStatsRow[]>(historyStatsKey)
 
-      // Optimistically update cache - remove most recent entry for this recipe
+      // Optimistically remove the target entry; legacy callers use the latest.
       let nextHistory: RecipeHistory[] | undefined
       queryClient.setQueryData<RecipeHistory[]>(
         historyKey,
         (old) => {
           const existing = old || []
-          // Find and remove the most recent entry for this recipe
-          // History is sorted by date_made DESC, so first match is most recent
-          const index = existing.findIndex(entry => entry.recipe_id === recipeId)
+          // History is sorted by date_made DESC for legacy recipe-only callers.
+          const index = existing.findIndex(entry => typeof target === "string"
+            ? entry.recipe_id === recipeId
+            : entry.id === target.historyId)
           if (index !== -1) {
             nextHistory = [...existing.slice(0, index), ...existing.slice(index + 1)]
             return nextHistory

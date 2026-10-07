@@ -115,7 +115,7 @@ vi.mock("@/hooks/use-recipes", () => ({
 vi.mock("@/hooks/use-planner", () => ({
   useRecipeHistoryStats: () => ({ data: [] }),
   useMarkRecipeAsMade: () => ({ mutateAsync: markMadeMutateAsync }),
-  useUnmarkRecipeAsMade: () => ({ mutate: unmarkMadeMutate }),
+  useUnmarkRecipeAsMade: () => ({ mutateAsync: unmarkMadeMutate }),
 }))
 
 vi.mock("@/hooks/use-shopping", () => ({
@@ -290,7 +290,9 @@ describe("RecipeList", () => {
     deleteRecipeMutateAsync.mockReset()
     favoriteMutate.mockReset()
     markMadeMutateAsync.mockReset()
+    markMadeMutateAsync.mockResolvedValue({ recipeId: "recipe-1", historyId: 42 })
     unmarkMadeMutate.mockReset()
+    unmarkMadeMutate.mockResolvedValue({ recipeId: "recipe-1" })
     undoToastShow.mockReset()
     routerPush.mockReset()
     routerReplace.mockReset()
@@ -308,7 +310,6 @@ describe("RecipeList", () => {
 
   it("shows favorite failures and uses the global history owner with Undo", async () => {
     favoriteMutate.mockImplementation((_input, options) => options.onError(new Error("Favorite unavailable")))
-    markMadeMutateAsync.mockResolvedValue({ recipeId: "recipe-1" })
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
     fireEvent.click(screen.getByRole("button", { name: "Favorite Chicken Soup" }))
     expect(undoToastShow).toHaveBeenCalledWith({ message: "Favorite unavailable" })
@@ -316,8 +317,63 @@ describe("RecipeList", () => {
     await waitFor(() => expect(markMadeMutateAsync).toHaveBeenCalledWith("recipe-1"))
     await waitFor(() => expect(undoToastShow).toHaveBeenCalledWith(expect.objectContaining({ message: '"Chicken Soup" marked as made' })))
     const toast = undoToastShow.mock.calls.find(([value]) => value.onUndo)?.[0]
-    toast.onUndo()
-    expect(unmarkMadeMutate).toHaveBeenCalledWith("recipe-1")
+    await act(async () => { toast.onUndo() })
+    expect(unmarkMadeMutate).toHaveBeenCalledWith({ recipeId: "recipe-1", historyId: 42 })
+    expect(undoToastShow).toHaveBeenLastCalledWith({ message: '"Chicken Soup" mark as made undone' })
+    expect(screen.queryByRole("button", { name: "Retry Undo" })).not.toBeInTheDocument()
+  })
+
+  it("retains an explicit retry after rejected Undo and retries the same entry", async () => {
+    unmarkMadeMutate.mockRejectedValueOnce(new Error("History unavailable"))
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    fireEvent.click(screen.getByRole("button", { name: "Made Chicken Soup" }))
+    await waitFor(() => expect(undoToastShow).toHaveBeenCalled())
+    await act(async () => { undoToastShow.mock.calls[0][0].onUndo() })
+    expect(screen.getByRole("alert")).toHaveTextContent('Could not undo "Chicken Soup". History unavailable')
+    expect(undoToastShow).not.toHaveBeenCalledWith({ message: '"Chicken Soup" mark as made undone' })
+    fireEvent.click(screen.getByRole("button", { name: "Retry Undo" }))
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retry Undo" })).not.toBeInTheDocument())
+    expect(unmarkMadeMutate.mock.calls.map(([target]) => target)).toEqual([
+      { recipeId: "recipe-1", historyId: 42 }, { recipeId: "recipe-1", historyId: 42 },
+    ])
+    expect(markMadeMutateAsync).toHaveBeenCalledTimes(1)
+    expect(undoToastShow).toHaveBeenLastCalledWith({ message: '"Chicken Soup" mark as made undone' })
+  })
+
+  it("guards overlapping Undo/retry clicks and waits for confirmed deletion", async () => {
+    let reject!: (reason: Error) => void
+    let resolve!: () => void
+    unmarkMadeMutate.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail }))
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    fireEvent.click(screen.getByRole("button", { name: "Made Chicken Soup" }))
+    await waitFor(() => expect(undoToastShow).toHaveBeenCalled())
+    const undo = undoToastShow.mock.calls[0][0].onUndo
+    act(() => { undo(); undo(); undo() })
+    expect(unmarkMadeMutate).toHaveBeenCalledTimes(1)
+    await act(async () => { reject(new Error("Network failed")) })
+    unmarkMadeMutate.mockReturnValueOnce(new Promise<void>(done => { resolve = done }))
+    const retry = screen.getByRole("button", { name: "Retry Undo" })
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+    act(() => { undo() })
+    expect(screen.getByRole("button", { name: "Retrying Undo…" })).toBeDisabled()
+    expect(unmarkMadeMutate).toHaveBeenCalledTimes(2)
+    expect(undoToastShow).not.toHaveBeenCalledWith({ message: '"Chicken Soup" mark as made undone' })
+    await act(async () => { resolve() })
+    act(() => { undo() })
+    expect(unmarkMadeMutate).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    expect(undoToastShow).toHaveBeenLastCalledWith({ message: '"Chicken Soup" mark as made undone' })
+  })
+
+  it("handles a synchronously thrown Undo error and keeps retry available", async () => {
+    unmarkMadeMutate.mockImplementationOnce(() => { throw new Error("Unexpected failure") })
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    fireEvent.click(screen.getByRole("button", { name: "Made Chicken Soup" }))
+    await waitFor(() => expect(undoToastShow).toHaveBeenCalled())
+    await act(async () => { undoToastShow.mock.calls[0][0].onUndo() })
+    expect(screen.getByRole("alert")).toHaveTextContent("Unexpected failure")
+    expect(screen.getByRole("button", { name: "Retry Undo" })).toBeEnabled()
   })
 
   it("routes Print to the canonical detail without printing collection chrome", () => {
