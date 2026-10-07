@@ -328,20 +328,10 @@ vi.mock("../meal-planner-components", () => ({
   }),
   PlannerDesktopWeekShell: ({
     children,
-    onPrevious,
-    onNext,
   }: {
     children: React.ReactNode
-    onPrevious?: () => void
-    onNext?: () => void
   }) => (
     <div>
-      <button type="button" onClick={onPrevious}>
-        Previous week
-      </button>
-      <button type="button" onClick={onNext}>
-        Next week
-      </button>
       {children}
     </div>
   ),
@@ -714,7 +704,7 @@ describe("MealPlanner interactions", () => {
     render(<MealPlanner />)
 
     const recipeTitles = screen.getAllByText("Planner Recipe")
-    const recipeCard = recipeTitles[0].closest('[role="button"]')
+    const recipeCard = recipeTitles[0].closest('button')
     expect(recipeCard).not.toBeNull()
     fireEvent.click(recipeCard!)
 
@@ -722,6 +712,18 @@ describe("MealPlanner interactions", () => {
     expect(routerPush).toHaveBeenCalledWith(
       "/recipes/recipe-1?from=planner"
     )
+  })
+
+  it("keeps one stable Add target on every day and separates meal actions from navigation", () => {
+    render(<MealPlanner />)
+
+    expect(screen.getAllByRole('button', { name: /^Add meal to / })).toHaveLength(7)
+    expect(screen.getAllByRole('button', { name: 'Previous week' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Next week' })).toHaveLength(1)
+    const title = screen.getByRole('button', { name: 'Planner Recipe' })
+    expect(title.querySelector('button')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Swap Planner Recipe' }))
+    expect(routerPush).not.toHaveBeenCalled()
   })
 
   it("initializes the selected planner week from route state", () => {

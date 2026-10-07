@@ -11,6 +11,28 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - `meal-planner.tsx` is intentionally still orchestration-heavy.
 - No planner hook extraction is recommended right now.
 
+## Slice 4 layout
+
+Planner uses compact title/week controls, visible Add meal and full-week Shopping
+actions, and broad chronological day panels: three columns from 1200px, two from
+768px, and one below 768px. The authenticated shell still switches at 1024px.
+Mobile Today/This Week/Next Week filtering and cooking progress remain available.
+Each day has one stable header Add target, with complete wrapping meal titles,
+small photo/fallback frames and cooked badges. Meal titles are buttons separate
+from their action controls. Desktop pointer drag/drop still uses the original
+day targets and recipe identities; mobile retains the move-menu alternative.
+
+The explicit meal action row, template controls and generation category editor
+remain accessible. Slice 5's workflow/menu consolidation is separate. Generation
+is below the desktop agenda to keep planning content first. The real handlers,
+dialogs, hooks and selectors are unchanged. Unassigned meals retain their current
+distributed placement; there is no Move to Unassigned or Clear week. The
+one-recipe-per-week rule and saved Shopping yield precedence remain unchanged.
+Styles are scoped in `components/planner/planner-layout.css`; shell, Dashboard,
+Recipe detail and global styles are not altered.
+Secondary text uses the existing desktop text-variant token for readable
+contrast; the original dark Slate/Emerald treatment stays scoped to Planner.
+
 ## Shopping actions
 
 Meal and weekly shopping actions open the shared `ShoppingSelectionDialog`.
@@ -65,6 +87,7 @@ and do not delete recipes or Shopping contributions.
 |------|----------------|
 | `web/src/components/planner/meal-planner.tsx` | Main planner orchestration: hook composition, week navigation, dialog state, DnD ownership, undo flows, async mutation sequencing. |
 | `web/src/components/planner/meal-planner-components.tsx` | Presentation-only planner sections extracted from the main component. |
+| `web/src/components/planner/planner-layout.css` | Scoped responsive day panels, meal frames, text contrast and dark presentation. |
 | `web/src/components/planner/meal-planner.selectors.ts` | Pure derived-state helpers for planner rendering and template shaping. |
 | `web/src/components/planner/plan-settings-modal.tsx` | Planner settings UI for default breakdown, excluded days, preferred days, and history exclusion. |
 | `web/src/hooks/use-planner.ts` | Planner data access and mutations. |
@@ -129,4 +152,4 @@ npm run check:cycles
 npm run check:no-new-ts-expect-error
 ```
 
-Last updated: 2026-08-03
+Last updated: 2026-10-07
