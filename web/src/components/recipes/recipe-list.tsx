@@ -13,6 +13,9 @@ import { AddToPlanDialog } from "./add-to-plan-dialog"
 import { RecipeSettingsModal } from "./recipe-settings-modal"
 import { ShareRecipeDialog } from "./share-recipe-dialog"
 import { SharedRecipesInbox } from "./shared-recipes-inbox"
+import { ShoppingSelectionDialog } from "@/components/shopping/shopping-selection-dialog"
+import type { ShoppingRecipeSelection } from "@/lib/shopping-selection"
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog"
 import { EmptyState } from "@/components/ui/empty-state"
 import {
   useRecipes,
@@ -23,7 +26,7 @@ import {
   useDeleteRecipe,
 } from "@/hooks/use-recipes"
 import { useIsDesktop } from "@/hooks/use-is-desktop"
-import { useRecipeHistoryStats } from "@/hooks/use-planner"
+import { useRecipeHistoryStats, useMarkRecipeAsMade, useUnmarkRecipeAsMade } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import { downloadRecipesAsJson } from "@/lib/recipe-export"
@@ -113,6 +116,8 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const collectionMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const collectionMenuActionRef = useRef<(() => void) | null>(null)
   const dialogReturnFocusRef = useRef<HTMLElement | null>(null)
+  const dialogRecipeIdRef = useRef<string | null>(null)
+  const collectionHeadingRef = useRef<HTMLHeadingElement>(null)
   const returnFocusRef = useRef(recipeToFocusOnReturn)
   const [search, setSearch] = useState(routeState.query)
   const lastSubmittedQueryRef = useRef(routeState.query)
@@ -123,6 +128,9 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const sortBy = routeState.sortBy
   const viewMode = routeState.viewMode ?? (isDesktop ? "grid" : "list")
   const [addToPlanRecipeId, setAddToPlanRecipeId] = useState<string | null>(null)
+  const [shoppingRecipeId, setShoppingRecipeId] = useState<string | null>(null)
+  const [editRecipeId, setEditRecipeId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Recipe | null>(null)
   const [addingToShoppingListId, setAddingToShoppingListId] = useState<string | null>(null)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -131,12 +139,23 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const [shareRecipeId, setShareRecipeId] = useState<string | null>(null)
   const [skeletonDelayed, setSkeletonDelayed] = useState(false)
 
-  const restoreDialogFocus = useCallback(() => {
+  const restoreDialogFocus = useCallback((event?: Event) => {
+    event?.preventDefault()
     const target = dialogReturnFocusRef.current
+    const recipeId = dialogRecipeIdRef.current
     dialogReturnFocusRef.current = null
+    dialogRecipeIdRef.current = null
     window.requestAnimationFrame(() => {
-      if (target?.isConnected) target.focus({ preventScroll: true })
+      const card = Array.from(document.querySelectorAll<HTMLElement>("[data-recipe-id]"))
+        .find(element => element.dataset.recipeId === recipeId)
+      const current = target?.isConnected ? target :
+        card?.querySelector<HTMLElement>('button[title="Actions"]') ?? collectionHeadingRef.current
+      current?.focus({ preventScroll: true })
     })
+  }, [])
+  const rememberRecipeFocus = useCallback((recipe: Recipe) => {
+    dialogReturnFocusRef.current = document.activeElement as HTMLElement
+    dialogRecipeIdRef.current = recipe.id
   }, [])
 
   useEffect(() => {
@@ -213,6 +232,8 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const { data: historyStats } = useRecipeHistoryStats()
   const toggleFavorite = useToggleFavorite()
   const deleteRecipe = useDeleteRecipe()
+  const markMade = useMarkRecipeAsMade()
+  const unmarkMade = useUnmarkRecipeAsMade()
   const addToShoppingList = useAddToShoppingList()
   const { show: showToast } = useUndoToast()
 
@@ -267,19 +288,23 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
     }
   }, [deleteRecipe, showToast])
 
-  const handleDelete = useCallback(async (recipe: Recipe) => {
-    if (!confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
-      return false
-    }
-    return deleteRecipeAndNotify(recipe)
-  }, [deleteRecipeAndNotify])
+  const handleDelete = useCallback((recipe: Recipe) => {
+    rememberRecipeFocus(recipe)
+    setDeleteTarget(recipe)
+  }, [rememberRecipeFocus])
 
-  const handleAddToShoppingList = useCallback(async (recipe: Recipe) => {
+  const handleAddToShoppingList = useCallback((recipe: Recipe) => {
+    rememberRecipeFocus(recipe)
+    setShoppingRecipeId(recipe.id)
+  }, [rememberRecipeFocus])
+  const handleShoppingSubmit = async (selections: ShoppingRecipeSelection[]) => {
+    const recipe = displayRecipes.find(recipe => recipe.id === shoppingRecipeId)
+    if (!recipe) throw new Error("Recipe no longer available. Close and reopen the selection.")
     setAddingToShoppingListId(recipe.id)
     try {
       const result = await addToShoppingList.mutateAsync({
-        recipeIds: [recipe.id],
-        scale: 1.0,
+        recipeIds: selections.map(selection => selection.recipeId),
+        selections,
       })
 
       showToast({
@@ -293,16 +318,17 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
       showToast({
         message: getErrorMessage(error, "Failed to add ingredients to shopping list"),
       })
+      throw error
     } finally {
       setAddingToShoppingListId(null)
     }
-  }, [addToShoppingList, showToast])
+  }
 
   const handleShareRecipe = useCallback((recipe: Recipe) => {
-    dialogReturnFocusRef.current = document.activeElement as HTMLElement
+    rememberRecipeFocus(recipe)
     setShareRecipeId(recipe.id)
     setIsShareDialogOpen(true)
-  }, [])
+  }, [rememberRecipeFocus])
 
   const handleOpenRecipe = useCallback((recipe: Recipe) => {
     recipeToFocusOnReturn = recipe.id
@@ -310,8 +336,18 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   }, [router])
 
   const handleToggleFavorite = useCallback((r: Recipe) => {
-    toggleFavorite.mutate({ id: r.id, favorite: !!r.favorite })
-  }, [toggleFavorite])
+    toggleFavorite.mutate({ id: r.id, favorite: !!r.favorite }, {
+      onError: error => showToast({ message: getErrorMessage(error, "Failed to update favorite") }),
+    })
+  }, [toggleFavorite, showToast])
+  const handleMarkMade = async (recipe: Recipe) => {
+    try {
+      await markMade.mutateAsync(recipe.id)
+      showToast({ message: `"${recipe.name}" marked as made`, onUndo: () => unmarkMade.mutate(recipe.id), onExpire: () => undefined })
+    } catch (error) {
+      showToast({ message: getErrorMessage(error, "Failed to mark recipe as made") })
+    }
+  }
 
   const handleTagClick = useCallback((tag: string) => {
     if (!selectedTags.includes(tag)) {
@@ -364,7 +400,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
       <header className="recipe-collection-heading">
         <div>
           <p className="recipe-collection-eyebrow">Your kitchen, collected</p>
-          <h1>Recipes</h1>
+          <h1 ref={collectionHeadingRef} tabIndex={-1}>Recipes</h1>
           <p>Find something good to cook.</p>
         </div>
         <div className="recipe-collection-heading-actions">
@@ -530,7 +566,10 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
                     isDesktopViewport={isDesktop}
                     onDelete={handleDelete}
                     onToggleFavorite={handleToggleFavorite}
-                    onAddToPlan={(recipe) => { dialogReturnFocusRef.current = document.activeElement as HTMLElement; setAddToPlanRecipeId(recipe.id) }}
+                    onAddToPlan={(recipe) => { rememberRecipeFocus(recipe); setAddToPlanRecipeId(recipe.id) }}
+                    onEdit={(recipe) => { rememberRecipeFocus(recipe); setEditRecipeId(recipe.id) }}
+                    onMarkMade={handleMarkMade}
+                    onPrint={handleOpenRecipe}
                     onAddToShoppingList={handleAddToShoppingList}
                     onShare={handleShareRecipe}
                     onClick={handleOpenRecipe}
@@ -539,6 +578,9 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
                     timesMade={stats?.timesMade ?? 0}
                     isAddingToShoppingList={addingToShoppingListId === recipe.id}
                     isSharing={false}
+                    isFavoritePending={toggleFavorite.isPending && toggleFavorite.variables?.id === recipe.id}
+                    isMarkingMade={markMade.isPending && markMade.variables === recipe.id}
+                    isDeleting={deleteRecipe.isPending && deleteRecipe.variables === recipe.id}
                   />
                 </div>
               )
@@ -549,6 +591,29 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
       </div>
 
       {/* Add Dialog */}
+      <ShoppingSelectionDialog
+        open={shoppingRecipeId !== null}
+        onOpenChange={open => { if (!open && !addToShoppingList.isPending) setShoppingRecipeId(null) }}
+        onCloseAutoFocus={restoreDialogFocus}
+        recipes={displayRecipes.filter(recipe => recipe.id === shoppingRecipeId)}
+        onSubmit={handleShoppingSubmit}
+      />
+      <RecipeDialog open={editRecipeId !== null} recipeId={editRecipeId ?? undefined}
+        categories={categories || []}
+        onCloseAutoFocus={restoreDialogFocus}
+        onOpenChange={open => { if (!open) setEditRecipeId(null) }} />
+      <AlertDialog open={deleteTarget !== null} onOpenChange={open => { if (!open && !deleteRecipe.isPending) setDeleteTarget(null) }}>
+        <AlertDialogContent onCloseAutoFocus={restoreDialogFocus}>
+          <AlertDialogHeader><AlertDialogTitle>Delete Recipe</AlertDialogTitle><AlertDialogDescription>Delete "{deleteTarget?.name}"? This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteRecipe.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction disabled={deleteRecipe.isPending} onClick={async event => {
+              event.preventDefault()
+              if (deleteTarget && await deleteRecipeAndNotify(deleteTarget)) setDeleteTarget(null)
+            }}>{deleteRecipe.isPending ? "Deleting…" : "Delete"}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <RecipeDialog
         open={isAddDialogOpen}
         onOpenChange={(open) => { setIsAddDialogOpen(open); if (!open) restoreDialogFocus() }}

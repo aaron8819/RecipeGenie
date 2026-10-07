@@ -4,6 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeDetailPage } from "../recipe-detail-page"
 import type { Recipe } from "@/types/database"
 import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
+import { createEmptyShoppingDocument } from "@/lib/shopping-document"
+
+vi.mock("@/hooks/shopping/use-shopping-document", () => ({
+  useShoppingDocumentState: () => ({ data: { document: createEmptyShoppingDocument() }, isLoading: false, isError: false }),
+}))
 
 globalThis.React = React
 
@@ -243,12 +248,14 @@ describe("RecipeDetailPage states", () => {
     render(<RecipeDetailPage recipeId="recipe-1" />)
     fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
+    expect(addShoppingMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByLabelText(/Selected yield for/)).toHaveValue(5)
+    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
 
     await waitFor(() => {
       expect(addShoppingMutateAsync).toHaveBeenCalledWith({
         recipeIds: ["recipe-1"],
-        scale: 1.25,
-        scaleV1: { numerator: "5", denominator: "4" },
+        selections: [expect.objectContaining({ recipeId: "recipe-1", selectedYield: 5, ingredientOrdinals: [0] })],
       })
     })
   })
@@ -270,6 +277,18 @@ describe("RecipeDetailPage states", () => {
     await waitFor(() => expect(
       screen.getByRole("button", { name: "Edit Recipe" })
     ).toHaveFocus())
+  })
+
+  it("returns Shopping focus to the replacement trigger after source refresh", async () => {
+    recipeResult = { data: makeRecipe(), error: null, isError: false, isLoading: false, isSuccess: true }
+    const view = render(<RecipeDetailPage recipeId="recipe-1" />)
+    const original = screen.getByRole("button", { name: "Add to Shopping List" })
+    fireEvent.click(original)
+    recipeResult.data = { ...makeRecipe(), updated_at: "2026-10-07T13:00:00Z" }
+    view.rerender(<RecipeDetailPage recipeId="recipe-1" />)
+    expect(original.isConnected).toBe(false)
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add to Shopping List" })).toHaveFocus())
   })
 
   it.each([

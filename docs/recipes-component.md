@@ -50,6 +50,21 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   - `getRecipeImageUrl()` is a pure helper.
   - Upload/delete behavior goes through `useRecipeImageStorage()`.
 
+### Recipe action entry points
+
+- Cards and detail open the shared Shopping selection dialog before writing.
+  Saved yield and ingredient occurrences take precedence over caller defaults.
+  A fresh card selection uses original yield; a fresh detail selection uses the
+  currently viewed yield. Submission stays in the existing Shopping command owner.
+- Card menus also expose Edit, Mark made, Print, and confirmed Delete. Print
+  navigates to canonical detail, where the existing Print control remains.
+  Recipe Mark made/Undo uses global history and never toggles weekly cooked flags.
+- Card dialogs return focus to the originating menu or its replacement after
+  editing. If deletion/filtering removes that card, focus returns to Recipes.
+- The selector retains section labels, repeated occurrences, preparation and
+  alternatives, exact quantities, selection counts, and Select/Deselect all.
+  Selection identities and saved-selection recovery remain helper-owned.
+
 ## Key Files
 
 | File | Responsibility |

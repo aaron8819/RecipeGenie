@@ -111,6 +111,7 @@ interface RecipeDialogProps {
   recipeId?: string
   categories: string[]
   onRecipeCreated?: (recipe: Recipe) => void
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 
@@ -121,6 +122,7 @@ export function RecipeDialog({
   recipeId,
   categories,
   onRecipeCreated,
+  onCloseAutoFocus,
 }: RecipeDialogProps) {
   const resolvedRecipeId = recipeId ?? recipe?.id ?? null
   const { data: liveRecipe } = useRecipe(open && !!resolvedRecipeId ? resolvedRecipeId : null)
@@ -978,6 +980,7 @@ export function RecipeDialog({
     </AlertDialog>
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        onCloseAutoFocus={onCloseAutoFocus}
         hideCloseButton
         className={
           isEditing || isMobileImportReview

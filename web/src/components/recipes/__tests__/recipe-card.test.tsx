@@ -57,6 +57,25 @@ function makeRecipe(): Recipe {
 }
 
 describe("RecipeCard", () => {
+  it("hands new actions the recipe only after menu focus is restored", () => {
+    const recipe = makeRecipe()
+    const callbacks = { onEdit: vi.fn(), onMarkMade: vi.fn(), onPrint: vi.fn(), onDelete: vi.fn() }
+    render(<RecipeCard recipe={recipe} {...callbacks} />)
+    for (const [name, callback] of [["Edit recipe", callbacks.onEdit], ["Mark made", callbacks.onMarkMade], ["Print recipe", callbacks.onPrint], ["Delete recipe", callbacks.onDelete]] as const) {
+      callback.mockImplementation(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+      fireEvent.click(screen.getByRole("button", { name }))
+      expect(callback).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+      expect(callback).toHaveBeenCalledExactlyOnceWith(recipe)
+    }
+  })
+
+  it("disables the pending favorite, history and deletion actions", () => {
+    render(<RecipeCard recipe={makeRecipe()} onToggleFavorite={vi.fn()} onMarkMade={vi.fn()} onDelete={vi.fn()} isFavoritePending isMarkingMade isDeleting />)
+    expect(screen.getByRole("button", { name: "Add Card Recipe to favorites" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Mark made" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Delete recipe" })).toBeDisabled()
+  })
   it("retains every long-tag filter and returns focus before handing off actions", () => {
     const tags = ["Menu regression", ...Array.from({ length: 18 }, (_, i) => `Tag ${i + 1}`), "W".repeat(50)]
     const recipe = { ...makeRecipe(), tags }

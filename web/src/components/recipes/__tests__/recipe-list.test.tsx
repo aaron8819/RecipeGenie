@@ -8,6 +8,11 @@ import {
   canonicalizeRecipeFixture,
   type RecipeFixtureInput,
 } from "@/test/recipe-fixtures"
+import { createEmptyShoppingDocument } from "@/lib/shopping-document"
+
+vi.mock("@/hooks/shopping/use-shopping-document", () => ({
+  useShoppingDocumentState: () => ({ data: { document: createEmptyShoppingDocument() }, isLoading: false, isError: false }),
+}))
 
 const DEFAULT_ROUTE_STATE: RecipeRouteState = {
   category: null,
@@ -31,6 +36,9 @@ let baseRecipes: Recipe[] = []
 let isDesktopViewport = true
 const addToShoppingListMutateAsync = vi.fn()
 const deleteRecipeMutateAsync = vi.fn()
+const favoriteMutate = vi.fn()
+const markMadeMutateAsync = vi.fn()
+const unmarkMadeMutate = vi.fn()
 const undoToastShow = vi.fn()
 let recipeError: Error | null = null
 const refetchRecipes = vi.fn()
@@ -97,7 +105,7 @@ vi.mock("@/hooks/use-recipes", () => ({
     data: [{ tag: "Quick", count: 1 }],
   }),
   useToggleFavorite: () => ({
-    mutate: vi.fn(),
+    mutate: favoriteMutate,
   }),
   useDeleteRecipe: () => ({
     mutateAsync: deleteRecipeMutateAsync,
@@ -106,8 +114,8 @@ vi.mock("@/hooks/use-recipes", () => ({
 
 vi.mock("@/hooks/use-planner", () => ({
   useRecipeHistoryStats: () => ({ data: [] }),
-  useMarkRecipeAsMade: () => ({ mutateAsync: vi.fn() }),
-  useUnmarkRecipeAsMade: () => ({ mutate: vi.fn() }),
+  useMarkRecipeAsMade: () => ({ mutateAsync: markMadeMutateAsync }),
+  useUnmarkRecipeAsMade: () => ({ mutate: unmarkMadeMutate }),
 }))
 
 vi.mock("@/hooks/use-shopping", () => ({
@@ -123,6 +131,7 @@ vi.mock("@/hooks/use-undo-toast", () => ({
 }))
 
 vi.mock("@/components/ui/button", () => ({
+  buttonVariants: () => "",
   Button: ({
     children,
     onClick,
@@ -197,14 +206,23 @@ vi.mock("../recipe-card", () => ({
     onAddToShoppingList,
     onDelete,
     onClick,
+    onToggleFavorite,
+    onMarkMade,
+    onPrint,
   }: {
     recipe: Recipe
     onAddToShoppingList?: (recipe: Recipe) => void
     onDelete?: (recipe: Recipe) => void
     onClick?: (recipe: Recipe) => void
+    onToggleFavorite?: (recipe: Recipe) => void
+    onMarkMade?: (recipe: Recipe) => void
+    onPrint?: (recipe: Recipe) => void
   }) => (
     <div>
       <span>{recipe.name}</span>
+      <button onClick={() => onToggleFavorite?.(recipe)}>Favorite {recipe.name}</button>
+      <button onClick={() => onMarkMade?.(recipe)}>Made {recipe.name}</button>
+      <button onClick={() => onPrint?.(recipe)}>Print {recipe.name}</button>
       <button type="button" onClick={() => onClick?.(recipe)}>
         View {recipe.name}
       </button>
@@ -251,7 +269,7 @@ function recipeFixture(overrides: RecipeFixtureInput = {}): Recipe {
     favorite: false,
     tags: [],
     servings: 4,
-    fixtureIngredients: [],
+    fixtureIngredients: [{ item: "onion", amount: 1, unit: "" }],
     fixtureInstructions: [],
     image_url: null,
     created_at: "2026-03-01T00:00:00.000Z",
@@ -270,6 +288,9 @@ describe("RecipeList", () => {
     isDesktopViewport = true
     addToShoppingListMutateAsync.mockReset()
     deleteRecipeMutateAsync.mockReset()
+    favoriteMutate.mockReset()
+    markMadeMutateAsync.mockReset()
+    unmarkMadeMutate.mockReset()
     undoToastShow.mockReset()
     routerPush.mockReset()
     routerReplace.mockReset()
@@ -283,6 +304,28 @@ describe("RecipeList", () => {
 
     expect(screen.getByLabelText("Search recipes by name or category")).toBeInTheDocument()
 
+  })
+
+  it("shows favorite failures and uses the global history owner with Undo", async () => {
+    favoriteMutate.mockImplementation((_input, options) => options.onError(new Error("Favorite unavailable")))
+    markMadeMutateAsync.mockResolvedValue({ recipeId: "recipe-1" })
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    fireEvent.click(screen.getByRole("button", { name: "Favorite Chicken Soup" }))
+    expect(undoToastShow).toHaveBeenCalledWith({ message: "Favorite unavailable" })
+    fireEvent.click(screen.getByRole("button", { name: "Made Chicken Soup" }))
+    await waitFor(() => expect(markMadeMutateAsync).toHaveBeenCalledWith("recipe-1"))
+    await waitFor(() => expect(undoToastShow).toHaveBeenCalledWith(expect.objectContaining({ message: '"Chicken Soup" marked as made' })))
+    const toast = undoToastShow.mock.calls.find(([value]) => value.onUndo)?.[0]
+    toast.onUndo()
+    expect(unmarkMadeMutate).toHaveBeenCalledWith("recipe-1")
+  })
+
+  it("routes Print to the canonical detail without printing collection chrome", () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined)
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    fireEvent.click(screen.getByRole("button", { name: "Print Chicken Soup" }))
+    expect(routerPush).toHaveBeenCalledWith("/recipes/recipe-1?from=recipes")
+    expect(print).not.toHaveBeenCalled()
   })
 
   it("shows active route search clearly and sends it to data fetching", () => {
@@ -400,6 +443,9 @@ describe("RecipeList", () => {
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
+    expect(addToShoppingListMutateAsync).not.toHaveBeenCalled()
+    expect(screen.getByLabelText("Selected yield for Chicken Soup")).toHaveValue(4)
+    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
@@ -417,6 +463,7 @@ describe("RecipeList", () => {
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
@@ -431,6 +478,8 @@ describe("RecipeList", () => {
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Delete Chicken Soup" }))
+    expect(deleteRecipeMutateAsync).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }))
 
     await waitFor(() => {
       expect(deleteRecipeMutateAsync).toHaveBeenCalledWith("recipe-1")

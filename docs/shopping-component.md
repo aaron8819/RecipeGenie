@@ -154,6 +154,13 @@ stale-coverage conflict; the UI reports it and a fresh tap uses current evidence
 
 ## Dashboard and Planner partial source selections
 
+Recipe cards and detail now use the same `ShoppingSelectionDialog`. Saved yield
+and ingredient subsets override caller defaults; fresh detail selections use
+viewed yield and fresh cards use original yield. Groups, preparation, alternatives,
+counts and Select/Deselect all are presentation over canonical global ordinals.
+Failed submission preserves the open draft; stale content requires reopening
+against refreshed source data. The command owner and recovery contracts are unchanged.
+
 Authoritative recipe commands accept optional `sourceSelections`: recipe identity,
 snapshot revision, selected yield and original ingredient ordinals. Both legacy
 V3 and initialized V4 planners rebuild the contribution from the owner recipe and

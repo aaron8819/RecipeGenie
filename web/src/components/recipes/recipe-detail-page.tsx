@@ -59,7 +59,6 @@ import {
   getAuthoredYieldText,
   getScalingBasis,
   getSelectedYieldText,
-  selectedYieldRatio
 } from "@/lib/recipe-quantity"
 export { scaleIngredientAmount } from "@/lib/recipe-quantity"
 import { getRecipeStatsMap } from "@/lib/recipe-history-stats"
@@ -68,6 +67,8 @@ import { getRecipeImageUrl } from "@/lib/supabase/storage"
 import { getErrorMessage } from "@/lib/utils"
 import type { Recipe } from "@/types/database"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
+import { ShoppingSelectionDialog } from "@/components/shopping/shopping-selection-dialog"
+import type { ShoppingRecipeSelection } from "@/lib/shopping-selection"
 import { RecipeDialog } from "./recipe-dialog"
 import { ShareRecipeDialog } from "./share-recipe-dialog"
 
@@ -84,6 +85,7 @@ interface RecipeDetailPageProps {
 interface RecipeDetailContentProps {
   recipe: Recipe
   editButtonRef?: Ref<HTMLButtonElement>
+  shoppingButtonRef?: Ref<HTMLButtonElement>
   returnLabel?: string
   lastMade?: string | null
   timesMade?: number
@@ -170,6 +172,7 @@ function RecipeDetailLoading() {
 export function RecipeDetailContent({
   recipe,
   editButtonRef,
+  shoppingButtonRef,
   returnLabel = RECIPE_RETURN_LABELS.recipes,
   lastMade,
   timesMade = 0,
@@ -451,9 +454,10 @@ export function RecipeDetailContent({
         <div className="detail-primary-actions recipe-detail-print-hidden">
           <Button
             type="button"
-            onClick={() => onAddToShopping(servings)}
+            onClick={event => { event.currentTarget.focus(); onAddToShopping(servings) }}
             disabled={isAddingToShopping}
             aria-label="Add to Shopping List"
+            ref={shoppingButtonRef}
           >
             {isAddingToShopping ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -718,9 +722,11 @@ export function RecipeDetailPage({
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [isAddToPlanOpen, setIsAddToPlanOpen] = useState(false)
+  const [shoppingYield, setShoppingYield] = useState<number | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const dialogReturnFocusRef = useRef<HTMLElement | null>(null)
   const editButtonRef = useRef<HTMLButtonElement>(null)
+  const shoppingButtonRef = useRef<HTMLButtonElement>(null)
   const rememberDialogFocus = () => {
     dialogReturnFocusRef.current = document.activeElement as HTMLElement | null
   }
@@ -728,7 +734,8 @@ export function RecipeDetailPage({
     window.setTimeout(() => {
       const target = dialogReturnFocusRef.current
       const currentTarget = target?.isConnected ? target :
-        target?.getAttribute("aria-label") === "Edit Recipe" ? editButtonRef.current : null
+        target?.getAttribute("aria-label") === "Edit Recipe" ? editButtonRef.current :
+        target?.getAttribute("aria-label") === "Add to Shopping List" ? shoppingButtonRef.current : null
       currentTarget?.focus({ preventScroll: true })
     }, 0)
   }
@@ -777,19 +784,14 @@ export function RecipeDetailPage({
     }
   }
 
-  const handleAddToShopping = async (selectedYield: number) => {
+  const handleAddToShopping = async (selections: ShoppingRecipeSelection[]) => {
     const recipe = recipeQuery.data
     if (!recipe) return
 
     try {
-      const scalingBasis = getScalingBasis(
-        recipe.yield_metadata,
-        recipe.servings
-      )
       const result = await addToShopping.mutateAsync({
-        recipeIds: [recipe.id],
-        scale: selectedYield / scalingBasis,
-        scaleV1: selectedYieldRatio(selectedYield, scalingBasis)
+        recipeIds: selections.map(selection => selection.recipeId),
+        selections,
       })
       showToast({
         message: formatShoppingAddMessage(result, {
@@ -805,6 +807,7 @@ export function RecipeDetailPage({
           "Failed to add ingredients to shopping list"
         )
       })
+      throw error
     }
   }
 
@@ -860,6 +863,7 @@ export function RecipeDetailPage({
         {recipeQuery.data ? (
           <RecipeDetailContent
             editButtonRef={editButtonRef}
+            shoppingButtonRef={shoppingButtonRef}
             key={`${recipeQuery.data.id}:${recipeQuery.data.updated_at ?? ""}`}
             recipe={recipeQuery.data}
             returnLabel={returnLabel}
@@ -881,7 +885,7 @@ export function RecipeDetailPage({
               setIsAddToPlanOpen(true)
             }}
             onAddToShopping={(selectedYield) =>
-              void handleAddToShopping(selectedYield)
+              { rememberDialogFocus(); setShoppingYield(selectedYield) }
             }
             onShare={() => {
               rememberDialogFocus()
@@ -895,6 +899,14 @@ export function RecipeDetailPage({
         ) : null}
       </div>
 
+      <ShoppingSelectionDialog
+        open={shoppingYield !== null}
+        onOpenChange={open => { if (!open && !addToShopping.isPending) setShoppingYield(null) }}
+        onCloseAutoFocus={() => restoreDialogFocus()}
+        recipes={recipeQuery.data ? [recipeQuery.data] : []}
+        defaultScale={recipeQuery.data && shoppingYield !== null ? shoppingYield / getScalingBasis(recipeQuery.data.yield_metadata, recipeQuery.data.servings) : 1}
+        onSubmit={handleAddToShopping}
+      />
       <RecipeDialog
         open={isEditOpen}
         onOpenChange={(open) => {

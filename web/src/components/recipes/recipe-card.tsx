@@ -2,7 +2,7 @@
 
 import { memo, useRef, useState } from "react"
 import Image from "next/image"
-import { Heart, Clock, UtensilsCrossed, CalendarPlus, Loader2, ShoppingCart, MoreHorizontal, Share2 } from "lucide-react"
+import { Heart, Clock, UtensilsCrossed, CalendarPlus, Loader2, ShoppingCart, MoreHorizontal, Share2, Pencil, Check, Printer, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { Recipe } from "@/types/database"
@@ -21,6 +21,12 @@ interface RecipeCardProps {
   onAddToPlan?: (recipe: Recipe) => void
   onAddToShoppingList?: (recipe: Recipe) => void
   onShare?: (recipe: Recipe) => void
+  onEdit?: (recipe: Recipe) => void
+  onMarkMade?: (recipe: Recipe) => void
+  onPrint?: (recipe: Recipe) => void
+  isFavoritePending?: boolean
+  isMarkingMade?: boolean
+  isDeleting?: boolean
   onClick?: (recipe: Recipe) => void
   onTagClick?: (tag: string) => void
   lastMade?: string | null
@@ -31,7 +37,7 @@ interface RecipeCardProps {
 }
 
 function RecipeCard({ recipe, viewMode = "grid", onToggleFavorite, onAddToPlan, onTagClick,
-  onAddToShoppingList, onShare, onClick, isAddingToPlan = false,
+  onAddToShoppingList, onShare, onEdit, onMarkMade, onPrint, onDelete, onClick, isFavoritePending = false, isMarkingMade = false, isDeleting = false, isAddingToPlan = false,
   isAddingToShoppingList = false, isSharing = false }: RecipeCardProps) {
   const imageUrl = getRecipeImageUrl(recipe.image_url)
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
@@ -39,7 +45,7 @@ function RecipeCard({ recipe, viewMode = "grid", onToggleFavorite, onAddToPlan, 
   const selectedActionRef = useRef<(() => void) | null>(null)
 
   return (
-    <article data-recipe-name={recipe.name} className={cn("recipe-collection-card", viewMode === "list" && "recipe-collection-card-list")}>
+    <article data-recipe-id={recipe.id} data-recipe-name={recipe.name} className={cn("recipe-collection-card", viewMode === "list" && "recipe-collection-card-list")}>
       <a
         className="recipe-collection-card-link"
         href={buildRecipeDetailHref(recipe.id, "recipes")}
@@ -70,8 +76,8 @@ function RecipeCard({ recipe, viewMode = "grid", onToggleFavorite, onAddToPlan, 
       <div className="recipe-collection-card-actions">
         {onToggleFavorite && <Button type="button" variant="ghost" size="icon" className="h-11 w-11"
           aria-label={`${recipe.favorite ? "Remove" : "Add"} ${recipe.name} ${recipe.favorite ? "from" : "to"} favorites`}
-          aria-pressed={!!recipe.favorite} onClick={() => onToggleFavorite(recipe)}>
-          <Heart className={cn("h-5 w-5", recipe.favorite && "fill-current")} />
+          aria-pressed={!!recipe.favorite} disabled={isFavoritePending} onClick={() => onToggleFavorite(recipe)}>
+          {isFavoritePending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Heart className={cn("h-5 w-5", recipe.favorite && "fill-current")} />}
         </Button>}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -99,6 +105,10 @@ function RecipeCard({ recipe, viewMode = "grid", onToggleFavorite, onAddToPlan, 
             {onShare && <DropdownMenuItem className="min-h-11" disabled={isSharing} onSelect={() => { selectedActionRef.current = () => onShare(recipe) }}>
               {isSharing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}Share Recipe
             </DropdownMenuItem>}
+            {onEdit && <DropdownMenuItem className="min-h-11" onSelect={() => { selectedActionRef.current = () => onEdit(recipe) }}><Pencil className="mr-2 h-4 w-4" />Edit recipe</DropdownMenuItem>}
+            {onMarkMade && <DropdownMenuItem className="min-h-11" disabled={isMarkingMade} onSelect={() => { selectedActionRef.current = () => onMarkMade(recipe) }}><Check className="mr-2 h-4 w-4" />Mark made</DropdownMenuItem>}
+            {onPrint && <DropdownMenuItem className="min-h-11" onSelect={() => { selectedActionRef.current = () => onPrint(recipe) }}><Printer className="mr-2 h-4 w-4" />Print recipe</DropdownMenuItem>}
+            {onDelete && <DropdownMenuItem className="min-h-11 text-destructive" disabled={isDeleting} onSelect={() => { selectedActionRef.current = () => onDelete(recipe) }}><Trash2 className="mr-2 h-4 w-4" />Delete recipe</DropdownMenuItem>}
             {onTagClick && recipe.tags?.map((tag) => <DropdownMenuItem className="min-h-11" key={tag} onSelect={() => { selectedActionRef.current = () => onTagClick(tag) }}>
               <span className="min-w-0 whitespace-normal [overflow-wrap:anywhere]">Filter by {tag}</span>
             </DropdownMenuItem>)}

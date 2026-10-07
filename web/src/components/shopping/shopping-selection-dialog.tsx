@@ -214,49 +214,69 @@ function SelectionForm({
                     : 'Enter a whole number from 1 to 100'}
                 </span>
               </label>
-              {ingredients.map((ingredient, index) => {
-                let quantity = 'Review yield';
-                if (validYield) {
-                  try {
-                    quantity = formatRecipeQuantity(
-                      ingredient,
-                      basis,
-                      draft.selection.selectedYield,
-                    ).text;
-                  } catch {
-                    quantity = 'Quantity cannot be scaled';
-                  }
-                }
-                return (
-                  <label
-                    key={index}
-                    className="flex min-h-11 cursor-pointer items-center gap-3 py-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      aria-label={`${recipe.name}: ${ingredient.item}, ingredient ${index + 1}`}
-                      disabled={!draft.enabled}
-                      className="h-5 w-5 shrink-0 accent-primary"
-                      checked={draft.selection.ingredientOrdinals.includes(
-                        index,
-                      )}
-                      onChange={(event) =>
-                        updateSelection({
-                          ingredientOrdinals: event.target.checked
-                            ? [...draft.selection.ingredientOrdinals, index]
-                            : draft.selection.ingredientOrdinals.filter(
-                                (ordinal) => ordinal !== index,
-                              ),
-                        })
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p aria-live="polite" className="text-sm text-foreground/80">
+                  {draft.selection.ingredientOrdinals.length} of {ingredients.length} selected
+                </p>
+                <Button variant="ghost" className="min-h-11" disabled={!draft.enabled}
+                  onClick={() => updateSelection({ ingredientOrdinals: draft.selection.ingredientOrdinals.length === ingredients.length ? [] : ingredients.map((_, index) => index) })}>
+                  {draft.selection.ingredientOrdinals.length === ingredients.length ? 'Deselect all' : 'Select all'}
+                </Button>
+              </div>
+              {recipe.ingredientSections.map((section, sectionIndex) => (
+                <div key={sectionIndex} className="mb-4 last:mb-0">
+                  <h3 className="mb-2 text-sm font-semibold text-primary">{section.label || 'Ingredients'}</h3>
+                  {section.ingredients.map((ingredient, localIndex) => {
+                    const index = recipe.ingredientSections.slice(0, sectionIndex)
+                      .reduce((count, section) => count + section.ingredients.length, 0) + localIndex;
+                    let quantity = 'Review yield';
+                    if (validYield) {
+                      try {
+                        quantity = formatRecipeQuantity(
+                          ingredient,
+                          basis,
+                          draft.selection.selectedYield,
+                        ).text;
+                      } catch {
+                        quantity = 'Quantity cannot be scaled';
                       }
-                    />
-                    <span className="min-w-0 flex-1">{ingredient.item}</span>
-                    <span className="max-w-[45%] text-right text-xs text-foreground/80">
-                      {quantity}
-                    </span>
-                  </label>
-                );
-              })}
+                    }
+                    return (
+                      <label
+                        key={index}
+                        className="flex min-h-11 cursor-pointer items-center gap-3 py-2 text-sm"
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label={`${recipe.name}: ${ingredient.item}, ingredient ${index + 1}`}
+                          disabled={!draft.enabled}
+                          className="h-5 w-5 shrink-0 accent-primary"
+                          checked={draft.selection.ingredientOrdinals.includes(
+                            index,
+                          )}
+                          onChange={(event) =>
+                            updateSelection({
+                              ingredientOrdinals: event.target.checked
+                                ? [...draft.selection.ingredientOrdinals, index]
+                                : draft.selection.ingredientOrdinals.filter(
+                                    (ordinal) => ordinal !== index,
+                                  ),
+                            })
+                          }
+                        />
+                        <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                          <span>{ingredient.item}</span>
+                          {ingredient.modifier && <span className="block text-xs text-foreground/80">{ingredient.modifier}</span>}
+                          {!!ingredient.alternatives?.length && <span className="block text-xs text-foreground/80">or {ingredient.alternatives.join(' or ')}</span>}
+                        </span>
+                        <span className="max-w-[45%] text-right text-xs text-foreground/80">
+                          {quantity}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
             </fieldset>
           );
         })}
