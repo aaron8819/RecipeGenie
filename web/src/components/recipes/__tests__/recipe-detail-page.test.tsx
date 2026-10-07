@@ -191,12 +191,80 @@ describe("RecipeDetailContent", () => {
 
     expect(window.location.hash).toBe("#instructions")
     expect(window.history.length).toBe(historyLength)
+    expect(document.getElementById("instructions")).toHaveFocus()
     window.history.replaceState(window.history.state, "", "/")
+  })
+
+  it("opens notes and moves keyboard focus to the section", () => {
+    renderDetail()
+    const notes = document.getElementById("notes")
+    expect(notes).not.toHaveAttribute("open")
+    fireEvent.click(screen.getByRole("link", { name: "Notes" }))
+    expect(notes).toHaveAttribute("open")
+    expect(notes).toHaveFocus()
+    window.history.replaceState(window.history.state, "", "/")
+  })
+
+  it("removes a broken photo without removing recipe content", () => {
+    renderDetail()
+    fireEvent.error(screen.getByRole("img", { name: "Taco Salad recipe" }))
+    expect(screen.queryByRole("img")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: "View recipe photo" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Taco Salad" })
+    ).toBeInTheDocument()
+  })
+
+  it("supports the validated 100 yield boundary and passes it to Shopping", () => {
+    const recipe = makeRecipe({ servings: 99 })
+    const callbacks = renderDetail(recipe)
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    expect(
+      screen.getByRole("button", { name: "Increase yield" })
+    ).toBeDisabled()
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add to Shopping List" })
+    )
+    expect(callbacks.onAddToShopping).toHaveBeenCalledWith(100)
+    expect(recipe.servings).toBe(99)
+  })
+
+  it("preserves repeated group boundaries, preparation and alternatives", () => {
+    renderDetail(
+      makeRecipe({
+        ingredientSections: [
+          {
+            label: "Sauce",
+            ingredients: [
+              {
+                item: "Yogurt",
+                amount: 1,
+                unit: "cup",
+                modifier: "strained",
+                alternatives: ["sour cream"]
+              }
+            ]
+          },
+          {
+            label: "Sauce",
+            ingredients: [{ item: "Salt", amount: null, unit: "" }]
+          }
+        ]
+      })
+    )
+    const groups = document.querySelectorAll("[data-ingredient-group='Sauce']")
+    expect(groups).toHaveLength(2)
+    expect(groups[0]).toHaveTextContent("Yogurt, strainedor sour cream")
+    expect(groups[1]).toHaveTextContent("As neededSalt")
   })
 
   it("renders groups, metadata, instructions, and notes in stored order", () => {
     renderDetail()
 
+    fireEvent.click(screen.getByText("Recipe details"))
+    fireEvent.click(screen.getByText("Notes", { selector: "h2" }))
     expect(screen.getByText("Prep 15 min")).toBeInTheDocument()
     expect(screen.getByText("Cook 20 min")).toBeInTheDocument()
     expect(screen.getByText("Total 35 min")).toBeInTheDocument()
@@ -342,6 +410,6 @@ describe("RecipeDetailContent", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument()
     expect(screen.getByText("No ingredients available.")).toBeInTheDocument()
     expect(screen.getByText("No instructions available.")).toBeInTheDocument()
-    expect(screen.getByText("No notes for this recipe.")).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Notes" })).not.toBeInTheDocument()
   })
 })

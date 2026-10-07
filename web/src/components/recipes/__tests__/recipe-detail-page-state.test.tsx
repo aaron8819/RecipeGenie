@@ -76,8 +76,19 @@ vi.mock("@/hooks/use-undo-toast", () => ({
 }))
 
 vi.mock("../recipe-dialog", () => ({
-  RecipeDialog: ({ open }: { open: boolean }) =>
-    open ? <div>Edit recipe dialog</div> : null,
+  RecipeDialog: ({
+    open,
+    onOpenChange
+  }: {
+    open: boolean
+    onOpenChange: (open: boolean) => void
+  }) =>
+    open ? (
+      <div>
+        Edit recipe dialog
+        <button onClick={() => onOpenChange(false)}>Close editor</button>
+      </div>
+    ) : null
 }))
 
 vi.mock("../share-recipe-dialog", () => ({
@@ -181,6 +192,23 @@ describe("RecipeDetailPage states", () => {
       })
     })
     expect(screen.getByText("Edit recipe dialog")).toBeInTheDocument()
+  })
+
+  it("restores focus to the edit trigger after the editor closes", async () => {
+    recipeResult = {
+      data: makeRecipe(),
+      error: null,
+      isError: false,
+      isLoading: false,
+      isSuccess: true
+    }
+    render(<RecipeDetailPage recipeId="recipe-1" />)
+    const trigger = screen.getByRole("button", { name: "Edit Recipe" })
+    fireEvent.click(trigger)
+    const close = screen.getByRole("button", { name: "Close editor" })
+    close.focus()
+    fireEvent.click(close)
+    await waitFor(() => expect(trigger).toHaveFocus())
   })
 
   it("adds the currently selected yield to shopping with an exact scale", async () => {
