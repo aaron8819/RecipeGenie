@@ -29,6 +29,7 @@ export default defineConfig({
   ],
   webServer: [
     {
+      name: 'Next3108',
       command: 'npm start -- --hostname 127.0.0.1 --port 3108',
       url: 'http://127.0.0.1:3108/login',
       reuseExistingServer: false,
@@ -37,6 +38,7 @@ export default defineConfig({
       stderr: 'ignore',
     },
     {
+      name: 'Ingress3107',
       command: 'npm run local:production -- --port 3107 --upstream-port 3108',
       url: 'http://127.0.0.1:3107/login',
       reuseExistingServer: false,

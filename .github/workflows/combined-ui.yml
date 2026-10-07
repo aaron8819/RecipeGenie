@@ -137,7 +137,15 @@ jobs:
       - name: Install only qualification browsers
         run: node node_modules/@playwright/test/cli.js install --with-deps chromium webkit
       - name: Combined browser acceptance (serial, no retries)
-        run: node node_modules/@playwright/test/cli.js test --config=playwright.combined-ui.config.ts
+        run: |
+          set +e
+          DEBUG=pw:webserver node node_modules/@playwright/test/cli.js test \
+            --config=playwright.combined-ui.config.ts > "$RUNNER_TEMP/combined-webserver.log" 2>&1
+          test_exit=$?
+          node scripts/capture-combined-ui-log.mjs "$test_exit"
+          capture_exit=$?
+          if [ "$capture_exit" -ne 0 ]; then exit "$capture_exit"; fi
+          exit "$test_exit"
       - name: Preserve bounded sanitized qualification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -146,6 +154,7 @@ jobs:
           path: |
             .codex-artifacts/combined-ui/*.json
             .codex-artifacts/combined-ui/*.png
+            .codex-artifacts/combined-ui/webserver-diagnostic.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Stop only the disposable job-local database
