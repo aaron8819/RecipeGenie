@@ -32,19 +32,20 @@ describe('Shopping selection dialog', () => {
     document = createEmptyShoppingDocument();
     onSubmit.mockResolvedValue(undefined);
   });
-  function open() {
+  function open(defaultScale = 1) {
     render(
       <ShoppingSelectionDialog
         open
         onOpenChange={onOpenChange}
         recipes={[recipe]}
         onSubmit={onSubmit}
+        defaultScale={defaultScale}
       />,
     );
   }
 
   it('submits a source subset at the selected yield, then closes', async () => {
-    open();
+    open(2);
     fireEvent.change(screen.getByLabelText('Selected yield for Soup'), {
       target: { value: '8' },
     });
@@ -85,12 +86,31 @@ describe('Shopping selection dialog', () => {
       selectedYield: 8,
       ingredientOrdinals: [1],
     });
-    open();
+    open(3);
     expect(screen.getByLabelText('Soup: milk, ingredient 1')).not.toBeChecked();
     expect(
       screen.getByLabelText('Soup: olive oil, ingredient 2'),
     ).toBeChecked();
     expect(screen.getByLabelText('Selected yield for Soup')).toHaveValue(8);
+  });
+
+  it('selects and deselects canonical occurrences across repeated groups', async () => {
+    const grouped = { ...recipe, ingredientSections: [
+      { label: 'Sauce', ingredients: [{ ...recipe.ingredientSections[0].ingredients[0], modifier: 'finely chopped', alternatives: ['oat milk'] }] },
+      { label: 'Sauce', ingredients: [recipe.ingredientSections[0].ingredients[0]] },
+    ] };
+    render(<ShoppingSelectionDialog open onOpenChange={onOpenChange} recipes={[grouped]} onSubmit={onSubmit} />);
+    expect(screen.getAllByRole('heading', { name: 'Sauce' })).toHaveLength(2);
+    expect(screen.getByText('finely chopped')).toBeInTheDocument();
+    expect(screen.getByText('or oat milk')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Deselect all' }));
+    expect(screen.getByText('0 of 2 selected')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add selected ingredients' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+    fireEvent.click(screen.getByLabelText('Soup: milk, ingredient 1'));
+    expect(screen.getByLabelText('Soup: milk, ingredient 2')).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Add selected ingredients' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ ingredientOrdinals: [1] })]));
   });
 
   it('keeps selections and shows a failed save for retry', async () => {

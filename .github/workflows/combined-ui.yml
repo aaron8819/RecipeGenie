@@ -1,0 +1,163 @@
+name: Combined Recipe Planner qualification
+
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'scripts/**'
+      - 'supabase/**'
+      - '.github/workflows/combined-ui.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: combined-ui-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  trusted-pr-gate:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: web
+        shell: pwsh
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      COMBINED_UI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup pinned Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Prepare source-bound build and gate fixture
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Ephemeral runner required' }
+          $actual = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:COMBINED_UI_EXPECTED_SHA) {
+            throw 'Exact requested source identity required'
+          }
+          if (git status --porcelain) { throw 'Clean source required' }
+          # Unchanged tooling assertions require this historical PR-head evidence object.
+          $evidenceCommit = '172958fe5a413f4c8ced08b431b3ead82dc92bf7'
+          git fetch --no-tags --no-write-fetch-head origin $evidenceCommit
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned tooling evidence acquisition failed' }
+          $resolvedEvidence = git rev-parse --verify "$evidenceCommit^{commit}"
+          if ($LASTEXITCODE -ne 0 -or $resolvedEvidence -ne $evidenceCommit) {
+            throw 'Exact pinned tooling evidence commit required'
+          }
+          if (Test-Path '.env.local') { throw 'Inherited environment forbidden' }
+          # Build-only dummy values, no credentials. This job never starts an app or database.
+          @('NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321',
+            'NEXT_PUBLIC_SUPABASE_ANON_KEY=disposable-build-only',
+            'SUPABASE_SERVICE_ROLE_KEY=disposable-build-only') | Set-Content '.env.local'
+          New-Item -ItemType Directory '../.codex-artifacts/combined-ui' -Force | Out-Null
+          # Existing backup-tooling tests explicitly require a second registered worktree.
+          git worktree add --detach (Join-Path $env:RUNNER_TEMP 'combined-gate-peer') $actual
+          if ($LASTEXITCODE -ne 0) { throw 'Gate peer fixture creation failed' }
+      - name: Existing trusted PR gate (including production build)
+        run: |
+          npm run --silent rg:doctor -- --json > ../.codex-artifacts/combined-ui/doctor.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $nodeDistribution = Split-Path -Parent (Get-Command node.exe -ErrorAction Stop).Source
+          $PSNativeCommandUseErrorActionPreference = $false
+          $gateExit = 1
+          try {
+            & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File ../scripts/rg-verify.ps1 `
+              -NodeDistribution $nodeDistribution pr *> ../.codex-artifacts/combined-ui/pr-gate.txt
+            $gateExit = $LASTEXITCODE
+          } finally {
+            @{ head = $env:COMBINED_UI_EXPECTED_SHA; exitCode = $gateExit } |
+              ConvertTo-Json | Set-Content ../.codex-artifacts/combined-ui/pr-gate-exit.json
+          }
+          exit $gateExit
+      - name: Preserve source-bound trusted gate evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: combined-pr-gate-${{ github.event.pull_request.head.sha }}
+          path: |
+            .codex-artifacts/combined-ui/*.json
+            .codex-artifacts/combined-ui/pr-gate.txt
+          if-no-files-found: warn
+          retention-days: 7
+
+  combined-ui:
+    needs: trusted-pr-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: web
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+      COMBINED_UI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact PR head (not the synthetic merge)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup pinned Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Setup existing local Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
+        with:
+          version: 2.109.0
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Start and reset disposable job-local database
+        working-directory: .
+        run: |
+          supabase start > /dev/null 2>&1
+          supabase db reset --local > /dev/null 2>&1
+      - name: Bind local-only runtime and source
+        run: node scripts/prepare-combined-ui.mjs
+      - name: Build same PR head for disposable local browser runtime
+        run: npm run build
+      - name: Install only qualification browsers
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium webkit
+      - name: Combined browser acceptance (serial, no retries)
+        run: |
+          set +e
+          DEBUG=pw:webserver node node_modules/@playwright/test/cli.js test \
+            --config=playwright.combined-ui.config.ts > "$RUNNER_TEMP/combined-webserver.log" 2>&1
+          test_exit=$?
+          node scripts/capture-combined-ui-log.mjs "$test_exit"
+          capture_exit=$?
+          if [ "$capture_exit" -ne 0 ]; then exit "$capture_exit"; fi
+          exit "$test_exit"
+      - name: Preserve bounded sanitized qualification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: combined-ui-${{ github.event.pull_request.head.sha }}
+          path: |
+            .codex-artifacts/combined-ui/*.json
+            .codex-artifacts/combined-ui/*.png
+            .codex-artifacts/combined-ui/webserver-diagnostic.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stop only the disposable job-local database
+        if: always()
+        working-directory: .
+        run: supabase stop --no-backup > /dev/null 2>&1

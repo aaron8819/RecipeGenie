@@ -1,5 +1,5 @@
 import React from "react"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import {
   RecipeDetailContent,
@@ -85,6 +85,78 @@ function renderDetail(recipe = makeRecipe()) {
 }
 
 describe("RecipeDetailContent", () => {
+  it("keeps a short jump destination active until the reader changes scroll position", async () => {
+    renderDetail()
+    const nav = screen.getByRole("navigation", { name: "Recipe sections" })
+    vi.spyOn(nav, "getBoundingClientRect").mockReturnValue({ bottom: 48 } as DOMRect)
+    for (const [id, top] of [["ingredients", -400], ["instructions", 60], ["notes", 600]] as const) {
+      vi.spyOn(document.getElementById(id)!, "getBoundingClientRect")
+        .mockReturnValue({ top, bottom: top + 200 } as DOMRect)
+    }
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(100)
+    fireEvent.click(within(nav).getByRole("link", { name: "Notes" }))
+    fireEvent.scroll(window)
+    await new Promise((resolve) => window.requestAnimationFrame(resolve))
+    expect(within(nav).getByRole("link", { name: "Notes" }))
+      .toHaveAttribute("aria-current", "location")
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(50)
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(2000)
+    fireEvent.scroll(window)
+    await waitFor(() => expect(within(nav).getByRole("link", { name: "Instructions" }))
+      .toHaveAttribute("aria-current", "location"))
+    expect(document.getElementById("notes")).toHaveFocus()
+    vi.restoreAllMocks()
+    window.history.replaceState(window.history.state, "", "/")
+  })
+  it("follows reading positions down and up without moving focus or changing the hash", async () => {
+    renderDetail()
+    const nav = screen.getByRole("navigation", { name: "Recipe sections" })
+    const rect = (top: number, bottom: number) => ({ top, bottom } as DOMRect)
+    vi.spyOn(nav, "getBoundingClientRect").mockReturnValue(rect(0, 48))
+    const ingredients = vi.spyOn(document.getElementById("ingredients")!, "getBoundingClientRect")
+    const instructions = vi.spyOn(document.getElementById("instructions")!, "getBoundingClientRect")
+    const notes = vi.spyOn(document.getElementById("notes")!, "getBoundingClientRect")
+    const trigger = screen.getByRole("button", { name: "Edit Recipe" })
+    trigger.focus()
+    const hash = window.location.hash
+    for (const [active, positions] of [
+      ["Ingredients", [60, 600, 1200]],
+      ["Instructions", [-600, 60, 700]],
+      ["Notes", [-1200, -600, 60]],
+      ["Instructions", [-600, 60, 700]],
+      ["Ingredients", [60, 600, 1200]],
+    ] as const) {
+      ingredients.mockReturnValue(rect(positions[0], positions[0] + 500))
+      instructions.mockReturnValue(rect(positions[1], positions[1] + 500))
+      notes.mockReturnValue(rect(positions[2], positions[2] + 100))
+      fireEvent.scroll(window)
+      await waitFor(() => expect(within(nav).getByRole("link", { name: active }))
+        .toHaveAttribute("aria-current", "location"))
+      expect(trigger).toHaveFocus()
+      expect(window.location.hash).toBe(hash)
+    }
+    vi.restoreAllMocks()
+  })
+
+  it("indicates a short final section at the bottom and updates on reverse scrolling", async () => {
+    renderDetail()
+    const nav = screen.getByRole("navigation", { name: "Recipe sections" })
+    vi.spyOn(nav, "getBoundingClientRect").mockReturnValue({ bottom: 48 } as DOMRect)
+    for (const [id, top] of [["ingredients", -1000], ["instructions", -500], ["notes", 600]] as const) {
+      vi.spyOn(document.getElementById(id)!, "getBoundingClientRect")
+        .mockReturnValue({ top, bottom: top + 100 } as DOMRect)
+    }
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(1000)
+    vi.spyOn(document.documentElement, "scrollHeight", "get").mockReturnValue(1768)
+    fireEvent.scroll(window)
+    await waitFor(() => expect(within(nav).getByRole("link", { name: "Notes" }))
+      .toHaveAttribute("aria-current", "location"))
+    vi.spyOn(window, "scrollY", "get").mockReturnValue(500)
+    fireEvent.scroll(window)
+    await waitFor(() => expect(within(nav).getByRole("link", { name: "Instructions" }))
+      .toHaveAttribute("aria-current", "location"))
+    vi.restoreAllMocks()
+  })
   it("scales supported single quantities and ranges without floating-point artifacts", () => {
     expect(scaleIngredientAmount("1", 4, 8)).toBe("2")
     expect(scaleIngredientAmount("0.75 cups", 4, 8)).toBe("1½ cups")
@@ -191,12 +263,80 @@ describe("RecipeDetailContent", () => {
 
     expect(window.location.hash).toBe("#instructions")
     expect(window.history.length).toBe(historyLength)
+    expect(document.getElementById("instructions")).toHaveFocus()
     window.history.replaceState(window.history.state, "", "/")
+  })
+
+  it("opens notes and moves keyboard focus to the section", () => {
+    renderDetail()
+    const notes = document.getElementById("notes")
+    expect(notes).not.toHaveAttribute("open")
+    fireEvent.click(screen.getByRole("link", { name: "Notes" }))
+    expect(notes).toHaveAttribute("open")
+    expect(notes).toHaveFocus()
+    window.history.replaceState(window.history.state, "", "/")
+  })
+
+  it("removes a broken photo without removing recipe content", () => {
+    renderDetail()
+    fireEvent.error(screen.getByRole("img", { name: "Taco Salad recipe" }))
+    expect(screen.queryByRole("img")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: "View recipe photo" })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Taco Salad" })
+    ).toBeInTheDocument()
+  })
+
+  it("supports the validated 100 yield boundary and passes it to Shopping", () => {
+    const recipe = makeRecipe({ servings: 99 })
+    const callbacks = renderDetail(recipe)
+    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    expect(
+      screen.getByRole("button", { name: "Increase yield" })
+    ).toBeDisabled()
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add to Shopping List" })
+    )
+    expect(callbacks.onAddToShopping).toHaveBeenCalledWith(100)
+    expect(recipe.servings).toBe(99)
+  })
+
+  it("preserves repeated group boundaries, preparation and alternatives", () => {
+    renderDetail(
+      makeRecipe({
+        ingredientSections: [
+          {
+            label: "Sauce",
+            ingredients: [
+              {
+                item: "Yogurt",
+                amount: 1,
+                unit: "cup",
+                modifier: "strained",
+                alternatives: ["sour cream"]
+              }
+            ]
+          },
+          {
+            label: "Sauce",
+            ingredients: [{ item: "Salt", amount: null, unit: "" }]
+          }
+        ]
+      })
+    )
+    const groups = document.querySelectorAll("[data-ingredient-group='Sauce']")
+    expect(groups).toHaveLength(2)
+    expect(groups[0]).toHaveTextContent("Yogurt, strainedor sour cream")
+    expect(groups[1]).toHaveTextContent("As neededSalt")
   })
 
   it("renders groups, metadata, instructions, and notes in stored order", () => {
     renderDetail()
 
+    fireEvent.click(screen.getByText("Recipe details"))
+    fireEvent.click(screen.getByText("Notes", { selector: "h2" }))
     expect(screen.getByText("Prep 15 min")).toBeInTheDocument()
     expect(screen.getByText("Cook 20 min")).toBeInTheDocument()
     expect(screen.getByText("Total 35 min")).toBeInTheDocument()
@@ -342,6 +482,6 @@ describe("RecipeDetailContent", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument()
     expect(screen.getByText("No ingredients available.")).toBeInTheDocument()
     expect(screen.getByText("No instructions available.")).toBeInTheDocument()
-    expect(screen.getByText("No notes for this recipe.")).toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Notes" })).not.toBeInTheDocument()
   })
 })

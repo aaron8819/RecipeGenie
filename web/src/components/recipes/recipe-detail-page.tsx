@@ -1,15 +1,15 @@
 "use client"
 
-import { type MouseEvent, useMemo, useState } from "react"
+import { type MouseEvent, type Ref, useEffect, useMemo, useRef, useState } from "react"
+import "./recipe-detail.css"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   CalendarPlus,
   Check,
-  Clock,
+  ChevronDown,
   Heart,
-  History,
   Loader2,
   Minus,
   Pencil,
@@ -18,8 +18,7 @@ import {
   Share2,
   ShoppingCart,
   Trash2,
-  Users,
-  UtensilsCrossed,
+  UtensilsCrossed
 } from "lucide-react"
 import {
   AlertDialog,
@@ -29,30 +28,30 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialogTitle
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   useCategories,
   useDeleteRecipe,
   useRecipe,
-  useToggleFavorite,
+  useToggleFavorite
 } from "@/hooks/use-recipes"
 import {
   useMarkRecipeAsMade,
   useRecipeHistoryStats,
-  useUnmarkRecipeAsMade,
+  useUnmarkRecipeAsMade
 } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import {
   flattenRecipeIngredients,
   formatRecipeTime,
-  normalizeRecipeNotes,
+  normalizeRecipeNotes
 } from "@/lib/recipe-structure"
 import {
   returnFromRecipeDetail,
-  type RecipeDetailSource,
+  type RecipeDetailSource
 } from "@/lib/recipe-detail-navigation"
 import {
   assertRecipeScalingFeasible,
@@ -60,22 +59,22 @@ import {
   getAuthoredYieldText,
   getScalingBasis,
   getSelectedYieldText,
-  selectedYieldRatio,
 } from "@/lib/recipe-quantity"
 export { scaleIngredientAmount } from "@/lib/recipe-quantity"
 import { getRecipeStatsMap } from "@/lib/recipe-history-stats"
 import { formatShoppingAddMessage } from "@/lib/shopping-feedback"
 import { getRecipeImageUrl } from "@/lib/supabase/storage"
-import { getTagClassName } from "@/lib/tag-colors"
-import { cn, getErrorMessage } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/utils"
 import type { Recipe } from "@/types/database"
 import { AddToPlanDialog } from "./add-to-plan-dialog"
+import { ShoppingSelectionDialog } from "@/components/shopping/shopping-selection-dialog"
+import type { ShoppingRecipeSelection } from "@/lib/shopping-selection"
 import { RecipeDialog } from "./recipe-dialog"
 import { ShareRecipeDialog } from "./share-recipe-dialog"
 
 const SHOPPING_ITEM_LABEL = {
   singular: "shopping item",
-  plural: "shopping items",
+  plural: "shopping items"
 }
 
 interface RecipeDetailPageProps {
@@ -85,6 +84,8 @@ interface RecipeDetailPageProps {
 
 interface RecipeDetailContentProps {
   recipe: Recipe
+  editButtonRef?: Ref<HTMLButtonElement>
+  shoppingButtonRef?: Ref<HTMLButtonElement>
   returnLabel?: string
   lastMade?: string | null
   timesMade?: number
@@ -106,7 +107,7 @@ const RECIPE_RETURN_LABELS: Record<RecipeDetailSource, string> = {
   planner: "Back to planner",
   recipes: "Back to recipes",
   shopping: "Back to shopping",
-  dashboard: "Back to dashboard",
+  dashboard: "Back to dashboard"
 }
 
 function RecipeDetailState({
@@ -114,7 +115,7 @@ function RecipeDetailState({
   message,
   onBack,
   returnLabel,
-  onRetry,
+  onRetry
 }: {
   title: string
   message: string
@@ -126,8 +127,12 @@ function RecipeDetailState({
     <div className="flex min-h-[60vh] items-center justify-center px-4">
       <div className="max-w-md rounded-3xl border bg-card p-8 text-center shadow-sm">
         <UtensilsCrossed className="mx-auto mb-4 h-10 w-10 text-primary/50" />
-        <h1 className="font-display text-3xl font-bold text-primary">{title}</h1>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">{message}</p>
+        <h1 className="font-display text-3xl font-bold text-primary">
+          {title}
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          {message}
+        </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <Button type="button" variant="outline" onClick={onBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -166,6 +171,8 @@ function RecipeDetailLoading() {
 
 export function RecipeDetailContent({
   recipe,
+  editButtonRef,
+  shoppingButtonRef,
   returnLabel = RECIPE_RETURN_LABELS.recipes,
   lastMade,
   timesMade = 0,
@@ -180,11 +187,73 @@ export function RecipeDetailContent({
   isDeleting = false,
   isFavoritePending = false,
   isMarkingMade = false,
-  isAddingToShopping = false,
+  isAddingToShopping = false
 }: RecipeDetailContentProps) {
   const scalingBasis = getScalingBasis(recipe.yield_metadata, recipe.servings)
   const [servings, setServings] = useState(scalingBasis)
   const [scaleError, setScaleError] = useState<string | null>(null)
+  const [activeSection, setActiveSection] = useState("ingredients")
+  const articleRef = useRef<HTMLElement>(null)
+  const sectionNavRef = useRef<HTMLElement>(null)
+  const jumpScrollPositionRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    let frame = 0
+    const updateSection = () => {
+      frame = 0
+      // A short section can be visible without reaching the reading line.
+      // Keep its explicit jump indication until the reader actually scrolls.
+      if (jumpScrollPositionRef.current !== null) {
+        if (Math.abs(window.scrollY - jumpScrollPositionRef.current) < 1) return
+        jumpScrollPositionRef.current = null
+      }
+      const nav = sectionNavRef.current
+      const article = articleRef.current
+      if (!nav || !article) return
+      const readingLine = nav.getBoundingClientRect().bottom + 16
+      const sections = ["ingredients", "instructions", "notes"]
+        .flatMap((id) => {
+          const element = article.querySelector<HTMLElement>(`#${id}`)
+          return element ? [{ id, rect: element.getBoundingClientRect() }] : []
+        })
+      const reached = sections.filter(({ rect }) => rect.top <= readingLine)
+      const last = sections.at(-1)
+      const atBottom = window.scrollY > 0 &&
+        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+
+      setActiveSection((current) => {
+        // Short final sections may never reach the sticky reading line.
+        if (atBottom && last && last.rect.top < window.innerHeight) return last.id
+        if (!reached.length) return "ingredients"
+        const nearestTop = Math.max(...reached.map(({ rect }) => rect.top))
+        const nearest = reached.filter(({ rect }) => Math.abs(rect.top - nearestTop) < 2)
+        // Desktop columns share a heading row; keep the chosen column while
+        // it still contains the reading line, then follow the remaining one.
+        const reading = nearest.filter(({ rect }) => rect.bottom > readingLine)
+        const candidates = reading.length ? reading : nearest
+        return candidates.find(({ id }) => id === current)?.id ?? candidates[0].id
+      })
+    }
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateSection)
+    }
+    const handleResize = () => {
+      jumpScrollPositionRef.current = null
+      scheduleUpdate()
+    }
+    window.addEventListener("scroll", scheduleUpdate, { passive: true })
+    window.addEventListener("resize", handleResize)
+    articleRef.current?.addEventListener("toggle", scheduleUpdate, true)
+    const article = articleRef.current
+    scheduleUpdate()
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("scroll", scheduleUpdate)
+      window.removeEventListener("resize", handleResize)
+      article?.removeEventListener("toggle", scheduleUpdate, true)
+    }
+  }, [])
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
   const isOriginalYield = servings === scalingBasis
   const authoredYield = getAuthoredYieldText(
     recipe.yield_metadata,
@@ -216,11 +285,16 @@ export function RecipeDetailContent({
 
     const hash = event.currentTarget.getAttribute("href")
     if (!hash?.startsWith("#")) return
+    setActiveSection(hash.slice(1))
 
     const section = document.getElementById(hash.slice(1))
+    if (section instanceof HTMLDetailsElement) section.open = true
     if (section && typeof section.scrollIntoView === "function") {
       section.scrollIntoView({ block: "start" })
     }
+
+    section?.focus({ preventScroll: true })
+    jumpScrollPositionRef.current = window.scrollY
 
     window.history.replaceState(
       window.history.state,
@@ -239,475 +313,390 @@ export function RecipeDetailContent({
   const timeChips = [
     { label: "Prep", value: formatRecipeTime(recipe.prep_time_minutes) },
     { label: "Cook", value: formatRecipeTime(recipe.cook_time_minutes) },
-    { label: "Total", value: formatRecipeTime(recipe.total_time_minutes) },
+    { label: "Total", value: formatRecipeTime(recipe.total_time_minutes) }
   ].filter((chip) => !!chip.value)
 
   let instructionNumber = 0
 
   return (
     <article
-      className="recipe-detail-page mx-auto w-full max-w-7xl px-4 pb-[calc(var(--bottom-nav-safe-height)+2rem)] pt-4 sm:px-6 md:pb-10 md:pt-6 lg:px-8"
+      ref={articleRef}
+      className="recipe-detail-page recipe-reading"
       data-testid="recipe-detail-page"
     >
-      <div className="recipe-detail-print-hidden mb-4 flex items-center justify-between gap-3">
+      <div className="recipe-detail-print-hidden detail-return">
         <Button
           type="button"
           variant="ghost"
           onClick={onBack}
-          className="-ml-3 min-h-11 rounded-full px-3 text-stone-600 hover:bg-stone-100 hover:text-primary"
           aria-label={returnLabel}
         >
-          <ArrowLeft className="mr-2 h-5 w-5" />
+          <ArrowLeft className="mr-2 h-4 w-4" />
           {returnLabel}
         </Button>
-        <span className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">
-          Recipe
-        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onFavorite}
+          disabled={isFavoritePending}
+          aria-pressed={!!recipe.favorite}
+          aria-label={
+            recipe.favorite ? "Remove from favorites" : "Add to favorites"
+          }
+        >
+          {isFavoritePending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Heart
+              className="h-5 w-5"
+              fill={recipe.favorite ? "currentColor" : "none"}
+            />
+          )}
+        </Button>
       </div>
 
-      <div className="grid gap-5 md:gap-7 lg:grid-cols-[minmax(0,1.06fr)_minmax(22rem,0.94fr)] lg:items-center">
-        <div className="relative aspect-[4/3] max-h-[32rem] overflow-hidden rounded-3xl bg-card-cream shadow-sm ring-1 ring-stone-200/70">
-          {recipeImageUrl ? (
+      <header className="detail-heading">
+        <div>
+          <p className="detail-eyebrow">
+            {recipe.category}
+            {recipe.total_time_minutes != null
+              ? ` · ${formatRecipeTime(recipe.total_time_minutes)} total`
+              : ""}
+          </p>
+          <h1 tabIndex={-1}>{recipe.name}</h1>
+          <details className="detail-metadata">
+            <summary>
+              Recipe details <ChevronDown aria-hidden="true" />
+            </summary>
+            <div>
+              {recipe.tags?.length ? <p>{recipe.tags.join(" · ")}</p> : null}
+              <p>Original yield: {authoredYield}</p>
+              {timeChips.map((chip) => (
+                <p key={chip.label}>
+                  {chip.label} {chip.value}
+                </p>
+              ))}
+              <p>
+                {timesMade > 0
+                  ? `Made ${timesMade} time${timesMade === 1 ? "" : "s"}${lastMade ? ` · Last ${new Date(lastMade).toLocaleDateString()}` : ""}`
+                  : "Not made yet"}
+              </p>
+              {recipeImageUrl && failedImageUrl !== recipeImageUrl ? (
+                <a href={recipeImageUrl} target="_blank" rel="noreferrer">
+                  View recipe photo
+                </a>
+              ) : null}
+            </div>
+          </details>
+        </div>
+        {recipeImageUrl && failedImageUrl !== recipeImageUrl ? (
+          <a
+            className="detail-photo recipe-detail-print-hidden"
+            href={recipeImageUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="View recipe photo"
+          >
             <Image
               src={recipeImageUrl}
               alt={`${recipe.name} recipe`}
               fill
               priority
+              sizes="120px"
               className="object-cover"
-              sizes="(max-width: 1023px) 100vw, 55vw"
               unoptimized={!recipeImageUrl.includes("supabase.co")}
+              onError={() => setFailedImageUrl(recipeImageUrl)}
             />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <UtensilsCrossed
-                className="h-20 w-20 text-stone-300/70"
-                aria-hidden="true"
-              />
-            </div>
-          )}
-        </div>
+          </a>
+        ) : null}
+      </header>
 
-        <div className="min-w-0 lg:px-2">
-          <div className="flex flex-wrap gap-2">
-            {recipe.category ? (
-              <span
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-semibold capitalize",
-                  getTagClassName(recipe.category, true)
-                )}
-              >
-                {recipe.category}
-              </span>
-            ) : null}
-            {recipe.tags?.map((tag) => (
-              <span
-                key={tag}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs font-medium",
-                  getTagClassName(tag, false)
-                )}
-              >
-                {tag}
-              </span>
-            ))}
+      <div className="detail-tools">
+        <div className="detail-yield">
+          <span>Yield</span>
+          <div
+            className="detail-yield-control recipe-detail-print-hidden"
+            aria-label="Adjust yield"
+          >
+            <button
+              type="button"
+              onClick={() => selectYield(Math.max(1, servings - 1))}
+              disabled={servings <= 1}
+              aria-label="Decrease yield"
+            >
+              <Minus className="h-4 w-4" />
+            </button>
+            <output aria-live="polite">{selectedYieldLabel}</output>
+            <button
+              type="button"
+              onClick={() => selectYield(Math.min(100, servings + 1))}
+              disabled={servings >= 100}
+              aria-label="Increase yield"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
-
-          <h1 className="mt-4 break-words font-display text-4xl font-bold leading-[0.98] tracking-[-0.025em] text-primary sm:text-5xl lg:text-6xl">
-            {recipe.name}
-          </h1>
-
-          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-stone-600">
-            <span className="inline-flex items-center gap-1.5">
-              <Users className="h-4 w-4 text-secondary" aria-hidden="true" />
-              {selectedYieldLabel}
-            </span>
-            {timesMade > 0 ? (
-              <span className="inline-flex items-center gap-1.5">
-                <History className="h-4 w-4 text-secondary" aria-hidden="true" />
-                Made {timesMade} time{timesMade === 1 ? "" : "s"}
-                {lastMade
-                  ? ` · Last ${new Date(lastMade).toLocaleDateString()}`
-                  : ""}
-              </span>
-            ) : null}
-          </div>
-
-          {timeChips.length > 0 ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {timeChips.map((chip) => (
-                <span
-                  key={chip.label}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-700"
-                >
-                  <Clock className="h-3.5 w-3.5 text-secondary" aria-hidden="true" />
-                  {chip.label} {chip.value}
-                </span>
-              ))}
-            </div>
+          <span className="recipe-detail-print-only hidden">
+            {selectedYieldLabel}
+          </span>
+          {!isOriginalYield ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => selectYield(scalingBasis)}
+              className="recipe-detail-print-hidden detail-reset"
+            >
+              Reset to {authoredYield}
+            </Button>
           ) : null}
-
-          <div className="recipe-detail-print-hidden mt-6 flex flex-wrap gap-2">
-            <Button
-              type="button"
-              onClick={onMarkMade}
-              disabled={isMarkingMade}
-              className="min-h-11 rounded-full px-5"
-            >
-              {isMarkingMade ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="mr-2 h-4 w-4" />
-              )}
-              Mark made
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onFavorite}
-              disabled={isFavoritePending}
-              className="min-h-11 rounded-full px-4"
-              aria-label={
-                recipe.favorite ? "Remove from favorites" : "Add to favorites"
-              }
-            >
-              {isFavoritePending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Heart
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    recipe.favorite && "fill-terracotta-500 text-terracotta-500"
-                  )}
-                />
-              )}
-              {recipe.favorite ? "Favorited" : "Favorite"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onEdit}
-              className="min-h-11 rounded-full px-4"
-              aria-label="Edit Recipe"
-            >
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
-          </div>
-
-          <div className="recipe-detail-print-hidden mt-2 flex flex-wrap gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onAddToPlan}
-              className="min-h-11 rounded-full px-3 text-stone-600"
-            >
-              <CalendarPlus className="mr-2 h-4 w-4" />
-              Add to plan
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => onAddToShopping(servings)}
-              disabled={isAddingToShopping}
-              className="min-h-11 rounded-full px-3 text-stone-600"
-              aria-label="Add to Shopping List"
-            >
-              {isAddingToShopping ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <ShoppingCart className="mr-2 h-4 w-4" />
-              )}
-              Shopping
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onShare}
-              className="min-h-11 rounded-full px-3 text-stone-600"
-            >
-              <Share2 className="mr-2 h-4 w-4" />
-              Share
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => window.print()}
-              className="min-h-11 rounded-full px-3 text-stone-600"
-            >
-              <Printer className="mr-2 h-4 w-4" />
-              Print
-            </Button>
-          </div>
         </div>
+        <div className="detail-primary-actions recipe-detail-print-hidden">
+          <Button
+            type="button"
+            onClick={event => { event.currentTarget.focus(); onAddToShopping(servings) }}
+            disabled={isAddingToShopping}
+            aria-label="Add to Shopping List"
+            ref={shoppingButtonRef}
+          >
+            {isAddingToShopping ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ShoppingCart className="h-4 w-4" />
+            )}
+            Add to Shopping
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={(event) => {
+              event.currentTarget.focus()
+              onAddToPlan()
+            }}
+          >
+            <CalendarPlus className="h-4 w-4" />
+            Add to plan
+          </Button>
+        </div>
+      </div>
+      {scaleError ? (
+        <p
+          className="recipe-detail-print-hidden detail-scale-error"
+          role="alert"
+        >
+          {scaleError}
+        </p>
+      ) : null}
+      <div
+        className="detail-existing-actions recipe-detail-print-hidden"
+        aria-label="Recipe actions"
+      >
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={(event) => {
+            event.currentTarget.focus()
+            onEdit()
+          }}
+          aria-label="Edit Recipe"
+          ref={editButtonRef}
+        >
+          <Pencil className="h-4 w-4" />
+          Edit
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={(event) => {
+            event.currentTarget.focus()
+            onShare()
+          }}
+        >
+          <Share2 className="h-4 w-4" />
+          Share
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => window.print()}>
+          <Printer className="h-4 w-4" />
+          Print
+        </Button>
       </div>
 
       <nav
-        className="recipe-detail-print-hidden sticky top-0 z-30 -mx-4 mt-5 border-y border-stone-200/80 bg-background/95 px-4 py-2 backdrop-blur-md md:hidden"
+        ref={sectionNavRef}
+        className="detail-section-nav recipe-detail-print-hidden"
         aria-label="Recipe sections"
       >
-        <div className="grid grid-cols-3 gap-1">
-          {[
-            ["Ingredients", "#ingredients"],
-            ["Instructions", "#instructions"],
-            ["Notes", "#notes"],
-          ].map(([label, href]) => (
-            <a
-              key={href}
-              href={href}
-              onClick={handleSectionNavigation}
-              className="rounded-full px-2 py-2.5 text-center text-sm font-semibold text-stone-600 transition-colors hover:bg-stone-100 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              {label}
-            </a>
-          ))}
-        </div>
+        <a
+          href="#ingredients"
+          onClick={handleSectionNavigation}
+          aria-current={
+            activeSection === "ingredients" ? "location" : undefined
+          }
+        >
+          Ingredients <small aria-hidden="true">{ingredientCount}</small>
+        </a>
+        <a
+          href="#instructions"
+          onClick={handleSectionNavigation}
+          aria-current={
+            activeSection === "instructions" ? "location" : undefined
+          }
+        >
+          Instructions{" "}
+          <small aria-hidden="true">
+            {instructionGroups.reduce(
+              (count, group) => count + group.steps.length,
+              0
+            )}
+          </small>
+        </a>
+        {notes.length ? (
+          <a
+            href="#notes"
+            onClick={handleSectionNavigation}
+            aria-current={activeSection === "notes" ? "location" : undefined}
+          >
+            Notes
+          </a>
+        ) : null}
       </nav>
-
-      <div className="mt-8 grid gap-10 border-t border-stone-200/80 pt-8 md:grid-cols-12 md:gap-12 lg:mt-10 lg:pt-10">
+      <div className="detail-cooking-layout">
         <section
           id="ingredients"
+          tabIndex={-1}
           aria-labelledby="ingredients-heading"
-          className="scroll-mt-20 md:col-span-5 lg:col-span-4"
         >
-          <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">
-                What you need
-              </p>
-              <h2
-                id="ingredients-heading"
-                className="mt-1 font-display text-3xl font-bold text-primary"
-              >
-                Ingredients
-                <span
-                  aria-hidden="true"
-                  className="ml-2 font-sans text-sm font-medium text-stone-400"
-                >
-                  {ingredientCount}
-                </span>
-              </h2>
-            </div>
-            <div
-              className="recipe-detail-print-hidden flex items-center rounded-full border border-stone-200 bg-white p-1"
-              aria-label="Adjust yield"
-            >
-              <button
-                type="button"
-                onClick={() => selectYield(Math.max(1, servings - 1))}
-                disabled={servings <= 1}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 disabled:opacity-35"
-                aria-label="Decrease yield"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span
-                className="min-w-20 px-1 text-center text-sm font-semibold tabular-nums"
-                aria-live="polite"
-              >
-                {selectedYieldLabel}
-              </span>
-              <button
-                type="button"
-                onClick={() => selectYield(Math.min(99, servings + 1))}
-                disabled={servings >= 99}
-                className="flex h-9 w-9 items-center justify-center rounded-full text-stone-600 hover:bg-stone-100 disabled:opacity-35"
-                aria-label="Increase yield"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-            {!isOriginalYield ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => selectYield(scalingBasis)}
-                className="recipe-detail-print-hidden h-9 rounded-full px-3 text-xs text-stone-500"
-              >
-                Reset to {authoredYield}
-              </Button>
-            ) : null}
-            <span className="recipe-detail-print-only hidden text-sm text-stone-500">
-              {selectedYieldLabel}
-            </span>
-          </div>
-          {scaleError ? (
-            <p
-              className="recipe-detail-print-hidden mt-2 text-sm text-destructive"
-              role="alert"
-            >
-              {scaleError}
+          <h2 id="ingredients-heading">Ingredients</h2>
+          {!isOriginalYield ? (
+            <p className="detail-scale-note" role="status">
+              Scaled to {selectedYieldLabel} · original {authoredYield}
             </p>
           ) : null}
-
-          {ingredientGroups.length > 0 ? (
-            <div className="space-y-7">
-              {ingredientGroups.map((group, groupIndex) => (
-                <section
-                  key={`${group.label || "main"}-${groupIndex}`}
-                  data-ingredient-group={group.label || ""}
-                >
-                  {group.label ? (
-                    <h3 className="mb-3 break-words text-sm font-semibold text-primary">
-                      {group.label}
-                    </h3>
-                  ) : null}
-                  <ul className="space-y-3">
-                    {group.ingredients.map((ingredient, index) => {
-                      const formattedQuantity = formatRecipeQuantity(
-                        ingredient,
-                        scalingBasis,
-                        servings
-                      )
-
-                      return (
-                        <li
-                          key={`${groupIndex}-${index}`}
-                          className="grid grid-cols-[minmax(4.25rem,auto)_1fr] items-start gap-x-3 border-b border-stone-100 pb-3 text-stone-700 last:border-b-0"
-                        >
-                          <span className="pt-0.5 text-right text-sm tabular-nums text-stone-500">
-                            {formattedQuantity.text}
-                            {formattedQuantity.hardToMeasure ? (
-                              <span className="block text-[10px] text-amber-700">
-                                hard to measure
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="min-w-0 text-sm font-semibold leading-6 text-stone-900">
-                            {ingredient.item}
-                            {ingredient.alternatives?.length ? (
-                              <span className="font-normal text-stone-600">
-                                {" or "}
-                                {ingredient.alternatives.join(" or ")}
-                              </span>
-                            ) : null}
-                            {ingredient.modifier ? (
-                              <span className="font-normal text-stone-500">
-                                , {ingredient.modifier}
-                              </span>
-                            ) : null}
-                          </span>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </section>
-              ))}
-            </div>
+          {ingredientGroups.length ? (
+            ingredientGroups.map((group, groupIndex) => (
+              <section
+                key={groupIndex}
+                className="detail-ingredient-group"
+                data-ingredient-group={group.label || ""}
+              >
+                {group.label ? <h3>{group.label}</h3> : null}
+                <ul>
+                  {group.ingredients.map((ingredient, index) => {
+                    const formattedQuantity = formatRecipeQuantity(
+                      ingredient,
+                      scalingBasis,
+                      servings
+                    )
+                    return (
+                      <li key={index}>
+                        <span className="detail-amount">
+                          {formattedQuantity.text}
+                          {formattedQuantity.hardToMeasure ? (
+                            <small>hard to measure</small>
+                          ) : null}
+                        </span>
+                        <span className="detail-ingredient-name">
+                          {ingredient.item}
+                          {ingredient.modifier ? (
+                            <span className="detail-preparation">
+                              , {ingredient.modifier}
+                            </span>
+                          ) : null}
+                          {ingredient.alternatives?.length ? (
+                            <span className="detail-alternatives">
+                              or {ingredient.alternatives.join(" or ")}
+                            </span>
+                          ) : null}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            ))
           ) : (
-            <p className="text-sm text-muted-foreground">
-              No ingredients available.
-            </p>
+            <p>No ingredients available.</p>
           )}
         </section>
-
         <section
           id="instructions"
+          tabIndex={-1}
           aria-labelledby="instructions-heading"
-          className="scroll-mt-20 md:col-span-7 lg:col-span-8"
         >
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">
-            How to make it
-          </p>
-          <h2
-            id="instructions-heading"
-            className="mt-1 font-display text-3xl font-bold text-primary"
-          >
-            Instructions
-          </h2>
-
-          {instructionGroups.length > 0 ? (
-            <div className="mt-6 space-y-9">
-              {instructionGroups.map((group, groupIndex) => {
-                const start = instructionNumber + 1
-                instructionNumber += group.steps.length
-
-                return (
-                  <section key={`${group.label || "main"}-${groupIndex}`}>
-                    {group.label ? (
-                      <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-stone-500">
-                        {group.label}
-                      </h3>
-                    ) : null}
-                    <ol start={start} className="space-y-5">
-                      {group.steps.map((step, stepIndex) => (
-                        <li
-                          key={`${groupIndex}-${stepIndex}`}
-                          value={start + stepIndex}
-                          className="grid grid-cols-[2.25rem_1fr] items-start gap-x-4"
-                        >
-                          <span
-                            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground"
-                            aria-hidden="true"
-                          >
-                            {start + stepIndex}
-                          </span>
-                          <p className="min-w-0 pt-1 leading-7 text-stone-700">
-                            {step}
-                          </p>
-                        </li>
-                      ))}
-                    </ol>
-                  </section>
-                )
-              })}
-            </div>
+          <h2 id="instructions-heading">Instructions</h2>
+          {instructionGroups.length ? (
+            instructionGroups.map((group, groupIndex) => {
+              const start = instructionNumber + 1
+              instructionNumber += group.steps.length
+              return (
+                <section key={groupIndex} className="detail-instruction-group">
+                  {group.label ? <h3>{group.label}</h3> : null}
+                  <ol start={start}>
+                    {group.steps.map((step, stepIndex) => (
+                      <li key={stepIndex} value={start + stepIndex}>
+                        <span className="detail-step-number" aria-hidden="true">
+                          {start + stepIndex}
+                        </span>
+                        <p>{step}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )
+            })
           ) : (
-            <p className="mt-5 text-sm text-muted-foreground">
-              No instructions available.
-            </p>
+            <p>No instructions available.</p>
           )}
+          <div className="detail-made-footer recipe-detail-print-hidden">
+            <div>
+              <p>Made this recipe?</p>
+              <span>Keep your cooking history up to date.</span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onMarkMade}
+              disabled={isMarkingMade}
+            >
+              {isMarkingMade ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Mark made
+            </Button>
+          </div>
         </section>
       </div>
-
-      <section
-        id="notes"
-        aria-labelledby="notes-heading"
-        className="scroll-mt-20 mt-10 border-t border-stone-200/80 pt-8"
-      >
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-secondary">
-          Keep in mind
-        </p>
-        <h2
-          id="notes-heading"
-          className="mt-1 font-display text-3xl font-bold text-primary"
-        >
-          Notes
-        </h2>
-        {notes.length > 0 ? (
-          <ul className="mt-5 grid gap-3 md:grid-cols-2">
+      {notes.length ? (
+        <details id="notes" className="detail-notes" tabIndex={-1}>
+          <summary>
+            <h2 id="notes-heading">Notes</h2>
+            <span>{notes.length}</span>
+            <ChevronDown aria-hidden="true" />
+          </summary>
+          <ul>
             {notes.map((note, index) => (
-              <li
-                key={index}
-                className="rounded-2xl border border-stone-100 bg-stone-50 px-5 py-4 text-sm leading-6 text-stone-700"
-              >
-                {note}
-              </li>
+              <li key={index}>{note}</li>
             ))}
           </ul>
-        ) : (
-          <p className="mt-4 text-sm text-muted-foreground">
-            No notes for this recipe.
-          </p>
-        )}
-      </section>
-
-      <div className="recipe-detail-print-hidden mt-10 flex justify-end border-t border-stone-200/80 pt-6">
+        </details>
+      ) : null}
+      <div className="detail-delete recipe-detail-print-hidden">
         <Button
           type="button"
-          variant="outline"
-          onClick={onDelete}
+          variant="ghost"
+          onClick={(event) => {
+            event.currentTarget.focus()
+            onDelete()
+          }}
           disabled={isDeleting}
-          className="min-h-11 border-destructive/20 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="text-destructive hover:text-destructive"
         >
           {isDeleting ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
           )}
           Delete recipe
         </Button>
@@ -718,7 +707,7 @@ export function RecipeDetailContent({
 
 export function RecipeDetailPage({
   recipeId,
-  returnSource = null,
+  returnSource = null
 }: RecipeDetailPageProps) {
   const router = useRouter()
   const recipeQuery = useRecipe(recipeId)
@@ -733,9 +722,24 @@ export function RecipeDetailPage({
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [isAddToPlanOpen, setIsAddToPlanOpen] = useState(false)
+  const [shoppingYield, setShoppingYield] = useState<number | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const returnLabel =
-    RECIPE_RETURN_LABELS[returnSource ?? "recipes"]
+  const dialogReturnFocusRef = useRef<HTMLElement | null>(null)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
+  const shoppingButtonRef = useRef<HTMLButtonElement>(null)
+  const rememberDialogFocus = () => {
+    dialogReturnFocusRef.current = document.activeElement as HTMLElement | null
+  }
+  const restoreDialogFocus = () => {
+    window.setTimeout(() => {
+      const target = dialogReturnFocusRef.current
+      const currentTarget = target?.isConnected ? target :
+        target?.getAttribute("aria-label") === "Edit Recipe" ? editButtonRef.current :
+        target?.getAttribute("aria-label") === "Add to Shopping List" ? shoppingButtonRef.current : null
+      currentTarget?.focus({ preventScroll: true })
+    }, 0)
+  }
+  const returnLabel = RECIPE_RETURN_LABELS[returnSource ?? "recipes"]
   const statsMap = useMemo(
     () => getRecipeStatsMap(historyStats),
     [historyStats]
@@ -753,11 +757,11 @@ export function RecipeDetailPage({
     try {
       await toggleFavorite.mutateAsync({
         id: recipe.id,
-        favorite: !!recipe.favorite,
+        favorite: !!recipe.favorite
       })
     } catch (error) {
       showToast({
-        message: getErrorMessage(error, "Failed to update favorite"),
+        message: getErrorMessage(error, "Failed to update favorite")
       })
     }
   }
@@ -771,43 +775,39 @@ export function RecipeDetailPage({
       showToast({
         message: `"${recipe.name}" marked as made`,
         onUndo: () => unmarkAsMade.mutate(recipe.id),
-        onExpire: () => undefined,
+        onExpire: () => undefined
       })
     } catch (error) {
       showToast({
-        message: getErrorMessage(error, "Failed to mark recipe as made"),
+        message: getErrorMessage(error, "Failed to mark recipe as made")
       })
     }
   }
 
-  const handleAddToShopping = async (selectedYield: number) => {
+  const handleAddToShopping = async (selections: ShoppingRecipeSelection[]) => {
     const recipe = recipeQuery.data
     if (!recipe) return
 
     try {
-      const scalingBasis = getScalingBasis(
-        recipe.yield_metadata,
-        recipe.servings
-      )
       const result = await addToShopping.mutateAsync({
-        recipeIds: [recipe.id],
-        scale: selectedYield / scalingBasis,
-        scaleV1: selectedYieldRatio(selectedYield, scalingBasis),
+        recipeIds: selections.map(selection => selection.recipeId),
+        selections,
       })
       showToast({
         message: formatShoppingAddMessage(result, {
           sourceName: recipe.name,
           itemLabel: SHOPPING_ITEM_LABEL,
-          zeroMessage: `All shopping items from "${recipe.name}" are already on the shopping list`,
-        }),
+          zeroMessage: `All shopping items from "${recipe.name}" are already on the shopping list`
+        })
       })
     } catch (error) {
       showToast({
         message: getErrorMessage(
           error,
           "Failed to add ingredients to shopping list"
-        ),
+        )
       })
+      throw error
     }
   }
 
@@ -823,7 +823,7 @@ export function RecipeDetailPage({
     } catch (error) {
       showToast({
         message: getErrorMessage(error, `Failed to delete "${recipe.name}"`),
-        duration: 4000,
+        duration: 4000
       })
     }
   }
@@ -833,11 +833,15 @@ export function RecipeDetailPage({
 
   return (
     <>
-      <div className="recipe-detail-scroll min-w-0 overflow-x-hidden scroll-smooth">
+      <div className="recipe-detail-scroll min-w-0 overflow-x-clip scroll-smooth">
         {recipeQuery.isLoading ? <RecipeDetailLoading /> : null}
         {recipeQuery.isError ? (
           <RecipeDetailState
-            title={errorCode === "PGRST116" ? "Recipe not found" : "Couldn’t load recipe"}
+            title={
+              errorCode === "PGRST116"
+                ? "Recipe not found"
+                : "Couldn’t load recipe"
+            }
             message={
               errorCode === "PGRST116"
                 ? "This recipe may have been removed or is not available to this account."
@@ -858,21 +862,35 @@ export function RecipeDetailPage({
         ) : null}
         {recipeQuery.data ? (
           <RecipeDetailContent
+            editButtonRef={editButtonRef}
+            shoppingButtonRef={shoppingButtonRef}
             key={`${recipeQuery.data.id}:${recipeQuery.data.updated_at ?? ""}`}
             recipe={recipeQuery.data}
             returnLabel={returnLabel}
             lastMade={stats?.lastMade ?? null}
             timesMade={stats?.timesMade ?? 0}
             onBack={handleReturn}
-            onDelete={() => setShowDeleteConfirm(true)}
-            onEdit={() => setIsEditOpen(true)}
+            onDelete={() => {
+              rememberDialogFocus()
+              setShowDeleteConfirm(true)
+            }}
+            onEdit={() => {
+              rememberDialogFocus()
+              setIsEditOpen(true)
+            }}
             onFavorite={() => void handleFavorite()}
             onMarkMade={() => void handleMarkMade()}
-            onAddToPlan={() => setIsAddToPlanOpen(true)}
+            onAddToPlan={() => {
+              rememberDialogFocus()
+              setIsAddToPlanOpen(true)
+            }}
             onAddToShopping={(selectedYield) =>
-              void handleAddToShopping(selectedYield)
+              { rememberDialogFocus(); setShoppingYield(selectedYield) }
             }
-            onShare={() => setIsShareOpen(true)}
+            onShare={() => {
+              rememberDialogFocus()
+              setIsShareOpen(true)
+            }}
             isDeleting={deleteRecipe.isPending}
             isFavoritePending={toggleFavorite.isPending}
             isMarkingMade={markAsMade.isPending}
@@ -881,30 +899,53 @@ export function RecipeDetailPage({
         ) : null}
       </div>
 
+      <ShoppingSelectionDialog
+        open={shoppingYield !== null}
+        onOpenChange={open => { if (!open && !addToShopping.isPending) setShoppingYield(null) }}
+        onCloseAutoFocus={() => restoreDialogFocus()}
+        recipes={recipeQuery.data ? [recipeQuery.data] : []}
+        defaultScale={recipeQuery.data && shoppingYield !== null ? shoppingYield / getScalingBasis(recipeQuery.data.yield_metadata, recipeQuery.data.servings) : 1}
+        onSubmit={handleAddToShopping}
+      />
       <RecipeDialog
         open={isEditOpen}
-        onOpenChange={setIsEditOpen}
+        onOpenChange={(open) => {
+          setIsEditOpen(open)
+          if (!open) restoreDialogFocus()
+        }}
         recipeId={recipeId}
         categories={categories || []}
       />
       <ShareRecipeDialog
         open={isShareOpen}
-        onOpenChange={setIsShareOpen}
+        onOpenChange={(open) => {
+          setIsShareOpen(open)
+          if (!open) restoreDialogFocus()
+        }}
         recipeId={recipeId}
       />
       <AddToPlanDialog
         open={isAddToPlanOpen}
-        onOpenChange={setIsAddToPlanOpen}
+        onOpenChange={(open) => {
+          setIsAddToPlanOpen(open)
+          if (!open) restoreDialogFocus()
+        }}
         recipeId={recipeId}
       />
 
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialog
+        open={showDeleteConfirm}
+        onOpenChange={(open) => {
+          setShowDeleteConfirm(open)
+          if (!open) restoreDialogFocus()
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Recipe</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{recipeQuery.data?.name}&quot;?
-              This action cannot be undone.
+              Are you sure you want to delete &quot;{recipeQuery.data?.name}
+              &quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

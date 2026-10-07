@@ -63,8 +63,8 @@ describe("recipe history stats cache freshness", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     })
-    const pendingInsert = deferred<{ error: null }>()
-    insertMock.mockReturnValueOnce(pendingInsert.promise)
+    const pendingInsert = deferred<{ data: { id: number }; error: null }>()
+    insertMock.mockReturnValueOnce({ select: () => ({ single: () => pendingInsert.promise }) })
 
     queryClient.setQueryData<RecipeHistoryStatsRow[]>(getRecipeHistoryStatsQueryKey(USER_ID), [
       { recipe_id: "recipe-1", times_made: 1, last_made: "2026-03-01T00:00:00.000Z" },
@@ -88,10 +88,36 @@ describe("recipe history stats cache freshness", () => {
       ])
     })
 
-    pendingInsert.resolve({ error: null })
+    pendingInsert.resolve({ data: { id: 42 }, error: null })
     await act(async () => {
-      await mutationPromise!
+      expect(await mutationPromise!).toEqual({ recipeId: "recipe-1", historyId: 42 })
     })
+  })
+
+  it("rolls back a rejected exact-entry Undo and preserves newer history on retry", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    const history: RecipeHistory[] = [
+      { id: 43, user_id: USER_ID, recipe_id: "recipe-1", date_made: "2026-03-06T00:00:00.000Z" },
+      { id: 42, user_id: USER_ID, recipe_id: "recipe-1", date_made: "2026-03-05T00:00:00.000Z" },
+    ]
+    const stats = [{ recipe_id: "recipe-1", times_made: 2, last_made: history[0].date_made }]
+    queryClient.setQueryData(getRecipeHistoryQueryKey(USER_ID), history)
+    queryClient.setQueryData(getRecipeHistoryStatsQueryKey(USER_ID), stats)
+    const { result } = renderHook(() => useUnmarkRecipeAsMade(), { wrapper: createWrapper(queryClient) })
+    deleteEqMock.mockResolvedValueOnce({ error: new Error("Rejected") })
+    const target = { recipeId: "recipe-1", historyId: 42 }
+    await act(async () => { await expect(result.current.mutateAsync(target)).rejects.toThrow("Rejected") })
+    expect(queryClient.getQueryData(getRecipeHistoryQueryKey(USER_ID))).toEqual(history)
+    expect(queryClient.getQueryData(getRecipeHistoryStatsQueryKey(USER_ID))).toEqual(stats)
+    deleteEqMock.mockResolvedValueOnce({ error: null })
+    await act(async () => { await result.current.mutateAsync(target) })
+    expect(deleteEqMock).toHaveBeenLastCalledWith("id", 42)
+    expect(queryClient.getQueryData(getRecipeHistoryQueryKey(USER_ID))).toEqual([history[0]])
+    expect(queryClient.getQueryData(getRecipeHistoryStatsQueryKey(USER_ID))).toEqual([
+      { recipe_id: "recipe-1", times_made: 1, last_made: history[0].date_made },
+    ])
   })
 
   it("recomputes recipe stats when the most recent made entry is unmarked", async () => {

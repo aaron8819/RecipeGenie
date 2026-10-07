@@ -34,9 +34,36 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   arithmetic and never mutates the stored recipe. The selected yield is also
   used when adding that recipe to Shopping. Recipe detail does not have an
   ingredient checklist or completion state.
+- Detail uses a compact title and optional desktop photo, expandable metadata,
+  a validated yield toolbar (1–100), and grouped ingredient/instruction reading
+  columns that stack on mobile. Alternatives remain on their own line.
+- Section links move keyboard focus without adding history entries; Notes
+  expands when selected. The active location follows scrolling below the sticky
+  bar, including short final sections at the page bottom. In desktop columns
+  with aligned headings, the chosen column stays active while it is being read.
+  Existing editor, planning, sharing and deletion dialogs restore focus to
+  their initiating detail control, including after discard. Successful editor
+  saves return focus to the current Edit button after detail content remounts.
+- Missing or broken photos leave the cooking content available. Photo links
+  expose the original image; printing includes selected yield and notes.
 - The recipe image storage boundary is now explicit:
   - `getRecipeImageUrl()` is a pure helper.
   - Upload/delete behavior goes through `useRecipeImageStorage()`.
+
+### Recipe action entry points
+
+- Cards and detail open the shared Shopping selection dialog before writing.
+  Saved yield and ingredient occurrences take precedence over caller defaults.
+  A fresh card selection uses original yield; a fresh detail selection uses the
+  currently viewed yield. Submission stays in the existing Shopping command owner.
+- Card menus also expose Edit, Mark made, Print, and confirmed Delete. Print
+  navigates to canonical detail, where the existing Print control remains.
+  Recipe Mark made/Undo uses global history and never toggles weekly cooked flags.
+- Card dialogs return focus to the originating menu or its replacement after
+  editing. If deletion/filtering removes that card, focus returns to Recipes.
+- The selector retains section labels, repeated occurrences, preparation and
+  alternatives, exact quantities, selection counts, and Select/Deselect all.
+  Selection identities and saved-selection recovery remain helper-owned.
 
 ## Key Files
 
@@ -78,7 +105,19 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 ### Recipe browsing UX
 
 - Recipe search currently matches recipe `name` and `category`.
-- Mobile recipes browsing intentionally separates primary browse controls from utility actions so `Shared` and `Settings` remain visible without horizontal scrolling.
+- The collection uses compact search, filter and sort controls, with category,
+  OR tags and favorites in the Filters popover. Shared recipes, Export and
+  Settings remain available in the named Collection actions menu on all widths.
+- Cards keep full titles, equal photo/fallback frames, authored yield and
+  optional timing/tag metadata. Favorite and the existing Shopping/Plan/Share
+  callbacks are sibling controls of the canonical detail link. Tag filtering
+  remains available in the card menu. Expanded card actions and the Recipe
+  Shopping selector wiring belong to later integration slices.
+- Mobile defaults to list view; its optional grid keeps two columns with full
+  title wrapping. Desktop uses four columns at 1360px and above. Styles are
+  scoped in `recipe-collection.css`; the shared authenticated shell is unchanged.
+- Recipe read errors expose Retry and keep cached cards available. Clearing
+  filters cancels the pending search update so stale filters cannot reappear.
 
 ### Recipe detail navigation
 

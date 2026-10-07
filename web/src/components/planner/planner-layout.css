@@ -1,0 +1,48 @@
+.planner-layout { min-width: 0; }
+.planner-week-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.planner-week-date { min-height: 44px; padding: 6px 8px; font-weight: 600; text-align: center; }
+.planner-progress { display: flex; align-items: center; gap: 12px; color: rgb(var(--rg-desktop-text-variant)); font-size: 12px; }
+.planner-progress-track { width: 96px; height: 5px; border-radius: 4px; overflow: hidden; background: hsl(var(--muted)); }
+.planner-progress-track > div { height: 100%; background: hsl(var(--primary)); transition: width 150ms; }
+.planner-agenda { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.planner-day-panel { min-width: 0; border: 1px solid hsl(var(--border)); border-radius: 12px; overflow: hidden; background: hsl(var(--card)); }
+.planner-day-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: hsl(var(--muted) / .55); }
+.planner-day-header h2 { font-size: 16px; font-weight: 600; }
+.planner-day-date { margin-left: 4px; color: rgb(var(--rg-desktop-text-variant)); font-size: 12px; font-weight: 400; white-space: nowrap; }
+.planner-day-empty { padding: 0 12px 14px; color: rgb(var(--rg-desktop-text-variant)); font-size: 13px; }
+.planner-meal-card { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px 10px; min-width: 0; padding: 14px 12px 8px; border-top: 1px solid hsl(var(--border)); background: hsl(var(--card)); }
+.planner-meal-cooked { background: hsl(var(--primary) / .04); }
+.planner-meal-photo { position: relative; display: grid; place-items: center; width: 52px; height: 58px; border-radius: 7px; overflow: hidden; background: hsl(var(--primary) / .07); }
+.planner-meal-copy { min-width: 0; }
+.planner-meal-copy h3 { margin: 0; }
+.planner-meal-title { width: 100%; min-height: 44px; font-size: 16px; line-height: 1.4; font-weight: 500; text-align: left; overflow-wrap: anywhere; }
+.planner-meal-title:hover { color: hsl(var(--primary)); }
+.planner-meal-meta, .planner-meal-history { margin-top: 4px; font-size: 12px; line-height: 1.5; color: rgb(var(--rg-desktop-text-variant)); overflow-wrap: anywhere; }
+.planner-meal-history { font-size: 11px; }
+.planner-cooked-badge { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; padding: 3px 7px; border-radius: 4px; background: hsl(var(--primary) / .1); color: hsl(var(--primary)); font-size: 12px; }
+.planner-meal-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; flex-wrap: wrap; }
+.planner-meal-actions button { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 7px; color: rgb(var(--rg-desktop-text-variant)); }
+.planner-meal-actions button:hover { color: hsl(var(--primary)); background: hsl(var(--muted)); }
+.planner-meal-actions button:disabled { opacity: .5; }
+.planner-generation { margin-top: 24px; }
+.planner-layout button:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+/* Retain the existing Slate/Emerald dark presentation without global changes. */
+.dark .planner-day-panel, .dark .planner-meal-card { background: #0f172a; color: #e2e8f0; border-color: #334155; }
+.dark .planner-day-header { background: #1e293b; }
+.dark .planner-meal-cooked { background: #022c22; }
+.dark .planner-meal-photo { background: #1e293b; }
+.dark .planner-meal-meta, .dark .planner-meal-history, .dark .planner-day-date,
+.dark .planner-day-empty, .dark .planner-progress, .dark .planner-meal-actions button { color: #94a3b8; }
+.dark .planner-cooked-badge { color: #6ee7b7; background: #064e3b; }
+.dark .planner-meal-title:hover, .dark .planner-meal-actions button:hover { color: #6ee7b7; }
+.dark .planner-meal-actions button:hover { background: #1e293b; }
+@media (min-width: 1200px) { .planner-agenda { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 767px) {
+  .planner-agenda { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .planner-week-toolbar { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 4px; }
+  .planner-week-date { font-size: 14px; }
+  .planner-current-week { grid-column: 2; }
+  .planner-day-header { padding: 8px 10px; }
+  .planner-meal-card { grid-template-columns: 44px minmax(0, 1fr); padding: 12px 10px 6px; gap: 8px; }
+  .planner-meal-photo { width: 44px; height: 50px; }
+}

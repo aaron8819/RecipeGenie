@@ -27,13 +27,13 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode; asChild?: boolean }) => (
     <>{children}</>
   ),
-  DropdownMenuContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuContent: ({ children, onCloseAutoFocus }: { children: React.ReactNode; onCloseAutoFocus?: (event: Event) => void }) => <div>{children}<button type="button" onClick={() => onCloseAutoFocus?.(new Event("close", { cancelable: true }))}>Close menu</button></div>,
   DropdownMenuItem: ({
     children,
-    onClick,
+    onSelect,
     disabled,
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button type="button" onClick={onClick} disabled={disabled}>
+  }: { children: React.ReactNode; onSelect?: () => void; disabled?: boolean }) => (
+    <button type="button" onClick={() => onSelect?.()} disabled={disabled}>
       {children}
     </button>
   ),
@@ -57,9 +57,52 @@ function makeRecipe(): Recipe {
 }
 
 describe("RecipeCard", () => {
+  it("hands new actions the recipe only after menu focus is restored", () => {
+    const recipe = makeRecipe()
+    const callbacks = { onEdit: vi.fn(), onMarkMade: vi.fn(), onPrint: vi.fn(), onDelete: vi.fn() }
+    render(<RecipeCard recipe={recipe} {...callbacks} />)
+    for (const [name, callback] of [["Edit recipe", callbacks.onEdit], ["Mark made", callbacks.onMarkMade], ["Print recipe", callbacks.onPrint], ["Delete recipe", callbacks.onDelete]] as const) {
+      callback.mockImplementation(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+      fireEvent.click(screen.getByRole("button", { name }))
+      expect(callback).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+      expect(callback).toHaveBeenCalledExactlyOnceWith(recipe)
+    }
+  })
+
+  it("disables the pending favorite, history and deletion actions", () => {
+    render(<RecipeCard recipe={makeRecipe()} onToggleFavorite={vi.fn()} onMarkMade={vi.fn()} onDelete={vi.fn()} isFavoritePending isMarkingMade isDeleting />)
+    expect(screen.getByRole("button", { name: "Add Card Recipe to favorites" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Mark made" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Delete recipe" })).toBeDisabled()
+  })
+  it("retains every long-tag filter and returns focus before handing off actions", () => {
+    const tags = ["Menu regression", ...Array.from({ length: 18 }, (_, i) => `Tag ${i + 1}`), "W".repeat(50)]
+    const recipe = { ...makeRecipe(), tags }
+    const navigate = vi.fn()
+    const tag = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    const shop = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    const plan = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    const share = vi.fn(() => expect(screen.getByTitle("Actions")).toHaveFocus())
+    render(<RecipeCard recipe={recipe} onClick={navigate} onTagClick={tag} onAddToShoppingList={shop} onAddToPlan={plan} onShare={share} />)
+    for (const label of tags) {
+      fireEvent.click(screen.getByRole("button", { name: `Filter by ${label}` }))
+      fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+      expect(tag).toHaveBeenLastCalledWith(label)
+    }
+    expect(tag).toHaveBeenCalledTimes(20)
+    for (const [name, callback] of [["Add to Shopping List", shop], ["Add to Meal Plan", plan], ["Share Recipe", share]] as const) {
+      fireEvent.click(screen.getByRole("button", { name }))
+      expect(callback).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+      expect(callback).toHaveBeenCalledExactlyOnceWith(recipe)
+    }
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   it("opens recipe detail without exposing cooking controls on the card", () => {
     const onClick = vi.fn()
-    const { container } = render(
+    render(
       <RecipeCard
         recipe={makeRecipe()}
         isDesktopViewport
@@ -76,7 +119,34 @@ describe("RecipeCard", () => {
     expect(screen.queryByText(/cook mode/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/start cooking/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/mark as made/i)).not.toBeInTheDocument()
-    expect(container.querySelector(".grid-cols-3")).toBeInTheDocument()
+    const link = screen.getByRole("link", { name: /Card Recipe/ })
+    expect(link).toHaveAttribute("href", "/recipes/recipe-1?from=recipes")
+    expect(link.querySelector("button")).toBeNull()
+  })
+
+  it("keeps favorite, pending menu actions, and tag filters separate from navigation", () => {
+    const open = vi.fn()
+    const favorite = vi.fn()
+    const tag = vi.fn()
+    const shop = vi.fn()
+    render(<RecipeCard recipe={makeRecipe()} viewMode="list" onClick={open} onToggleFavorite={favorite} onTagClick={tag} onAddToShoppingList={shop} isAddingToShoppingList />)
+    fireEvent.click(screen.getByRole("button", { name: "Add Card Recipe to favorites" }))
+    fireEvent.click(screen.getByRole("button", { name: "Filter by Quick" }))
+    expect(tag).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("button", { name: "Close menu" }))
+    fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
+    expect(favorite).toHaveBeenCalledOnce()
+    expect(tag).toHaveBeenCalledWith("Quick")
+    expect(shop).not.toHaveBeenCalled()
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it("recovers a broken photo without dropping the recipe link", () => {
+    const recipe = { ...makeRecipe(), image_url: "https://example.com/broken.jpg" }
+    const { container } = render(<RecipeCard recipe={recipe} />)
+    fireEvent.error(container.querySelector("img")!)
+    expect(container.querySelector("img")).toBeNull()
+    expect(screen.getByRole("link", { name: /Card Recipe/ })).toBeInTheDocument()
   })
 
   it("keeps mobile card utilities in a touch-sized overflow menu", () => {
