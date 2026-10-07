@@ -51,6 +51,14 @@ jobs:
             throw 'Exact requested source identity required'
           }
           if (git status --porcelain) { throw 'Clean source required' }
+          # Unchanged tooling assertions require this historical PR-head evidence object.
+          $evidenceCommit = '172958fe5a413f4c8ced08b431b3ead82dc92bf7'
+          git fetch --no-tags --no-write-fetch-head origin $evidenceCommit
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned tooling evidence acquisition failed' }
+          $resolvedEvidence = git rev-parse --verify "$evidenceCommit^{commit}"
+          if ($LASTEXITCODE -ne 0 -or $resolvedEvidence -ne $evidenceCommit) {
+            throw 'Exact pinned tooling evidence commit required'
+          }
           if (Test-Path '.env.local') { throw 'Inherited environment forbidden' }
           # Build-only dummy values, no credentials. This job never starts an app or database.
           @('NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321',
