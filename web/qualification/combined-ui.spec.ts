@@ -419,7 +419,7 @@ for (const viewport of [
         await assertSaved();
         await cancelFocus(trigger);
         const fullWeek = page.getByRole('button', {
-          name: 'Add full week to Shopping', exact: true,
+          name: 'Add planned meal ingredients to Shopping', exact: true,
         });
         await fullWeek.focus();
         await page.keyboard.press('Enter');
