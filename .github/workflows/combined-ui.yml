@@ -65,15 +65,25 @@ jobs:
           npm run --silent rg:doctor -- --json > ../.codex-artifacts/combined-ui/doctor.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $nodeDistribution = Split-Path -Parent (Get-Command node.exe -ErrorAction Stop).Source
-          & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File ../scripts/rg-verify.ps1 `
-            -NodeDistribution $nodeDistribution pr --json > ../.codex-artifacts/combined-ui/pr-gate.json
-          exit $LASTEXITCODE
+          $PSNativeCommandUseErrorActionPreference = $false
+          $gateExit = 1
+          try {
+            & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File ../scripts/rg-verify.ps1 `
+              -NodeDistribution $nodeDistribution pr *> ../.codex-artifacts/combined-ui/pr-gate.txt
+            $gateExit = $LASTEXITCODE
+          } finally {
+            @{ head = $env:COMBINED_UI_EXPECTED_SHA; exitCode = $gateExit } |
+              ConvertTo-Json | Set-Content ../.codex-artifacts/combined-ui/pr-gate-exit.json
+          }
+          exit $gateExit
       - name: Preserve source-bound trusted gate evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: combined-pr-gate-${{ github.event.pull_request.head.sha }}
-          path: .codex-artifacts/combined-ui/*.json
+          path: |
+            .codex-artifacts/combined-ui/*.json
+            .codex-artifacts/combined-ui/pr-gate.txt
           if-no-files-found: warn
           retention-days: 7
 
