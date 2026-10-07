@@ -62,9 +62,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Gate peer fixture creation failed' }
       - name: Existing trusted PR gate (including production build)
         run: |
-          node scripts/workflow/doctor.mjs --json > ../.codex-artifacts/combined-ui/doctor.json
+          npm run --silent rg:doctor -- --json > ../.codex-artifacts/combined-ui/doctor.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node scripts/workflow/verification.mjs pr --json > ../.codex-artifacts/combined-ui/pr-gate.json
+          $nodeDistribution = Split-Path -Parent (Get-Command node.exe -ErrorAction Stop).Source
+          & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File ../scripts/rg-verify.ps1 `
+            -NodeDistribution $nodeDistribution pr --json > ../.codex-artifacts/combined-ui/pr-gate.json
           exit $LASTEXITCODE
       - name: Preserve source-bound trusted gate evidence
         if: always()
