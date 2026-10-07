@@ -38,8 +38,12 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   a validated yield toolbar (1–100), and grouped ingredient/instruction reading
   columns that stack on mobile. Alternatives remain on their own line.
 - Section links move keyboard focus without adding history entries; Notes
-  expands when selected. Existing editor, planning, sharing and deletion dialogs
-  restore focus to their initiating detail control, including after discard.
+  expands when selected. The active location follows scrolling below the sticky
+  bar, including short final sections at the page bottom. In desktop columns
+  with aligned headings, the chosen column stays active while it is being read.
+  Existing editor, planning, sharing and deletion dialogs restore focus to
+  their initiating detail control, including after discard. Successful editor
+  saves return focus to the current Edit button after detail content remounts.
 - Missing or broken photos leave the cooking content available. Photo links
   expose the original image; printing includes selected yield and notes.
 - The recipe image storage boundary is now explicit:

@@ -1,6 +1,6 @@
 "use client"
 
-import { type MouseEvent, useMemo, useRef, useState } from "react"
+import { type MouseEvent, type Ref, useEffect, useMemo, useRef, useState } from "react"
 import "./recipe-detail.css"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -83,6 +83,7 @@ interface RecipeDetailPageProps {
 
 interface RecipeDetailContentProps {
   recipe: Recipe
+  editButtonRef?: Ref<HTMLButtonElement>
   returnLabel?: string
   lastMade?: string | null
   timesMade?: number
@@ -168,6 +169,7 @@ function RecipeDetailLoading() {
 
 export function RecipeDetailContent({
   recipe,
+  editButtonRef,
   returnLabel = RECIPE_RETURN_LABELS.recipes,
   lastMade,
   timesMade = 0,
@@ -188,6 +190,66 @@ export function RecipeDetailContent({
   const [servings, setServings] = useState(scalingBasis)
   const [scaleError, setScaleError] = useState<string | null>(null)
   const [activeSection, setActiveSection] = useState("ingredients")
+  const articleRef = useRef<HTMLElement>(null)
+  const sectionNavRef = useRef<HTMLElement>(null)
+  const jumpScrollPositionRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    let frame = 0
+    const updateSection = () => {
+      frame = 0
+      // A short section can be visible without reaching the reading line.
+      // Keep its explicit jump indication until the reader actually scrolls.
+      if (jumpScrollPositionRef.current !== null) {
+        if (Math.abs(window.scrollY - jumpScrollPositionRef.current) < 1) return
+        jumpScrollPositionRef.current = null
+      }
+      const nav = sectionNavRef.current
+      const article = articleRef.current
+      if (!nav || !article) return
+      const readingLine = nav.getBoundingClientRect().bottom + 16
+      const sections = ["ingredients", "instructions", "notes"]
+        .flatMap((id) => {
+          const element = article.querySelector<HTMLElement>(`#${id}`)
+          return element ? [{ id, rect: element.getBoundingClientRect() }] : []
+        })
+      const reached = sections.filter(({ rect }) => rect.top <= readingLine)
+      const last = sections.at(-1)
+      const atBottom = window.scrollY > 0 &&
+        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+
+      setActiveSection((current) => {
+        // Short final sections may never reach the sticky reading line.
+        if (atBottom && last && last.rect.top < window.innerHeight) return last.id
+        if (!reached.length) return "ingredients"
+        const nearestTop = Math.max(...reached.map(({ rect }) => rect.top))
+        const nearest = reached.filter(({ rect }) => Math.abs(rect.top - nearestTop) < 2)
+        // Desktop columns share a heading row; keep the chosen column while
+        // it still contains the reading line, then follow the remaining one.
+        const reading = nearest.filter(({ rect }) => rect.bottom > readingLine)
+        const candidates = reading.length ? reading : nearest
+        return candidates.find(({ id }) => id === current)?.id ?? candidates[0].id
+      })
+    }
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateSection)
+    }
+    const handleResize = () => {
+      jumpScrollPositionRef.current = null
+      scheduleUpdate()
+    }
+    window.addEventListener("scroll", scheduleUpdate, { passive: true })
+    window.addEventListener("resize", handleResize)
+    articleRef.current?.addEventListener("toggle", scheduleUpdate, true)
+    const article = articleRef.current
+    scheduleUpdate()
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("scroll", scheduleUpdate)
+      window.removeEventListener("resize", handleResize)
+      article?.removeEventListener("toggle", scheduleUpdate, true)
+    }
+  }, [])
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
   const isOriginalYield = servings === scalingBasis
   const authoredYield = getAuthoredYieldText(
@@ -229,6 +291,7 @@ export function RecipeDetailContent({
     }
 
     section?.focus({ preventScroll: true })
+    jumpScrollPositionRef.current = window.scrollY
 
     window.history.replaceState(
       window.history.state,
@@ -254,6 +317,7 @@ export function RecipeDetailContent({
 
   return (
     <article
+      ref={articleRef}
       className="recipe-detail-page recipe-reading"
       data-testid="recipe-detail-page"
     >
@@ -431,6 +495,7 @@ export function RecipeDetailContent({
             onEdit()
           }}
           aria-label="Edit Recipe"
+          ref={editButtonRef}
         >
           <Pencil className="h-4 w-4" />
           Edit
@@ -453,6 +518,7 @@ export function RecipeDetailContent({
       </div>
 
       <nav
+        ref={sectionNavRef}
         className="detail-section-nav recipe-detail-print-hidden"
         aria-label="Recipe sections"
       >
@@ -654,13 +720,16 @@ export function RecipeDetailPage({
   const [isAddToPlanOpen, setIsAddToPlanOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const dialogReturnFocusRef = useRef<HTMLElement | null>(null)
+  const editButtonRef = useRef<HTMLButtonElement>(null)
   const rememberDialogFocus = () => {
     dialogReturnFocusRef.current = document.activeElement as HTMLElement | null
   }
   const restoreDialogFocus = () => {
     window.setTimeout(() => {
       const target = dialogReturnFocusRef.current
-      if (target?.isConnected) target.focus({ preventScroll: true })
+      const currentTarget = target?.isConnected ? target :
+        target?.getAttribute("aria-label") === "Edit Recipe" ? editButtonRef.current : null
+      currentTarget?.focus({ preventScroll: true })
     }, 0)
   }
   const returnLabel = RECIPE_RETURN_LABELS[returnSource ?? "recipes"]
@@ -790,6 +859,7 @@ export function RecipeDetailPage({
         ) : null}
         {recipeQuery.data ? (
           <RecipeDetailContent
+            editButtonRef={editButtonRef}
             key={`${recipeQuery.data.id}:${recipeQuery.data.updated_at ?? ""}`}
             recipe={recipeQuery.data}
             returnLabel={returnLabel}

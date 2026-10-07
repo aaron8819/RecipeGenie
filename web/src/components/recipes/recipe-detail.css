@@ -8,6 +8,9 @@
 .recipe-reading button {
   min-height: 44px;
 }
+.recipe-reading .detail-return button[aria-pressed] {
+  min-width: 44px;
+}
 .recipe-reading button svg {
   flex-shrink: 0;
 }
@@ -170,6 +173,7 @@
 }
 .recipe-reading .detail-section-nav a {
   min-height: 48px;
+  min-width: 44px;
   display: flex;
   align-items: center;
   gap: 6px;

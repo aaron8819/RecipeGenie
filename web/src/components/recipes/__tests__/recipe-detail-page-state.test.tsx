@@ -253,6 +253,25 @@ describe("RecipeDetailPage states", () => {
     })
   })
 
+  it("returns focus to the replacement Edit trigger after a saved recipe remount", async () => {
+    recipeResult = {
+      data: makeRecipe(), error: null, isError: false,
+      isLoading: false, isSuccess: true,
+    }
+    const view = render(<RecipeDetailPage recipeId="recipe-1" />)
+    const original = screen.getByRole("button", { name: "Edit Recipe" })
+    fireEvent.click(original)
+    recipeResult.data = { ...makeRecipe(), updated_at: "2026-10-07T12:00:00Z" }
+    view.rerender(<RecipeDetailPage recipeId="recipe-1" />)
+    expect(original.isConnected).toBe(false)
+    const close = screen.getByRole("button", { name: "Close editor" })
+    close.focus()
+    fireEvent.click(close)
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: "Edit Recipe" })
+    ).toHaveFocus())
+  })
+
   it.each([
     ["recipes", "Back to recipes"],
     ["planner", "Back to planner"],
