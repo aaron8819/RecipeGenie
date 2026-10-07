@@ -29,13 +29,18 @@ const addRecipeToPlanMutate = vi.fn()
 const routerPush = vi.fn()
 
 vi.mock('@/components/shopping/shopping-selection-dialog', () => ({
-  ShoppingSelectionDialog: ({ open, recipes, onSubmit }: {
+  ShoppingSelectionDialog: ({ open, recipes, onSubmit, onOpenChange, onCloseAutoFocus }: {
     open: boolean; recipes: Recipe[];
+    onOpenChange: (open: boolean) => void;
+    onCloseAutoFocus: (event: Event) => void;
     onSubmit: (selections: import('@/lib/shopping-selection').ShoppingRecipeSelection[]) => Promise<void>
-  }) => open ? <button onClick={() => void onSubmit(recipes.map(recipe => ({
+  }) => open ? <><button onClick={() => void onSubmit(recipes.map(recipe => ({
     recipeId: recipe.id, selectedYield: recipe.servings,
     ingredientOrdinals: [0], contentSnapshot: 'fixture',
-  })))}>Add selected ingredients</button> : null,
+  })))}>Add selected ingredients</button><button onClick={() => {
+    onOpenChange(false)
+    onCloseAutoFocus(new Event('close', { cancelable: true }))
+  }}>Dismiss Shopping</button></> : null,
 }))
 
 vi.mock('@/hooks/use-replace-planned-recipe', () => ({
@@ -51,6 +56,10 @@ vi.mock("next/navigation", () => ({
 }))
 
 let currentWeeklyPlan: WeeklyPlan
+let planReadFailed = false
+let planReadLoading = false
+let planReadHasData = true
+const retryPlanRead = vi.fn()
 let currentUserConfig: UserConfig
 let currentRecipes: Recipe[]
 let currentWeeklyPlanRecipes: Recipe[]
@@ -112,8 +121,11 @@ vi.mock("@/hooks/use-planner", () => ({
     requestedWeekDate = weekDate
     requestedWeekDates.push(weekDate)
     return {
-    data: currentWeeklyPlan,
+    data: planReadHasData ? currentWeeklyPlan : undefined,
     isLoading: false,
+    isError: planReadFailed,
+    isPending: planReadLoading,
+    refetch: retryPlanRead,
     }
   },
   useWeeklyPlanRecipes: () => ({
@@ -440,6 +452,9 @@ function setDesktopMatchMedia(matches: boolean) {
 describe("MealPlanner interactions", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    planReadFailed = false
+    planReadLoading = false
+    planReadHasData = true
     setDesktopMatchMedia(true)
 
     currentWeeklyPlan = weeklyPlanFixture({
@@ -455,6 +470,63 @@ describe("MealPlanner interactions", () => {
     requestedWeekDate = ""
     requestedWeekDates = []
     window.sessionStorage.clear()
+  })
+
+  it.each([true, false])('hides unavailable meals and replacement controls after a failed read (cached: %s), and retries without writes', (hasData) => {
+    planReadFailed = true
+    planReadHasData = hasData
+    const { rerender } = render(<MealPlanner />)
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load this week's plan")
+    expect(screen.queryByText('Planner Recipe')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Generate Plan' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add meal' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(retryPlanRead).toHaveBeenCalledTimes(1)
+    planReadFailed = false
+    planReadHasData = true
+    rerender(<MealPlanner />)
+    expect(screen.getByText('Planner Recipe')).toBeInTheDocument()
+    expect(generatePlanMutateAsync).not.toHaveBeenCalled()
+    expect(addRecipeToPlanMutate).not.toHaveBeenCalled()
+  })
+
+  it('does not present a pending read as a successfully empty week', () => {
+    planReadLoading = true
+    render(<MealPlanner />)
+    expect(screen.getByRole('status')).toHaveTextContent("Loading this week's plan")
+    expect(screen.queryByRole('button', { name: 'Add meal' })).not.toBeInTheDocument()
+  })
+
+  it('offers plan actions for a successfully loaded empty week', () => {
+    currentWeeklyPlan = weeklyPlanFixture({ recipe_ids: [] })
+    currentWeeklyPlanRecipes = []
+    render(<MealPlanner />)
+    expect(screen.getByRole('button', { name: 'Add meal' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Generate Plan' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+  })
+
+  it.each(['Add Planner Recipe ingredients to Shopping', 'Add planned meal ingredients to Shopping'])(
+    'returns focus to the actual pointer trigger: %s', (name) => {
+      render(<MealPlanner />)
+      const previous = screen.getByRole('button', { name: 'Next week' })
+      previous.focus()
+      const trigger = screen.getByRole('button', { name })
+      // fireEvent, like WebKit pointer opening, does not focus the clicked button.
+      fireEvent.click(trigger)
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss Shopping' }))
+      expect(trigger).toHaveFocus()
+    },
+  )
+
+  it.each(['removed', 'disabled'])('uses a safe fallback when the Shopping trigger is %s', (state) => {
+    render(<MealPlanner />)
+    const trigger = screen.getByRole('button', { name: 'Add Planner Recipe ingredients to Shopping' })
+    fireEvent.click(trigger)
+    if (state === 'removed') trigger.remove()
+    else trigger.setAttribute('disabled', '')
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss Shopping' }))
+    expect(screen.getByLabelText('Meal planner')).toHaveFocus()
   })
 
   it("keeps regenerate confirmation in context on failure and closes it only after a confirmed retry success", async () => {

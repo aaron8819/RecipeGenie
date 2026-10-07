@@ -347,7 +347,7 @@ function DayColumn({
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
   onMarkMade: (recipeId: string, isMade: boolean) => void
-  onAddToCart: (recipeId: string) => void
+  onAddToCart: (recipeId: string, trigger: HTMLButtonElement) => void
   onRemoveRecipe: (recipe: Recipe) => void
   onMoveToDay: (recipeId: string, dayIndex: number) => void
   onAddMeal: (dayIndex?: number) => void
@@ -397,7 +397,7 @@ function DayColumn({
                   onView={() => onViewRecipe(mainRecipe)}
                   onSwap={() => onSwapRecipe(mainRecipe)}
                   onMarkMade={() => onMarkMade(mainRecipe.id, isRecipeMade(mainRecipe))}
-                  onAddToCart={() => onAddToCart(mainRecipe.id)}
+                  onAddToCart={(trigger) => onAddToCart(mainRecipe.id, trigger)}
                   onRemove={() => onRemoveRecipe(mainRecipe)}
                   onMoveToDay={(dayIdx) => onMoveToDay(mainRecipe.id, dayIdx)}
                   weekDays={weekDays}
@@ -426,7 +426,7 @@ function DayColumn({
                     onView={() => onViewRecipe(r)}
                     onSwap={() => onSwapRecipe(r)}
                     onMarkMade={() => onMarkMade(r.id, isRecipeMade(r))}
-                    onAddToCart={() => onAddToCart(r.id)}
+                    onAddToCart={(trigger) => onAddToCart(r.id, trigger)}
                     onRemove={() => onRemoveRecipe(r)}
                     onMoveToDay={(dayIdx) => onMoveToDay(r.id, dayIdx)}
                     weekDays={weekDays}
@@ -487,7 +487,7 @@ function MobileDayColumn({
   onViewRecipe: (recipe: Recipe) => void
   onSwapRecipe: (recipe: Recipe) => void
   onMarkMade: (recipeId: string, isMade: boolean) => void
-  onAddToCart: (recipeId: string) => void
+  onAddToCart: (recipeId: string, trigger: HTMLButtonElement) => void
   onRemoveRecipe: (recipe: Recipe) => void
   onMoveToDay: (recipeId: string, dayIndex: number) => void
   onAddMeal: (dayIndex?: number) => void
@@ -533,7 +533,7 @@ function MobileDayColumn({
                   onView={() => onViewRecipe(recipe)}
                   onSwap={() => onSwapRecipe(recipe)}
                   onMarkMade={() => onMarkMade(recipe.id, isRecipeMade(recipe))}
-                  onAddToCart={() => onAddToCart(recipe.id)}
+                  onAddToCart={(trigger) => onAddToCart(recipe.id, trigger)}
                   onRemove={() => onRemoveRecipe(recipe)}
                   onMoveToDay={(dayIdx) => onMoveToDay(recipe.id, dayIdx)}
                   weekDays={weekDays}
@@ -591,7 +591,7 @@ function StitchRecipeCard({
   onView: () => void
   onSwap: () => void
   onMarkMade: () => void
-  onAddToCart: () => void
+  onAddToCart: (trigger: HTMLButtonElement) => void
   onRemove: () => void
   onMoveToDay: (dayIndex: number) => void
   weekDays: Array<{ date: Date; dayName: string; dayNumber: number }>
@@ -628,7 +628,7 @@ function StitchRecipeCard({
           <button type="button" onClick={onSwap} disabled={isSwapping} title="Swap recipe" aria-label={"Swap " + recipe.name}>
             {isSwapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
           </button>
-          <button type="button" onClick={onAddToCart} disabled={isAddingToCart} title={isInShopping ? "Add recipe ingredients again to merge any updates in Shopping" : "Add recipe ingredients to Shopping"} aria-label={"Add " + recipe.name + " ingredients to Shopping"}>
+          <button type="button" onClick={(event) => onAddToCart(event.currentTarget)} disabled={isAddingToCart} title={isInShopping ? "Add recipe ingredients again to merge any updates in Shopping" : "Add recipe ingredients to Shopping"} aria-label={"Add " + recipe.name + " ingredients to Shopping"}>
             {isAddingToCart ? <Loader2 className="h-4 w-4 animate-spin" /> : isJustAddedToCart ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
           </button>
         </>}
@@ -680,9 +680,9 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   )
   const dialogTrigger = useRef<HTMLElement | null>(null)
   const plannerFocusFallback = useRef<HTMLDivElement>(null)
-  function rememberDialogTrigger() {
-    dialogTrigger.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement : null
+  function rememberDialogTrigger(trigger?: HTMLElement) {
+    dialogTrigger.current = trigger ?? (document.activeElement instanceof HTMLElement
+      ? document.activeElement : null)
   }
   function restoreDialogFocus(event: Event) {
     event.preventDefault()
@@ -718,7 +718,14 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
 
   const { data: config } = useUserConfig()
   const updateConfig = useUpdateUserConfig()
-  const { data: weeklyPlan, isLoading: planLoading } = useWeeklyPlan(currentWeekDate)
+  const {
+    data: weeklyPlan,
+    isLoading: planLoading,
+    isPending: planPending,
+    isError: planReadFailed,
+    isFetching: planFetching,
+    refetch: retryPlanRead,
+  } = useWeeklyPlan(currentWeekDate)
   const { selections: shoppingSelections } = useShoppingList()
 
   const clearPendingAssignmentOverlay = useCallback((weekDate: string) => {
@@ -879,13 +886,13 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     }
   }
 
-  const handleGenerateShoppingList = () => {
+  const handleGenerateShoppingList = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (!weeklyPlan?.recipe_ids || weeklyPlan.recipe_ids.length === 0) return
     if (!recipes || weeklyPlan.recipe_ids.some(id => !recipes.some(recipe => recipe.id === id))) {
       undoToast.show({ message: 'Recipes are still loading. Try again.', duration: 4000 })
       return
     }
-    rememberDialogTrigger()
+    rememberDialogTrigger(event.currentTarget)
     setShoppingRequest({ ids: weeklyPlan.recipe_ids, weekly: true })
   }
 
@@ -1042,8 +1049,8 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     )
   }, [addRecipeToPlan, currentWeekDate, recipeDayAssignments, removeFromPlan, removingRecipeId, undoToast])
 
-  const handleAddRecipeToCart = (recipeId: string) => {
-    rememberDialogTrigger()
+  const handleAddRecipeToCart = (recipeId: string, trigger: HTMLButtonElement) => {
+    rememberDialogTrigger(trigger)
     setShoppingRequest({ ids: [recipeId], weekly: false })
   }
 
@@ -1225,6 +1232,28 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     plannedRecipesInShoppingCount,
     plannedRecipesRemainingForShopping,
   ])
+
+  // A failed refetch can leave cached data. Hide it and all plan actions until
+  // recovery rather than treating unavailable state as an empty or current week.
+  if (planReadFailed || planPending || planLoading) {
+    return (
+      <div className="planner-layout space-y-4 pb-6" ref={plannerFocusFallback} tabIndex={-1} aria-label="Meal planner">
+        <h1 className="font-display text-3xl font-bold text-primary">Planner</h1>
+        {planReadFailed ? (
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3">
+            <p role="alert" className="text-sm text-destructive">
+              Couldn't load this week's plan. Meals and plan actions are unavailable until it loads successfully.
+            </p>
+            <Button type="button" variant="outline" className="mt-3 min-h-11" disabled={planFetching} onClick={() => void retryPlanRead()}>
+              {planFetching ? 'Retrying…' : 'Retry'}
+            </Button>
+          </div>
+        ) : (
+          <p role="status" className="text-muted-foreground text-center py-8">Loading this week's plan...</p>
+        )}
+      </div>
+    )
+  }
 
   const plannerContent = (
     <div className="planner-layout space-y-4 pb-6" ref={plannerFocusFallback} tabIndex={-1} aria-label="Meal planner">
