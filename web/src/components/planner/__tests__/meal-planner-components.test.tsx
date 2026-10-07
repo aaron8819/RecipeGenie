@@ -54,12 +54,9 @@ describe("PlannerSectionShell", () => {
 })
 
 describe("PlannerDesktopWeekShell", () => {
-  it("renders child day content and forwards week navigation callbacks", () => {
-    const onPrevious = vi.fn()
-    const onNext = vi.fn()
-
+  it("renders day content without duplicating the header navigation", () => {
     render(
-      <PlannerDesktopWeekShell onPrevious={onPrevious} onNext={onNext}>
+      <PlannerDesktopWeekShell>
         <div>Sunday column</div>
         <div>Monday column</div>
       </PlannerDesktopWeekShell>
@@ -68,11 +65,8 @@ describe("PlannerDesktopWeekShell", () => {
     expect(screen.getByText("Sunday column")).toBeInTheDocument()
     expect(screen.getByText("Monday column")).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole("button", { name: "Previous week" }))
-    fireEvent.click(screen.getByRole("button", { name: "Next week" }))
-
-    expect(onPrevious).toHaveBeenCalledTimes(1)
-    expect(onNext).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole("button", { name: "Previous week" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Next week" })).not.toBeInTheDocument()
   })
 })
 

@@ -1,5 +1,5 @@
 import React, { type HTMLAttributes, type ReactNode } from "react"
-import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react"
+import { CalendarDays, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type PlannerDaySectionProps = {
@@ -64,35 +64,13 @@ export function PlannerSectionShell({
 
 type PlannerDesktopWeekShellProps = {
   children: ReactNode
-  onPrevious: () => void
-  onNext: () => void
 }
 
 export function PlannerDesktopWeekShell({
   children,
-  onPrevious,
-  onNext,
 }: PlannerDesktopWeekShellProps) {
   return (
-    <div className="flex items-start gap-2">
-      <button
-        type="button"
-        onClick={onPrevious}
-        className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
-        aria-label="Previous week"
-      >
-        <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
-      </button>
-      <div className="flex-1 min-w-0 grid grid-cols-7 gap-4">{children}</div>
-      <button
-        type="button"
-        onClick={onNext}
-        className="shrink-0 p-2 rounded-lg bg-stone-50 dark:bg-zinc-800 border border-stone-200 dark:border-zinc-700 hover:bg-stone-100 dark:hover:bg-zinc-700 transition-colors mt-1"
-        aria-label="Next week"
-      >
-        <ChevronRight className="h-5 w-5 text-slate-600 dark:text-zinc-300" />
-      </button>
-    </div>
+    <div className="planner-agenda">{children}</div>
   )
 }
 
@@ -181,8 +159,8 @@ export function PlannerActionBar({ leading, children }: PlannerActionBarProps) {
     <div className="space-y-3">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         {leading}
-        <div className="lg:ml-auto">
-          <div className="flex items-center gap-2 rounded-2xl border border-stone-200/80 bg-stone-50/80 p-1.5 shadow-sm lg:bg-transparent lg:p-0 lg:shadow-none">
+        <div>
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
             {children}
           </div>
         </div>
@@ -219,22 +197,16 @@ type PlannerDayAddButtonProps = {
 export function PlannerDayAddButton({
   onClick,
   ariaLabel,
-  desktop = false,
 }: PlannerDayAddButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={ariaLabel}
-      className={cn(
-        "w-full border border-dashed transition-colors flex items-center justify-center gap-2 text-slate-500 hover:text-primary dark:hover:text-emerald-400 hover:border-primary dark:hover:border-emerald-500",
-        desktop
-          ? "rounded-xl border-slate-300 dark:border-slate-700 px-3 py-2 text-[11px] font-bold uppercase tracking-wide"
-          : "rounded-2xl border-slate-200 dark:border-slate-800 px-4 py-3 text-sm font-semibold"
-      )}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-primary hover:bg-primary/10"
     >
-      <Plus className={cn("shrink-0", desktop ? "h-4 w-4" : "h-4 w-4")} />
-      <span>Add Meal</span>
+      <Plus className="h-5 w-5" aria-hidden />
+      <span className="sr-only">Add Meal</span>
     </button>
   )
 }
