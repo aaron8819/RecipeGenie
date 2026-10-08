@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { finishQualification, SetupFailure, setupErrorCode } from './qualification-outcome.ts';
+import { finishQualification, SetupFailure, setupErrorCode, qualificationResult } from './qualification-outcome.ts';
 
 test('preserves the exact primary error despite teardown failure', () => {
   const primary = new Error('synthetic seed failure');
@@ -36,4 +36,11 @@ test('omits missing, malformed and credential-like error values', () => {
   for (const error of [null, undefined, 'synthetic-password', {}, { message: '23514' }]) {
     assert.equal(setupErrorCode(error), 'unknown');
   }
+});
+
+test('focused completion never represents full acceptance', () => {
+  assert.equal(qualificationResult(true, true, true), 'FOCUSED_PASS');
+  assert.equal(qualificationResult(true, false, true), 'FAIL');
+  assert.equal(qualificationResult(true, true, false), 'FAIL');
+  assert.equal(qualificationResult(false, true, true), 'PASS');
 });

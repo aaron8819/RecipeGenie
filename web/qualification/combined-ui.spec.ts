@@ -10,10 +10,12 @@ import type { Database } from '../src/types/database';
 import type { ShoppingCommand } from '../src/lib/shopping-command';
 import { readShoppingCompatibility } from '../src/lib/shopping-compatibility';
 import { parseQuantityV1 } from '../src/lib/recipe-quantity';
-import { finishQualification, SetupFailure, type Failure } from './qualification-outcome';
+import { finishQualification, qualificationResult, SetupFailure, type Failure } from './qualification-outcome';
 
 config({ path: '.env.local', quiet: true });
 const backend = 'http://127.0.0.1:54321';
+const focused = process.env.COMBINED_UI_FOCUS === 'selector-read-recovery';
+if (process.env.COMBINED_UI_FOCUS && !focused) throw new Error('Unknown qualification scope');
 if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted' ||
   process.env.NEXT_PUBLIC_SUPABASE_URL !== backend) {
   throw new Error('Combined fixtures require ephemeral hosted Actions and loopback Supabase');
@@ -186,6 +188,14 @@ for (const viewport of [
     const directory = path.resolve('..', '.codex-artifacts', 'combined-ui');
     const artifact = `${info.project.name}-${viewport.width}`;
     let passed = false;
+    const readRecovery: {
+      interceptions: number; alertPresent: boolean | null; retryEnabled: boolean | null;
+      restoredYield: number | null; selectedIngredientCount: number | null;
+      dialogPresent: boolean | null; triggerFocused: boolean | null;
+    } = {
+      interceptions: 0, alertPresent: null, retryEnabled: null, restoredYield: null,
+      selectedIngredientCount: null, dialogPresent: null, triggerFocused: null,
+    };
     let witnessStatus = 'snapshot-not-acquired';
     let primaryFailure: Failure | undefined;
     let teardownFailure: Failure | undefined;
@@ -340,7 +350,8 @@ for (const viewport of [
       expect(document.manualItems[0]).toMatchObject(manual);
       stage = 'browser acceptance';
 
-      await test.step('cards: invalid admission retains draft; retry writes real DB', async () => {
+      await test.step(focused ? 'prepare saved selector contribution' :
+        'cards: invalid admission retains draft; retry writes real DB', async () => {
         await page.goto('/recipes');
         await cardMenu(main, 'Add to Shopping List');
         await expect(yieldControl()).toHaveValue('4');
@@ -351,15 +362,17 @@ for (const viewport of [
             { name: new RegExp(`ingredient ${ordinal}$`) }).check();
         }
         const before = await readShopping();
-        await page.route('**/api/shopping', route => route.fulfill({
-          status: 400,
-          contentType: 'application/json', body: '{"status":"InvalidInput"}'
-        }));
-        await submit().click();
-        await expect(shoppingDialog().getByRole('alert')).toBeVisible();
-        await assertSaved();
-        expect(await readShopping()).toEqual(before);
-        await page.unroute('**/api/shopping');
+        if (!focused) {
+          await page.route('**/api/shopping', route => route.fulfill({
+            status: 400,
+            contentType: 'application/json', body: '{"status":"InvalidInput"}'
+          }));
+          await submit().click();
+          await expect(shoppingDialog().getByRole('alert')).toBeVisible();
+          await assertSaved();
+          expect(await readShopping()).toEqual(before);
+          await page.unroute('**/api/shopping');
+        }
         await submit().click();
         await expect(shoppingDialog()).toHaveCount(0);
         await expect.poll(async () => (await readShopping()).document
@@ -370,25 +383,62 @@ for (const viewport of [
           .map(item => item.ordinal)).toEqual([0, 2]);
         expect(saved.manualItems).toEqual(document.manualItems);
       });
-      checks.push('cards-selection-failure-retry');
+      checks.push(focused ? 'saved-selection-prerequisite' : 'cards-selection-failure-retry');
 
       await test.step('selector read error is retryable without replacing saved data', async () => {
-        const before = await readShopping();
-        await page.route('**/rest/v1/shopping_list*', route => route.fulfill({
-          status: 503,
-          contentType: 'application/json', body: '{"message":"Qualification read unavailable"}'
-        }));
-        await page.reload();
-        const trigger = await cardMenu(main, 'Add to Shopping List');
-        await expect(shoppingDialog().getByRole('alert')).toContainText(
-          'Could not load your shopping selections');
-        await page.unroute('**/rest/v1/shopping_list*');
-        await shoppingDialog().getByRole('button', { name: 'Retry', exact: true }).click();
-        await assertSaved();
-        await cancelFocus(trigger);
-        expect(await readShopping()).toEqual(before);
+        const observe = async () => {
+          readRecovery.dialogPresent = await shoppingDialog().count() === 1;
+          readRecovery.alertPresent = await shoppingDialog().getByRole('alert').count() > 0;
+          const retry = shoppingDialog().getByRole('button', { name: 'Retry', exact: true });
+          readRecovery.retryEnabled = await retry.count() === 1 ? await retry.isEnabled() : null;
+          if (await yieldControl().count() === 1) {
+            const value = await yieldControl().inputValue();
+            readRecovery.restoredYield = /^[0-9]{1,4}$/.test(value) ? Number(value) : null;
+          }
+          const ingredients = await shoppingDialog().getByRole('checkbox', {
+            name: /ingredient [1-4]$/,
+          }).all();
+          if (ingredients.length) {
+            const selected = await Promise.all(ingredients.map(control => control.isChecked()));
+            readRecovery.selectedIngredientCount = selected.filter(Boolean).length;
+          }
+        };
+        try {
+          stage = 'read-recovery: baseline read';
+          const before = await readShopping();
+          stage = 'read-recovery: intercept and reload';
+          await page.route('**/rest/v1/shopping_list*', route => {
+            readRecovery.interceptions++;
+            return route.fulfill({ status: 503, contentType: 'application/json',
+              body: '{"message":"Qualification read unavailable"}' });
+          });
+          await page.reload();
+          stage = 'read-recovery: reopen selector';
+          const trigger = await cardMenu(main, 'Add to Shopping List');
+          stage = 'read-recovery: expect read-error alert';
+          await expect(shoppingDialog().getByRole('alert')).toContainText(
+            'Could not load your shopping selections');
+          await observe();
+          stage = 'read-recovery: remove fault and click Retry';
+          await page.unroute('**/rest/v1/shopping_list*');
+          await shoppingDialog().getByRole('button', { name: 'Retry', exact: true }).click();
+          stage = 'read-recovery: expect saved yield and ingredient ordinals';
+          await assertSaved();
+          await observe();
+          stage = 'read-recovery: expect bounds, cancel and trigger focus';
+          await cancelFocus(trigger);
+          readRecovery.triggerFocused = await trigger.evaluate(node => node === globalThis.document.activeElement);
+          stage = 'read-recovery: expect unchanged persisted state';
+          expect(await readShopping()).toEqual(before);
+          stage = 'read-recovery: complete';
+        } finally {
+          // Fixed booleans/counts only. Observation must not replace the original exception.
+          try { await observe(); } catch { /* Retain available safe observations. */ }
+        }
       });
       checks.push('shopping-read-recovery');
+      if (focused) { passed = true; return; }
+      stage = 'browser acceptance';
 
       await test.step('lost real execute response reuses admission and applies once', async () => {
         await cardMenu(main, 'Add to Shopping List');
@@ -665,8 +715,12 @@ for (const viewport of [
         writeFileSync(path.join(directory, `${artifact}.json`), JSON.stringify({
           schema: 2, sha: process.env.COMBINED_UI_EXPECTED_SHA, runId: process.env.GITHUB_RUN_ID,
           attempt: process.env.GITHUB_RUN_ATTEMPT, engine: info.project.name, viewport, checks,
-          result: passed && witnessStatus === 'unchanged' && cleanupComplete && owners.length === 2
-            ? 'PASS' : 'FAIL',
+          scope: focused ? 'selector-read-recovery' : 'full',
+          fullAcceptance: !focused && passed && witnessStatus === 'unchanged' &&
+            cleanupComplete && owners.length === 2,
+          result: qualificationResult(focused, passed, witnessStatus === 'unchanged' &&
+            cleanupComplete && owners.length === 2),
+          readRecovery,
           stage, primaryFailure: primaryFailure !== undefined,
           setupError: primaryFailure?.error instanceof SetupFailure
             ? { operation: primaryFailure.error.operation, code: primaryFailure.error.code }
