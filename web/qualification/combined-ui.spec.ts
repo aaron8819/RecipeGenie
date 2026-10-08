@@ -10,7 +10,7 @@ import { createEmptyShoppingDocument } from '../src/lib/shopping-document';
 import { initializeShoppingDocument } from '../src/lib/shopping-initialization';
 import { readShoppingCompatibility } from '../src/lib/shopping-compatibility';
 import { parseQuantityV1 } from '../src/lib/recipe-quantity';
-import { finishQualification, type Failure } from './qualification-outcome';
+import { finishQualification, SetupFailure, type Failure } from './qualification-outcome';
 
 config({ path: '.env.local', quiet: true });
 const backend = 'http://127.0.0.1:54321';
@@ -48,7 +48,7 @@ const requiredChecks = [
 ];
 
 function requireResult(error: unknown, data: unknown, operation: string): void {
-  if (error || data === null) throw new Error(`Disposable fixture operation failed: ${operation}`);
+  if (error || data === null) throw new SetupFailure(operation, error);
 }
 
 function privateRows(id: string): string {
@@ -642,6 +642,9 @@ for (const viewport of [
           result: passed && witnessStatus === 'unchanged' && cleanupComplete && owners.length === 2
             ? 'PASS' : 'FAIL',
           stage, primaryFailure: primaryFailure !== undefined,
+          setupError: primaryFailure?.error instanceof SetupFailure
+            ? { operation: primaryFailure.error.operation, code: primaryFailure.error.code }
+            : { operation: 'unknown', code: 'unknown' },
           witnessStatus, cleanupComplete, owners: cleanupResults,
           limitation: 'Injected browser faults; WebKit HTTP CSP accommodation; no sharing/import',
         }, null, 2));
