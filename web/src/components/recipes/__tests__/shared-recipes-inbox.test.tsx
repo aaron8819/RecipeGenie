@@ -1,7 +1,12 @@
 import React from "react"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { SharedRecipesInbox } from "../shared-recipes-inbox"
+
+const incomingHook = vi.fn()
+const sentHook = vi.fn()
+const acceptMutate = vi.fn()
+const declineMutate = vi.fn()
 
 const incomingState = {
   isLoading: false,
@@ -30,14 +35,20 @@ const sentState = {
 }
 
 vi.mock("@/hooks/use-recipe-shares", () => ({
-  useIncomingRecipeShares: () => incomingState,
-  useSentRecipeShares: () => sentState,
+  useIncomingRecipeShares: (enabled: boolean) => {
+    incomingHook(enabled)
+    return incomingState
+  },
+  useSentRecipeShares: (enabled: boolean) => {
+    sentHook(enabled)
+    return sentState
+  },
   useAcceptRecipeShare: () => ({
-    mutate: vi.fn(),
+    mutate: acceptMutate,
     isPending: false,
   }),
   useDeclineRecipeShare: () => ({
-    mutate: vi.fn(),
+    mutate: declineMutate,
     isPending: false,
   }),
 }))
@@ -55,7 +66,15 @@ vi.mock("@/components/ui/button", () => ({
 }))
 
 vi.mock("@/components/ui/dialog", () => ({
-  Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Dialog: ({ children, onOpenChange }: {
+    children: React.ReactNode
+    onOpenChange: (open: boolean) => void
+  }) => (
+    <div>
+      {children}
+      <button type="button" onClick={() => onOpenChange(false)}>Close inbox</button>
+    </div>
+  ),
   DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
 }))
@@ -69,6 +88,7 @@ vi.mock("@/components/ui/tabs", () => ({
 
 describe("SharedRecipesInbox", () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     incomingState.isLoading = false
     incomingState.error = null
     incomingState.data = []
@@ -77,6 +97,30 @@ describe("SharedRecipesInbox", () => {
     sentState.data = []
   })
 
+  it("passes closed/open state to both query hooks", () => {
+    const { rerender } = render(<SharedRecipesInbox open={false} onOpenChange={vi.fn()} />)
+    expect(incomingHook).toHaveBeenLastCalledWith(false)
+    expect(sentHook).toHaveBeenLastCalledWith(false)
+    rerender(<SharedRecipesInbox open onOpenChange={vi.fn()} />)
+    expect(incomingHook).toHaveBeenLastCalledWith(true)
+    expect(sentHook).toHaveBeenLastCalledWith(true)
+  })
+
+  it("keeps accept, decline and close callbacks intact", () => {
+    incomingState.data = [{
+      id: "share-1", status: "pending", created_at: "2026-10-08T12:00:00Z",
+      sender_email: "sender@example.com", message: null,
+      source_recipe_snapshot: { name: "Pasta" },
+    }]
+    const onOpenChange = vi.fn()
+    render(<SharedRecipesInbox open onOpenChange={onOpenChange} />)
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }))
+    expect(acceptMutate).toHaveBeenCalledWith("share-1")
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }))
+    expect(declineMutate).toHaveBeenCalledWith("share-1")
+    fireEvent.click(screen.getByRole("button", { name: "Close inbox" }))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
   it("uses task-specific loading copy for both inbox tabs", () => {
     incomingState.isLoading = true
     sentState.isLoading = true

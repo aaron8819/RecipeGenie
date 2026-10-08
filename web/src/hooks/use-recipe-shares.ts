@@ -17,7 +17,7 @@ async function readErrorMessage(response: Response): Promise<string> {
   return `Request failed (${response.status})`;
 }
 
-export function useIncomingRecipeShares() {
+export function useIncomingRecipeShares(enabled = true) {
   const { user } = useAuthContext();
 
   return useQuery({
@@ -29,12 +29,12 @@ export function useIncomingRecipeShares() {
       }
       return (await response.json()) as RecipeShare[];
     },
-    enabled: !!user,
+    enabled: !!user && enabled,
     staleTime: 15 * 1000,
   });
 }
 
-export function useSentRecipeShares() {
+export function useSentRecipeShares(enabled = true) {
   const { user } = useAuthContext();
 
   return useQuery({
@@ -46,7 +46,7 @@ export function useSentRecipeShares() {
       }
       return (await response.json()) as RecipeShare[];
     },
-    enabled: !!user,
+    enabled: !!user && enabled,
     staleTime: 15 * 1000,
   });
 }
