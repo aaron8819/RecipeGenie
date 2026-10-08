@@ -149,7 +149,7 @@ async function cleanup(value: Owner, run: string): Promise<boolean> {
 }
 
 async function login(page: Page, value: Owner): Promise<void> {
-  await page.goto('/login');
+  await page.goto('/recipes');
   await page.getByLabel('Email', { exact: true }).fill(value.email);
   await page.getByLabel('Password', { exact: true }).fill(value.password);
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();

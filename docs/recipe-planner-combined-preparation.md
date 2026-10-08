@@ -1,5 +1,10 @@
 # Combined Recipe and Planner preparation checkpoint
 
+> Historical preparation checkpoint. PR #78 merged and released on 2026-10-07.
+> The frozen status and identities below describe that earlier checkpoint,
+> not current qualification or release state.
+> [Release PR #78](https://github.com/aaron8819/RecipeGenie/pull/78).
+
 STATUS: COMPLETE for local preparation only. Qualification pending under the
 Trainer browser-process ownership hold. No combined runtime approval or release.
 

@@ -293,11 +293,12 @@ security regression, conflict, or missing exact-head evidence.
 ## Release status
 
 `rg:doctor` answers whether the local environment is capable.
-`rg:release:status` is the default first check after a merge or deployment, or
+The existing `scripts/rg-verify.ps1 release` launcher is the default first check
+after a merge or deployment, or
 when verifying an expected production release:
 
 ```powershell
-npm run rg:release:status -- `
+& 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 release `
   --repository aaron8819/RecipeGenie `
   --branch main `
   --expected-sha <40-character-sha> `
@@ -305,7 +306,20 @@ npm run rg:release:status -- `
   --expected-project-ref <20-character-project-ref>
 ```
 
-Use `npm run --silent rg:release:status -- --json ...` for deterministic JSON. The equivalent environment inputs are `RG_REPOSITORY`, `RG_BRANCH`, `RG_EXPECTED_GIT_SHA`, `RG_PRODUCTION_URL`, and `RG_EXPECTED_SUPABASE_PROJECT_REF`. The branch may be omitted only when GitHub reports the repository default branch. Add `--historical` only when intentionally checking an expected SHA that is not the selected branch head.
+Add `--json` to the launcher command for deterministic JSON. Run it from the
+repository root; it delegates to the same read-only `rg:release:status` implementation.
+The launcher validates the complete Node/npm distribution and supplies the trusted
+GitHub CLI contract. Use its existing `-NodeDistribution ABSOLUTE_PATH` option when
+that complete distribution is outside a discoverable approved location. Do not
+assemble runtime or CLI environment variables manually. A Node-only directory is
+not a complete distribution. Direct npm invocation remains a diagnostic entry
+point, not the supported release launch boundary.
+
+The equivalent environment inputs are `RG_REPOSITORY`, `RG_BRANCH`,
+`RG_EXPECTED_GIT_SHA`, `RG_PRODUCTION_URL`, and `RG_EXPECTED_SUPABASE_PROJECT_REF`.
+The branch may be omitted only when GitHub reports the repository default branch.
+Add `--historical` only when intentionally checking an expected SHA that is not
+on the selected branch head.
 
 The command performs authenticated, read-only GitHub queries through `gh` and
 one anonymous, credential-free `GET <production-url>/api/version` with a

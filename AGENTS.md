@@ -52,8 +52,9 @@ by the user. The user owns the final risk classification and authorization for
 external writes. Classification is not authorization.
 
 After a merge or deployment, or when checking an expected production release,
-use `npm run rg:release:status` as the first release-consistency check. It
-correlates the expected Git SHA, exact-SHA GitHub checks, `/api/version` build
+use the existing `scripts/rg-verify.ps1 release` launcher as the first
+release-consistency check. It correlates the expected Git SHA, exact-SHA GitHub
+checks, `/api/version` build
 metadata, Supabase project reference, expected migration, and optional
 deployment evidence. Unavailable Vercel CLI or control-plane metadata is
 degraded assurance, not a blocker, when authoritative GitHub checks and
