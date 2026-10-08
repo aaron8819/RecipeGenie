@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { finishQualification, SetupFailure, setupErrorCode } from './qualification-outcome.ts';
+import { boundedFailureDiagnostic, finishQualification, SetupFailure, setupErrorCode } from './qualification-outcome.ts';
 
 test('preserves the exact primary error despite teardown failure', () => {
   const primary = new Error('synthetic seed failure');
@@ -35,5 +35,42 @@ test('omits missing, malformed and credential-like error values', () => {
   }
   for (const error of [null, undefined, 'synthetic-password', {}, { message: '23514' }]) {
     assert.equal(setupErrorCode(error), 'unknown');
+  }
+});
+
+
+test('bounded failure diagnostic keeps only an allowlisted step, coarse type and source', () => {
+  const secret = 'synthetic-TOKEN-cookie-password-page-body-header';
+  for (const [name, expected] of [['TimeoutError', 'timeout'], ['AssertionError', 'assertion']]) {
+    const error = new Error(secret);
+    error.name = name;
+    error.stack = `${secret}\n    at ${secret} (C:\\private-${secret}\\qualification\\combined-ui.spec.ts:590:17)`;
+    error.request = { authorization: secret };
+    const result = boundedFailureDiagnostic(error, 'return week: open recipe detail');
+    assert.deepEqual(result, {
+      step: 'return week: open recipe detail', errorType: expected,
+      source: { file: 'web/qualification/combined-ui.spec.ts', line: 590, column: 17 },
+    });
+    assert.equal(JSON.stringify(result).includes(secret), false);
+  }
+  assert.equal(boundedFailureDiagnostic({ matcherResult: { message: secret } },
+    'Edit menu: select action').errorType, 'assertion');
+});
+
+test('sensitive or malformed diagnostic inputs cannot escape retained fields', () => {
+  const secret = 'synthetic-TOKEN-cookie-password-page-body-header';
+  const candidates = [
+    null, undefined, secret,
+    { name: secret, message: secret, stack: secret, headers: secret },
+    { name: `${secret}TimeoutError`, stack: `combined-ui.spec.ts:590:17 ${secret}` },
+    { stack: `    at private (/qualification/other.spec.ts:590:17)` },
+    { stack: `    at private (/qualification/combined-ui.spec.ts:590:17?token=${secret})` },
+    { stack: `    at private (/qualification/combined-ui.spec.ts:123456:17)` },
+    { get name() { throw new Error(secret); } },
+  ];
+  for (const error of candidates) {
+    const result = boundedFailureDiagnostic(error, secret);
+    assert.deepEqual(result, { step: 'unknown', errorType: 'unknown', source: null });
+    assert.equal(JSON.stringify(result).includes(secret), false);
   }
 });

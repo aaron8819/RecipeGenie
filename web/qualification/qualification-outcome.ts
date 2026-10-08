@@ -28,3 +28,61 @@ export class SetupFailure extends Error {
     this.code = setupErrorCode(original);
   }
 }
+
+const DIAGNOSTIC_STEPS = new Set([
+  'Edit menu: focus trigger',
+  'Edit menu: open with keyboard',
+  'Edit menu: select action',
+  'return week: navigate Planner',
+  'return week: select next week',
+  'return week: open recipe detail',
+  'return week: detail visible',
+  'return week: back to Planner',
+  'return week: returned URL',
+  'return week: reload returned week',
+  'return week: returned meals visible',
+  'return week: read saved plan',
+  'return week: inject failed plan read',
+  'return week: reload failed read',
+  'return week: read error visible',
+  'return week: no Add meal on read failure',
+  'return week: restore plan reads',
+  'return week: retry plan read',
+  'return week: recovered meals visible',
+  'return week: recovered URL',
+  'return week: recovered plan unchanged',
+]);
+
+type FailureDiagnostic = {
+  step: string;
+  errorType: 'timeout' | 'assertion' | 'error' | 'unknown';
+  source: {
+    file: 'web/qualification/combined-ui.spec.ts'; line: number; column: number;
+  } | null;
+};
+
+// Never retain messages, raw stacks, caller paths or matcher/request/page data.
+export function boundedFailureDiagnostic(error: unknown, step: string): FailureDiagnostic {
+  const result: FailureDiagnostic = {
+    step: DIAGNOSTIC_STEPS.has(step) ? step : 'unknown', errorType: 'unknown', source: null,
+  };
+  try {
+    if (!error || typeof error !== 'object') return result;
+    if ('name' in error && error.name === 'TimeoutError') result.errorType = 'timeout';
+    else if (('name' in error && error.name === 'AssertionError') ||
+      ('matcherResult' in error && error.matcherResult !== null &&
+        typeof error.matcherResult === 'object')) result.errorType = 'assertion';
+    else if (error instanceof Error) result.errorType = 'error';
+    if (!('stack' in error) || typeof error.stack !== 'string') return result;
+    // Match only a spec stack frame, not arbitrary locations embedded in messages.
+    const frame = new RegExp(
+      String.raw`^\s*at [^\r\n]*[\\/]qualification[\\/]combined-ui\.spec\.ts:` +
+      String.raw`([1-9]\d{0,3}):([1-9]\d{0,3})\)?[ \t]*$`, 'm',
+    ).exec(error.stack);
+    if (frame) result.source = {
+      file: 'web/qualification/combined-ui.spec.ts',
+      line: Number(frame[1]), column: Number(frame[2]),
+    };
+  } catch { /* Hostile/nonstandard properties cannot prevent the existing failure receipt. */ }
+  return result;
+}
