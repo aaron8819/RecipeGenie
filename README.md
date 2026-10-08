@@ -22,12 +22,15 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15 (App Router), React 18, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS
 - **Backend**: Supabase (PostgreSQL + Row Level Security)
 - **State**: TanStack Query (React Query)
 - **UI**: Radix UI primitives with shadcn/ui styling
 - **Rate limiting**: Upstash Redis (`@upstash/ratelimit`)
 - **HTML parsing**: Cheerio (server-side recipe URL scraping)
+
+For verification and release commands, use the existing
+[developer workflow guide](docs/developer-workflow.md).
 
 ## Quick Start
 
@@ -313,8 +316,7 @@ Ownership is intentionally split:
 
 | File | Authority |
 |------|-----------|
-| `AGENTS.md` | Codex operating policy, authorization boundaries, and required handoff workflow |
-| `CLAUDE.md` | Technical agent quick reference and routing; subordinate to `AGENTS.md` for Codex |
+| `AGENTS.md` | Agent guidance, repository conventions, authorization boundaries, and handoff |
 | `README.md` | Human onboarding, local setup, feature overview, and links to specialist guidance |
 | `docs/project_overview.md` | Current architecture layers and ownership boundaries |
 | `supabase/SCHEMA.md` | Current database schema, active migration chain, compatibility state, and migration runbook |
