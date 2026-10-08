@@ -316,8 +316,7 @@ Ownership is intentionally split:
 
 | File | Authority |
 |------|-----------|
-| `AGENTS.md` | Codex operating policy, authorization boundaries, and required handoff workflow |
-| `CLAUDE.md` | Technical agent quick reference and routing; subordinate to `AGENTS.md` for Codex |
+| `AGENTS.md` | Agent guidance, repository conventions, authorization boundaries, and handoff |
 | `README.md` | Human onboarding, local setup, feature overview, and links to specialist guidance |
 | `docs/project_overview.md` | Current architecture layers and ownership boundaries |
 | `supabase/SCHEMA.md` | Current database schema, active migration chain, compatibility state, and migration runbook |

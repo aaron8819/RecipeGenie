@@ -1,84 +1,98 @@
-# Codex operating policy
+# Recipe Genie agent guidance
 
-This is the authoritative repository policy for Codex. `CLAUDE.md` and the
-documents it routes to provide technical context; `docs/developer-workflow.md`
-documents workflow command usage. When guidance conflicts, this file wins.
+This is the authoritative repository policy for agents. Use the
+[developer workflow guide](docs/developer-workflow.md) for supported runtime,
+verification and release commands; this file owns authorization boundaries.
 
-Recipe Genie is a personal experimentation project. Prefer fast, reversible,
-practical execution and the least ceremony appropriate to actual risk. Preserve
-strict safety for credible data-loss, security, wrong-project,
-irreversible-production, and unknown-state risks. Do not build generalized
-infrastructure for a one-off low-risk problem. When safety remains adequately
-controlled, prefer a documented warning or explicit waiver over an invented
-hard blocker.
+Recipe Genie is a personal experimentation project. Prefer small, reversible
+changes and the least ceremony appropriate to actual risk. Preserve strict
+safety for data loss, security, wrong targets and irreversible production work.
+Do not build a framework for a one-off task. Use documented warnings or explicit
+owner waivers when appropriate; never silently turn failed checks into passes.
 
-## Startup
+## Start with the task
 
-1. Understand the task request and attachments sufficiently to determine what
-   guidance, skills, and local memory apply.
-2. Read the applicable repository policy.
-3. Read applicable `SKILL.md` instructions when available. Do not guess a path
-   or block startup when a skill is unavailable.
-4. Read only task-relevant lessons from `.Codex/napkin.md` when present. It is
-   ignored, machine-local working memory and is not authoritative policy.
-5. Read routed specialist documentation that applies to the task.
-6. Inspect repository state.
+Read relevant guidance and inspect Git state before editing. Preserve unrelated
+owner changes. Read applicable skills and task-relevant `.Codex/napkin.md`
+lessons when available; local memory is not authoritative policy. A harmless
+read-only ordering mistake does not require restarting the task.
 
-These steps supplement and do not override higher-level runtime instructions.
-Keep routine startup silent except for notices required by the active runtime
-or applicable skill instructions. A harmless read-only ordering mistake is not
-a safety incident; read the missing guidance and continue.
+Use only the specialist docs needed for the work:
 
-## Workflow selection
+- [Architecture](docs/project_overview.md) and
+  [guardrails](docs/ARCHITECTURE_GUARDRAILS.md).
+- [Recipes](docs/recipes-component.md), [Planner](docs/planner-component.md),
+  [Shopping](docs/shopping-component.md), [Pantry](docs/pantry-component.md).
+- [Schema and migrations](supabase/SCHEMA.md),
+  [backup/restore runbooks](scripts/database/README.md).
+- [E2E workflow](web/tests/README.md) and
+  [target/credential contract](web/tests/E2E_CREDENTIALS.md).
+- [Documentation index](docs/DOCS_INDEX.md), [decisions](decisions.md),
+  [release history](changelog.md).
 
-Run `npm run rg:doctor` from `web/` before environment-sensitive verification
-or work involving Supabase, Vercel, GitHub operational state, PostgreSQL tools,
-production verification, deployments, migrations, backups, restores, or
-operational incidents. It is optional for writing, documentation-only edits,
-and clearly local low-risk code changes unless environment capability matters.
-Treat its output as local capability evidence, never proof of remote health.
+## Repository map and conventions
 
-Classify work using these tiers:
+The app uses Next.js 16, React 19, TypeScript, TanStack Query, Tailwind and
+Supabase. `web/package.json`, `web/.nvmrc` and the lockfile own runtime versions
+and scripts; do not duplicate a command catalog here. Run npm commands from
+`web/`. `npm run lint` invokes `eslint .`; unit tests use Vitest and browser
+checks use Playwright.
 
-- Tier 1: local application or code changes with no production or database
-  writes.
-- Tier 2: additive, reversible, or forward-repairable production or database
-  changes.
-- Tier 3: destructive, lossy, ownership-changing, compatibility-breaking,
-  mass-rewrite, or recovery-dependent changes.
+- `web/src/app/(authenticated)/` owns route screens under the shared shell;
+  `/` redirects to `/recipes`. Only the active route should mount its queries.
+- `web/src/components/` owns UI, `web/src/hooks/` owns query/mutation
+  orchestration, and `web/src/lib/` owns pure domain helpers and server utilities.
+- `@/*` maps to `web/src/*`. Follow existing local formatting and filenames;
+  prefer named exports. Do not add `@ts-expect-error` (the enforced baseline is
+  zero); use generated database types or narrow typed adapters.
+- Keep service-role clients server-only and user writes within the existing
+  owner/command/RPC boundaries. Shopping commands own Shopping writes; do not
+  substitute direct table writes to bypass permissions.
+- Keep auth network calls out of the request proxy and avoid blocking the
+  initial shell on auth verification. API routes/server actions retain their
+  authoritative user checks. Preserve the root layout's per-request CSP nonce.
+- Use `toLocalNoonISOString()` in `web/src/lib/planner-utils.ts` for `date_made`
+  and the SSR-safe `web/src/hooks/use-is-desktop.ts` for breakpoint detection.
+- Follow existing feature recovery and per-item pending behavior; do not change
+  Planner cooked state, history, Shopping selection or Undo semantics as cleanup.
 
-Codex may recommend a higher tier but must never silently lower a tier selected
-by the user. The user owns the final risk classification and authorization for
-external writes. Classification is not authorization.
+## Verification and release
 
-After a merge or deployment, or when checking an expected production release,
-use the existing `scripts/rg-verify.ps1 release` launcher as the first
-release-consistency check. It correlates the expected Git SHA, exact-SHA GitHub
-checks, `/api/version` build
-metadata, Supabase project reference, expected migration, and optional
-deployment evidence. Unavailable Vercel CLI or control-plane metadata is
-degraded assurance, not a blocker, when authoritative GitHub checks and
-`/api/version` agree. Use `npm run verify:production` only when fuller
-database-backed verification is required. See `docs/developer-workflow.md` for
-command syntax and evidence boundaries.
+Choose checks for the actual change and the task's environment constraints.
+For prose-only changes, validate commands, links and whitespace; do not launch
+full builds or browser/database harnesses merely for documentation edits.
+For code, use the existing focused checks and required CI rather than inventing
+new gates. Keep secrets, local auth state and raw private diagnostics out of
+commits and uploaded artifacts. Preserve ignored `.codex-artifacts/` receipts;
+never delete evidence, shared previews or processes as incidental cleanup.
 
-Use status terms consistently:
+Run `npm run rg:doctor` before environment-sensitive verification or operational
+work involving Supabase, Vercel, GitHub, PostgreSQL, migrations, backups or
+restores. It is optional for clearly local low-risk/prose changes and is local
+capability evidence, not remote health evidence.
 
-- `BLOCKED`: wrong or contradictory identity; unsafe target; real migration
-  divergence; failed required safety check; destructive action without required
-  recovery evidence; or unresolved state that makes proceeding unsafe.
-- `ACTION REQUIRED`: specific user authorization, credentials, or manual
-  dashboard work is needed; CI failed or is pending; production is unreachable;
-  expected and deployed SHAs differ; or a ready operation cannot proceed
-  automatically.
-- `WARNING`: optional control-plane evidence is unavailable; non-required
-  restore evidence is absent; a local Supabase link is absent while explicit
-  identities agree; or assurance is otherwise degraded without making the next
-  step unsafe.
-- Successful completion: required work and verification are complete; warnings
-  may still be reported separately.
+After a merge/deployment, use `scripts/rg-verify.ps1 release` as the first
+read-only release consistency check. The workflow guide owns its syntax and
+identity binding. Use `npm run verify:production` only when fuller database-backed
+verification is required. Missing optional Vercel control-plane evidence is a
+warning when authoritative GitHub checks and `/api/version` agree.
 
-Never label unavailable optional assurance as `BLOCKED`.
+Report implementation, testing, review, merge and release separately. Preserve
+failed checks and exact owner waivers: PR79's full browser qualification remains
+FAIL under Aaron's maintenance-only merge waiver, not resolved UI acceptance.
+See [PR79](https://github.com/aaron8819/RecipeGenie/pull/79) for the retained
+Chromium locator ambiguity and unresolved WebKit findings.
+
+Risk tiers: Tier1 is local code with no production/database writes; Tier2 is
+additive or forward-repairable production work; Tier3 is destructive, lossy,
+ownership-changing or recovery-dependent work. Never silently lower a tier
+selected by the owner. Risk classification does not grant authorization.
+
+Use `BLOCKED` for unsafe/contradictory targets, real migration divergence,
+failed required safety checks or unauthorized destructive actions. Use
+`ACTION REQUIRED` for pending/failed CI, missing authorization/access or release
+SHA mismatch. Use `WARNING` for optional missing assurance; do not present it as
+an unsafe-target blocker.
 
 ## Authorization boundaries
 
@@ -94,8 +108,7 @@ migrations, restores, destructive actions, and other materially risky
 operations remain separately protected unless the user explicitly includes
 them.
 
-Current repository-specific migration and backup runbooks remain authoritative
-until Phase 3 orchestration exists. Do not invent or pre-document migration,
+Current repository-specific migration and backup runbooks remain authoritative. Do not invent or pre-document migration,
 backup, or restore commands or weaken their safety gates.
 
 ## Git worktree convention
@@ -117,35 +130,10 @@ backup, or restore commands or weaken their safety gates.
   authorization.
 - Do not remove the task worktree automatically.
 
-## Final handoff
+## Handoff
 
-For engineering and operational tasks, use this concise structure and omit
-ceremonial evidence:
-
-```text
-STATUS: COMPLETE, ACTION REQUIRED, or BLOCKED
-
-Completed:
-- material outcomes
-
-Blockers:
-- actual blockers only
-
-Warnings:
-- meaningful degraded assurance only
-
-Verification:
-- relevant commands and results
-
-Git:
-- branch, worktree, base, changed files, and commit/push/merge state when applicable
-
-Safety:
-- relevant external actions that did or did not occur
-
-Next action:
-- exactly one recommended action
-```
-
-Put detailed logs in local artifacts when useful. The final handoff must contain
-exactly one recommended next action.
+State the material outcome, relevant verification, branch/base and publication
+state, actual blockers/warnings, and any external actions. Keep the report
+concise; put detailed evidence in local artifacts when useful. End with exactly
+one recommended next action. Do not claim tests, independent approval or release
+that did not happen.

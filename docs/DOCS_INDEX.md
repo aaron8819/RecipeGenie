@@ -9,7 +9,7 @@ than combining conflicting instructions.
 
 | File | Purpose |
 |------|---------|
-| [`../AGENTS.md`](../AGENTS.md) | Authoritative Codex operating policy, including startup, authorization boundaries, worktrees, risk language, and final handoff. |
+| [`../AGENTS.md`](../AGENTS.md) | Authoritative agent guidance, repository conventions, authorization boundaries, worktrees, verification and handoff. |
 | [`../README.md`](../README.md) | Human onboarding, supported local setup, feature overview, and entry points to specialist documentation. |
 | [`developer-workflow.md`](developer-workflow.md) | Supported runtime, verification and release command usage. |
 | [`project_overview.md`](project_overview.md) | Current architecture overview: layers, domains, data flow, and where logic lives. |
@@ -27,7 +27,6 @@ than combining conflicting instructions.
 | [`planner-component.md`](planner-component.md) | Planner feature behavior, boundaries, and focused verification. |
 | [`shopping-component.md`](shopping-component.md) | Shopping feature behavior, boundaries, and focused verification. |
 | [`pantry-component.md`](pantry-component.md) | Pantry feature behavior, boundaries, and focused verification. |
-| [`../CLAUDE.md`](../CLAUDE.md) | Technical agent quick reference and doc router; subordinate to `AGENTS.md` for Codex policy and to the specialist owner for detailed behavior. |
 | [`../changelog.md`](../changelog.md) | Release history. |
 
 ## Historical / Superseded Docs
