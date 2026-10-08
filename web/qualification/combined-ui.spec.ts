@@ -5,9 +5,9 @@ import path from 'node:path';
 import { config } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
-import type { Database, Json } from '../src/types/database';
-import { createEmptyShoppingDocument } from '../src/lib/shopping-document';
-import { initializeShoppingDocument } from '../src/lib/shopping-initialization';
+import { z } from 'zod';
+import type { Database } from '../src/types/database';
+import type { ShoppingCommand } from '../src/lib/shopping-command';
 import { readShoppingCompatibility } from '../src/lib/shopping-compatibility';
 import { parseQuantityV1 } from '../src/lib/recipe-quantity';
 import { finishQualification, SetupFailure, type Failure } from './qualification-outcome';
@@ -216,17 +216,6 @@ for (const viewport of [
         });
         requireResult(seeded.error, true, 'seed weekly plan');
       }
-      stage = 'seed shopping';
-      const legacyDocument = createEmptyShoppingDocument();
-      legacyDocument.manualItems.push({
-        id: randomUUID(), displayName: 'manual bread',
-        quantity: { amount: 1, unit: 'count' }, categoryKey: 'bakery', bucket: 'items',
-        checked: false
-      });
-      const document = initializeShoppingDocument(legacyDocument, []);
-      const seededShopping = await admin.from('shopping_list')
-        .update({ document: document as unknown as Json }).eq('user_id', primary.id);
-      requireResult(seededShopping.error, true, 'seed shopping');
       stage = 'acquire witness snapshot';
       witnessBefore = await snapshot(witness);
       stage = 'owner scoped read';
@@ -312,7 +301,44 @@ for (const viewport of [
         await expect(shoppingDialog()).toHaveCount(0);
         await expect(trigger).toBeFocused();
       };
+      stage = 'browser login';
       await login(page, primary);
+      stage = 'seed shopping through command API';
+      const manual = {
+        id: randomUUID(), displayName: 'manual bread',
+        quantity: { amount: 1, unit: 'count' }, categoryKey: 'bakery', bucket: 'items' as const,
+        checked: false,
+      };
+      const mutations: ShoppingCommand['mutation'][] = [
+        { type: 'initialize' }, { type: 'addManualItem', item: manual },
+      ];
+      for (const mutation of mutations) {
+        const command: ShoppingCommand = {
+          protocol: 1, observedRevision: (await readShopping()).contentRevision, mutation,
+        };
+        const operationId = randomUUID();
+        const options = { headers: { Origin: 'http://127.0.0.1:3107' } };
+        stage = `${mutation.type} shopping seed admission`;
+        const admission = await context.request.post('/api/shopping', {
+          ...options, data: { phase: 'admit', operationId, command },
+        });
+        expect(admission.ok()).toBe(true);
+        const ticket = z.object({
+          status: z.literal('Admitted'), sequence: z.string().regex(/^[1-9][0-9]{0,17}$/),
+        }).parse(await admission.json());
+        stage = `${mutation.type} shopping seed execution`;
+        const executed = await context.request.post('/api/shopping', {
+          ...options, data: { phase: 'execute', operationId, command, sequence: ticket.sequence },
+        });
+        expect(executed.ok()).toBe(true);
+        const outcome = z.object({ status: z.enum(['Applied', 'Unchanged']) })
+          .parse(await executed.json());
+        if (mutation.type === 'addManualItem') expect(outcome.status).toBe('Applied');
+      }
+      const document = (await readShopping()).document;
+      expect(document.manualItems).toHaveLength(1);
+      expect(document.manualItems[0]).toMatchObject(manual);
+      stage = 'browser acceptance';
 
       await test.step('cards: invalid admission retains draft; retry writes real DB', async () => {
         await page.goto('/recipes');
