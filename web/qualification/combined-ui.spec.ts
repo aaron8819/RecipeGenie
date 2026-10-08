@@ -10,7 +10,9 @@ import type { Database } from '../src/types/database';
 import type { ShoppingCommand } from '../src/lib/shopping-command';
 import { readShoppingCompatibility } from '../src/lib/shopping-compatibility';
 import { parseQuantityV1 } from '../src/lib/recipe-quantity';
-import { finishQualification, SetupFailure, type Failure } from './qualification-outcome';
+import {
+  boundedFailureDiagnostic, finishQualification, SetupFailure, type Failure,
+} from './qualification-outcome';
 
 config({ path: '.env.local', quiet: true });
 const backend = 'http://127.0.0.1:54321';
@@ -584,28 +586,46 @@ for (const viewport of [
       checks.push('planner-dashboard-focus');
 
       await test.step('return week survives detail/back/reload and failed plan read', async () => {
+        stage = 'return week: navigate Planner';
         await page.goto('/planner');
+        stage = 'return week: select next week';
         await page.getByRole('button', { name: 'Next week', exact: true }).click();
         const selectedURL = page.url();
+        stage = 'return week: open recipe detail';
         await page.locator('.planner-meal-title').filter({ hasText: main.name }).click();
+        stage = 'return week: detail visible';
         await expect(page.getByTestId('recipe-detail-page')).toBeVisible();
+        stage = 'return week: back to Planner';
         await page.getByRole('button', { name: 'Back to planner', exact: true }).click();
+        stage = 'return week: returned URL';
         await expect(page).toHaveURL(selectedURL);
+        stage = 'return week: reload returned week';
         await page.reload();
+        stage = 'return week: returned meals visible';
         await expect(page.locator('.planner-meal-card')).toHaveCount(3);
+        stage = 'return week: read saved plan';
         const before = await readPlan(monday(7));
+        stage = 'return week: inject failed plan read';
         await page.route('**/rest/v1/weekly_plans*', route => route.fulfill({
           status: 503,
           contentType: 'application/json', body: '{"message":"Qualification plan unavailable"}'
         }));
+        stage = 'return week: reload failed read';
         await page.reload();
+        stage = 'return week: read error visible';
         await expect(page.getByText("Couldn't load this week's plan.", { exact: false }))
           .toBeVisible();
+        stage = 'return week: no Add meal on read failure';
         await expect(page.getByRole('button', { name: 'Add meal', exact: true })).toHaveCount(0);
+        stage = 'return week: restore plan reads';
         await page.unroute('**/rest/v1/weekly_plans*');
+        stage = 'return week: retry plan read';
         await page.getByRole('button', { name: 'Retry', exact: true }).click();
+        stage = 'return week: recovered meals visible';
         await expect(page.locator('.planner-meal-card')).toHaveCount(3);
+        stage = 'return week: recovered URL';
         await expect(page).toHaveURL(selectedURL);
+        stage = 'return week: recovered plan unchanged';
         expect(await readPlan(monday(7))).toEqual(before);
       });
       checks.push('planner-return-week-read-retry');
@@ -777,6 +797,8 @@ for (const viewport of [
             ? 'PASS' : 'FAIL',
           readRecovery,
           stage, primaryFailure: primaryFailure !== undefined,
+          failureDiagnostic: primaryFailure
+            ? boundedFailureDiagnostic(primaryFailure.error, stage) : null,
           setupError: primaryFailure?.error instanceof SetupFailure
             ? { operation: primaryFailure.error.operation, code: primaryFailure.error.code }
             : { operation: 'unknown', code: 'unknown' },
