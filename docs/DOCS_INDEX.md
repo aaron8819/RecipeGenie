@@ -11,6 +11,7 @@ than combining conflicting instructions.
 |------|---------|
 | [`../AGENTS.md`](../AGENTS.md) | Authoritative Codex operating policy, including startup, authorization boundaries, worktrees, risk language, and final handoff. |
 | [`../README.md`](../README.md) | Human onboarding, supported local setup, feature overview, and entry points to specialist documentation. |
+| [`developer-workflow.md`](developer-workflow.md) | Supported runtime, verification and release command usage. |
 | [`project_overview.md`](project_overview.md) | Current architecture overview: layers, domains, data flow, and where logic lives. |
 | [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTURE_GUARDRAILS.md) | Canonical contributor guardrails: non-negotiable boundaries, refactor stopping points, and verification baseline. |
 | [`operational-verification.md`](operational-verification.md) | Read-only deployment manifest, production verification, and data-integrity audit commands. |

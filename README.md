@@ -22,12 +22,15 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 
 ## Tech Stack
 
-- **Frontend**: Next.js 15 (App Router), React 18, TypeScript, Tailwind CSS
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS
 - **Backend**: Supabase (PostgreSQL + Row Level Security)
 - **State**: TanStack Query (React Query)
 - **UI**: Radix UI primitives with shadcn/ui styling
 - **Rate limiting**: Upstash Redis (`@upstash/ratelimit`)
 - **HTML parsing**: Cheerio (server-side recipe URL scraping)
+
+For verification and release commands, use the existing
+[developer workflow guide](docs/developer-workflow.md).
 
 ## Quick Start
 

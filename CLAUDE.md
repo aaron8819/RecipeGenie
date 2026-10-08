@@ -3,15 +3,15 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 For Codex, root `AGENTS.md` is the authoritative operating policy. Use
-`docs/developer-workflow.md` for workflow-doctor and release-status command
-usage. This file remains technical project guidance and does not override those
-policies.
+[`docs/developer-workflow.md`](docs/developer-workflow.md) as the source for
+verification and release command usage. This file remains technical project
+guidance and does not override those policies.
 
 ## Project Overview
 
 Recipe Genie is a weekly meal planning app. Users maintain recipes by category, generate randomized meal plans, get smart shopping lists with ingredient merging, and track what they've cooked.
 
-**Stack:** Next.js 15 (App Router) + TypeScript + Supabase (PostgreSQL/Auth/RLS/Storage) + TanStack Query v5 + Tailwind CSS + Radix UI/shadcn + Cheerio (server-side HTML parsing) + Upstash Redis (rate limiting)
+**Stack:** Next.js 16 (App Router) + React 19 + TypeScript + Supabase (PostgreSQL/Auth/RLS/Storage) + TanStack Query v5 + Tailwind CSS + Radix UI/shadcn + Cheerio (server-side HTML parsing) + Upstash Redis (rate limiting)
 
 ## Commands
 
@@ -20,7 +20,7 @@ All commands run from `web/`:
 ```bash
 npm run dev                    # Dev server at localhost:3000
 npm run build                  # Production build
-npm run lint                   # ESLint (next lint)
+npm run lint                   # ESLint (eslint .)
 npm run test                   # Vitest unit tests
 npm run test -- --run path/to/file.test.ts  # Run single test file
 npm run test:watch             # Watch mode
@@ -124,7 +124,7 @@ Patterns established during the 2026-02-27 performance audit. Treat these as har
 - **E2E configuration**: Use the `RECIPE_GENIE_E2E_*` target/credential
   contract plus `NEXT_PUBLIC_SUPABASE_URL` and
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`; see `web/tests/E2E_CREDENTIALS.md`.
-- **CSP nonces**: Middleware sets `x-nonce` header; root layout MUST call `headers()` to trigger Next.js 15 automatic nonce application to inline scripts
+- **CSP nonces**: Middleware sets `x-nonce` header; root layout MUST call `headers()` to trigger Next.js automatic nonce application to inline scripts
 - **User config fetch**: PGRST116 (not found) is expected for new users — `resolveUserConfig()` returns defaults
 - **Shopping per-item pending**: Never use `mutation.isPending` to disable all items in a list — track pending state per-item with a `Set<string>` of item keys; only disable the specific item being mutated
 - **Shopping pantry alternatives**: Pantry matching checks both primary item name AND `alternatives[]`; exclusion keyword matching only checks the primary name (alternatives cannot trigger exclusion)
