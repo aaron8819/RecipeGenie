@@ -156,24 +156,6 @@ async function login(page: Page, value: Owner): Promise<void> {
   await expect(page.getByRole('link', { name: 'Go to Planner', exact: true })).toBeVisible();
 }
 
-async function geometry(page: Page, dialog?: Locator): Promise<void> {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  if (dialog) {
-    const bounds = await dialog.boundingBox();
-    const viewport = page.viewportSize();
-    if (!bounds || !viewport) throw new Error('Dialog bounds unavailable');
-    expect(bounds.x).toBeGreaterThanOrEqual(-1);
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
-    // The dialog may scroll internally but its frame must remain on screen.
-    expect(bounds.y).toBeGreaterThanOrEqual(-1);
-    expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height + 1);
-    for (let index = 0;index < 12;index++) {
-      await page.keyboard.press('Tab');
-      expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
-    }
-  }
-}
-
 for (const viewport of [
   { width: 1440, height: 900 }, { width: 390, height: 844 },
 ]) {
@@ -198,6 +180,31 @@ for (const viewport of [
     let primaryFailure: Failure | undefined;
     let teardownFailure: Failure | undefined;
     let stage = 'acquire primary owner';
+    async function geometry(page: Page, dialog?: Locator): Promise<void> {
+      stage = 'geometry: page width';
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      if (dialog) {
+        stage = 'geometry: dialog bounds';
+        const bounds = await dialog.boundingBox();
+        const viewport = page.viewportSize();
+        if (!bounds || !viewport) throw new Error('Dialog bounds unavailable');
+        stage = 'geometry: dialog left edge';
+        expect(bounds.x).toBeGreaterThanOrEqual(-1);
+        stage = 'geometry: dialog right edge';
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
+        // The dialog may scroll internally but its frame must remain on screen.
+        stage = 'geometry: dialog top edge';
+        expect(bounds.y).toBeGreaterThanOrEqual(-1);
+        stage = 'geometry: dialog bottom edge';
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height + 1);
+        for (let index = 0;index < 12;index++) {
+          stage = 'geometry: tab within dialog';
+          await page.keyboard.press('Tab');
+          stage = 'geometry: dialog contains focus';
+          expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
+        }
+      }
+    }
     let witnessBefore: string | undefined;
     let cleanupComplete = true;
     let releasePending: (() => void) | undefined;
@@ -282,8 +289,17 @@ for (const viewport of [
       };
       const cardMenu = async (item: RecipeInsert, action: string) => {
         const trigger = page.getByRole('button', { name: `Actions for ${item.name}`, exact: true });
+        if (action === 'Edit recipe') stage = 'Edit menu: focus trigger';
+        else if (action === 'Print recipe') stage = 'Print menu: focus trigger';
+        else stage = 'Shopping menu: focus trigger';
         await trigger.focus();
+        if (action === 'Edit recipe') stage = 'Edit menu: open with keyboard';
+        else if (action === 'Print recipe') stage = 'Print menu: open with keyboard';
+        else stage = 'Shopping menu: open with keyboard';
         await page.keyboard.press('Enter');
+        if (action === 'Edit recipe') stage = 'Edit menu: select action';
+        else if (action === 'Print recipe') stage = 'Print menu: select action';
+        else stage = 'Shopping menu: select action';
         await page.getByRole('menuitem', { name: action, exact: true }).click();
         return trigger;
       };
@@ -293,20 +309,29 @@ for (const viewport of [
       const submit = () => shoppingDialog().getByRole('button',
         { name: 'Add selected ingredients', exact: true });
       const assertSaved = async () => {
+        stage = 'saved selector: yield';
         await expect(yieldControl()).toHaveValue('5');
         // Accessible ordinal names distinguish identical lemon occurrences across sections.
         for (let index = 0;index < 4;index++) {
           const control = shoppingDialog().getByRole('checkbox', {
             name: new RegExp(`ingredient ${index + 1}$`),
           });
+          if (index === 0) stage = 'saved selector: first ingredient';
+          else if (index === 1) stage = 'saved selector: second ingredient';
+          else if (index === 2) stage = 'saved selector: third ingredient';
+          else stage = 'saved selector: fourth ingredient';
           if (index === 0 || index === 2) await expect(control).toBeChecked();
           else await expect(control).not.toBeChecked();
         }
       };
       const cancelFocus = async (trigger: Locator) => {
+        stage = 'cancel selector: check geometry';
         await geometry(page, shoppingDialog());
+        stage = 'cancel selector: click Cancel';
         await shoppingDialog().getByRole('button', { name: 'Cancel', exact: true }).click();
+        stage = 'cancel selector: dialog closed';
         await expect(shoppingDialog()).toHaveCount(0);
+        stage = 'cancel selector: trigger focus restored';
         await expect(trigger).toBeFocused();
       };
       stage = 'browser login';
@@ -475,52 +500,81 @@ for (const viewport of [
       checks.push('shopping-response-loss-dedup');
 
       await test.step('detail and print entry preserve selection and trigger focus', async () => {
+        stage = 'detail: open Edit menu action';
         const editTrigger = await cardMenu(main, 'Edit recipe');
+        stage = 'detail: Edit dialog visible';
         await expect(page.getByRole('dialog', { name: 'Edit Recipe', exact: true })).toBeVisible();
+        stage = 'detail: cancel Edit dialog';
         await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+        stage = 'detail: Edit trigger focus restored';
         await expect(editTrigger).toBeFocused();
+        stage = 'detail: open Print menu action';
         await cardMenu(main, 'Print recipe');
+        stage = 'detail: page visible';
         await expect(page.getByTestId('recipe-detail-page')).toBeVisible();
+        stage = 'detail: recipe heading visible';
         await expect(page.getByRole('heading', { level: 1, name: main.name })).toBeVisible();
         for (let index = 0;index < 5;index++) {
+          stage = 'detail: increase displayed yield';
           await page.getByRole('button', { name: 'Increase yield', exact: true }).click();
         }
         const trigger = page.getByRole('button', { name: 'Add to Shopping List', exact: true });
+        stage = 'detail: open Shopping selector';
         await trigger.click();
+        stage = 'detail: saved Shopping selection';
         await assertSaved();
+        stage = 'detail: cancel Shopping selector';
         await cancelFocus(trigger);
+        stage = 'detail: page geometry';
         await geometry(page);
       });
       checks.push('detail-saved-selection');
 
       await test.step('Planner/Dashboard saved selector and cooked inclusion', async () => {
+        stage = 'planner: navigate';
         await page.goto('/planner');
         const trigger = page.getByRole('button', {
           name: `Add ${main.name} ingredients to Shopping`, exact: true,
         });
+        stage = 'planner: open meal Shopping selector';
         await trigger.click();
+        stage = 'planner-dashboard: saved Shopping selection';
         await assertSaved();
+        stage = 'planner: cancel meal selector';
         await cancelFocus(trigger);
         const fullWeek = page.getByRole('button', {
           name: 'Add planned meal ingredients to Shopping', exact: true,
         });
+        stage = 'planner: focus full-week Shopping trigger';
         await fullWeek.focus();
+        stage = 'planner: open full-week selector with keyboard';
         await page.keyboard.press('Enter');
+        stage = 'planner: full-week main saved yield';
         await expect(yieldControl()).toHaveValue('5');
+        stage = 'planner: full-week cooked yield';
         await expect(shoppingDialog().getByRole('spinbutton', {
           name: `Selected yield for ${cooked.name}`, exact: true,
         })).toHaveValue('8');
+        stage = 'planner: full-week selector geometry';
         await geometry(page, shoppingDialog());
+        stage = 'planner: submit full-week Shopping selection';
         await submit().click();
+        stage = 'planner: full-week selector closed';
         await expect(shoppingDialog()).toHaveCount(0);
+        stage = 'planner: cooked contribution persisted';
         expect((await readShopping()).document.recipeEntries[cooked.id].selectedServings).toBe(8);
+        stage = 'dashboard: navigate';
         await page.goto('/dashboard');
         const dashboardTrigger = page.getByRole('button', {
           name: `Meal actions for ${main.name}`, exact: true,
         });
+        stage = 'dashboard: open meal menu';
         await dashboardTrigger.click();
+        stage = 'dashboard: select Shopping menu action';
         await page.getByRole('menuitem', { name: 'Add to shopping', exact: true }).click();
+        stage = 'planner-dashboard: saved Shopping selection';
         await assertSaved();
+        stage = 'dashboard: cancel meal selector';
         await cancelFocus(dashboardTrigger);
       });
       checks.push('planner-dashboard-focus');
