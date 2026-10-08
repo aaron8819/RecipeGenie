@@ -1,5 +1,10 @@
 # Combined UI hosted qualification candidate
 
+> Historical preparation report. PR #78 merged and released on 2026-10-07 with
+> the new combined-browser coverage exception. The frozen checkpoint below is
+> retained as evidence, not current startup instructions.
+> [Release PR #78](https://github.com/aaron8819/RecipeGenie/pull/78).
+
 This local CI addition is based on reviewed combined preparation commit
 `5f44d00fe1b3bf0b8533d797e78c9762b913f2c2`, tree
 `2802429507a2ac68a7ea9fdd3538415ad16847b6`.

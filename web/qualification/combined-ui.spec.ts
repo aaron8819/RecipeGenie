@@ -5,11 +5,12 @@ import path from 'node:path';
 import { config } from 'dotenv';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
-import type { Database, Json } from '../src/types/database';
-import { createEmptyShoppingDocument } from '../src/lib/shopping-document';
-import { initializeShoppingDocument } from '../src/lib/shopping-initialization';
+import { z } from 'zod';
+import type { Database } from '../src/types/database';
+import type { ShoppingCommand } from '../src/lib/shopping-command';
 import { readShoppingCompatibility } from '../src/lib/shopping-compatibility';
 import { parseQuantityV1 } from '../src/lib/recipe-quantity';
+import { finishQualification, SetupFailure, type Failure } from './qualification-outcome';
 
 config({ path: '.env.local', quiet: true });
 const backend = 'http://127.0.0.1:54321';
@@ -47,7 +48,7 @@ const requiredChecks = [
 ];
 
 function requireResult(error: unknown, data: unknown, operation: string): void {
-  if (error || data === null) throw new Error(`Disposable fixture operation failed: ${operation}`);
+  if (error || data === null) throw new SetupFailure(operation, error);
 }
 
 function privateRows(id: string): string {
@@ -96,7 +97,6 @@ function recipe(owner: string, name: string): RecipeInsert {
 async function owner(run: string, journal: Owner[]): Promise<Owner> {
   const email = `combined-${randomUUID()}@example.test`;
   const password = randomUUID() + randomUUID();
-  process.stdout.write(`::add-mask::${password}\n::add-mask::${email}\n`);
   const created = await admin.auth.admin.createUser({
     email, password, email_confirm: true, app_metadata: { combinedQualification: run },
   });
@@ -149,29 +149,11 @@ async function cleanup(value: Owner, run: string): Promise<boolean> {
 }
 
 async function login(page: Page, value: Owner): Promise<void> {
-  await page.goto('/login');
+  await page.goto('/recipes');
   await page.getByLabel('Email', { exact: true }).fill(value.email);
   await page.getByLabel('Password', { exact: true }).fill(value.password);
   await page.getByRole('button', { name: 'Sign In', exact: true }).click();
   await expect(page.getByRole('link', { name: 'Go to Planner', exact: true })).toBeVisible();
-}
-
-async function geometry(page: Page, dialog?: Locator): Promise<void> {
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  if (dialog) {
-    const bounds = await dialog.boundingBox();
-    const viewport = page.viewportSize();
-    if (!bounds || !viewport) throw new Error('Dialog bounds unavailable');
-    expect(bounds.x).toBeGreaterThanOrEqual(-1);
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
-    // The dialog may scroll internally but its frame must remain on screen.
-    expect(bounds.y).toBeGreaterThanOrEqual(-1);
-    expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height + 1);
-    for (let index = 0;index < 12;index++) {
-      await page.keyboard.press('Tab');
-      expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
-    }
-  }
 }
 
 for (const viewport of [
@@ -186,12 +168,49 @@ for (const viewport of [
     const directory = path.resolve('..', '.codex-artifacts', 'combined-ui');
     const artifact = `${info.project.name}-${viewport.width}`;
     let passed = false;
-    let witnessUnchanged = false;
+    const readRecovery: {
+      interceptions: number; alertPresent: boolean | null; retryEnabled: boolean | null;
+      restoredYield: number | null; selectedIngredientCount: number | null;
+      dialogPresent: boolean | null; triggerFocused: boolean | null;
+    } = {
+      interceptions: 0, alertPresent: null, retryEnabled: null, restoredYield: null,
+      selectedIngredientCount: null, dialogPresent: null, triggerFocused: null,
+    };
+    let witnessStatus = 'snapshot-not-acquired';
+    let primaryFailure: Failure | undefined;
+    let teardownFailure: Failure | undefined;
+    let stage = 'acquire primary owner';
+    async function geometry(page: Page, dialog?: Locator): Promise<void> {
+      stage = 'geometry: page width';
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      if (dialog) {
+        stage = 'geometry: dialog bounds';
+        const bounds = await dialog.boundingBox();
+        const viewport = page.viewportSize();
+        if (!bounds || !viewport) throw new Error('Dialog bounds unavailable');
+        stage = 'geometry: dialog left edge';
+        expect(bounds.x).toBeGreaterThanOrEqual(-1);
+        stage = 'geometry: dialog right edge';
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width + 1);
+        // The dialog may scroll internally but its frame must remain on screen.
+        stage = 'geometry: dialog top edge';
+        expect(bounds.y).toBeGreaterThanOrEqual(-1);
+        stage = 'geometry: dialog bottom edge';
+        expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height + 1);
+        for (let index = 0;index < 12;index++) {
+          stage = 'geometry: tab within dialog';
+          await page.keyboard.press('Tab');
+          stage = 'geometry: dialog contains focus';
+          expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
+        }
+      }
+    }
     let witnessBefore: string | undefined;
     let cleanupComplete = true;
     let releasePending: (() => void) | undefined;
     try {
       const primary = await owner(run, owners);
+      stage = 'acquire witness owner';
       const witness = await owner(run, owners);
       const main = recipe(primary.id,
         'Qualification citrus chicken with a long grouped ingredient title for narrow cards');
@@ -199,34 +218,29 @@ for (const viewport of [
       const unassigned = recipe(primary.id, 'Qualification unassigned chicken');
       const replacement = recipe(primary.id, 'Qualification replacement chicken');
       const rows = [main, cooked, unassigned, replacement];
-      const inserted = await admin.from('recipes').insert(rows);
+      stage = 'seed canonical recipes';
+      const inserted = await primary.client.from('recipes').insert(rows);
       requireResult(inserted.error, true, 'seed canonical recipes');
       const today = new Date().getUTCDay();
+      stage = 'seed weekly plans';
       for (const week of [monday(), monday(7)]) {
-        const seeded = await admin.from('weekly_plans').upsert({
+        const seeded = await primary.client.from('weekly_plans').upsert({
           user_id: primary.id, week_date: week, scale: 2,
           recipe_uuids: [main.id, cooked.id, unassigned.id], made_recipe_uuids: [cooked.id],
           day_assignment_recipe_uuids: { [main.id]: today, [cooked.id]: (today + 1) % 7 },
         });
         requireResult(seeded.error, true, 'seed weekly plan');
       }
-      const legacyDocument = createEmptyShoppingDocument();
-      legacyDocument.manualItems.push({
-        id: randomUUID(), displayName: 'manual bread',
-        quantity: { amount: 1, unit: 'count' }, categoryKey: 'bakery', bucket: 'items',
-        checked: false
-      });
-      const document = initializeShoppingDocument(legacyDocument, []);
-      const seededShopping = await admin.from('shopping_list')
-        .update({ document: document as unknown as Json }).eq('user_id', primary.id);
-      requireResult(seededShopping.error, true, 'seed shopping');
+      stage = 'acquire witness snapshot';
       witnessBefore = await snapshot(witness);
+      stage = 'owner scoped read';
       const protectedRows = await witness.client.from('recipes').select('recipe_uuid')
         .eq('recipe_uuid', main.id);
       requireResult(protectedRows.error, protectedRows.data, 'owner scoped read');
       expect(protectedRows.data).toHaveLength(0);
       checks.push('owner-isolation');
 
+      stage = 'browser acceptance';
       const context = await browser.newContext({
         viewport, baseURL: 'http://127.0.0.1:3107', timezoneId: 'UTC',
       });
@@ -275,8 +289,17 @@ for (const viewport of [
       };
       const cardMenu = async (item: RecipeInsert, action: string) => {
         const trigger = page.getByRole('button', { name: `Actions for ${item.name}`, exact: true });
+        if (action === 'Edit recipe') stage = 'Edit menu: focus trigger';
+        else if (action === 'Print recipe') stage = 'Print menu: focus trigger';
+        else stage = 'Shopping menu: focus trigger';
         await trigger.focus();
+        if (action === 'Edit recipe') stage = 'Edit menu: open with keyboard';
+        else if (action === 'Print recipe') stage = 'Print menu: open with keyboard';
+        else stage = 'Shopping menu: open with keyboard';
         await page.keyboard.press('Enter');
+        if (action === 'Edit recipe') stage = 'Edit menu: select action';
+        else if (action === 'Print recipe') stage = 'Print menu: select action';
+        else stage = 'Shopping menu: select action';
         await page.getByRole('menuitem', { name: action, exact: true }).click();
         return trigger;
       };
@@ -286,23 +309,69 @@ for (const viewport of [
       const submit = () => shoppingDialog().getByRole('button',
         { name: 'Add selected ingredients', exact: true });
       const assertSaved = async () => {
+        stage = 'saved selector: yield';
         await expect(yieldControl()).toHaveValue('5');
         // Accessible ordinal names distinguish identical lemon occurrences across sections.
         for (let index = 0;index < 4;index++) {
           const control = shoppingDialog().getByRole('checkbox', {
             name: new RegExp(`ingredient ${index + 1}$`),
           });
+          if (index === 0) stage = 'saved selector: first ingredient';
+          else if (index === 1) stage = 'saved selector: second ingredient';
+          else if (index === 2) stage = 'saved selector: third ingredient';
+          else stage = 'saved selector: fourth ingredient';
           if (index === 0 || index === 2) await expect(control).toBeChecked();
           else await expect(control).not.toBeChecked();
         }
       };
       const cancelFocus = async (trigger: Locator) => {
+        stage = 'cancel selector: check geometry';
         await geometry(page, shoppingDialog());
+        stage = 'cancel selector: click Cancel';
         await shoppingDialog().getByRole('button', { name: 'Cancel', exact: true }).click();
+        stage = 'cancel selector: dialog closed';
         await expect(shoppingDialog()).toHaveCount(0);
+        stage = 'cancel selector: trigger focus restored';
         await expect(trigger).toBeFocused();
       };
+      stage = 'browser login';
       await login(page, primary);
+      stage = 'seed shopping through command API';
+      const manual = {
+        id: randomUUID(), displayName: 'manual bread',
+        quantity: { amount: 1, unit: 'count' }, categoryKey: 'bakery', bucket: 'items' as const,
+        checked: false,
+      };
+      const mutations: ShoppingCommand['mutation'][] = [
+        { type: 'initialize' }, { type: 'addManualItem', item: manual },
+      ];
+      for (const mutation of mutations) {
+        const command: ShoppingCommand = {
+          protocol: 1, observedRevision: (await readShopping()).contentRevision, mutation,
+        };
+        const operationId = randomUUID();
+        const options = { headers: { Origin: 'http://127.0.0.1:3107' } };
+        stage = `${mutation.type} shopping seed admission`;
+        const admission = await context.request.post('/api/shopping', {
+          ...options, data: { phase: 'admit', operationId, command },
+        });
+        expect(admission.ok()).toBe(true);
+        const ticket = z.object({
+          status: z.literal('Admitted'), sequence: z.string().regex(/^[1-9][0-9]{0,17}$/),
+        }).parse(await admission.json());
+        stage = `${mutation.type} shopping seed execution`;
+        const executed = await context.request.post('/api/shopping', {
+          ...options, data: { phase: 'execute', operationId, command, sequence: ticket.sequence },
+        });
+        expect(executed.ok()).toBe(true);
+        const outcome = z.object({ status: z.enum(['Applied', 'Unchanged']) })
+          .parse(await executed.json());
+        if (mutation.type === 'addManualItem') expect(outcome.status).toBe('Applied');
+      }
+      const document = (await readShopping()).document;
+      expect(document.manualItems).toHaveLength(1);
+      expect(document.manualItems[0]).toMatchObject(manual);
+      stage = 'browser acceptance';
 
       await test.step('cards: invalid admission retains draft; retry writes real DB', async () => {
         await page.goto('/recipes');
@@ -337,22 +406,61 @@ for (const viewport of [
       checks.push('cards-selection-failure-retry');
 
       await test.step('selector read error is retryable without replacing saved data', async () => {
-        const before = await readShopping();
-        await page.route('**/rest/v1/shopping_list*', route => route.fulfill({
-          status: 503,
-          contentType: 'application/json', body: '{"message":"Qualification read unavailable"}'
-        }));
-        await page.reload();
-        const trigger = await cardMenu(main, 'Add to Shopping List');
-        await expect(shoppingDialog().getByRole('alert')).toContainText(
-          'Could not load your shopping selections');
-        await page.unroute('**/rest/v1/shopping_list*');
-        await shoppingDialog().getByRole('button', { name: 'Retry', exact: true }).click();
-        await assertSaved();
-        await cancelFocus(trigger);
-        expect(await readShopping()).toEqual(before);
+        const observe = async () => {
+          readRecovery.dialogPresent = await shoppingDialog().count() === 1;
+          readRecovery.alertPresent = await shoppingDialog().getByRole('alert').count() > 0;
+          const retry = shoppingDialog().getByRole('button', { name: 'Retry', exact: true });
+          readRecovery.retryEnabled = await retry.count() === 1 ? await retry.isEnabled() : null;
+          if (await yieldControl().count() === 1) {
+            const value = await yieldControl().inputValue();
+            readRecovery.restoredYield = /^[0-9]{1,4}$/.test(value) ? Number(value) : null;
+          }
+          const ingredients = await shoppingDialog().getByRole('checkbox', {
+            name: /ingredient [1-4]$/,
+          }).all();
+          if (ingredients.length) {
+            const selected = await Promise.all(ingredients.map(control => control.isChecked()));
+            readRecovery.selectedIngredientCount = selected.filter(Boolean).length;
+          }
+        };
+        try {
+          stage = 'read-recovery: baseline read';
+          const before = await readShopping();
+          stage = 'read-recovery: intercept and reload';
+          await page.route('**/rest/v1/shopping_list*', route => {
+            readRecovery.interceptions++;
+            return route.fulfill({ status: 503, contentType: 'application/json',
+              body: '{"message":"Qualification read unavailable"}' });
+          });
+          await page.reload();
+          stage = 'read-recovery: reopen selector';
+          const trigger = await cardMenu(main, 'Add to Shopping List');
+          stage = 'read-recovery: expect read-error alert';
+          // SDK: 3 query attempts x (1s + 2s + 4s), plus Query's 1s + 2s = 24s.
+          // Allow 16s for the 12 locally intercepted responses and UI settling.
+          // Only this persistent-503 terminal-error assertion needs the 40s budget.
+          await expect(shoppingDialog().getByRole('alert')).toContainText(
+            'Could not load your shopping selections', { timeout: 40_000 });
+          await observe();
+          stage = 'read-recovery: remove fault and click Retry';
+          await page.unroute('**/rest/v1/shopping_list*');
+          await shoppingDialog().getByRole('button', { name: 'Retry', exact: true }).click();
+          stage = 'read-recovery: expect saved yield and ingredient ordinals';
+          await assertSaved();
+          await observe();
+          stage = 'read-recovery: expect bounds, cancel and trigger focus';
+          await cancelFocus(trigger);
+          readRecovery.triggerFocused = await trigger.evaluate(node => node === globalThis.document.activeElement);
+          stage = 'read-recovery: expect unchanged persisted state';
+          expect(await readShopping()).toEqual(before);
+          stage = 'read-recovery: complete';
+        } finally {
+          // Fixed booleans/counts only. Observation must not replace the original exception.
+          try { await observe(); } catch { /* Retain available safe observations. */ }
+        }
       });
       checks.push('shopping-read-recovery');
+      stage = 'browser acceptance';
 
       await test.step('lost real execute response reuses admission and applies once', async () => {
         await cardMenu(main, 'Add to Shopping List');
@@ -392,52 +500,81 @@ for (const viewport of [
       checks.push('shopping-response-loss-dedup');
 
       await test.step('detail and print entry preserve selection and trigger focus', async () => {
+        stage = 'detail: open Edit menu action';
         const editTrigger = await cardMenu(main, 'Edit recipe');
+        stage = 'detail: Edit dialog visible';
         await expect(page.getByRole('dialog', { name: 'Edit Recipe', exact: true })).toBeVisible();
+        stage = 'detail: cancel Edit dialog';
         await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+        stage = 'detail: Edit trigger focus restored';
         await expect(editTrigger).toBeFocused();
+        stage = 'detail: open Print menu action';
         await cardMenu(main, 'Print recipe');
+        stage = 'detail: page visible';
         await expect(page.getByTestId('recipe-detail-page')).toBeVisible();
+        stage = 'detail: recipe heading visible';
         await expect(page.getByRole('heading', { level: 1, name: main.name })).toBeVisible();
         for (let index = 0;index < 5;index++) {
+          stage = 'detail: increase displayed yield';
           await page.getByRole('button', { name: 'Increase yield', exact: true }).click();
         }
         const trigger = page.getByRole('button', { name: 'Add to Shopping List', exact: true });
+        stage = 'detail: open Shopping selector';
         await trigger.click();
+        stage = 'detail: saved Shopping selection';
         await assertSaved();
+        stage = 'detail: cancel Shopping selector';
         await cancelFocus(trigger);
+        stage = 'detail: page geometry';
         await geometry(page);
       });
       checks.push('detail-saved-selection');
 
       await test.step('Planner/Dashboard saved selector and cooked inclusion', async () => {
+        stage = 'planner: navigate';
         await page.goto('/planner');
         const trigger = page.getByRole('button', {
           name: `Add ${main.name} ingredients to Shopping`, exact: true,
         });
+        stage = 'planner: open meal Shopping selector';
         await trigger.click();
+        stage = 'planner-dashboard: saved Shopping selection';
         await assertSaved();
+        stage = 'planner: cancel meal selector';
         await cancelFocus(trigger);
         const fullWeek = page.getByRole('button', {
           name: 'Add planned meal ingredients to Shopping', exact: true,
         });
+        stage = 'planner: focus full-week Shopping trigger';
         await fullWeek.focus();
+        stage = 'planner: open full-week selector with keyboard';
         await page.keyboard.press('Enter');
+        stage = 'planner: full-week main saved yield';
         await expect(yieldControl()).toHaveValue('5');
+        stage = 'planner: full-week cooked yield';
         await expect(shoppingDialog().getByRole('spinbutton', {
           name: `Selected yield for ${cooked.name}`, exact: true,
         })).toHaveValue('8');
+        stage = 'planner: full-week selector geometry';
         await geometry(page, shoppingDialog());
+        stage = 'planner: submit full-week Shopping selection';
         await submit().click();
+        stage = 'planner: full-week selector closed';
         await expect(shoppingDialog()).toHaveCount(0);
+        stage = 'planner: cooked contribution persisted';
         expect((await readShopping()).document.recipeEntries[cooked.id].selectedServings).toBe(8);
+        stage = 'dashboard: navigate';
         await page.goto('/dashboard');
         const dashboardTrigger = page.getByRole('button', {
           name: `Meal actions for ${main.name}`, exact: true,
         });
+        stage = 'dashboard: open meal menu';
         await dashboardTrigger.click();
+        stage = 'dashboard: select Shopping menu action';
         await page.getByRole('menuitem', { name: 'Add to shopping', exact: true }).click();
+        stage = 'planner-dashboard: saved Shopping selection';
         await assertSaved();
+        stage = 'dashboard: cancel meal selector';
         await cancelFocus(dashboardTrigger);
       });
       checks.push('planner-dashboard-focus');
@@ -596,43 +733,62 @@ for (const viewport of [
       checks.push('shopping-stale-source');
       expect(checks).toEqual(requiredChecks);
       expect(externalRequests).toBe(0);
-      witnessUnchanged = await snapshot(witness) === witnessBefore;
-      expect(witnessUnchanged).toBe(true);
+      witnessStatus = await snapshot(witness) === witnessBefore ? 'unchanged' : 'changed';
+      expect(witnessStatus).toBe('unchanged');
       mkdirSync(directory, { recursive: true });
       await page.screenshot({
         path: path.join(directory, `${artifact}.png`), fullPage: true,
         animations: 'disabled', mask: [page.getByText(primary.email, { exact: true })]
       });
       passed = true;
+    } catch (error) {
+      primaryFailure = { error };
     } finally {
-      // Reserve bounded teardown time even after an assertion failure/step timeout.
-      info.setTimeout(info.timeout + 120_000);
-      releasePending?.();
-      for (const context of contexts) {
-        try { await context.close(); } catch { cleanupComplete = false; }
+      try {
+        // Reserve bounded teardown time even after an assertion failure/step timeout.
+        info.setTimeout(info.timeout + 120_000);
+        releasePending?.();
+        for (const context of contexts) {
+          try { await context.close(); } catch { cleanupComplete = false; }
+        }
+        if (owners[1] && witnessBefore) {
+          try {
+            witnessStatus = await snapshot(owners[1]) === witnessBefore ? 'unchanged' : 'changed';
+          } catch { witnessStatus = 'snapshot-read-failed'; }
+        }
+        for (const value of owners) {
+          let absent = false;
+          try { absent = await cleanup(value, run); } catch { /* Continue other owned cleanup. */ }
+          cleanupResults.push({ ownerId: value.id, absent });
+          cleanupComplete = cleanupComplete && absent;
+        }
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(path.join(directory, `${artifact}.json`), JSON.stringify({
+          schema: 2, sha: process.env.COMBINED_UI_EXPECTED_SHA, runId: process.env.GITHUB_RUN_ID,
+          attempt: process.env.GITHUB_RUN_ATTEMPT, engine: info.project.name, viewport, checks,
+          scope: 'full',
+          fullAcceptance: passed && witnessStatus === 'unchanged' &&
+            cleanupComplete && owners.length === 2,
+          result: passed && witnessStatus === 'unchanged' && cleanupComplete && owners.length === 2
+            ? 'PASS' : 'FAIL',
+          readRecovery,
+          stage, primaryFailure: primaryFailure !== undefined,
+          setupError: primaryFailure?.error instanceof SetupFailure
+            ? { operation: primaryFailure.error.operation, code: primaryFailure.error.code }
+            : { operation: 'unknown', code: 'unknown' },
+          witnessStatus, cleanupComplete, owners: cleanupResults,
+          limitation: 'Injected browser faults; WebKit HTTP CSP accommodation; no sharing/import',
+        }, null, 2));
+        if (!cleanupComplete || owners.length !== 2) {
+          throw new Error('Qualification cleanup/owner acquisition incomplete');
+        }
+        if (witnessStatus !== 'unchanged') {
+          throw new Error(`Qualification witness status: ${witnessStatus}`);
+        }
+      } catch (error) {
+        teardownFailure = { error };
       }
-      if (owners[1] && witnessBefore) {
-        try { witnessUnchanged = await snapshot(owners[1]) === witnessBefore; }
-        catch { witnessUnchanged = false; }
-      }
-      for (const value of owners) {
-        let absent = false;
-        try { absent = await cleanup(value, run); } catch { /* Continue other owned cleanup. */ }
-        cleanupResults.push({ ownerId: value.id, absent });
-        cleanupComplete = cleanupComplete && absent;
-      }
-      mkdirSync(directory, { recursive: true });
-      writeFileSync(path.join(directory, `${artifact}.json`), JSON.stringify({
-        schema: 1, sha: process.env.COMBINED_UI_EXPECTED_SHA, runId: process.env.GITHUB_RUN_ID,
-        attempt: process.env.GITHUB_RUN_ATTEMPT, engine: info.project.name, viewport, checks,
-        result: passed && witnessUnchanged && cleanupComplete && owners.length === 2
-          ? 'PASS' : 'FAIL',
-        witnessUnchanged, cleanupComplete, owners: cleanupResults,
-        limitation: 'Injected browser faults; WebKit HTTP CSP accommodation; no sharing/import',
-      }, null, 2));
-      if (!cleanupComplete || !witnessUnchanged || owners.length !== 2) {
-        throw new Error('Qualification failed: disposable ownership cleanup/absence incomplete');
-      }
+      finishQualification(primaryFailure, teardownFailure);
     }
   });
 }

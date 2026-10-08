@@ -31,7 +31,7 @@ export default defineConfig({
     {
       name: 'Next3108',
       command: 'npm start -- --hostname 127.0.0.1 --port 3108',
-      url: 'http://127.0.0.1:3108/login',
+      url: 'http://127.0.0.1:3108/recipes',
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: 'ignore',
@@ -40,7 +40,7 @@ export default defineConfig({
     {
       name: 'Ingress3107',
       command: 'npm run local:production -- --port 3107 --upstream-port 3108',
-      url: 'http://127.0.0.1:3107/login',
+      url: 'http://127.0.0.1:3107/recipes',
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: 'ignore',

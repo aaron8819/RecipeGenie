@@ -139,8 +139,8 @@ jobs:
       - name: Combined browser acceptance (serial, no retries)
         run: |
           set +e
-          DEBUG=pw:webserver node node_modules/@playwright/test/cli.js test \
-            --config=playwright.combined-ui.config.ts > "$RUNNER_TEMP/combined-webserver.log" 2>&1
+          node node_modules/@playwright/test/cli.js test \
+            --config=playwright.combined-ui.config.ts > /dev/null 2>&1
           test_exit=$?
           node scripts/capture-combined-ui-log.mjs "$test_exit"
           capture_exit=$?
@@ -154,7 +154,6 @@ jobs:
           path: |
             .codex-artifacts/combined-ui/*.json
             .codex-artifacts/combined-ui/*.png
-            .codex-artifacts/combined-ui/webserver-diagnostic.txt
           if-no-files-found: warn
           retention-days: 7
       - name: Stop only the disposable job-local database
