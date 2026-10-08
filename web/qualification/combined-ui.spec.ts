@@ -204,12 +204,12 @@ for (const viewport of [
       const replacement = recipe(primary.id, 'Qualification replacement chicken');
       const rows = [main, cooked, unassigned, replacement];
       stage = 'seed canonical recipes';
-      const inserted = await admin.from('recipes').insert(rows);
+      const inserted = await primary.client.from('recipes').insert(rows);
       requireResult(inserted.error, true, 'seed canonical recipes');
       const today = new Date().getUTCDay();
       stage = 'seed weekly plans';
       for (const week of [monday(), monday(7)]) {
-        const seeded = await admin.from('weekly_plans').upsert({
+        const seeded = await primary.client.from('weekly_plans').upsert({
           user_id: primary.id, week_date: week, scale: 2,
           recipe_uuids: [main.id, cooked.id, unassigned.id], made_recipe_uuids: [cooked.id],
           day_assignment_recipe_uuids: { [main.id]: today, [cooked.id]: (today + 1) % 7 },
