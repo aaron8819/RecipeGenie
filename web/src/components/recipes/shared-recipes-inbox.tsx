@@ -22,8 +22,8 @@ export function SharedRecipesInbox({
   open,
   onOpenChange,
 }: SharedRecipesInboxProps) {
-  const incoming = useIncomingRecipeShares();
-  const sent = useSentRecipeShares();
+  const incoming = useIncomingRecipeShares(open);
+  const sent = useSentRecipeShares(open);
   const acceptShare = useAcceptRecipeShare();
   const declineShare = useDeclineRecipeShare();
 
