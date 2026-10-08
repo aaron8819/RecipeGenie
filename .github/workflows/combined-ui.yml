@@ -1,4 +1,4 @@
-name: Selector read-recovery focused diagnostic (not full acceptance)
+name: Combined Recipe Planner qualification
 
 on:
   pull_request:
@@ -96,7 +96,6 @@ jobs:
           retention-days: 7
 
   combined-ui:
-    name: Focused selector diagnostic (not full acceptance)
     needs: trusted-pr-gate
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -107,7 +106,6 @@ jobs:
       CI: 'true'
       NEXT_TELEMETRY_DISABLED: '1'
       COMBINED_UI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
-      COMBINED_UI_FOCUS: 'selector-read-recovery'
     steps:
       - name: Checkout exact PR head (not the synthetic merge)
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -137,13 +135,12 @@ jobs:
       - name: Build same PR head for disposable local browser runtime
         run: npm run build
       - name: Install only qualification browsers
-        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
-      - name: Focused selector read-recovery (Chromium 1440, no retries)
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium webkit
+      - name: Combined browser acceptance (serial, no retries)
         run: |
           set +e
           node node_modules/@playwright/test/cli.js test \
-            --config=playwright.combined-ui.config.ts --project=combined-chromium \
-            --grep=1440x900 > /dev/null 2>&1
+            --config=playwright.combined-ui.config.ts > /dev/null 2>&1
           test_exit=$?
           node scripts/capture-combined-ui-log.mjs "$test_exit"
           capture_exit=$?

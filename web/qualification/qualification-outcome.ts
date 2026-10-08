@@ -28,10 +28,3 @@ export class SetupFailure extends Error {
     this.code = setupErrorCode(original);
   }
 }
-
-export function qualificationResult(
-  focused: boolean, passed: boolean, integrity: boolean,
-): 'PASS' | 'FOCUSED_PASS' | 'FAIL' {
-  if (!passed || !integrity) return 'FAIL';
-  return focused ? 'FOCUSED_PASS' : 'PASS';
-}
