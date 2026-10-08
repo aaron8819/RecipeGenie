@@ -10,6 +10,7 @@ import { createEmptyShoppingDocument } from '../src/lib/shopping-document';
 import { initializeShoppingDocument } from '../src/lib/shopping-initialization';
 import { readShoppingCompatibility } from '../src/lib/shopping-compatibility';
 import { parseQuantityV1 } from '../src/lib/recipe-quantity';
+import { finishQualification, type Failure } from './qualification-outcome';
 
 config({ path: '.env.local', quiet: true });
 const backend = 'http://127.0.0.1:54321';
@@ -96,7 +97,6 @@ function recipe(owner: string, name: string): RecipeInsert {
 async function owner(run: string, journal: Owner[]): Promise<Owner> {
   const email = `combined-${randomUUID()}@example.test`;
   const password = randomUUID() + randomUUID();
-  process.stdout.write(`::add-mask::${password}\n::add-mask::${email}\n`);
   const created = await admin.auth.admin.createUser({
     email, password, email_confirm: true, app_metadata: { combinedQualification: run },
   });
@@ -186,12 +186,16 @@ for (const viewport of [
     const directory = path.resolve('..', '.codex-artifacts', 'combined-ui');
     const artifact = `${info.project.name}-${viewport.width}`;
     let passed = false;
-    let witnessUnchanged = false;
+    let witnessStatus = 'snapshot-not-acquired';
+    let primaryFailure: Failure | undefined;
+    let teardownFailure: Failure | undefined;
+    let stage = 'acquire primary owner';
     let witnessBefore: string | undefined;
     let cleanupComplete = true;
     let releasePending: (() => void) | undefined;
     try {
       const primary = await owner(run, owners);
+      stage = 'acquire witness owner';
       const witness = await owner(run, owners);
       const main = recipe(primary.id,
         'Qualification citrus chicken with a long grouped ingredient title for narrow cards');
@@ -199,9 +203,11 @@ for (const viewport of [
       const unassigned = recipe(primary.id, 'Qualification unassigned chicken');
       const replacement = recipe(primary.id, 'Qualification replacement chicken');
       const rows = [main, cooked, unassigned, replacement];
+      stage = 'seed canonical recipes';
       const inserted = await admin.from('recipes').insert(rows);
       requireResult(inserted.error, true, 'seed canonical recipes');
       const today = new Date().getUTCDay();
+      stage = 'seed weekly plans';
       for (const week of [monday(), monday(7)]) {
         const seeded = await admin.from('weekly_plans').upsert({
           user_id: primary.id, week_date: week, scale: 2,
@@ -210,6 +216,7 @@ for (const viewport of [
         });
         requireResult(seeded.error, true, 'seed weekly plan');
       }
+      stage = 'seed shopping';
       const legacyDocument = createEmptyShoppingDocument();
       legacyDocument.manualItems.push({
         id: randomUUID(), displayName: 'manual bread',
@@ -220,13 +227,16 @@ for (const viewport of [
       const seededShopping = await admin.from('shopping_list')
         .update({ document: document as unknown as Json }).eq('user_id', primary.id);
       requireResult(seededShopping.error, true, 'seed shopping');
+      stage = 'acquire witness snapshot';
       witnessBefore = await snapshot(witness);
+      stage = 'owner scoped read';
       const protectedRows = await witness.client.from('recipes').select('recipe_uuid')
         .eq('recipe_uuid', main.id);
       requireResult(protectedRows.error, protectedRows.data, 'owner scoped read');
       expect(protectedRows.data).toHaveLength(0);
       checks.push('owner-isolation');
 
+      stage = 'browser acceptance';
       const context = await browser.newContext({
         viewport, baseURL: 'http://127.0.0.1:3107', timezoneId: 'UTC',
       });
@@ -596,43 +606,55 @@ for (const viewport of [
       checks.push('shopping-stale-source');
       expect(checks).toEqual(requiredChecks);
       expect(externalRequests).toBe(0);
-      witnessUnchanged = await snapshot(witness) === witnessBefore;
-      expect(witnessUnchanged).toBe(true);
+      witnessStatus = await snapshot(witness) === witnessBefore ? 'unchanged' : 'changed';
+      expect(witnessStatus).toBe('unchanged');
       mkdirSync(directory, { recursive: true });
       await page.screenshot({
         path: path.join(directory, `${artifact}.png`), fullPage: true,
         animations: 'disabled', mask: [page.getByText(primary.email, { exact: true })]
       });
       passed = true;
+    } catch (error) {
+      primaryFailure = { error };
     } finally {
-      // Reserve bounded teardown time even after an assertion failure/step timeout.
-      info.setTimeout(info.timeout + 120_000);
-      releasePending?.();
-      for (const context of contexts) {
-        try { await context.close(); } catch { cleanupComplete = false; }
+      try {
+        // Reserve bounded teardown time even after an assertion failure/step timeout.
+        info.setTimeout(info.timeout + 120_000);
+        releasePending?.();
+        for (const context of contexts) {
+          try { await context.close(); } catch { cleanupComplete = false; }
+        }
+        if (owners[1] && witnessBefore) {
+          try {
+            witnessStatus = await snapshot(owners[1]) === witnessBefore ? 'unchanged' : 'changed';
+          } catch { witnessStatus = 'snapshot-read-failed'; }
+        }
+        for (const value of owners) {
+          let absent = false;
+          try { absent = await cleanup(value, run); } catch { /* Continue other owned cleanup. */ }
+          cleanupResults.push({ ownerId: value.id, absent });
+          cleanupComplete = cleanupComplete && absent;
+        }
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(path.join(directory, `${artifact}.json`), JSON.stringify({
+          schema: 2, sha: process.env.COMBINED_UI_EXPECTED_SHA, runId: process.env.GITHUB_RUN_ID,
+          attempt: process.env.GITHUB_RUN_ATTEMPT, engine: info.project.name, viewport, checks,
+          result: passed && witnessStatus === 'unchanged' && cleanupComplete && owners.length === 2
+            ? 'PASS' : 'FAIL',
+          stage, primaryFailure: primaryFailure !== undefined,
+          witnessStatus, cleanupComplete, owners: cleanupResults,
+          limitation: 'Injected browser faults; WebKit HTTP CSP accommodation; no sharing/import',
+        }, null, 2));
+        if (!cleanupComplete || owners.length !== 2) {
+          throw new Error('Qualification cleanup/owner acquisition incomplete');
+        }
+        if (witnessStatus !== 'unchanged') {
+          throw new Error(`Qualification witness status: ${witnessStatus}`);
+        }
+      } catch (error) {
+        teardownFailure = { error };
       }
-      if (owners[1] && witnessBefore) {
-        try { witnessUnchanged = await snapshot(owners[1]) === witnessBefore; }
-        catch { witnessUnchanged = false; }
-      }
-      for (const value of owners) {
-        let absent = false;
-        try { absent = await cleanup(value, run); } catch { /* Continue other owned cleanup. */ }
-        cleanupResults.push({ ownerId: value.id, absent });
-        cleanupComplete = cleanupComplete && absent;
-      }
-      mkdirSync(directory, { recursive: true });
-      writeFileSync(path.join(directory, `${artifact}.json`), JSON.stringify({
-        schema: 1, sha: process.env.COMBINED_UI_EXPECTED_SHA, runId: process.env.GITHUB_RUN_ID,
-        attempt: process.env.GITHUB_RUN_ATTEMPT, engine: info.project.name, viewport, checks,
-        result: passed && witnessUnchanged && cleanupComplete && owners.length === 2
-          ? 'PASS' : 'FAIL',
-        witnessUnchanged, cleanupComplete, owners: cleanupResults,
-        limitation: 'Injected browser faults; WebKit HTTP CSP accommodation; no sharing/import',
-      }, null, 2));
-      if (!cleanupComplete || !witnessUnchanged || owners.length !== 2) {
-        throw new Error('Qualification failed: disposable ownership cleanup/absence incomplete');
-      }
+      finishQualification(primaryFailure, teardownFailure);
     }
   });
 }
