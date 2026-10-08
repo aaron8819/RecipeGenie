@@ -111,11 +111,20 @@ Completed acceptance checks:
 - [x] Root redirect, logo target, manifest start URL, and PWA launch configuration
   are unchanged in the accumulated diff.
 
-Run the guarded integration checks from `web/` with Node 22:
-`node --import tsx scripts/verify-dashboard-local.mjs`. It requires the existing
-loopback Supabase runtime, refuses an occupied app port, creates disposable users,
-deletes them afterward, and never resets the shared database. Evidence lives in
-ignored `.codex-artifacts/dashboard/`.
+The PR73 Dashboard verifier scripts are historical one-off tooling and were
+removed from the current checkout. Their final versions remain recoverable at
+commit `86b9fe855d097081c3db37f813616674cc3d146b`:
+
+- [Initial Dashboard verifier](https://github.com/aaron8819/RecipeGenie/blob/86b9fe855d097081c3db37f813616674cc3d146b/web/scripts/verify-dashboard-local.mjs)
+- [Dashboard correction verifier](https://github.com/aaron8819/RecipeGenie/blob/86b9fe855d097081c3db37f813616674cc3d146b/web/scripts/verify-dashboard-corrections-local.mjs)
+- [Remaining-findings verifier](https://github.com/aaron8819/RecipeGenie/blob/86b9fe855d097081c3db37f813616674cc3d146b/web/scripts/verify-dashboard-remaining-local.mjs)
+
+They are not supported current verification commands. Preserve their original
+ignored receipts. Coverage gaps include Dashboard accessibility/layout and
+independent panel read failures, cross-view Shopping check-off persistence,
+stale cross-tab cooked-history swap rejection, and delayed-read focus recovery
+for populated/empty Dashboard and Planner additions. The combined suite overlaps
+some flows but does not fully replace these assertions.
 
 No implementation slices remain. Safari and actual native iPhone Home Screen
 launch require device/browser verification; preserving launch configuration is
@@ -363,9 +372,10 @@ Regression coverage lives in `dashboard-shopping-contract.test.ts`,
 `shopping-check-intents.test.tsx`, `dashboard-meal-image.test.tsx`, the updated
 Shopping selection/swap hook tests, and `planner_history_swap_guard.sql`.
 `test-dashboard-history-race.mjs` verifies a real concurrent history transaction;
-`verify-dashboard-corrections-local.mjs` verifies both requested browser sizes
-using disposable users and actual persistence. These are new candidate checks,
-not claims that modified review-only fixtures prove the unchanged product works.
+the historical Dashboard correction verifier checked both requested browser
+sizes using disposable users and actual persistence (see the pinned source links
+above). These were candidate checks at that time, not claims that modified
+review-only fixtures proved the unchanged product worked.
 The final finding-to-fix handoff records exact commit/tree IDs and verification.
 Safari and physical iPhone remain unverified.
 
