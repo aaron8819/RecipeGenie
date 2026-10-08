@@ -262,6 +262,37 @@ Duplicate `--json` is a deterministic JSON argument error. Human failures stay
 concise on stderr. Always use `npm run --silent ... -- --json` so npm lifecycle
 headers cannot contaminate machine output.
 
+## Browser qualification selection
+
+Routine releases use normal CI (`quality-guards` and `migration-smoke-and-drift`),
+focused tests for the affected code, and the existing release-status check.
+The full combined browser suite does not run automatically on every web PR.
+Request it when changes affect recipe/Shopping saves, Planner mutations or return
+navigation, Undo, auth/ownership, dialogs, focus or responsive interactions.
+Existing component/hook tests remain the first checks for isolated logic changes.
+
+Explicitly run the preserved suite on a reviewed repository branch or tag:
+
+```powershell
+gh workflow run combined-ui.yml --repo aaron8819/RecipeGenie --ref <reviewed-branch-or-tag>
+```
+
+The dispatch event's `github.sha` binds both checkouts, expected-source guards and
+artifact names to the same immutable commit. Confirm that SHA in the run and
+receipts matches the reviewed candidate. Manual dispatch becomes available after
+the workflow is present on the default branch; do not substitute a local harness
+or a different trigger. It retains the trusted gate, hosted disposable runners,
+loopback database, owner isolation, sanitized evidence and cleanup controls.
+
+This invocation still runs the full Chromium/WebKit, desktop/mobile suite; it
+adds no selective runner or parallel smoke framework. Existing shell/navigation
+smoke tests do not establish recipe and Planner persistence. Choose deeper
+qualification for the actual risk rather than treating its existence as a
+routine release requirement. Preserve failed receipts and obtain an explicit
+owner waiver when accepting a failure; never report it as passing acceptance.
+PR82's existing return-week URL assertion failure remains unresolved, with
+`fullAcceptance=false`; Aaron accepted it only for this test/tooling-only update.
+
 ## Proportional review
 
 - Behavioral code change: implementation, independent review, corrections,

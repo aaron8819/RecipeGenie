@@ -1,18 +1,13 @@
 name: Combined Recipe Planner qualification
 
 on:
-  pull_request:
-    paths:
-      - 'web/**'
-      - 'scripts/**'
-      - 'supabase/**'
-      - '.github/workflows/combined-ui.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: combined-ui-${{ github.event.pull_request.number }}
+  group: combined-ui-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,12 +21,12 @@ jobs:
     env:
       CI: 'true'
       NEXT_TELEMETRY_DISABLED: '1'
-      COMBINED_UI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      COMBINED_UI_EXPECTED_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout exact PR head
+      - name: Checkout exact dispatched commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Setup pinned Node
@@ -88,7 +83,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: combined-pr-gate-${{ github.event.pull_request.head.sha }}
+          name: combined-pr-gate-${{ github.sha }}
           path: |
             .codex-artifacts/combined-ui/*.json
             .codex-artifacts/combined-ui/pr-gate.txt
@@ -105,12 +100,12 @@ jobs:
     env:
       CI: 'true'
       NEXT_TELEMETRY_DISABLED: '1'
-      COMBINED_UI_EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+      COMBINED_UI_EXPECTED_SHA: ${{ github.sha }}
     steps:
-      - name: Checkout exact PR head (not the synthetic merge)
+      - name: Checkout exact dispatched commit
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Setup pinned Node
@@ -132,7 +127,7 @@ jobs:
           supabase db reset --local > /dev/null 2>&1
       - name: Bind local-only runtime and source
         run: node scripts/prepare-combined-ui.mjs
-      - name: Build same PR head for disposable local browser runtime
+      - name: Build same dispatched commit for disposable local browser runtime
         run: npm run build
       - name: Install only qualification browsers
         run: node node_modules/@playwright/test/cli.js install --with-deps chromium webkit
@@ -150,7 +145,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: combined-ui-${{ github.event.pull_request.head.sha }}
+          name: combined-ui-${{ github.sha }}
           path: |
             .codex-artifacts/combined-ui/*.json
             .codex-artifacts/combined-ui/*.png
