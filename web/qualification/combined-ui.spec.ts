@@ -565,9 +565,13 @@ for (const viewport of [
         expect((await readShopping()).document.recipeEntries[cooked.id].selectedServings).toBe(8);
         stage = 'dashboard: navigate';
         await page.goto('/dashboard');
-        const dashboardTrigger = page.getByRole('button', {
+        const dashboardTrigger = page.getByRole('region', {
+          name: 'Today’s meals', exact: true,
+        }).getByRole('button', {
           name: `Meal actions for ${main.name}`, exact: true,
         });
+        stage = 'dashboard: unique Today meal menu';
+        await expect(dashboardTrigger).toHaveCount(1);
         stage = 'dashboard: open meal menu';
         await dashboardTrigger.click();
         stage = 'dashboard: select Shopping menu action';
