@@ -248,6 +248,17 @@ function Get-RecipeGenieMigrationBackupDefinition {
                 )
             }
         }
+        'supabase/migrations/033_fix_recipe_quantity_rational_comparison.sql' {
+            [ordered]@{
+                MigrationPath = $normalizedPath
+                PendingMigrationVersion = '033'
+                ExpectedAppliedMigrationVersions = @(1..32 | ForEach-Object { '{0:d3}' -f $_ })
+                ExpectedProjectReference = 'eyaoahwzixqetjgfghsh'
+                RequireRestoreVerification = $false
+                PreflightPath = 'scripts/database/preflight/033_fix_recipe_quantity_rational_comparison.sql'
+                RecoveryMode = 'function-forward-repair'
+            }
+        }
         default { throw 'Migration is not supported by the Recipe Genie production backup gate.' }
     }
     [pscustomobject]$definition
