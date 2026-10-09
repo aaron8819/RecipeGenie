@@ -54,7 +54,7 @@ For verification and release commands, use the existing
 
 - Canonical bootstrap is baseline-first and applies every tracked file in
   `supabase/migrations/`, currently `001_baseline.sql` through
-  `032_planner_mutation_lock_order.sql`.
+  `033_fix_recipe_quantity_rational_comparison.sql`.
 - Pre-baseline incremental migrations are retained under
   `supabase/migrations/archive/2026-03-09-pre-028-squash/` for historical
   context only.

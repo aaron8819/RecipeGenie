@@ -142,6 +142,14 @@ High-risk examples include destructive removal, irreversible transforms, primary
 
 Classification never authorizes a migration. Any active-write enforcement, identity/UUID migration, RPC replacement, trigger, RLS, destructive authority, existing-data repair, or tightened constraint requires disposable restore verification.
 
+## Migration 033 function repair policy
+
+Migration 033 changes only private validator definitions and adds a private exact-comparison helper; it does not rewrite recipes, shares, constraints, permissions, or ownership. Its reviewed bounded recovery policy is `function-forward-repair`. A full logical backup or disposable restore is not a prerequisite for this specific function repair. All older migration backup and restore requirements remain unchanged.
+
+Before separately authorized application, require a successful existing `Backup-RecipeGenieProduction.ps1 -PreflightOnly` run with `-MigrationPath supabase/migrations/033_fix_recipe_quantity_rational_comparison.sql` from the exact reviewed clean commit. This retains production project/endpoint/TLS identity, exact 001-through-032 ledger, committed SQL hashes, and read-only predecessor/stored-data compatibility checks. It creates no backup and grants no migration authorization. An optional backup remains a separate explicitly authorized action through the existing backup path.
+
+SQL failure before transaction commit rolls back the definition changes. After commit, use a reviewed forward correction: restoring the faulty predecessor validators can reject recurring fractions saved after the repair. Do not promise a data-safe validator rollback or restore production as exploratory recovery. Migration, merge, deployment, and any backup creation still require their own applicable authorization.
+
 ## Migration 012 sequence
 
 1. Confirm the authorized commit, exact migration file, and hash.

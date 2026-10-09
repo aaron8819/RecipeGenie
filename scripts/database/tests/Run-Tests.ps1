@@ -355,6 +355,32 @@ try {
         Must ($definition.RestorePreparationPath -ceq $restore017PreparationPath)
         Must ($definition.RestoreFinalizationPath -ceq $restore017FinalizationPath)
     }
+    Case 'migration 033 binds guarded function forward repair without archive prerequisite' {
+        $definition=Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/033_fix_recipe_quantity_rational_comparison.sql'
+        Must (($definition.ExpectedAppliedMigrationVersions -join ',') -ceq ((1..32 | ForEach-Object { '{0:d3}' -f $_ }) -join ','))
+        Must ($definition.PendingMigrationVersion -ceq '033')
+        Must ($definition.ExpectedProjectReference -ceq 'eyaoahwzixqetjgfghsh')
+        Must ($definition.PreflightPath -ceq 'scripts/database/preflight/033_fix_recipe_quantity_rational_comparison.sql')
+        Must ($definition.RequireRestoreVerification -eq $false)
+        Must ($definition.RecoveryMode -ceq 'function-forward-repair')
+        Must (-not $definition.PSObject.Properties['RequiredArchiveTables'])
+        Must (-not $definition.PSObject.Properties['RequiredArchiveFunctions'])
+        foreach ($path in @($migration012Path,$migration013Path,$migration014Path,$migration016Path,$migration017Path)) {
+            Must ((Get-RecipeGenieMigrationBackupDefinition $path).RequireRestoreVerification -eq $true)
+        }
+    }
+    Case 'migration 033 preflight is bounded read only and binds predecessor source' {
+        $text=[IO.File]::ReadAllText((Join-Path $root 'preflight/033_fix_recipe_quantity_rational_comparison.sql'))
+        Must ($text -match '\\set ON_ERROR_STOP on')
+        Must ($text -match 'begin transaction read only;')
+        Must ($text -match "set local lock_timeout = '5s';")
+        Must ($text -match "set local statement_timeout = '30s';")
+        Must ($text -match '(?s)rollback;\s*$')
+        Must ($text -match 'sha256\(convert_to\(replace\(p.prosrc')
+        Must ($text -match "ingredient->'quantityV1'")
+        Must ($text -match 'double precision is distinct from')
+        Must ($text -notmatch '(?im)^\s*(create|alter|drop|insert|update|delete|truncate|grant|revoke)\s')
+    }
     Case 'unsupported future migration definition fails closed' { Throws { Get-RecipeGenieMigrationBackupDefinition 'supabase/migrations/018_unknown.sql' } 'not supported' }
 
     $backupScriptText = [IO.File]::ReadAllText((Join-Path $root 'Backup-RecipeGenieProduction.ps1'))

@@ -1,4 +1,4 @@
-export const EXPECTED_LATEST_MIGRATION = "032_planner_mutation_lock_order"
+export const EXPECTED_LATEST_MIGRATION = "033_fix_recipe_quantity_rational_comparison"
 export const EXPECTED_SUPABASE_PROJECT_REF = "eyaoahwzixqetjgfghsh"
 
 export interface DeploymentManifest {
