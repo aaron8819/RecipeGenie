@@ -1,5 +1,11 @@
 # Approved Recipe and Planner application integration plan
 
+> Historical integration plan and slice checkpoints. Publishing and execution
+> holds below describe their original task scope, not current authorization for
+> new work. Use [AGENTS.md](../AGENTS.md) and
+> [the workflow guide](developer-workflow.md) for current policy. Product scope,
+> gap decisions, source identities, and failed verification evidence remain intact.
+
 Planning only, 2026-10-06. Application baseline: freshly fetched `origin/main`, `8277eeeb06ee68d5c198f0fa9d6d781f9135bacc`. No application or backend changes made. Detailed interaction ownership is in [the capability map](recipe-planner-capability-map.md).
 
 ## Frozen design authority

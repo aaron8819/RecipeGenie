@@ -1,13 +1,19 @@
 # Dashboard integration plan
 
+> Historical implementation plan. The checkpoint permissions and delivery holds
+> below record their original task scope; they do not govern new authorized work.
+> Use [AGENTS.md](../AGENTS.md) for current authorization and
+> [the workflow guide](developer-workflow.md) for current verification. Preserve
+> the product decisions and verification limitations recorded here.
+
 The approved local mockup adds a Dashboard destination alongside the existing
 Recipes, Planner, Shopping, and Pantry screens. Integrate its presentation with
 the current authenticated shell and domain hooks; do not ship the standalone
 fixture application or replace the other screens. The shopping selection and
 searchable swap modals are approved improvements to share with Planner.
 
-This document is an implementation proposal, not authorization to commit,
-push, apply migrations, merge, or deploy. Planning is Tier 1. Any eventual
+The original proposal did not authorize publication or production changes.
+Planning was Tier 1. Any eventual
 database function change and production rollout require their own classification
 and explicit authorization under `AGENTS.md`.
 
@@ -49,8 +55,8 @@ Local limitations: Turbopack cannot build with this worktree's dependency juncti
 so webpack is used. Safari/WebKit verification is incomplete because existing CSP
 upgrades loopback HTTP resources to HTTPS. No security-policy change is included.
 At that slice, commit, push, merge, and deployment remained unauthorized. The
-subsequent integration request authorizes committing the accumulated completed
-work; push, merge, deployment, and migrations remain unauthorized.
+subsequent integration request authorized committing the accumulated completed
+work; push, merge, deployment, and migrations remained unauthorized at that checkpoint.
 
 Slice 2 is implemented locally: the searchable swap picker uses a single guarded
 UPDATE through existing RLS and UUID ownership triggers. The existing SQL guards
@@ -298,7 +304,8 @@ remove its already-added Shopping contribution.
    support, and the agreed mobile header. Leave other destination layouts intact.
 4. **Integration verification and delivery.** Test locally with disposable
    authenticated fixtures, prepare reviewable changes and an evidence summary,
-   then stop before any unauthorized commit, push, merge, migration, or deployment.
+   then follow current task authorization under `AGENTS.md` before publication or
+   protected production stages.
 
 Keep each slice reviewable. Do not copy the standalone mockup app into the
 authenticated shell, build generalized dashboard infrastructure, or refactor
