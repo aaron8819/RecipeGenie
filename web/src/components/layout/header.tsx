@@ -33,13 +33,13 @@ export function Header({ userEmail, onSignOut }: HeaderProps) {
             className="-m-1 flex flex-shrink-0 cursor-pointer items-center gap-2 rounded-lg p-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
             aria-label="Go to Planner"
           >
-            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center">
+            <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center">
               <Image
                 src="/recipe-genie-mark.png"
                 alt=""
-                width={462}
-                height={426}
-                className="h-8 w-auto"
+                width={236}
+                height={360}
+                className="h-11 w-auto rounded-sm"
                 loading="eager"
                 unoptimized
                 aria-hidden="true"
