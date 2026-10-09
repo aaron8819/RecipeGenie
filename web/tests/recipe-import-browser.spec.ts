@@ -474,7 +474,7 @@ test.describe('local recipe import browser verification', () => {
       await expect(editDialog.getByTestId('replacement-review')).toContainText(IMPORTED_TITLE)
       await expect(editDialog.getByText('Pasted category: beef. This recipe keeps category lamb.')).toBeVisible()
 
-      await editDialog.getByRole('button', { name: /^edit$/i }).click()
+      await editDialog.getByRole('button', { name: /^back to edit$/i }).first().click()
       await editDialog.getByRole('tab', { name: /^details$/i }).click()
       await expect(editDialog.locator('#name-edit')).toHaveValue(IMPORTED_TITLE)
       await expect(editDialog.locator('#servings-edit')).toHaveValue('4')

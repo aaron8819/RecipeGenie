@@ -1144,6 +1144,16 @@ export function quantityToLegacyAmount(
   return null
 }
 
+// PostgreSQL requires the compatibility amount to equal the exact rational.
+// Keep recurring fractions as lexemes instead of rounded JSON decimals.
+export function quantityToPersistenceAmount(quantity: QuantityV1): Ingredient['amount'] {
+  const amount = quantityToLegacyAmount(quantity)
+  if (quantity.kind !== 'exact' && quantity.kind !== 'range') return amount
+  // Compare value only: approximation stays in quantityV1, not the legacy amount.
+  if (quantityMatchesLegacy(quantity, String(amount))) return amount
+  return quantity.kind === 'range' ? quantity.authored : quantity.lexeme
+}
+
 function scaleQuantity(
   quantity: QuantityV1,
   ratio: Rational

@@ -1092,9 +1092,9 @@ export function RecipeDialog({
           <div className="sticky top-0 z-20 px-4 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-6 flex justify-between items-center border-b border-stone-200 dark:border-zinc-800 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
             {editTab === 'replace' && replacementPhase === 'review' ? <>
               <Button type="button" variant="ghost" className="min-h-11 px-0" disabled={isSubmitting} onClick={() => setReplacementPhase('input')}>
-                <ArrowLeft className="mr-2 h-4 w-4" />Edit
+                <ArrowLeft className="mr-2 h-4 w-4" />Back to edit
               </Button>
-              <h1 className="text-lg font-semibold sm:text-2xl">Review changes</h1>
+              <h1 className="text-lg font-semibold sm:text-2xl">Preview recipe</h1>
               <Button type="button" variant="ghost" className="min-h-11 px-0" disabled={isSubmitting} onClick={() => handleOpenChange(false)}>Cancel</Button>
             </> : <>
             <div>
@@ -1517,7 +1517,7 @@ export function RecipeDialog({
               </TabsContent>
               <TabsContent value="replace" className="mt-0 data-[state=inactive]:hidden">
                 {replacementPhase === 'review' && replacementBaseline ? (
-                  <RecipeReplacementReview current={initialEditingFormValues ?? replacementBaseline} updated={currentDraft} unparsed={replacementUnparsed} warnings={replacementWarnings} />
+                  <RecipeReplacementReview updated={currentDraft} unparsed={replacementUnparsed} warnings={replacementWarnings} />
                 ) : <RecipeImportSection
                   variant="replace"
                   showUrlImport={false}
@@ -1571,7 +1571,7 @@ export function RecipeDialog({
             <div className="w-full space-y-2">
               <div className="flex w-full gap-3">
                 <Button type="button" variant="outline" className="min-h-11 flex-1" disabled={isSubmitting} onClick={() => replacementPhase === 'review' ? setReplacementPhase('input') : handleOpenChange(false)}>
-                  {replacementPhase === 'review' ? 'Back to text' : 'Cancel'}
+                  {replacementPhase === 'review' ? 'Back to edit' : 'Cancel'}
                 </Button>
                 <Button type="button" className="min-h-11 flex-1" onClick={() => replacementPhase === 'review' ? handleSubmit() : handleApplyReplacementPreview()}
                   disabled={isSubmitting || !rawSource.trim() || (replacementPhase === 'review' && (replacementUnparsed.length > 0 || replacementSource !== rawSource || !name.trim() || !hasValidIngredients))}>
