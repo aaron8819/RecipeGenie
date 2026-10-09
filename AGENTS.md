@@ -66,6 +66,13 @@ new gates. Keep secrets, local auth state and raw private diagnostics out of
 commits and uploaded artifacts. Preserve ignored `.codex-artifacts/` receipts;
 never delete evidence, shared previews or processes as incidental cleanup.
 
+After opening or updating a PR, monitor CI for the current head through its
+terminal result and proceed with PR review without another owner prompt.
+Investigate failures and make authorized fixes; refresh affected checks and
+review after corrections. Report actual blockers instead of treating pending
+CI as a completed handoff. Flag measured opportunities to shorten the
+build-to-review cycle without silently skipping or weakening required checks.
+
 Run `npm run rg:doctor` before environment-sensitive verification or operational
 work involving Supabase, Vercel, GitHub, PostgreSQL, migrations, backups or
 restores. It is optional for clearly local low-risk/prose changes and is local
