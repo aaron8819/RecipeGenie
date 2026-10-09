@@ -6,6 +6,10 @@ import type { Recipe } from "@/types/database"
 import { canonicalizeRecipeFixture } from "@/test/recipe-fixtures"
 import { createEmptyShoppingDocument } from "@/lib/shopping-document"
 
+vi.mock("@/hooks/use-pantry", () => ({
+  usePantryItems: () => ({ data: [], isLoading: false, isError: false }),
+}))
+
 vi.mock("@/hooks/shopping/use-shopping-document", () => ({
   useShoppingDocumentState: () => ({ data: { document: createEmptyShoppingDocument() }, isLoading: false, isError: false }),
 }))
@@ -251,7 +255,7 @@ describe("RecipeDetailPage states", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
     expect(addShoppingMutateAsync).not.toHaveBeenCalled()
     expect(screen.getByLabelText(/Selected yield for/)).toHaveValue(5)
-    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ ingredients?$/ }))
 
     await waitFor(() => {
       expect(addShoppingMutateAsync).toHaveBeenCalledWith({

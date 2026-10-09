@@ -2,26 +2,34 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShoppingSelectionDialog } from '../shopping-selection-dialog';
 import { createEmptyShoppingDocument } from '@/lib/shopping-document';
-import {
-  initialShoppingSelection,
-  createSelectedShoppingEntry,
-} from '@/lib/shopping-selection';
+import { initialShoppingSelection, createSelectedShoppingEntry } from '@/lib/shopping-selection';
 import { canonicalizeRecipeFixture } from '@/test/recipe-fixtures';
 import { parseIngredientLine } from '@/lib/recipe-parser';
 
+let pantryItems: import('@/types/database').PantryItem[] | undefined = [];
+let pantryLoading = false;
+let pantryError = false;
+let documentError = false;
+vi.mock('@/hooks/use-pantry', () => ({
+  usePantryItems: () => ({
+    data: pantryItems,
+    isLoading: pantryLoading,
+    isError: pantryError,
+    refetch: vi.fn(),
+  }),
+}));
 let document = createEmptyShoppingDocument();
 vi.mock('@/hooks/shopping/use-shopping-document', () => ({
   useShoppingDocumentState: () => ({
     data: { document },
     isLoading: false,
-    isError: false,
+    isError: documentError,
+    refetch: vi.fn(),
   }),
 }));
 const recipe = canonicalizeRecipeFixture({
   name: 'Soup',
-  fixtureIngredients: ['1 cup milk', '2 tbsp olive oil'].map(
-    parseIngredientLine,
-  ),
+  fixtureIngredients: ['1 cup milk', '2 tbsp olive oil'].map(parseIngredientLine),
 });
 const onSubmit = vi.fn();
 const onOpenChange = vi.fn();
@@ -30,10 +38,14 @@ describe('Shopping selection dialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     document = createEmptyShoppingDocument();
+    pantryItems = [];
+    pantryLoading = false;
+    pantryError = false;
+    documentError = false;
     onSubmit.mockResolvedValue(undefined);
   });
   function open(defaultScale = 1) {
-    render(
+    return render(
       <ShoppingSelectionDialog
         open
         onOpenChange={onOpenChange}
@@ -44,15 +56,63 @@ describe('Shopping selection dialog', () => {
     );
   }
 
+  it('waits for Pantry, freezes defaults, and preserves input through refresh errors', () => {
+    pantryItems = undefined;
+    pantryLoading = true;
+    const view = open();
+    expect(screen.queryByLabelText('Soup: milk, ingredient 1')).toBeNull();
+    pantryItems = [{ id: 'milk', user_id: 'owner', item: 'milk', created_at: '' }];
+    pantryLoading = false;
+    const rerender = () =>
+      view.rerender(
+        <ShoppingSelectionDialog
+          open
+          recipes={[recipe]}
+          onSubmit={onSubmit}
+          onOpenChange={onOpenChange}
+        />,
+      );
+    rerender();
+    expect(screen.getByLabelText('Soup: milk, ingredient 1')).not.toBeChecked();
+    expect(screen.getByText('In pantry')).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Soup: milk, ingredient 1'));
+    fireEvent.click(screen.getByLabelText('Soup: olive oil, ingredient 2'));
+    documentError = true;
+    pantryError = true;
+    pantryItems = undefined;
+    rerender();
+    expect(screen.getByLabelText('Soup: milk, ingredient 1')).toBeChecked();
+    expect(screen.getByLabelText('Soup: olive oil, ingredient 2')).not.toBeChecked();
+    expect(screen.getByText(/Your choices are preserved/)).toBeVisible();
+    pantryItems = [];
+    pantryError = false;
+    documentError = false;
+    document.preferences.excludedIngredientKeys = ['milk'];
+    rerender();
+    fireEvent.change(screen.getByLabelText('Selected yield for Soup'), { target: { value: '8' } });
+    expect(screen.getByLabelText('Soup: milk, ingredient 1')).toBeChecked();
+    expect(screen.getByLabelText('Soup: olive oil, ingredient 2')).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Add 1 ingredient' })).toBeEnabled();
+  });
+
+  it('keeps excluded ingredients visible and allows manual inclusion', async () => {
+    document.preferences.excludedIngredientKeys = ['olive oil'];
+    open();
+    expect(screen.getByLabelText('Soup: olive oil, ingredient 2')).not.toBeChecked();
+    expect(screen.getByText('Excluded')).toBeVisible();
+    fireEvent.click(screen.getByLabelText('Soup: olive oil, ingredient 2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add 2 ingredients' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+    expect(onSubmit.mock.calls[0][0][0].ingredientOrdinals).toEqual([0, 1]);
+  });
+
   it('submits a source subset at the selected yield, then closes', async () => {
     open(2);
     fireEvent.change(screen.getByLabelText('Selected yield for Soup'), {
       target: { value: '8' },
     });
     fireEvent.click(screen.getByLabelText('Soup: olive oil, ingredient 2'));
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Add selected ingredients' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ ingredients?/ }));
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
     expect(onSubmit).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -67,16 +127,12 @@ describe('Shopping selection dialog', () => {
     open();
     fireEvent.click(screen.getByLabelText('Soup: milk, ingredient 1'));
     fireEvent.click(screen.getByLabelText('Soup: olive oil, ingredient 2'));
-    expect(
-      screen.getByRole('button', { name: 'Add selected ingredients' }),
-    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Add \d+ ingredients?/ })).toBeDisabled();
     fireEvent.click(screen.getByLabelText('Soup: milk, ingredient 1'));
     fireEvent.change(screen.getByLabelText('Selected yield for Soup'), {
       target: { value: '1.5' },
     });
-    expect(
-      screen.getByRole('button', { name: 'Add selected ingredients' }),
-    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Add \d+ ingredients?/ })).toBeDisabled();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -88,43 +144,128 @@ describe('Shopping selection dialog', () => {
     });
     open(3);
     expect(screen.getByLabelText('Soup: milk, ingredient 1')).not.toBeChecked();
-    expect(
-      screen.getByLabelText('Soup: olive oil, ingredient 2'),
-    ).toBeChecked();
+    expect(screen.getByLabelText('Soup: olive oil, ingredient 2')).toBeChecked();
     expect(screen.getByLabelText('Selected yield for Soup')).toHaveValue(8);
   });
 
   it('selects and deselects canonical occurrences across repeated groups', async () => {
-    const grouped = { ...recipe, ingredientSections: [
-      { label: 'Sauce', ingredients: [{ ...recipe.ingredientSections[0].ingredients[0], modifier: 'finely chopped', alternatives: ['oat milk'] }] },
-      { label: 'Sauce', ingredients: [recipe.ingredientSections[0].ingredients[0]] },
-    ] };
-    render(<ShoppingSelectionDialog open onOpenChange={onOpenChange} recipes={[grouped]} onSubmit={onSubmit} />);
+    const grouped = {
+      ...recipe,
+      ingredientSections: [
+        {
+          label: 'Sauce',
+          ingredients: [
+            {
+              ...recipe.ingredientSections[0].ingredients[0],
+              modifier: 'finely chopped',
+              alternatives: ['oat milk'],
+            },
+          ],
+        },
+        { label: 'Sauce', ingredients: [recipe.ingredientSections[0].ingredients[0]] },
+      ],
+    };
+    render(
+      <ShoppingSelectionDialog
+        open
+        onOpenChange={onOpenChange}
+        recipes={[grouped]}
+        onSubmit={onSubmit}
+      />,
+    );
     expect(screen.getAllByRole('heading', { name: 'Sauce' })).toHaveLength(2);
     expect(screen.getByText('finely chopped')).toBeInTheDocument();
     expect(screen.getByText('or oat milk')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Deselect all' }));
     expect(screen.getByText('0 of 2 selected')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add selected ingredients' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Add \d+ ingredients?/ })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
     fireEvent.click(screen.getByLabelText('Soup: milk, ingredient 1'));
     expect(screen.getByLabelText('Soup: milk, ingredient 2')).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: 'Add selected ingredients' }));
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ ingredientOrdinals: [1] })]));
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ ingredients?/ }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ ingredientOrdinals: [1] })]),
+    );
   });
 
   it('keeps selections and shows a failed save for retry', async () => {
-    onSubmit.mockRejectedValueOnce(
-      new Error('Shopping changed in another session.'),
-    );
+    onSubmit.mockRejectedValueOnce(new Error('Shopping changed in another session.'));
     open();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Add selected ingredients' }),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Shopping changed'),
-    );
+    fireEvent.click(screen.getByRole('button', { name: /Add \d+ ingredients?/ }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Shopping changed'));
     expect(screen.getByLabelText('Soup: milk, ingredient 1')).toBeChecked();
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('shopping review lifetime', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    document = createEmptyShoppingDocument();
+    pantryItems = [];
+    pantryLoading = false;
+    pantryError = false;
+    documentError = false;
+    onSubmit.mockResolvedValue(undefined);
+  });
+  it('cancels without writing and resets unsaved choices only on explicit reopening', () => {
+    pantryItems = [];
+    pantryError = false;
+    documentError = false;
+    document = createEmptyShoppingDocument();
+    const view = render(
+      <ShoppingSelectionDialog
+        open
+        recipes={[recipe]}
+        onSubmit={onSubmit}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText('Soup: milk, ingredient 1'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    view.rerender(
+      <ShoppingSelectionDialog
+        open={false}
+        recipes={[recipe]}
+        onSubmit={onSubmit}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    view.rerender(
+      <ShoppingSelectionDialog
+        open
+        recipes={[recipe]}
+        onSubmit={onSubmit}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    expect(screen.getByLabelText('Soup: milk, ingredient 1')).toBeChecked();
+  });
+
+  it('locks duplicate submissions until the pending write settles', async () => {
+    let settle: () => void = () => undefined;
+    onSubmit.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    render(
+      <ShoppingSelectionDialog
+        open
+        recipes={[recipe]}
+        onSubmit={onSubmit}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    const button = screen.getByRole('button', { name: 'Add 2 ingredients' });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(button).toBeDisabled();
+    settle();
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 });

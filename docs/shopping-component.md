@@ -170,3 +170,29 @@ amounts fail closed. Reopening, re-adding, changing yield and Undo retain a save
 subset rather than expanding it to the whole recipe. Shared check intents pass
 the inspected coverage and revision for each acknowledgement, including retries
 and rapid reversals; stale evidence still rejects at admission.
+
+
+## Ingredient review defaults
+
+Recipe-list actions, recipe detail, Planner (individual and weekly), and Dashboard
+reuse `ShoppingSelectionDialog`. A fresh review waits for Shopping preferences
+and Pantry, then leaves optional, Pantry-matched, and excluded occurrences
+unchecked with visible reasons. Canonical recipes have no optional boolean:
+review recognizes an explicit `optional` modifier, a section beginning with
+`Optional`, or a section ending with `(optional)`. Garnish/serving wording alone
+does not imply optional. Pantry and exclusions use Shopping's canonical resolver
+and classification, including its exact controlled alternatives/family policy.
+
+The loaded defaults are frozen for a live review. Background loading or errors
+cannot reset choices; cancel writes nothing. Servings only change scale, never
+selected source ordinals. Safely recovered saved choices take precedence over
+fresh defaults on reopening; changed/ambiguous sources show a notice and fresh
+defaults. The Add button counts selected source occurrences across enabled recipes.
+
+Authoritative command planning reconstructs the selected source subset before
+applying explicit inclusion through existing trip/row visibility. Reviewed items
+remain buyable even when Pantry or exclusion rules match; global preferences
+stay unchanged. Purchase rows share visibility across recipe/manual contributions
+under the existing Shopping model, so inclusion also makes merged requirements
+buyable for the current trip. Legacy callers without a reviewed selection retain
+automatic Pantry/exclusion classification. No recipe or database schema changed.
