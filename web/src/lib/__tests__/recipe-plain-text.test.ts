@@ -37,4 +37,29 @@ describe('recipe plain text and replacement coverage', () => {
       expect(parseRecipeText(text).unparsedContent).toEqual([])
     }
   })
+
+  it.each([
+    ['Prep time: overnight', 'Preparation time: 20 min'],
+    ['Prep time: 10 min', 'Preparation time: 20 min'],
+    ['Cooking time: 10 min', 'Cook time: 20 min'],
+    ['**Prep time:** overnight', '**Preparation time**: 20 min'],
+    ['Serves 4', 'Yield: 6 servings'],
+    ['Makes 4 servings', 'Servings 6'],
+    ['# Rice', 'Title: Chicken'],
+    ['Title: Chicken', '# Rice'],
+    ['# Rice', '**Name:** Chicken'],
+    ['Category: dinner', '**Category:** lunch'],
+  ])('reports both conflicting consumed values: %s / %s', (first, second) => {
+    const parsed = parseRecipeText(`${first}\n${second}\nIngredients:\n1 cup rice\nInstructions:\nCook.`)
+    expect(parsed.unparsedContent).toEqual(expect.arrayContaining([first, second]))
+  })
+
+  it.each([
+    'Rice\nPreparation time: 20 min\nCooking time: 10 min\nServes 4',
+    '# Rice\nTitle: Rice\nPrep time: 20 min\nPreparation time: 20 min',
+    '# Rice\n**Name:** Rice\n**Preparation time:** 20 min\n**Servings:** 4',
+    'Rice\nServes 4\nYield 4',
+  ])('accepts represented, nonconflicting metadata: %s', (preamble) => {
+    expect(parseRecipeText(`${preamble}\nIngredients:\n1 cup rice\nInstructions:\nCook.`).unparsedContent).toEqual([])
+  })
 })

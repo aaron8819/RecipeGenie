@@ -134,6 +134,20 @@ for (const device of [
       await page.screenshot({ path: testInfo.outputPath('keyboard-height.png') })
       await page.setViewportSize(device.viewport)
     }
+    for (const preamble of [
+      'Rice\nPrep time: overnight\nPreparation time: 20 min',
+      'Rice\nServes 4\nYield: 6 servings',
+      '# Rice\nTitle: Chicken',
+    ]) {
+      const conflictingSource = `${preamble}\nIngredients:\n1 cup rice\nInstructions:\nCook.`
+      await input.fill(conflictingSource)
+      await editor.getByRole('button', { name: 'Review changes', exact: true }).click()
+      const loss = editor.getByRole('alert')
+      await expect(loss).toContainText(preamble.split('\n').at(-1)!)
+      await expect(editor.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled()
+      await editor.getByRole('button', { name: 'Back to text' }).click()
+      await expect(input).toHaveValue(conflictingSource)
+    }
     // Native textarea input remains usable when the clipboard API is denied.
     await input.fill(replacementText + '\n\n## Nutrition\nProtein 10g')
     await editor.getByRole('button', { name: 'Review changes', exact: true }).click()

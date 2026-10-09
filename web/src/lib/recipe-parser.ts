@@ -165,7 +165,7 @@ export function parseRecipeText(text: string): ParsedRecipe {
     notes = notesSections.flatMap((section) => parseNotesSection(section.lines))
   }
 
-  const unparsedContent = [...ignoredContent]
+  const unparsedContent = [...ignoredContent, ...preludeMetadata.unparsedContent]
   if (sections.length === 0) {
     // Heuristic legacy inference cannot establish complete source coverage for a replacement.
     unparsedContent.push('Use Ingredients and Instructions headings so every section can be reviewed.')
@@ -175,17 +175,6 @@ export function parseRecipeText(text: string): ParsedRecipe {
       if (!line.trimmed || cleanDetectedTitle(line.trimmed) === title) continue
       if (ingredientsSections.length === 0 && !hasMarkdownSections) continue
       unparsedContent.push(line.trimmed)
-    }
-    const titleHeadings = prelude.filter(line => parseMarkdownHeading(line.trimmed))
-    for (const line of titleHeadings.slice(1)) unparsedContent.push(line.trimmed)
-    const seenAttributes = new Set<string>()
-    for (const line of prelude) {
-      const plain = stripMarkdownInlineSyntax(line.trimmed)
-      const attribute = plain.match(/^(title|recipe|name|category|servings?|serves|yield|makes?|prep(?:aration)? time|cook(?:ing)? time|total time)\s*:/i)
-      if (!attribute) continue
-      const key = attribute[1].toLowerCase().replace(/^(recipe|name)$/, 'title').replace(/^(servings?|serves|makes?)$/, 'yield')
-      if (seenAttributes.has(key)) unparsedContent.push(line.trimmed)
-      seenAttributes.add(key)
     }
     for (const section of sections) {
       const parsedLabels = (section.kind === 'ingredients'
@@ -450,6 +439,7 @@ function parseMarkdownHeading(line: string): MarkdownHeading | null {
 }
 
 function extractPreludeMetadata(lines: RecipeLine[]): {
+  unparsedContent: string[]
   titleLine?: string
   remainingLines: RecipeLine[]
   category?: string
@@ -484,83 +474,55 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
     metadata.titleLine = markdownTitle.label
   }
 
+  const unparsedContent: string[] = []
+  const consumed = new Map<PreludeAttributeKey, { value: string; source: string }>()
   for (const line of lines) {
-    const trimmed = line.trimmed
-
-    if (!trimmed) {
+    const heading = parseMarkdownHeading(line.trimmed)
+    const attribute = heading
+      ? { key: 'title' as const, value: heading.label, bold: false }
+      : parsePreludeAttribute(line.trimmed)
+    if (!attribute) {
       remainingLines.push(line)
       continue
     }
 
-    const heading = parseMarkdownHeading(trimmed)
-    if (heading) {
-      continue
+    // Track the same tokens extraction consumes, including aliases and colonless
+    // yield syntax. Report both values when one source occurrence hides another.
+    const previous = consumed.get(attribute.key)
+    if (previous && previous.value !== attribute.value) {
+      unparsedContent.push(previous.source, line.trimmed)
     }
+    consumed.set(attribute.key, { value: attribute.value, source: line.trimmed })
 
-    const boldAttribute = parseBoldAttributeLine(trimmed)
-    if (boldAttribute) {
-      const attributeHandled = applyPreludeAttribute(
-        metadata,
-        boldAttribute.label,
-        boldAttribute.value
-      )
-      if (attributeHandled) {
-        continue
-      }
+    switch (attribute.key) {
+      case 'title':
+        if (!markdownTitle) metadata.titleLine = attribute.value
+        break
+      case 'category':
+        metadata.category = normalizeRecipeCategory(attribute.value)
+        break
+      case 'yield':
+        metadata.servings = extractServingsFromText(attribute.value)
+        metadata.servingsText = attribute.bold || isServingRange(attribute.value) || !/^\d+$/.test(attribute.value)
+          ? attribute.value : undefined
+        break
+      case 'prep':
+        metadata.prepTime = attribute.value
+        metadata.prepTimeMinutes = parseDurationToMinutes(attribute.value)
+        break
+      case 'cook':
+        metadata.cookTime = attribute.value
+        metadata.cookTimeMinutes = parseDurationToMinutes(attribute.value)
+        break
+      case 'total':
+        metadata.totalTime = attribute.value
+        metadata.totalTimeMinutes = parseDurationToMinutes(attribute.value)
+        break
     }
-
-    const titleMatch = trimmed.match(/^(?:title|recipe|name)\s*:\s*(.+)$/i)
-    if (titleMatch) {
-      if (!markdownTitle) {
-        metadata.titleLine = stripMarkdownInlineSyntax(titleMatch[1]).trim()
-      }
-      continue
-    }
-
-    const categoryMatch = trimmed.match(/^category\s*:\s*(.+)$/i)
-    if (categoryMatch) {
-      metadata.category = normalizeRecipeCategory(categoryMatch[1])
-      continue
-    }
-
-    const servingsMatch = trimmed.match(
-      /^(?:servings?|serves|yield|makes?)\s*:?\s*(.+)$/i
-    )
-    if (servingsMatch) {
-      const value = stripMarkdownInlineSyntax(servingsMatch[1]).trim()
-      metadata.servings = extractServingsFromText(value)
-      metadata.servingsText =
-        isServingRange(value) || !/^\d+$/.test(value)
-          ? value
-          : undefined
-      continue
-    }
-
-    const prepTimeMatch = trimmed.match(/^prep(?:aration)?\s*time\s*:\s*(.+)$/i)
-    if (prepTimeMatch) {
-      metadata.prepTime = stripMarkdownInlineSyntax(prepTimeMatch[1]).trim()
-      metadata.prepTimeMinutes = parseDurationToMinutes(metadata.prepTime)
-      continue
-    }
-
-    const cookTimeMatch = trimmed.match(/^cook(?:ing)?\s*time\s*:\s*(.+)$/i)
-    if (cookTimeMatch) {
-      metadata.cookTime = stripMarkdownInlineSyntax(cookTimeMatch[1]).trim()
-      metadata.cookTimeMinutes = parseDurationToMinutes(metadata.cookTime)
-      continue
-    }
-
-    const totalTimeMatch = trimmed.match(/^total\s*time\s*:\s*(.+)$/i)
-    if (totalTimeMatch) {
-      metadata.totalTime = stripMarkdownInlineSyntax(totalTimeMatch[1]).trim()
-      metadata.totalTimeMinutes = parseDurationToMinutes(metadata.totalTime)
-      continue
-    }
-
-    remainingLines.push(line)
   }
 
   return {
+    unparsedContent,
     titleLine: metadata.titleLine,
     remainingLines,
     category: metadata.category,
@@ -591,53 +553,27 @@ function parseBoldAttributeLine(
   return label && value ? { label, value } : null
 }
 
-function applyPreludeAttribute(
-  metadata: {
-    category?: string
-    servings?: number
-    servingsText?: string
-    prepTime?: string
-    prepTimeMinutes?: number
-    cookTime?: string
-    cookTimeMinutes?: number
-    totalTime?: string
-    totalTimeMinutes?: number
-  },
-  label: string,
+type PreludeAttributeKey = 'title' | 'category' | 'yield' | 'prep' | 'cook' | 'total'
+
+function parsePreludeAttribute(line: string): {
+  key: PreludeAttributeKey
   value: string
-): boolean {
-  const normalizedLabel = label.toLowerCase().replace(/\s+/g, " ").trim()
+  bold: boolean
+} | null {
+  const bold = parseBoldAttributeLine(line)
+  const plain = line.match(/^(title|recipe|name|category|prep(?:aration)?\s*time|cook(?:ing)?\s*time|total\s*time)\s*:\s*(.+)$/i) ||
+    line.match(/^(servings?|serves|yield|makes?)\s*:?\s*(.+)$/i)
+  const label = (bold?.label ?? plain?.[1])?.toLowerCase().replace(/\s+/g, ' ').trim()
+  const value = stripMarkdownInlineSyntax(bold?.value ?? plain?.[2] ?? '').trim()
+  if (!label || !value) return null
 
-  if (normalizedLabel === "category") {
-    metadata.category = normalizeRecipeCategory(value)
-    return true
-  }
-
-  if (/^(?:servings?|serves|yield|makes?)$/.test(normalizedLabel)) {
-    metadata.servings = extractServingsFromText(value)
-    metadata.servingsText = value
-    return true
-  }
-
-  if (/^prep(?:aration)? time$/.test(normalizedLabel)) {
-    metadata.prepTime = value
-    metadata.prepTimeMinutes = parseDurationToMinutes(value)
-    return true
-  }
-
-  if (/^cook(?:ing)? time$/.test(normalizedLabel)) {
-    metadata.cookTime = value
-    metadata.cookTimeMinutes = parseDurationToMinutes(value)
-    return true
-  }
-
-  if (/^total time$/.test(normalizedLabel)) {
-    metadata.totalTime = value
-    metadata.totalTimeMinutes = parseDurationToMinutes(value)
-    return true
-  }
-
-  return false
+  const key: PreludeAttributeKey | null = /^(title|recipe|name)$/.test(label) ? 'title'
+    : label === 'category' ? 'category'
+    : /^(servings?|serves|yield|makes?)$/.test(label) ? 'yield'
+    : /^prep(?:aration)?\s*time$/.test(label) ? 'prep'
+    : /^cook(?:ing)?\s*time$/.test(label) ? 'cook'
+    : /^total\s*time$/.test(label) ? 'total' : null
+  return key ? { key, value, bold: !!bold } : null
 }
 
 function buildRecipeMetadata(metadata: {
