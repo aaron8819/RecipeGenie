@@ -305,6 +305,13 @@ function toRecipeLines(text: string): RecipeLine[] {
     .replace(/\uFEFF/g, "")
     .replace(/\r\n?/g, "\n")
     .replace(/\u00A0/g, " ")
+    // Clipboard Markdown can escape headings, bullets, and punctuation and
+    // use a trailing backslash for a hard line break. Decode one layer before
+    // section detection, while retaining backslashes before ordinary letters.
+    .replace(
+      /\\([!"#$%&'()*+,\-./:;<=>?@[\]\\^_`{|}~])|\\[ \t]*$/gm,
+      (_match, escaped: string | undefined) => escaped ?? ""
+    )
 
   return normalized.split("\n").map((raw) => ({
     raw,
