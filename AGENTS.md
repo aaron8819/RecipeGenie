@@ -97,7 +97,12 @@ an unsafe-target blocker.
 ## Authorization boundaries
 
 Codex may run local checks and explicitly requested read-only remote checks.
-Stop before any commit, push, merge, deployment, redeployment, rollback, alias
+Codex may commit authorized local changes after appropriate checks and review
+pass, without separate approval. Stage only task-specific changes and preserve
+unrelated owner work. Checks that require a clean committed worktree may run
+immediately after the local commit; report failures and stop before publication.
+
+Stop before any push, merge, deployment, redeployment, rollback, alias
 reassignment, environment change, Supabase link change, migration application
 or repair, database repair, backup creation, restore execution, production data
 write, or other production change. One user message may authorize multiple
