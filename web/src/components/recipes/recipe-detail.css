@@ -33,6 +33,28 @@
 .recipe-reading .detail-heading > div {
   min-width: 0;
 }
+.recipe-reading .detail-header-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.recipe-reading .detail-header-controls .detail-metadata {
+  margin-top: 0;
+  font-size: 16px;
+}
+.recipe-reading .detail-header-controls .detail-yield {
+  flex-shrink: 0;
+  justify-content: flex-end;
+  max-width: 55%;
+}
+.recipe-reading .detail-header-controls .detail-yield > button {
+  font-size: 16px;
+  padding: 0 4px;
+}
+.recipe-reading .detail-copy-status:empty { display: none; }
+.recipe-reading .detail-copy-status { font-size: 14px; margin-bottom: 8px; }
 .recipe-reading .detail-eyebrow {
   margin-bottom: 10px;
   font-size: 11px;
@@ -141,6 +163,15 @@
   display: flex;
   gap: 8px;
 }
+.recipe-reading .detail-primary-actions button {
+  background: transparent;
+  color: rgb(var(--rg-desktop-brand-primary));
+  border: 0;
+  box-shadow: none;
+  padding-inline: 0;
+  font-size: 16px;
+}
+.recipe-reading .detail-primary-actions { width: 100%; justify-content: space-between; }
 .recipe-reading
   :is(
     .detail-primary-actions,
@@ -155,11 +186,12 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin: 0 0 12px;
 }
 .recipe-reading .detail-existing-actions button {
-  font-size: 13px;
+  font-size: 16px;
+  padding-inline: 0;
 }
 .recipe-reading .detail-section-nav {
   display: flex;
@@ -387,7 +419,7 @@
     padding: 10px;
   }
   .recipe-reading .detail-existing-actions {
-    justify-content: flex-start;
+    justify-content: space-between;
   }
   .recipe-reading .detail-section-nav {
     margin-bottom: 22px;
@@ -406,10 +438,12 @@
     margin-bottom: 20px;
   }
   .recipe-reading .detail-ingredient-group li {
-    grid-template-columns: 80px minmax(0, 1fr);
-    padding: 12px 0;
+    grid-template-columns: minmax(96px, 30%) minmax(0, 1fr);
+    padding: 16px 0;
     line-height: 1.5;
+    font-size: 18px;
   }
+  .recipe-reading .detail-amount { font-size: 18px; font-weight: 600; }
   .recipe-reading #ingredients {
     margin-bottom: 32px;
   }

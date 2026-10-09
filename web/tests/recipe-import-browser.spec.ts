@@ -230,6 +230,9 @@ async function assertImportedDetail(detail: Locator) {
     timeout: 30_000,
   })
   await expect(detail.getByText('4 servings', { exact: true }).first()).toBeVisible()
+  if (await detail.locator('.detail-metadata:not([open])').count()) {
+    await detail.locator('.detail-metadata > summary').click()
+  }
   await expect(detail.getByText('Prep 15 min', { exact: true }).first()).toBeVisible()
   await expect(detail.getByText('Cook 10 min', { exact: true }).first()).toBeVisible()
   await expect(detail.getByText('Total 25 min', { exact: true }).first()).toBeVisible()
@@ -258,20 +261,22 @@ async function assertImportedDetail(detail: Locator) {
       exact: true,
     })
   ).toBeVisible()
-  await expect(
-    detail.getByText('lean ground beef or ground turkey', { exact: true })
-  ).toBeVisible()
-  await expect(
-    detail.getByText(
-      'chopped romaine or shredded iceberg or arugula or other greens',
-      { exact: true }
-    )
-  ).toBeVisible()
+  const meat = ingredientsSection.locator('.detail-ingredient-name').filter({ hasText: 'lean ground beef' })
+  await expect(meat).toBeVisible()
+  await expect(meat.locator('.detail-alternatives')).toContainText('ground turkey')
+  const greens = ingredientsSection.locator('.detail-ingredient-name').filter({ hasText: 'romaine' })
+  await expect(greens).toBeVisible()
+  for (const item of ['iceberg', 'arugula', 'other greens']) {
+    await expect(greens).toContainText(item)
+  }
   await expect(detail.getByText('plain Greek yogurt', { exact: true })).toBeVisible()
   for (const instruction of EXPECTED_INSTRUCTIONS) {
     await expect(detail.getByText(instruction, { exact: true })).toBeVisible()
   }
   for (const note of EXPECTED_NOTES) {
+    if (await detail.locator('.detail-notes:not([open])').count()) {
+      await detail.locator('.detail-notes > summary').click()
+    }
     await expect(detail.getByText(note, { exact: true })).toBeVisible()
   }
 }
@@ -463,19 +468,13 @@ test.describe('local recipe import browser verification', () => {
 
       const editDialog = page.getByRole('dialog').first()
       await expect(editDialog.locator('h1')).toHaveText('Edit Recipe')
-      await editDialog.getByRole('tab', { name: /^replace$/i }).click()
-      await editDialog.getByLabel('Paste Updated Recipe Text').fill(
-        MARKDOWN_TACO_SALAD_RECIPE_TEXT
-      )
-      await expect(editDialog.getByText(IMPORTED_TITLE, { exact: true })).toBeVisible()
-      await expect(editDialog.getByText('Category beef', { exact: true })).toBeVisible()
-      await expect(
-        editDialog.getByText('Replace current recipe draft', { exact: true })
-      ).toBeVisible()
-      await editDialog.getByRole('button', {
-        name: /^apply to current recipe$/i,
-      }).click()
+      await editDialog.getByRole('tab', { name: /^replace text$/i }).click()
+      await editDialog.getByLabel('Recipe text', { exact: true }).fill(MARKDOWN_TACO_SALAD_RECIPE_TEXT)
+      await editDialog.getByRole('button', { name: /^review changes$/i }).click()
+      await expect(editDialog.getByTestId('replacement-review')).toContainText(IMPORTED_TITLE)
+      await expect(editDialog.getByText('Pasted category: beef. This recipe keeps category lamb.')).toBeVisible()
 
+      await editDialog.getByRole('button', { name: /^edit$/i }).click()
       await editDialog.getByRole('tab', { name: /^details$/i }).click()
       await expect(editDialog.locator('#name-edit')).toHaveValue(IMPORTED_TITLE)
       await expect(editDialog.locator('#servings-edit')).toHaveValue('4')
@@ -483,6 +482,8 @@ test.describe('local recipe import browser verification', () => {
         response.request().method() === 'PATCH' &&
         response.url().includes('/rest/v1/recipes')
       )
+      await editDialog.getByRole('tab', { name: /^replace text$/i }).click()
+      await editDialog.getByRole('button', { name: /^review changes$/i }).click()
       await editDialog.getByRole('button', { name: /^save changes$/i }).click()
       expect((await updateResponse).ok()).toBe(true)
       await expect(editDialog).toBeHidden()
@@ -494,11 +495,9 @@ test.describe('local recipe import browser verification', () => {
       await expect(
         replacedDetail.getByRole('button', { name: 'Remove from favorites' })
       ).toBeVisible()
-      await expect(replacedDetail.getByText(/^lamb$/i)).toBeVisible()
-      await expect(replacedDetail.getByText('preserve-me', { exact: true })).toBeVisible()
-      await expect(
-        replacedDetail.getByText('browser-fixture', { exact: true })
-      ).toBeVisible()
+      await expect(replacedDetail.locator('.detail-eyebrow')).toContainText('lamb')
+      await expect(replacedDetail.locator('.detail-metadata')).toContainText('preserve-me')
+      await expect(replacedDetail.locator('.detail-metadata')).toContainText('browser-fixture')
 
       const { data: row, error } = await client
         .from('recipes')
@@ -583,7 +582,9 @@ test.describe('local recipe import browser verification', () => {
       await page.goto(`/recipes/${EDITOR_FIDELITY_RECIPE_UUID}?from=recipes`)
       let detail = page.getByTestId('recipe-detail-page')
       await expect(detail.locator('h1')).toHaveText(fixture.name)
-      await expect(detail.getByText('cilantro or parsley', { exact: true })).toBeVisible()
+      const herb = detail.locator('.detail-ingredient-name').filter({ hasText: 'cilantro' })
+      await expect(herb).toBeVisible()
+      await expect(herb.locator('.detail-alternatives')).toContainText('parsley')
       await detail.getByRole('button', { name: /edit recipe/i }).click()
 
       let editDialog = page.getByRole('dialog').first()
@@ -641,7 +642,7 @@ test.describe('local recipe import browser verification', () => {
       await page.reload()
       detail = page.getByTestId('recipe-detail-page')
       await expect(detail.getByText('cilantro', { exact: true })).toBeVisible()
-      await expect(detail.getByText('cilantro or parsley', { exact: true })).toHaveCount(0)
+      await expect(detail.locator('.detail-alternatives').filter({ hasText: 'parsley' })).toHaveCount(0)
       await detail.getByRole('button', { name: /edit recipe/i }).click()
       editDialog = page.getByRole('dialog').first()
       await editDialog.getByRole('tab', { name: /^ingredients$/i }).click()
@@ -729,6 +730,7 @@ test.describe('local recipe import browser verification', () => {
 
       const detail = page.getByTestId('recipe-detail-page')
       await expect(detail.locator('h1')).toHaveText(LEGACY_TITLE)
+      await detail.locator('.detail-notes > summary').click()
       await expect(
         detail.getByText(LEGACY_NOTES[0], { exact: true })
       ).toBeVisible()

@@ -84,7 +84,36 @@ function renderDetail(recipe = makeRecipe()) {
   return callbacks
 }
 
+function changeYield(direction: 'Increase' | 'Decrease') {
+  if (!screen.queryByRole('button', { name: direction + ' yield' })) fireEvent.click(screen.getByRole('button', { name: 'Adjust yield' }))
+  fireEvent.click(screen.getByRole('button', { name: direction + ' yield' }))
+}
+
 describe("RecipeDetailContent", () => {
+  it('only confirms copy after success and locks repeated taps', async () => {
+    let finish!: () => void
+    const writeText = vi.fn((_text: string) => new Promise<void>(resolve => { finish = resolve }))
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderDetail()
+    changeYield('Increase')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    expect(writeText).toHaveBeenCalledOnce()
+    expect(writeText.mock.calls[0][0]).toContain('Yield: 5 servings')
+    expect(screen.getByText('Copying…')).toBeInTheDocument()
+    finish()
+    await waitFor(() => expect(screen.getByText('Recipe copied')).toBeInTheDocument())
+  })
+
+  it('offers complete selectable text when copying fails', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } })
+    renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    const fallback = await screen.findByRole('textbox', { name: 'Recipe text to copy' })
+    expect((fallback as HTMLTextAreaElement).value).toContain('Keep the dressing separate')
+    expect(screen.queryByText('Recipe copied')).not.toBeInTheDocument()
+  })
+
   it("keeps a short jump destination active until the reader changes scroll position", async () => {
     renderDetail()
     const nav = screen.getByRole("navigation", { name: "Recipe sections" })
@@ -292,7 +321,7 @@ describe("RecipeDetailContent", () => {
   it("supports the validated 100 yield boundary and passes it to Shopping", () => {
     const recipe = makeRecipe({ servings: 99 })
     const callbacks = renderDetail(recipe)
-    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    changeYield('Increase')
     expect(
       screen.getByRole("button", { name: "Increase yield" })
     ).toBeDisabled()
@@ -363,7 +392,7 @@ describe("RecipeDetailContent", () => {
     renderDetail(recipe)
 
     for (let index = 0; index < 4; index += 1) {
-      fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+      changeYield('Increase')
     }
 
     expect(screen.getAllByText("8 servings").length).toBeGreaterThan(0)
@@ -382,8 +411,8 @@ describe("RecipeDetailContent", () => {
       ],
     }))
 
-    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
-    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    changeYield('Increase')
+    changeYield('Increase')
 
     expect(screen.getAllByText("1 serving").length).toBeGreaterThan(0)
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -406,16 +435,16 @@ describe("RecipeDetailContent", () => {
       ],
     }))
 
-    fireEvent.click(screen.getByRole("button", { name: "Decrease yield" }))
+    changeYield('Decrease')
 
     for (const quantity of [
-      "¾ lb",
-      "¾ tsp",
-      "⅜ tsp",
+      "3/4 lb",
+      "3/4 tsp",
+      "3/8 tsp",
       "3 tbsp",
-      "4½ cups",
-      "¾ cup",
-      "¾",
+      "4 1/2 cups",
+      "3/4 cup",
+      "3/4",
     ]) {
       expect(screen.getAllByText(quantity).length).toBeGreaterThan(0)
     }
@@ -432,9 +461,9 @@ describe("RecipeDetailContent", () => {
       ],
     }))
 
-    fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
+    changeYield('Increase')
 
-    expect(screen.getByText("2½-3¾")).toBeInTheDocument()
+    expect(screen.getByText("2 1/2-3 3/4")).toBeInTheDocument()
     expect(screen.getByText("a pinch")).toBeInTheDocument()
     expect(screen.getByText("As needed")).toBeInTheDocument()
     expect(scaleIngredientAmount("0.5-1 tsp", 4, 8)).toBe("1-2 tsp")
@@ -452,7 +481,8 @@ describe("RecipeDetailContent", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit Recipe" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to plan" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
-    fireEvent.click(screen.getByRole("button", { name: "Share" }))
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'More' }), { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Share' }))
     fireEvent.click(screen.getByRole("button", { name: "Delete recipe" }))
     fireEvent.click(screen.getByRole("button", { name: "Back to recipes" }))
 
