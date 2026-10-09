@@ -28,6 +28,9 @@ const updatedSource = readFileSync('src/lib/__tests__/updated-recipe.txt', 'utf8
 const latestSource = readFileSync('src/lib/__tests__/latest-recipe.txt', 'utf8')
   .replace(/\r\n/g, '\n')
   .trimEnd()
+const escapedUpdatedSource = updatedSource.split('\n')
+  .map(line => line.replace(/([*.-])/g, '\\$1') + '\\')
+  .join('\r\n')
 const ingredientLabels = [
   'Chicken',
   'Teriyaki Sauce &amp; Marinade',
@@ -93,6 +96,7 @@ describe('isolated plain recipe section titles', () => {
     ['original', source],
     ['updated', updatedSource],
     ['latest', latestSource],
+    ['escaped clipboard', escapedUpdatedSource],
   ])('keeps %s structure through review, same-recipe local save, reload and editing', (_, text) => {
     // Disposable local persistence adapter: no Supabase or production data access.
     const original = canonicalizeRecipeFixture({
