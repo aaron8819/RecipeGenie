@@ -3,7 +3,7 @@ import { applyOrganization, inspectOrganization, organizationVersion, purchaseOr
 import { shoppingRowCoverage } from './shopping-coverage-runtime';
 import { planShoppingAcknowledgement } from './shopping-coverage';
 import { applyShoppingDocumentMutation, projectShoppingDocument, validateShoppingDocumentV3,
-  type ShoppingDocumentV3, type ShoppingManualItemV1 } from './shopping-document';
+  includeReviewedShoppingIngredients, type ShoppingDocumentV3, type ShoppingManualItemV1 } from './shopping-document';
 import { appendDocumentPurchases, initializeShoppingDocument, legacyQuantity, readInitializedDocument,
   SHOPPING_IDENTITY_POLICY, resolveShoppingPlacement } from './shopping-initialization';
 import { canonicalShoppingPayload, type ShoppingCommand } from './shopping-command';
@@ -171,6 +171,7 @@ export function planInitializedShoppingCommand(context: ShoppingCommandContext, 
         keys.push(...entry.ingredients.map(ingredient => ingredient.purchaseKey));
       }
       next = appendDocumentPurchases(next, keys);
+      if (command.sourceSelections) next = includeReviewedShoppingIngredients(next, entries);
     } else if (mutation.type === 'complete') {
       if (command.clearUndoRequired !== undefined && (!sameRevision ||
         (command.clearUndoRequired && context.row?.shopping_clear_undo_available !== true))) return result('Conflict');

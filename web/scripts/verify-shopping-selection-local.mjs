@@ -292,7 +292,7 @@ try {
         .evaluate((node) => node.scrollWidth <= node.clientWidth),
     ).toBe(true);
     await page
-      .getByRole('button', { name: 'Add selected ingredients', exact: true })
+      .getByRole('button', { name: /^Add \d+ ingredients?$/, exact: true })
       .click();
     await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20000 });
     let saved = checked(
@@ -319,7 +319,7 @@ try {
       }),
     ).not.toBeChecked();
     await page
-      .getByRole('button', { name: 'Add selected ingredients', exact: true })
+      .getByRole('button', { name: /^Add \d+ ingredients?$/, exact: true })
       .click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     saved = checked(
@@ -343,7 +343,7 @@ try {
       page.getByLabel('Selection Salad', { exact: true }),
     ).toBeChecked();
     await page
-      .getByRole('button', { name: 'Add selected ingredients', exact: true })
+      .getByRole('button', { name: /^Add \d+ ingredients?$/, exact: true })
       .click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     saved = checked(

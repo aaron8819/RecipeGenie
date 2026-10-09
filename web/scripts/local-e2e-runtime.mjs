@@ -186,3 +186,15 @@ export function localSupabaseEnvironment(output) {
   }
   return { supabaseUrl, anonKey, serviceRoleKey }
 }
+
+// Check fixture/schema compatibility before creating disposable owners or writing data.
+export function assertLocalFixtureMigrations(appliedVersions, requiredVersions) {
+  const applied = new Set(appliedVersions)
+  const missing = requiredVersions.filter(version => !applied.has(version))
+  if (missing.length) {
+    throw new Error(
+      'Local fixture backend is incompatible; missing migrations: ' + missing.join(', ') +
+      '. Select an existing migrated disposable stack; this harness never migrates or resets it.'
+    )
+  }
+}

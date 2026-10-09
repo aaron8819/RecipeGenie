@@ -1,6 +1,8 @@
-import type { Recipe } from '@/types/database';
+import type { PantryItem, Recipe } from '@/types/database';
 import {
   createShoppingRecipeEntry,
+  shoppingIngredientDefaultBucket,
+  type ShoppingDocumentV3,
   type ShoppingRecipeEntryV2,
 } from './shopping-document';
 import {
@@ -57,10 +59,7 @@ export function createSelectedShoppingEntry(
     !ordinals.size ||
     ordinals.size !== selection.ingredientOrdinals.length ||
     [...ordinals].some(
-      (index) =>
-        !Number.isSafeInteger(index) ||
-        index < 0 ||
-        index >= ingredients.length,
+      (index) => !Number.isSafeInteger(index) || index < 0 || index >= ingredients.length,
     )
   ) {
     throw new Error(`Choose at least one ingredient for "${recipe.name}".`);
@@ -89,25 +88,67 @@ export function createSelectedShoppingEntry(
   );
 }
 
+/** Canonical recipes retain explicit optional wording, not an optional boolean.
+ * Do not infer it from garnish, serving instructions, ingredient names or prose.
+ */
+export function isShoppingIngredientOptional(label: string | null, modifier?: string): boolean {
+  return (
+    /^\s*optional(?:\s|$)/i.test(label ?? '') ||
+    /\(\s*optional\s*\)\s*$/i.test(label ?? '') ||
+    (modifier ?? '').split(/[,;]/).some(
+      (part) =>
+        part
+          .trim()
+          .replace(/^\(|\)$/g, '')
+          .trim()
+          .toLowerCase() === 'optional',
+    )
+  );
+}
+
+/** Source ordinals are stable across scaling, sections and alternatives. */
+export function shoppingSelectionReasons(
+  recipe: Recipe,
+  document: ShoppingDocumentV3,
+  pantryItems: PantryItem[],
+): string[][] {
+  return recipe.ingredientSections.flatMap((section) =>
+    section.ingredients.map((ingredient) => {
+      const entry = createShoppingRecipeEntry(
+        {
+          ...recipe,
+          ingredientSections: [{ label: null, ingredients: [ingredient] }],
+        },
+        recipe.servings,
+        { numerator: '1', denominator: '1' },
+      );
+      const bucket = shoppingIngredientDefaultBucket(entry.ingredients[0], document, pantryItems);
+      return [
+        ...(isShoppingIngredientOptional(section.label, ingredient.modifier) ? ['Optional'] : []),
+        ...(bucket === 'already_have' ? ['In pantry'] : []),
+        ...(bucket === 'excluded' ? ['Excluded'] : []),
+      ];
+    }),
+  );
+}
+
 export function initialShoppingSelection(
   recipe: Recipe,
   saved?: ShoppingRecipeEntryV2,
   defaultScale = 1,
+  reasons: string[][] = [],
 ): { selection: ShoppingRecipeSelection; notice?: string } {
   const basis = getScalingBasis(recipe.yield_metadata, recipe.servings);
   const desiredYield =
     basis *
-    (saved
-      ? Number(saved.scaleV1.numerator) / Number(saved.scaleV1.denominator)
-      : defaultScale);
+    (saved ? Number(saved.scaleV1.numerator) / Number(saved.scaleV1.denominator) : defaultScale);
   let selectedYield = desiredYield;
   let notice: string | undefined;
   try {
     selectedYieldRatio(selectedYield, basis);
   } catch {
     selectedYield = Math.min(basis, 100);
-    notice =
-      'The saved scale is outside supported yield limits. Review the new yield.';
+    notice = 'The saved scale is outside supported yield limits. Review the new yield.';
   }
   const selection: ShoppingRecipeSelection = {
     recipeId: recipe.id,
@@ -117,49 +158,52 @@ export function initialShoppingSelection(
     ),
     contentSnapshot: getShoppingRecipeSnapshot(recipe),
   };
-  if (!saved || notice) return { selection, notice };
-  const full = createShoppingRecipeEntry(
-    recipe,
-    saved.selectedServings,
-    saved.scaleV1,
-  );
+  const freshSelection = {
+    ...selection,
+    ingredientOrdinals: selection.ingredientOrdinals.filter((index) => !reasons[index]?.length),
+  };
+  if (!saved || notice) return { selection: freshSelection, notice };
+  const full = createShoppingRecipeEntry(recipe, saved.selectedServings, saved.scaleV1);
   if (
-    serializeShoppingSelection(full.ingredients) ===
-    serializeShoppingSelection(saved.ingredients)
+    serializeShoppingSelection(full.ingredients) === serializeShoppingSelection(saved.ingredients)
   ) {
     return { selection };
   }
   if (saved.sourceEvidence?.history === 'captured') {
-    const ordinals = saved.sourceEvidence.occurrences.map(source => source.ordinal);
+    const ordinals = saved.sourceEvidence.occurrences.map((source) => source.ordinal);
     try {
       const recovered = { ...selection, ingredientOrdinals: ordinals };
       const expected = createSelectedShoppingEntry(recipe, recovered);
-      if (serializeShoppingSelection(expected.ingredients) === serializeShoppingSelection(saved.ingredients) &&
-        saved.sourceEvidence.sourceRevision === recipe.updated_at) return { selection: recovered };
-    } catch { /* Changed sources use the explicit review fallback below. */ }
+      if (
+        serializeShoppingSelection(expected.ingredients) ===
+          serializeShoppingSelection(saved.ingredients) &&
+        saved.sourceEvidence.sourceRevision === recipe.updated_at
+      )
+        return { selection: recovered };
+    } catch {
+      /* Changed sources use the explicit review fallback below. */
+    }
   }
   const matched: number[] = [];
   for (const ingredient of saved.ingredients) {
     const matches = full.ingredients.flatMap((candidate, index) =>
-      serializeShoppingSelection(candidate) ===
-      serializeShoppingSelection(ingredient)
+      serializeShoppingSelection(candidate) === serializeShoppingSelection(ingredient)
         ? [index]
         : [],
     );
     if (matches.length !== 1 || matched.includes(matches[0])) {
       return {
-        selection,
+        selection: freshSelection,
         notice:
-          'Saved ingredients cannot be matched safely to this recipe. All ingredients are selected; review before updating Shopping.',
+          'Saved ingredients cannot be matched safely to this recipe. Review fresh defaults before updating Shopping.',
       };
     }
     matched.push(matches[0]);
   }
   if (!matched.length) {
     return {
-      selection,
-      notice:
-        'The saved contribution is empty. Review a fresh ingredient selection.',
+      selection: freshSelection,
+      notice: 'The saved contribution is empty. Review a fresh ingredient selection.',
     };
   }
   return { selection: { ...selection, ingredientOrdinals: matched } };
@@ -172,7 +216,7 @@ export function reconstructShoppingEntry(
   selections?: ShoppingRecipeSelection[],
 ): ShoppingRecipeEntryV2 {
   if (!selections) return createShoppingRecipeEntry(recipe, entry.selectedServings, entry.scaleV1);
-  const selection = selections.find(s => s.recipeId === recipe.id);
+  const selection = selections.find((s) => s.recipeId === recipe.id);
   if (!selection) throw new Error('Missing source selection.');
   return createSelectedShoppingEntry(recipe, selection);
 }
