@@ -370,7 +370,7 @@ export function RecipeImportSection({
     return (
       <div className="mx-auto max-w-3xl space-y-4" data-testid="replacement-input">
         <h2 className="text-xl font-semibold">Replace text</h2>
-        <p className="text-sm text-muted-foreground">Paste an updated recipe for {currentRecipeName || 'this recipe'}. Review changes before saving. Sections missing from the text stay the same.</p>
+        <p className="text-sm text-muted-foreground">Paste an updated recipe for {currentRecipeName || 'this recipe'}. Preview the recipe before saving. Sections missing from the text stay the same.</p>
         <Button type="button" variant="outline" className="min-h-11" disabled={isPasting} onClick={handlePaste}>{isPasting ? 'Pasting…' : 'Paste'}</Button>
         <p role="status" className="text-sm text-muted-foreground">{pasteHint || 'You can also touch and hold in the text box to paste.'}</p>
         <Label htmlFor="replace-text">Recipe text</Label>
