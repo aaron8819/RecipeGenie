@@ -902,18 +902,19 @@ export function RecipeDetailPage({
   const rememberDialogFocus = () => {
     dialogReturnFocusRef.current = document.activeElement as HTMLElement | null
   }
+  const focusDialogTrigger = () => {
+    const target = dialogReturnFocusRef.current
+    const currentTarget = target?.isConnected
+      ? target
+      : target?.getAttribute("aria-label") === "Edit Recipe"
+        ? editButtonRef.current
+        : target?.getAttribute("aria-label") === "Add to Shopping List"
+          ? shoppingButtonRef.current
+          : null
+    currentTarget?.focus({ preventScroll: true })
+  }
   const restoreDialogFocus = () => {
-    window.setTimeout(() => {
-      const target = dialogReturnFocusRef.current
-      const currentTarget = target?.isConnected
-        ? target
-        : target?.getAttribute("aria-label") === "Edit Recipe"
-          ? editButtonRef.current
-          : target?.getAttribute("aria-label") === "Add to Shopping List"
-            ? shoppingButtonRef.current
-            : null
-      currentTarget?.focus({ preventScroll: true })
-    }, 0)
+    window.setTimeout(focusDialogTrigger, 0)
   }
   const returnLabel = RECIPE_RETURN_LABELS[returnSource ?? "recipes"]
   const statsMap = useMemo(
@@ -1081,7 +1082,10 @@ export function RecipeDetailPage({
         onOpenChange={(open) => {
           if (!open && !addToShopping.isPending) setShoppingYield(null)
         }}
-        onCloseAutoFocus={() => restoreDialogFocus()}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          focusDialogTrigger()
+        }}
         recipes={recipeQuery.data ? [recipeQuery.data] : []}
         defaultScale={
           recipeQuery.data && shoppingYield !== null

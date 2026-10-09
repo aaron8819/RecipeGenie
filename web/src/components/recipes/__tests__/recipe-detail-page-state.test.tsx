@@ -1,5 +1,5 @@
 import React from "react"
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { RecipeDetailPage } from "../recipe-detail-page"
 import type { Recipe } from "@/types/database"
@@ -285,15 +285,41 @@ describe("RecipeDetailPage states", () => {
   })
 
   it("returns Shopping focus to the replacement trigger after source refresh", async () => {
-    recipeResult = { data: makeRecipe(), error: null, isError: false, isLoading: false, isSuccess: true }
+    vi.useFakeTimers()
+    recipeResult = {
+      data: makeRecipe(),
+      error: null,
+      isError: false,
+      isLoading: false,
+      isSuccess: true,
+    }
     const view = render(<RecipeDetailPage recipeId="recipe-1" />)
-    const original = screen.getByRole("button", { name: "Add to Shopping List" })
-    fireEvent.click(original)
-    recipeResult.data = { ...makeRecipe(), updated_at: "2026-10-07T13:00:00Z" }
-    view.rerender(<RecipeDetailPage recipeId="recipe-1" />)
-    expect(original.isConnected).toBe(false)
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
-    await waitFor(() => expect(screen.getByRole("button", { name: "Add to Shopping List" })).toHaveFocus())
+    try {
+      const original = screen.getByRole("button", {
+        name: "Add to Shopping List",
+      })
+      fireEvent.click(original)
+      recipeResult.data = {
+        ...makeRecipe(),
+        updated_at: "2026-10-07T13:00:00Z",
+      }
+      view.rerender(<RecipeDetailPage recipeId="recipe-1" />)
+      expect(original.isConnected).toBe(false)
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }))
+      // Radix defers its close-autofocus event by one timer turn.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(
+        screen.getByRole("button", { name: "Add to Shopping List" })
+      ).toHaveFocus()
+    } finally {
+      await act(async () => {
+        view.unmount()
+        await vi.runAllTimersAsync()
+      })
+      vi.useRealTimers()
+    }
   })
 
   it.each([
