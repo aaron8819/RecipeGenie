@@ -33,6 +33,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { clampRecipeServings } from "./recipe-dialog.defaults"
 import type { Ingredient, RecipeInstructionGroup } from "@/types/database"
 import type { ParsedRecipe } from "@/lib/recipe-parser"
+import { formatRecipeQuantity } from "@/lib/recipe-quantity"
+import { readableRecipeQuantity } from "@/lib/recipe-plain-text"
 import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import {
   createEmptyInstructionGroup,
@@ -888,7 +890,7 @@ Instructions:
                       {group.ingredients.slice(0, 4).map((ingredient, index) => (
                         <div key={`${groupIndex}-${index}`} className="flex items-start gap-3">
                           <span className="mt-0.5 min-w-[70px] flex-shrink-0 text-right font-mono text-xs text-muted-foreground">
-                            {formatIngredientAmount(ingredient)}
+                            {readableRecipeQuantity(formatRecipeQuantity(ingredient, 1, 1).text)}
                           </span>
                           <span className="flex-1">{formatIngredientText(ingredient)}</span>
                         </div>
