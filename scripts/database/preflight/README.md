@@ -36,3 +36,9 @@ Do not run a preflight merely because a backup exists. Migrations 012 through
 014 and destructive migration 017 separately require a verified disposable
 restore. Migration 017 binds its aggregate-only post-016 restore assertion and
 preparation/finalization procedure to the backup tooling commit.
+
+## Migration 033
+
+The existing guarded `PreflightOnly` path binds migration 033 to production project `eyaoahwzixqetjgfghsh`, the exact reviewed clean commit, and ledger 001 through 032. Its read-only SQL verifies predecessor function source/attributes, canonical metadata, current stored validity, and compatibility with exact endpoint comparison and strict binary64 legacy projections. It installs no candidate functions and emits only aggregate pass/fail evidence.
+
+This function-only repair requires successful guarded preflight and reviewed forward repair, with no full-backup or disposable-restore prerequisite. Optional backups need separate authorization. Before commit PostgreSQL rolls back failure; after commit a reviewed forward correction is preferred because reverting validators can reject newly saved fractions. Older migration recovery gates remain unchanged.

@@ -1,6 +1,13 @@
 "use client"
 
-import { type MouseEvent, type Ref, useEffect, useMemo, useRef, useState } from "react"
+import {
+  type MouseEvent,
+  type Ref,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import "./recipe-detail.css"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -19,7 +26,7 @@ import {
   Share2,
   ShoppingCart,
   Trash2,
-  UtensilsCrossed
+  UtensilsCrossed,
 } from "lucide-react"
 import {
   AlertDialog,
@@ -29,35 +36,52 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { recipePlainText, readableRecipeQuantity } from '@/lib/recipe-plain-text'
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import {
+  recipePlainText,
+  readableRecipeQuantity,
+} from "@/lib/recipe-plain-text"
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import {
   useCategories,
   useDeleteRecipe,
   useRecipe,
-  useToggleFavorite
+  useToggleFavorite,
 } from "@/hooks/use-recipes"
 import {
   useMarkRecipeAsMade,
   useRecipeHistoryStats,
-  useUnmarkRecipeAsMade
+  useUnmarkRecipeAsMade,
 } from "@/hooks/use-planner"
 import { useAddToShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
 import {
   flattenRecipeIngredients,
   formatRecipeTime,
-  normalizeRecipeNotes
+  normalizeRecipeNotes,
 } from "@/lib/recipe-structure"
 import {
   returnFromRecipeDetail,
-  type RecipeDetailSource
+  type RecipeDetailSource,
 } from "@/lib/recipe-detail-navigation"
 import {
   assertRecipeScalingFeasible,
@@ -80,7 +104,7 @@ import { ShareRecipeDialog } from "./share-recipe-dialog"
 
 const SHOPPING_ITEM_LABEL = {
   singular: "shopping item",
-  plural: "shopping items"
+  plural: "shopping items",
 }
 
 interface RecipeDetailPageProps {
@@ -113,7 +137,7 @@ const RECIPE_RETURN_LABELS: Record<RecipeDetailSource, string> = {
   planner: "Back to planner",
   recipes: "Back to recipes",
   shopping: "Back to shopping",
-  dashboard: "Back to dashboard"
+  dashboard: "Back to dashboard",
 }
 
 function RecipeDetailState({
@@ -121,7 +145,7 @@ function RecipeDetailState({
   message,
   onBack,
   returnLabel,
-  onRetry
+  onRetry,
 }: {
   title: string
   message: string
@@ -193,11 +217,11 @@ export function RecipeDetailContent({
   isDeleting = false,
   isFavoritePending = false,
   isMarkingMade = false,
-  isAddingToShopping = false
+  isAddingToShopping = false,
 }: RecipeDetailContentProps) {
   const scalingBasis = getScalingBasis(recipe.yield_metadata, recipe.servings)
   const [servings, setServings] = useState(scalingBasis)
-  const [copyStatus, setCopyStatus] = useState('')
+  const [copyStatus, setCopyStatus] = useState("")
   const [copyFallback, setCopyFallback] = useState<string | null>(null)
   const copyTextRef = useRef<HTMLTextAreaElement>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
@@ -206,14 +230,15 @@ export function RecipeDetailContent({
   const handleCopy = async () => {
     if (copyInFlight.current) return
     copyInFlight.current = true
-    setCopyStatus('Copying…')
+    setCopyStatus("Copying…")
     const text = recipePlainText(recipe, servings)
     try {
-      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable')
+      if (!navigator.clipboard?.writeText)
+        throw new Error("Clipboard unavailable")
       await navigator.clipboard.writeText(text)
-      setCopyStatus('Recipe copied')
+      setCopyStatus("Recipe copied")
     } catch {
-      setCopyStatus('Copy unavailable. Select and copy the recipe below.')
+      setCopyStatus("Copy unavailable. Select and copy the recipe below.")
       setCopyFallback(text)
     } finally {
       copyInFlight.current = false
@@ -239,27 +264,35 @@ export function RecipeDetailContent({
       const article = articleRef.current
       if (!nav || !article) return
       const readingLine = nav.getBoundingClientRect().bottom + 16
-      const sections = ["ingredients", "instructions", "notes"]
-        .flatMap((id) => {
+      const sections = ["ingredients", "instructions", "notes"].flatMap(
+        (id) => {
           const element = article.querySelector<HTMLElement>(`#${id}`)
           return element ? [{ id, rect: element.getBoundingClientRect() }] : []
-        })
+        }
+      )
       const reached = sections.filter(({ rect }) => rect.top <= readingLine)
       const last = sections.at(-1)
-      const atBottom = window.scrollY > 0 &&
-        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2
+      const atBottom =
+        window.scrollY > 0 &&
+        window.scrollY + window.innerHeight >=
+          document.documentElement.scrollHeight - 2
 
       setActiveSection((current) => {
         // Short final sections may never reach the sticky reading line.
-        if (atBottom && last && last.rect.top < window.innerHeight) return last.id
+        if (atBottom && last && last.rect.top < window.innerHeight)
+          return last.id
         if (!reached.length) return "ingredients"
         const nearestTop = Math.max(...reached.map(({ rect }) => rect.top))
-        const nearest = reached.filter(({ rect }) => Math.abs(rect.top - nearestTop) < 2)
+        const nearest = reached.filter(
+          ({ rect }) => Math.abs(rect.top - nearestTop) < 2
+        )
         // Desktop columns share a heading row; keep the chosen column while
         // it still contains the reading line, then follow the remaining one.
         const reading = nearest.filter(({ rect }) => rect.bottom > readingLine)
         const candidates = reading.length ? reading : nearest
-        return candidates.find(({ id }) => id === current)?.id ?? candidates[0].id
+        return (
+          candidates.find(({ id }) => id === current)?.id ?? candidates[0].id
+        )
       })
     }
     const scheduleUpdate = () => {
@@ -341,7 +374,7 @@ export function RecipeDetailContent({
   const timeChips = [
     { label: "Prep", value: formatRecipeTime(recipe.prep_time_minutes) },
     { label: "Cook", value: formatRecipeTime(recipe.cook_time_minutes) },
-    { label: "Total", value: formatRecipeTime(recipe.total_time_minutes) }
+    { label: "Total", value: formatRecipeTime(recipe.total_time_minutes) },
   ].filter((chip) => !!chip.value)
 
   let instructionNumber = 0
@@ -384,172 +417,241 @@ export function RecipeDetailContent({
         </Button>
       </div>
 
-      <header className="detail-heading">
-        <div>
-          <p className="detail-eyebrow">
-            {recipe.category}
-            {recipe.total_time_minutes != null
-              ? ` · ${formatRecipeTime(recipe.total_time_minutes)} total`
-              : ""}
-          </p>
-          <h1 tabIndex={-1}>{recipe.name}</h1>
+      <div className="detail-editorial-header">
+        <header className="detail-heading">
+          <div className="detail-title">
+            <p className="detail-eyebrow">
+              {recipe.category}
+              {recipe.total_time_minutes != null
+                ? ` · ${formatRecipeTime(recipe.total_time_minutes)} total`
+                : ""}
+            </p>
+            <h1 tabIndex={-1}>{recipe.name}</h1>
+          </div>
+          {recipeImageUrl && failedImageUrl !== recipeImageUrl ? (
+            <a
+              className="detail-photo recipe-detail-print-hidden"
+              href={recipeImageUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="View recipe photo"
+            >
+              <Image
+                src={recipeImageUrl}
+                alt={`${recipe.name} recipe`}
+                fill
+                priority
+                sizes="(max-width: 767px) 100vw, 420px"
+                className="object-cover"
+                unoptimized={!recipeImageUrl.includes("supabase.co")}
+                onError={() => setFailedImageUrl(recipeImageUrl)}
+              />
+            </a>
+          ) : (
+            <div className="detail-photo detail-photo-empty">
+              <span>No photo saved</span>
+            </div>
+          )}
+        </header>
 
-        </div>
-        {recipeImageUrl && failedImageUrl !== recipeImageUrl ? (
-          <a
-            className="detail-photo recipe-detail-print-hidden"
-            href={recipeImageUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="View recipe photo"
-          >
-            <Image
-              src={recipeImageUrl}
-              alt={`${recipe.name} recipe`}
-              fill
-              priority
-              sizes="120px"
-              className="object-cover"
-              unoptimized={!recipeImageUrl.includes("supabase.co")}
-              onError={() => setFailedImageUrl(recipeImageUrl)}
-            />
-          </a>
-        ) : null}
-      </header>
-
-      <div className="detail-header-controls">
-          <details className="detail-metadata">
-            <summary>
-              Recipe details <ChevronDown aria-hidden="true" />
-            </summary>
-            <div>
-              {recipe.tags?.length ? <p>{recipe.tags.join(" · ")}</p> : null}
-              <p>Original yield: {authoredYield}</p>
-              {timeChips.map((chip) => (
-                <p key={chip.label}>
-                  {chip.label} {chip.value}
+        <div className="detail-toolbar">
+          <div className="detail-header-controls">
+            <details className="detail-metadata">
+              <summary>
+                Recipe details <ChevronDown aria-hidden="true" />
+              </summary>
+              <div>
+                {recipe.tags?.length ? <p>{recipe.tags.join(" · ")}</p> : null}
+                <p>Original yield: {authoredYield}</p>
+                {timeChips.map((chip) => (
+                  <p key={chip.label}>
+                    {chip.label} {chip.value}
+                  </p>
+                ))}
+                <p>
+                  {timesMade > 0
+                    ? `Made ${timesMade} time${timesMade === 1 ? "" : "s"}${lastMade ? ` · Last ${new Date(lastMade).toLocaleDateString()}` : ""}`
+                    : "Not made yet"}
                 </p>
-              ))}
-              <p>
-                {timesMade > 0
-                  ? `Made ${timesMade} time${timesMade === 1 ? "" : "s"}${lastMade ? ` · Last ${new Date(lastMade).toLocaleDateString()}` : ""}`
-                  : "Not made yet"}
-              </p>
-              {recipeImageUrl && failedImageUrl !== recipeImageUrl ? (
-                <a href={recipeImageUrl} target="_blank" rel="noreferrer">
-                  View recipe photo
-                </a>
+                {recipeImageUrl && failedImageUrl !== recipeImageUrl ? (
+                  <a href={recipeImageUrl} target="_blank" rel="noreferrer">
+                    View recipe photo
+                  </a>
+                ) : null}
+              </div>
+            </details>
+            <div className="detail-yield">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label="Adjust yield"
+                  >
+                    {selectedYieldLabel}
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-auto">
+                  <div
+                    className="detail-yield-control recipe-detail-print-hidden"
+                    aria-label="Adjust yield"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => selectYield(Math.max(1, servings - 1))}
+                      disabled={servings <= 1}
+                      aria-label="Decrease yield"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </button>
+                    <output aria-live="polite">{selectedYieldLabel}</output>
+                    <button
+                      type="button"
+                      onClick={() => selectYield(Math.min(100, servings + 1))}
+                      disabled={servings >= 100}
+                      aria-label="Increase yield"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <span className="recipe-detail-print-only hidden">
+                {selectedYieldLabel}
+              </span>
+              {!isOriginalYield ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => selectYield(scalingBasis)}
+                  className="recipe-detail-print-hidden detail-reset"
+                >
+                  Reset to {authoredYield}
+                </Button>
               ) : null}
             </div>
-          </details>
-        <div className="detail-yield">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button type="button" variant="ghost" aria-label="Adjust yield">
-                {selectedYieldLabel}<ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-auto">
-          <div
-            className="detail-yield-control recipe-detail-print-hidden"
-            aria-label="Adjust yield"
-          >
-            <button
-              type="button"
-              onClick={() => selectYield(Math.max(1, servings - 1))}
-              disabled={servings <= 1}
-              aria-label="Decrease yield"
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-            <output aria-live="polite">{selectedYieldLabel}</output>
-            <button
-              type="button"
-              onClick={() => selectYield(Math.min(100, servings + 1))}
-              disabled={servings >= 100}
-              aria-label="Increase yield"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
           </div>
-            </PopoverContent>
-          </Popover>
-          <span className="recipe-detail-print-only hidden">
-            {selectedYieldLabel}
-          </span>
-          {!isOriginalYield ? (
+          <div
+            className="detail-existing-actions recipe-detail-print-hidden"
+            aria-label="Recipe actions"
+          >
             <Button
               type="button"
               variant="ghost"
-              onClick={() => selectYield(scalingBasis)}
-              className="recipe-detail-print-hidden detail-reset"
+              onClick={handleCopy}
+              disabled={copyStatus === "Copying…"}
             >
-              Reset to {authoredYield}
+              <Copy className="h-5 w-5" />
+              Copy
             </Button>
-          ) : null}
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={(event) => {
+                event.currentTarget.focus()
+                onEdit()
+              }}
+              aria-label="Edit Recipe"
+              ref={editButtonRef}
+            >
+              <Pencil className="h-5 w-5" />
+              Edit
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" ref={moreButtonRef}>
+                  <MoreHorizontal className="h-5 w-5" />
+                  More
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                onCloseAutoFocus={(event) => {
+                  if (sharingFromMenuRef.current) event.preventDefault()
+                  sharingFromMenuRef.current = false
+                }}
+              >
+                <DropdownMenuItem
+                  onSelect={() => {
+                    sharingFromMenuRef.current = true
+                    moreButtonRef.current?.focus()
+                    onShare()
+                  }}
+                  className="min-h-11"
+                >
+                  <Share2 className="mr-2 h-4 w-4" />
+                  Share
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      </div>
-      <div className="detail-existing-actions recipe-detail-print-hidden" aria-label="Recipe actions">
-        <Button type="button" variant="ghost" onClick={handleCopy} disabled={copyStatus === 'Copying…'}>
-          <Copy className="h-5 w-5" />Copy
-        </Button>
-        <Button type="button" variant="ghost" onClick={event => { event.currentTarget.focus(); onEdit() }} aria-label="Edit Recipe" ref={editButtonRef}>
-          <Pencil className="h-5 w-5" />Edit
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" ref={moreButtonRef}><MoreHorizontal className="h-5 w-5" />More</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onCloseAutoFocus={event => {
-            if (sharingFromMenuRef.current) event.preventDefault()
-            sharingFromMenuRef.current = false
-          }}>
-            <DropdownMenuItem onSelect={() => {
-              sharingFromMenuRef.current = true
-              moreButtonRef.current?.focus()
-              onShare()
-            }} className="min-h-11">
-              <Share2 className="mr-2 h-4 w-4" />Share
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-      <p role="status" className="detail-copy-status">{copyStatus}</p>
-      <Dialog open={copyFallback !== null} onOpenChange={open => { if (!open) setCopyFallback(null) }}>
-        <DialogContent>
-          <DialogTitle>Copy recipe</DialogTitle>
-          <DialogDescription>Clipboard access failed. Select the text and use Copy.</DialogDescription>
-          <Textarea ref={copyTextRef} aria-label="Recipe text to copy" value={copyFallback ?? ''} readOnly className="min-h-64 !text-base" onFocus={event => event.currentTarget.select()} />
-          <Button type="button" variant="outline" onClick={() => { copyTextRef.current?.focus(); copyTextRef.current?.select() }}>Select all</Button>
-        </DialogContent>
-      </Dialog>
-      <div className="detail-tools">
-        <div className="detail-primary-actions recipe-detail-print-hidden">
-          <Button
-            type="button"
-            onClick={event => { event.currentTarget.focus(); onAddToShopping(servings) }}
-            disabled={isAddingToShopping}
-            aria-label="Add to Shopping List"
-            ref={shoppingButtonRef}
-          >
-            {isAddingToShopping ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ShoppingCart className="h-4 w-4" />
-            )}
-            Add to Shopping
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={(event) => {
-              event.currentTarget.focus()
-              onAddToPlan()
-            }}
-          >
-            <CalendarPlus className="h-4 w-4" />
-            Add to plan
-          </Button>
+        <p role="status" className="detail-copy-status">
+          {copyStatus}
+        </p>
+        <Dialog
+          open={copyFallback !== null}
+          onOpenChange={(open) => {
+            if (!open) setCopyFallback(null)
+          }}
+        >
+          <DialogContent>
+            <DialogTitle>Copy recipe</DialogTitle>
+            <DialogDescription>
+              Clipboard access failed. Select the text and use Copy.
+            </DialogDescription>
+            <Textarea
+              ref={copyTextRef}
+              aria-label="Recipe text to copy"
+              value={copyFallback ?? ""}
+              readOnly
+              className="min-h-64 !text-base"
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                copyTextRef.current?.focus()
+                copyTextRef.current?.select()
+              }}
+            >
+              Select all
+            </Button>
+          </DialogContent>
+        </Dialog>
+        <div className="detail-tools">
+          <div className="detail-primary-actions recipe-detail-print-hidden">
+            <Button
+              type="button"
+              onClick={(event) => {
+                event.currentTarget.focus()
+                onAddToShopping(servings)
+              }}
+              disabled={isAddingToShopping}
+              aria-label="Add to Shopping List"
+              ref={shoppingButtonRef}
+            >
+              {isAddingToShopping ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShoppingCart className="h-4 w-4" />
+              )}
+              Add to Shopping
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={(event) => {
+                event.currentTarget.focus()
+                onAddToPlan()
+              }}
+            >
+              <CalendarPlus className="h-4 w-4" />
+              Add to plan
+            </Button>
+          </div>
         </div>
       </div>
       {scaleError ? (
@@ -560,7 +662,6 @@ export function RecipeDetailContent({
           {scaleError}
         </p>
       ) : null}
-
 
       <nav
         ref={sectionNavRef}
@@ -709,20 +810,50 @@ export function RecipeDetailContent({
           </div>
         </section>
       </div>
-      {notes.length ? (
+      <div className="detail-supplementary">
         <details id="notes" className="detail-notes" tabIndex={-1}>
           <summary>
             <h2 id="notes-heading">Notes</h2>
             <span>{notes.length}</span>
             <ChevronDown aria-hidden="true" />
           </summary>
-          <ul>
-            {notes.map((note, index) => (
-              <li key={index}>{note}</li>
-            ))}
-          </ul>
+          {notes.length ? (
+            <ul>
+              {notes.map((note, index) => (
+                <li key={index}>{note}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="detail-empty">No notes saved.</p>
+          )}
         </details>
-      ) : null}
+        <section className="detail-tags" aria-labelledby="tags-heading">
+          <h2 id="tags-heading">Tags</h2>
+          {recipe.tags?.length ? (
+            <ul>
+              {recipe.tags.map((tag, index) => (
+                <li key={index}>{tag}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="detail-empty">No tags saved.</p>
+          )}
+        </section>
+        <section
+          className="detail-placeholder"
+          aria-labelledby="nutrition-heading"
+        >
+          <h2 id="nutrition-heading">Nutrition</h2>
+          <p>Unavailable — nutrition support is planned.</p>
+        </section>
+      </div>
+      <section
+        className="detail-placeholder detail-related"
+        aria-labelledby="related-heading"
+      >
+        <h2 id="related-heading">Related recipes</h2>
+        <p>Coming later.</p>
+      </section>
       <div className="detail-delete recipe-detail-print-hidden">
         <Button
           type="button"
@@ -748,7 +879,7 @@ export function RecipeDetailContent({
 
 export function RecipeDetailPage({
   recipeId,
-  returnSource = null
+  returnSource = null,
 }: RecipeDetailPageProps) {
   const router = useRouter()
   const recipeQuery = useRecipe(recipeId)
@@ -774,9 +905,13 @@ export function RecipeDetailPage({
   const restoreDialogFocus = () => {
     window.setTimeout(() => {
       const target = dialogReturnFocusRef.current
-      const currentTarget = target?.isConnected ? target :
-        target?.getAttribute("aria-label") === "Edit Recipe" ? editButtonRef.current :
-        target?.getAttribute("aria-label") === "Add to Shopping List" ? shoppingButtonRef.current : null
+      const currentTarget = target?.isConnected
+        ? target
+        : target?.getAttribute("aria-label") === "Edit Recipe"
+          ? editButtonRef.current
+          : target?.getAttribute("aria-label") === "Add to Shopping List"
+            ? shoppingButtonRef.current
+            : null
       currentTarget?.focus({ preventScroll: true })
     }, 0)
   }
@@ -798,11 +933,11 @@ export function RecipeDetailPage({
     try {
       await toggleFavorite.mutateAsync({
         id: recipe.id,
-        favorite: !!recipe.favorite
+        favorite: !!recipe.favorite,
       })
     } catch (error) {
       showToast({
-        message: getErrorMessage(error, "Failed to update favorite")
+        message: getErrorMessage(error, "Failed to update favorite"),
       })
     }
   }
@@ -816,11 +951,11 @@ export function RecipeDetailPage({
       showToast({
         message: `"${recipe.name}" marked as made`,
         onUndo: () => unmarkAsMade.mutate(recipe.id),
-        onExpire: () => undefined
+        onExpire: () => undefined,
       })
     } catch (error) {
       showToast({
-        message: getErrorMessage(error, "Failed to mark recipe as made")
+        message: getErrorMessage(error, "Failed to mark recipe as made"),
       })
     }
   }
@@ -831,22 +966,22 @@ export function RecipeDetailPage({
 
     try {
       const result = await addToShopping.mutateAsync({
-        recipeIds: selections.map(selection => selection.recipeId),
+        recipeIds: selections.map((selection) => selection.recipeId),
         selections,
       })
       showToast({
         message: formatShoppingAddMessage(result, {
           sourceName: recipe.name,
           itemLabel: SHOPPING_ITEM_LABEL,
-          zeroMessage: `All shopping items from "${recipe.name}" are already on the shopping list`
-        })
+          zeroMessage: `All shopping items from "${recipe.name}" are already on the shopping list`,
+        }),
       })
     } catch (error) {
       showToast({
         message: getErrorMessage(
           error,
           "Failed to add ingredients to shopping list"
-        )
+        ),
       })
       throw error
     }
@@ -864,7 +999,7 @@ export function RecipeDetailPage({
     } catch (error) {
       showToast({
         message: getErrorMessage(error, `Failed to delete "${recipe.name}"`),
-        duration: 4000
+        duration: 4000,
       })
     }
   }
@@ -925,9 +1060,10 @@ export function RecipeDetailPage({
               rememberDialogFocus()
               setIsAddToPlanOpen(true)
             }}
-            onAddToShopping={(selectedYield) =>
-              { rememberDialogFocus(); setShoppingYield(selectedYield) }
-            }
+            onAddToShopping={(selectedYield) => {
+              rememberDialogFocus()
+              setShoppingYield(selectedYield)
+            }}
             onShare={() => {
               rememberDialogFocus()
               setIsShareOpen(true)
@@ -942,10 +1078,20 @@ export function RecipeDetailPage({
 
       <ShoppingSelectionDialog
         open={shoppingYield !== null}
-        onOpenChange={open => { if (!open && !addToShopping.isPending) setShoppingYield(null) }}
+        onOpenChange={(open) => {
+          if (!open && !addToShopping.isPending) setShoppingYield(null)
+        }}
         onCloseAutoFocus={() => restoreDialogFocus()}
         recipes={recipeQuery.data ? [recipeQuery.data] : []}
-        defaultScale={recipeQuery.data && shoppingYield !== null ? shoppingYield / getScalingBasis(recipeQuery.data.yield_metadata, recipeQuery.data.servings) : 1}
+        defaultScale={
+          recipeQuery.data && shoppingYield !== null
+            ? shoppingYield /
+              getScalingBasis(
+                recipeQuery.data.yield_metadata,
+                recipeQuery.data.servings
+              )
+            : 1
+        }
         onSubmit={handleAddToShopping}
       />
       <RecipeDialog
