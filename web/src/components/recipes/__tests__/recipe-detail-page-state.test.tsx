@@ -246,6 +246,7 @@ describe("RecipeDetailPage states", () => {
     })
 
     render(<RecipeDetailPage recipeId="recipe-1" />)
+    fireEvent.click(screen.getByRole("button", { name: "Adjust yield" }))
     fireEvent.click(screen.getByRole("button", { name: "Increase yield" }))
     fireEvent.click(screen.getByRole("button", { name: "Add to Shopping List" }))
     expect(addShoppingMutateAsync).not.toHaveBeenCalled()

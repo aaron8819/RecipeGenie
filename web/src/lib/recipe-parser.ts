@@ -74,6 +74,7 @@ export interface ParsedRecipe {
   notes?: string[]
   metadata?: ParsedRecipeMetadata
   warnings: string[]
+  unparsedContent?: string[]
 }
 
 /**
@@ -104,6 +105,7 @@ export function parseRecipeText(text: string): ParsedRecipe {
     prelude,
     sections,
     ignoredMarkdownSections,
+    ignoredContent,
     hasMarkdownSections,
   } = splitIntoSections(lines)
   const preludeMetadata = extractPreludeMetadata(prelude)
@@ -161,6 +163,62 @@ export function parseRecipeText(text: string): ParsedRecipe {
     )
 
     notes = notesSections.flatMap((section) => parseNotesSection(section.lines))
+  }
+
+  const unparsedContent = [...ignoredContent]
+  if (sections.length === 0) {
+    // Heuristic legacy inference cannot establish complete source coverage for a replacement.
+    unparsedContent.push('Use Ingredients and Instructions headings so every section can be reviewed.')
+  } else {
+    const title = preludeMetadata.titleLine || name
+    for (const line of preludeMetadata.remainingLines) {
+      if (!line.trimmed || cleanDetectedTitle(line.trimmed) === title) continue
+      if (ingredientsSections.length === 0 && !hasMarkdownSections) continue
+      unparsedContent.push(line.trimmed)
+    }
+    const titleHeadings = prelude.filter(line => parseMarkdownHeading(line.trimmed))
+    for (const line of titleHeadings.slice(1)) unparsedContent.push(line.trimmed)
+    const seenAttributes = new Set<string>()
+    for (const line of prelude) {
+      const plain = stripMarkdownInlineSyntax(line.trimmed)
+      const attribute = plain.match(/^(title|recipe|name|category|servings?|serves|yield|makes?|prep(?:aration)? time|cook(?:ing)? time|total time)\s*:/i)
+      if (!attribute) continue
+      const key = attribute[1].toLowerCase().replace(/^(recipe|name)$/, 'title').replace(/^(servings?|serves|makes?)$/, 'yield')
+      if (seenAttributes.has(key)) unparsedContent.push(line.trimmed)
+      seenAttributes.add(key)
+    }
+    for (const section of sections) {
+      const parsedLabels = (section.kind === 'ingredients'
+        ? parseIngredientSection(section.lines)
+        : parseInstructionSection(section.lines))
+        .flatMap(group => group.label ? [group.label] : [])
+      for (const line of section.lines) {
+        const label = parseMarkdownHeading(line.trimmed)?.label ||
+          (isSubsectionLabel(line.trimmed) ? stripTrailingColon(line.trimmed) : null)
+        if (label && section.kind !== 'notes') {
+          const index = parsedLabels.indexOf(label)
+          if (index < 0) unparsedContent.push(line.trimmed)
+          else parsedLabels.splice(index, 1)
+        }
+        if (isRecipeMetadataLine(line.trimmed)) unparsedContent.push(line.trimmed)
+        if (section.kind === 'notes' && parseMarkdownHeading(line.trimmed)) unparsedContent.push(line.trimmed)
+        if (section.kind === 'ingredients' && line.trimmed &&
+            !parseMarkdownHeading(line.trimmed) && !isSubsectionLabel(line.trimmed) &&
+            !isRecipeMetadataLine(line.trimmed) && !parseIngredientLine(line.trimmed).item) {
+          unparsedContent.push(line.trimmed)
+        }
+      }
+    }
+    for (const [text, minutes] of [
+      [metadata?.prepTime, metadata?.prepTimeMinutes],
+      [metadata?.cookTime, metadata?.cookTimeMinutes],
+      [metadata?.totalTime, metadata?.totalTimeMinutes],
+    ]) {
+      if (text && (minutes === undefined || String(text)
+        .replace(/\d+(?:\.\d+)?\s*(hours?|hrs?|hr|h|minutes?|mins?|min|m)\b/gi, '')
+        .replace(/\band\b|[\s,]/gi, '').length > 0)) unparsedContent.push(String(text))
+    }
+    if (preludeMetadata.servingsText && !servings) unparsedContent.push(preludeMetadata.servingsText)
   }
 
   const ingredients = flattenIngredientGroups(ingredientGroups)
@@ -227,6 +285,7 @@ export function parseRecipeText(text: string): ParsedRecipe {
     notes: notes.length > 0 ? notes : undefined,
     metadata,
     warnings,
+    unparsedContent: [...new Set(unparsedContent)],
   }
 }
 
@@ -253,11 +312,13 @@ function splitIntoSections(lines: RecipeLine[]): {
   prelude: RecipeLine[]
   sections: SectionBlock[]
   ignoredMarkdownSections: string[]
+  ignoredContent: string[]
   hasMarkdownSections: boolean
 } {
   const prelude: RecipeLine[] = []
   const sections: SectionBlock[] = []
   const ignoredMarkdownSections: string[] = []
+  const ignoredContent: string[] = []
   let currentSection: SectionBlock | null = null
   let ignoringMarkdownSection = false
   let hasMarkdownSections = false
@@ -303,6 +364,7 @@ function splitIntoSections(lines: RecipeLine[]): {
       } else {
         ignoringMarkdownSection = true
         ignoredMarkdownSections.push(heading.label)
+        ignoredContent.push(line.trimmed)
       }
       continue
     }
@@ -325,6 +387,8 @@ function splitIntoSections(lines: RecipeLine[]): {
       currentSection.lines.push(line)
     } else if (!ignoringMarkdownSection) {
       prelude.push(line)
+    } else if (line.trimmed) {
+      ignoredContent.push(line.trimmed)
     }
   }
 
@@ -336,6 +400,7 @@ function splitIntoSections(lines: RecipeLine[]): {
     prelude,
     sections,
     ignoredMarkdownSections,
+    ignoredContent,
     hasMarkdownSections,
   }
 }

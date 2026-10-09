@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import dynamic from "next/dynamic"
-import { FileText, PenTool, Plus, Trash2, X } from "lucide-react"
+import { ArrowLeft, FileText, PenTool, Plus, Trash2, X } from "lucide-react"
 import type { DragEndEvent } from "@dnd-kit/core"
 import {
   Dialog,
@@ -80,6 +80,7 @@ import {
   getImportErrorMessage,
   IMPORT_URL_FAILURE_ERROR,
   parseRecipeImportPreview,
+  parseRecipeImportText,
   toParsedRecipeImport,
   validateRecipeImportUrl,
 } from "./recipe-import.parser"
@@ -115,6 +116,8 @@ interface RecipeDialogProps {
 }
 
 
+import { RecipeReplacementReview } from './recipe-replacement-review'
+
 export function RecipeDialog({
   open,
   onOpenChange,
@@ -134,6 +137,12 @@ export function RecipeDialog({
   const undoToast = useUndoToast()
 
   const [mode, setMode] = useState<"manual" | "import">("manual")
+  const [replacementPhase, setReplacementPhase] = useState<'input' | 'review'>('input')
+  const [replacementSource, setReplacementSource] = useState<string | null>(null)
+  const [replacementBaseline, setReplacementBaseline] = useState<ReturnType<typeof buildNewRecipeDialogFormValues> | null>(null)
+  const [replacementWarnings, setReplacementWarnings] = useState<string[]>([])
+  const [replacementUnparsed, setReplacementUnparsed] = useState<string[]>([])
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [editTab, setEditTab] = useState<
     "details" | "ingredients" | "instructions" | "replace"
   >("details")
@@ -163,6 +172,7 @@ export function RecipeDialog({
   const pendingCreateUuidRef = useRef<string | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const submitInFlightRef = useRef(false)
+  const loadedDraftRef = useRef<ReturnType<typeof buildNewRecipeDialogFormValues> | null>(null)
   const confirmationGuardRef = useRef(false)
   const rawSourceRef = useRef("")
   const importUrlRef = useRef("")
@@ -191,6 +201,7 @@ export function RecipeDialog({
   const { data: tagCounts = [] } = useTagsWithCounts()
 
   const applyFormValues = useCallback((formValues: ReturnType<typeof buildNewRecipeDialogFormValues>) => {
+    loadedDraftRef.current = formValues
     setName(formValues.name)
     setCategory(formValues.category)
     setServings(formValues.servings)
@@ -207,6 +218,12 @@ export function RecipeDialog({
     setImagePreview(null)
     setMode("manual")
     setEditTab("details")
+    setReplacementPhase('input')
+    setReplacementSource(null)
+    setReplacementBaseline(null)
+    setReplacementWarnings([])
+    setReplacementUnparsed([])
+    setSaveError(null)
     setRawSource("")
     rawSourceRef.current = ""
     setImportUrl("")
@@ -636,10 +653,47 @@ export function RecipeDialog({
     setParsedPreview(null)
   }
 
-  const handleApplyReplacementPreview = () => {
-    if (!parsedCandidate) return
-    applyPreviewToCurrentForm(parsedCandidate)
-    setEditTab("ingredients")
+  const handleApplyReplacementPreview = (discardCorrections = false) => {
+    if (submitInFlightRef.current) return
+    const candidate = parseRecipeImportText(rawSource)
+    if (!candidate.parsedRecipe || !candidate.parsedRecipe.ingredientSections.some(section => section.ingredients.length)) {
+      setParseError(candidate.error || 'No ingredients found. Add an Ingredients section and try again.')
+      return
+    }
+    const parsed = candidate.parsedRecipe
+    if (parsed.unparsedContent?.includes('Use Ingredients and Instructions headings so every section can be reviewed.')) {
+      setParseError('Could not read a recipe. Add Ingredients and Instructions headings and try again.')
+      return
+    }
+    if (!discardCorrections && replacementSource !== null && replacementSource !== rawSource && appliedDraftSnapshot && draftCorrected) {
+      confirmationGuardRef.current = true
+      setShowReplacementConfirm(true)
+      return
+    }
+    if (replacementSource !== rawSource) {
+      const baseline = replacementBaseline ?? currentDraft
+      const next = applyParsedRecipeToFormValues(baseline, {
+        ...parsed,
+        name: parsed.warnings.some(warning => warning.startsWith('No recipe name')) ? baseline.name : parsed.name,
+      })
+      setReplacementBaseline(baseline)
+      setAppliedDraftSnapshot(next)
+      setName(next.name); setServings(next.servings); setYieldText(next.yieldText ?? '')
+      setPrepTimeMinutes(next.prepTimeMinutes); setCookTimeMinutes(next.cookTimeMinutes); setTotalTimeMinutes(next.totalTimeMinutes)
+      setIngredientSections(next.ingredientSections); setInstructionGroups(next.instructionGroups); setNotes(next.notes)
+      setReplacementSource(rawSource)
+      const retainedTags = `tags: ${baseline.tags.join(', ')}`.toLowerCase()
+      const unparsed = (parsed.unparsedContent ?? []).filter(text => text.toLowerCase() !== retainedTags)
+      setReplacementUnparsed(unparsed)
+      setReplacementWarnings([
+        ...parsed.warnings,
+        ...(parsed.category && parsed.category.toLowerCase() !== baseline.category.toLowerCase()
+          ? [`Pasted category: ${parsed.category}. This recipe keeps category ${baseline.category}.`]
+          : []),
+      ])
+    }
+    setParseError(null)
+    setReplacementPhase('review')
   }
 
   const handleBackToInput = () => {
@@ -733,6 +787,13 @@ export function RecipeDialog({
 
   const handleSubmit = async () => {
     if (submitInFlightRef.current) return
+    if (isEditing && (rawSource.trim() || replacementSource !== null) &&
+        (replacementSource !== rawSource || replacementUnparsed.length > 0 || replacementPhase !== 'review' || editTab !== 'replace')) {
+      setEditTab('replace')
+      setParseError('Review all replacement text before saving.')
+      return
+    }
+    setSaveError(null)
 
     // P3: Validate ingredients before submitting (only blocking issues)
     const blockingIssuesCount = countBlockingIngredientIssues(ingredients)
@@ -829,6 +890,7 @@ export function RecipeDialog({
       onOpenChange(false)
     } catch (error) {
       console.error("Failed to save recipe:", error)
+      setSaveError('Could not save changes. Your edits are still here. Try again.')
       undoToast.show({ message: 'Failed to save recipe. Please try again.', duration: 6000 })
     } finally {
       submitInFlightRef.current = false
@@ -844,9 +906,7 @@ export function RecipeDialog({
   const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
 
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
-  const initialEditingFormValues = editingRecipe
-    ? buildEditingRecipeDialogFormValues(editingRecipe)
-    : null
+  const initialEditingFormValues = isEditing ? loadedDraftRef.current : null
   const hasDirtyForm = isEditing
     ? !!initialEditingFormValues && isEditingRecipeDialogDirty(initialEditingFormValues, {
         name,
@@ -877,17 +937,48 @@ export function RecipeDialog({
         notes,
         imageReference: imagePreview ?? imageUrl,
       })
-  const isDirty = hasDirtyForm || (!isEditing && isImportWorkDirty({
+  const isDirty = hasDirtyForm || isImportWorkDirty({
     rawSource,
     importUrl,
     hasParsedCandidate: parsedCandidate !== null,
     hasAppliedCandidate: appliedRawSource !== null,
-  }))
+  })
+  const dirtyRef = useRef(isDirty)
+  dirtyRef.current = isDirty
+  const openChangeRef = useRef(onOpenChange)
+  openChangeRef.current = onOpenChange
+  useEffect(() => {
+    if (!open || !isEditing) return
+    // One same-route history entry makes browser Back dismiss the editor through
+    // the same discard protection as Cancel, before it can leave the recipe.
+    const pushEditorEntry = () => window.history.pushState(
+      { ...window.history.state, recipeGenieEditor: true }, '', window.location.href
+    )
+    let ownsEntry = true
+    pushEditorEntry()
+    const handleBack = () => {
+      ownsEntry = false
+      if (submitInFlightRef.current || dirtyRef.current) {
+        pushEditorEntry()
+        ownsEntry = true
+        if (!submitInFlightRef.current) {
+          confirmationGuardRef.current = true
+          setShowDiscardConfirm(true)
+        }
+      } else openChangeRef.current(false)
+    }
+    window.addEventListener('popstate', handleBack)
+    return () => {
+      window.removeEventListener('popstate', handleBack)
+      if (ownsEntry && window.history.state?.recipeGenieEditor) window.history.back()
+    }
+  }, [open, isEditing])
   const isMobileImportInput = !isDesktop && !isEditing && mode === 'import' &&
     mobileImportPhase === 'input'
   const isMobileImportReview = !isDesktop && !isEditing && mode === 'import' &&
     mobileImportPhase === 'review'
   const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && submitInFlightRef.current) return
     if (!nextOpen && confirmationGuardRef.current) {
       return
     }
@@ -898,6 +989,13 @@ export function RecipeDialog({
     }
     onOpenChange(nextOpen)
   }
+
+  useEffect(() => {
+    if (!open || !isDirty) return
+    const protect = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', protect)
+    return () => window.removeEventListener('beforeunload', protect)
+  }, [open, isDirty])
 
   const handleKeepEditing = () => {
     setShowDiscardConfirm(false)
@@ -968,7 +1066,8 @@ export function RecipeDialog({
           </AlertDialogCancel>
           <AlertDialogAction onClick={() => {
             setShowReplacementConfirm(false)
-            applyCandidateForReview()
+            if (isEditing) handleApplyReplacementPreview(true)
+            else applyCandidateForReview()
             window.setTimeout(() => {
               confirmationGuardRef.current = false
             }, 0)
@@ -991,20 +1090,28 @@ export function RecipeDialog({
         <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
         {isEditing && (
           <div className="sticky top-0 z-20 px-4 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-6 flex justify-between items-center border-b border-stone-200 dark:border-zinc-800 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+            {editTab === 'replace' && replacementPhase === 'review' ? <>
+              <Button type="button" variant="ghost" className="min-h-11 px-0" disabled={isSubmitting} onClick={() => setReplacementPhase('input')}>
+                <ArrowLeft className="mr-2 h-4 w-4" />Edit
+              </Button>
+              <h1 className="text-lg font-semibold sm:text-2xl">Review changes</h1>
+              <Button type="button" variant="ghost" className="min-h-11 px-0" disabled={isSubmitting} onClick={() => handleOpenChange(false)}>Cancel</Button>
+            </> : <>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-primary">Edit Recipe</h1>
-              <p className="text-sm text-muted-foreground">Update your culinary masterpiece details.</p>
+              <p className="text-sm text-muted-foreground">Edit details or replace with recipe text.</p>
             </div>
             <DialogClose asChild>
               <button
                 ref={closeButtonRef}
                 type="button"
-                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                 aria-label="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </DialogClose>
+            </>}
           </div>
         )}
 
@@ -1160,7 +1267,7 @@ export function RecipeDialog({
           >
             <div className="flex-shrink-0 border-b border-stone-200 bg-card px-3 py-2 dark:border-zinc-800">
               <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
-                <TabsTrigger value="details" className="rounded-lg text-xs font-semibold">Details</TabsTrigger>
+                <TabsTrigger value="details" className="min-h-11 rounded-lg text-sm font-semibold">Details</TabsTrigger>
                 <TabsTrigger value="ingredients" className="rounded-lg text-xs font-semibold">Ingredients</TabsTrigger>
                 <TabsTrigger value="instructions" className="rounded-lg text-xs font-semibold">Instructions</TabsTrigger>
               </TabsList>
@@ -1238,10 +1345,10 @@ export function RecipeDialog({
         {isEditing && (
           <Tabs
             value={editTab}
-            onValueChange={(value) => setEditTab(value as typeof editTab)}
+            onValueChange={(value) => { if (!isSubmitting) setEditTab(value as typeof editTab) }}
             className="flex flex-1 min-h-0 flex-col"
           >
-            <div className="border-b border-stone-200 bg-card px-4 py-3 dark:border-zinc-800 sm:px-8">
+            <div hidden={editTab === 'replace' && replacementPhase === 'review'} className="border-b border-stone-200 bg-card px-4 py-3 dark:border-zinc-800 sm:px-8">
               <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:inline-grid sm:w-auto sm:grid-cols-4">
                 <TabsTrigger value="details" className="rounded-lg text-xs font-semibold">
                   Details
@@ -1253,7 +1360,7 @@ export function RecipeDialog({
                   Instructions
                 </TabsTrigger>
                 <TabsTrigger value="replace" className="rounded-lg text-xs font-semibold">
-                  Replace
+                  Replace text
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -1409,7 +1516,9 @@ export function RecipeDialog({
                 />
               </TabsContent>
               <TabsContent value="replace" className="mt-0 data-[state=inactive]:hidden">
-                <RecipeImportSection
+                {replacementPhase === 'review' && replacementBaseline ? (
+                  <RecipeReplacementReview current={initialEditingFormValues ?? replacementBaseline} updated={currentDraft} unparsed={replacementUnparsed} warnings={replacementWarnings} />
+                ) : <RecipeImportSection
                   variant="replace"
                   showUrlImport={false}
                   currentRecipeName={name}
@@ -1443,7 +1552,7 @@ export function RecipeDialog({
                   onApplyLivePreview={handleApplyReplacementPreview}
                   onBackToInput={handleBackToInput}
                   onApplyPreview={handleApplyPreview}
-                />
+                />}
               </TabsContent>
             </div>
           </Tabs>
@@ -1457,7 +1566,21 @@ export function RecipeDialog({
               : "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col items-end flex-shrink-0"
           }
         >
-          {isMobileImportInput ? (
+          {saveError && <p role="alert" className="mb-3 w-full text-sm text-destructive">{saveError}</p>}
+          {isEditing && editTab === 'replace' ? (
+            <div className="w-full space-y-2">
+              <div className="flex w-full gap-3">
+                <Button type="button" variant="outline" className="min-h-11 flex-1" disabled={isSubmitting} onClick={() => replacementPhase === 'review' ? setReplacementPhase('input') : handleOpenChange(false)}>
+                  {replacementPhase === 'review' ? 'Back to text' : 'Cancel'}
+                </Button>
+                <Button type="button" className="min-h-11 flex-1" onClick={() => replacementPhase === 'review' ? handleSubmit() : handleApplyReplacementPreview()}
+                  disabled={isSubmitting || !rawSource.trim() || (replacementPhase === 'review' && (replacementUnparsed.length > 0 || replacementSource !== rawSource || !name.trim() || !hasValidIngredients))}>
+                  {isSubmitting ? 'Saving…' : replacementPhase === 'review' ? 'Save changes' : 'Review changes'}
+                </Button>
+              </div>
+              <p className="text-center text-xs text-muted-foreground">Nothing changes until you save.</p>
+            </div>
+          ) : isMobileImportInput ? (
             <Button
               type="button"
               onClick={handleReviewCandidate}

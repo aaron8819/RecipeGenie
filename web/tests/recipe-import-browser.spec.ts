@@ -463,19 +463,13 @@ test.describe('local recipe import browser verification', () => {
 
       const editDialog = page.getByRole('dialog').first()
       await expect(editDialog.locator('h1')).toHaveText('Edit Recipe')
-      await editDialog.getByRole('tab', { name: /^replace$/i }).click()
-      await editDialog.getByLabel('Paste Updated Recipe Text').fill(
-        MARKDOWN_TACO_SALAD_RECIPE_TEXT
-      )
-      await expect(editDialog.getByText(IMPORTED_TITLE, { exact: true })).toBeVisible()
-      await expect(editDialog.getByText('Category beef', { exact: true })).toBeVisible()
-      await expect(
-        editDialog.getByText('Replace current recipe draft', { exact: true })
-      ).toBeVisible()
-      await editDialog.getByRole('button', {
-        name: /^apply to current recipe$/i,
-      }).click()
+      await editDialog.getByRole('tab', { name: /^replace text$/i }).click()
+      await editDialog.getByLabel('Recipe text', { exact: true }).fill(MARKDOWN_TACO_SALAD_RECIPE_TEXT)
+      await editDialog.getByRole('button', { name: /^review changes$/i }).click()
+      await expect(editDialog.getByTestId('replacement-review')).toContainText(IMPORTED_TITLE)
+      await expect(editDialog.getByText('Pasted category: beef. This recipe keeps category lamb.')).toBeVisible()
 
+      await editDialog.getByRole('button', { name: /^edit$/i }).click()
       await editDialog.getByRole('tab', { name: /^details$/i }).click()
       await expect(editDialog.locator('#name-edit')).toHaveValue(IMPORTED_TITLE)
       await expect(editDialog.locator('#servings-edit')).toHaveValue('4')
@@ -483,6 +477,8 @@ test.describe('local recipe import browser verification', () => {
         response.request().method() === 'PATCH' &&
         response.url().includes('/rest/v1/recipes')
       )
+      await editDialog.getByRole('tab', { name: /^replace text$/i }).click()
+      await editDialog.getByRole('button', { name: /^review changes$/i }).click()
       await editDialog.getByRole('button', { name: /^save changes$/i }).click()
       expect((await updateResponse).ok()).toBe(true)
       await expect(editDialog).toBeHidden()

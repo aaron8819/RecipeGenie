@@ -29,7 +29,7 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   - add to shopping
   - mark made
   - share/edit/delete
-  - serving adjustment and print
+  - serving adjustment and plain-text Copy
 - Yield adjustment scales displayed quantities locally with exact rational
   arithmetic and never mutates the stored recipe. The selected yield is also
   used when adding that recipe to Shopping. Recipe detail does not have an
@@ -45,7 +45,9 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   their initiating detail control, including after discard. Successful editor
   saves return focus to the current Edit button after detail content remounts.
 - Missing or broken photos leave the cooking content available. Photo links
-  expose the original image; printing includes selected yield and notes.
+  expose the original image. Copy includes selected yield, displayed quantities,
+  ordered sections, preparation, alternatives, times and notes. Clipboard failure
+  exposes selectable text and never reports success.
 - The recipe image storage boundary is now explicit:
   - `getRecipeImageUrl()` is a pure helper.
   - Upload/delete behavior goes through `useRecipeImageStorage()`.
@@ -57,7 +59,8 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
   A fresh card selection uses original yield; a fresh detail selection uses the
   currently viewed yield. Submission stays in the existing Shopping command owner.
 - Card menus also expose Edit, Mark made, Print, and confirmed Delete. Print
-  navigates to canonical detail, where the existing Print control remains.
+  navigates to canonical detail. Detail now offers Copy; browser printing remains
+  available through the browser menu and existing print styles.
   Recipe Mark made/Undo uses global history and never toggles weekly cooked flags.
 - Card dialogs return focus to the originating menu or its replacement after
   editing. If deletion/filtering removes that card, focus returns to Recipes.
@@ -168,6 +171,15 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - Import apply/save/reopen parity preserves canonical section boundaries,
   structured recipe times, and notes directly.
 - Edit mode has a paste-to-replace flow that reuses the text parser and applies parsed fields to the current recipe draft. It preserves the recipe id, category, tags, and image; replaces name/servings/times when parsed; replaces ingredients only when at least one ingredient is parsed; replaces instructions only when steps are parsed; and keeps existing notes unless parsed notes are present.
+- Replacement uses Replace text → Review changes → Save changes on both widths.
+  Review shows changed ingredient occurrences, other changed fields, retained
+  sections and the full candidate. Pasted category differences are disclosed
+  while retaining the existing category. Unrepresented source content blocks
+  saving until corrected; heuristic text requires explicit section headings.
+  The source survives parsing errors, Back, and save failures. Clipboard read
+  failure focuses the native textarea for keyboard or long-press Paste.
+  Cancel, Escape and browser Back use discard protection; reload/leave prompts
+  protect unsaved work. Saves keep the same update mutation and submit lock.
 
 ### Sharing
 

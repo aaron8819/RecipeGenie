@@ -303,6 +303,39 @@ export function RecipeImportSection({
   onBackToInput,
   onApplyPreview,
 }: RecipeImportSectionProps) {
+  const pasteInputRef = React.useRef<HTMLTextAreaElement>(null)
+  const pasteInFlight = React.useRef(false)
+  const latestImportText = React.useRef(importText)
+  latestImportText.current = importText
+  const [pasteHint, setPasteHint] = React.useState('')
+  const [isPasting, setIsPasting] = React.useState(false)
+  const handlePaste = async () => {
+    if (pasteInFlight.current) return
+    pasteInFlight.current = true
+    setIsPasting(true)
+    try {
+      if (!navigator.clipboard?.readText) throw new Error('Clipboard unavailable')
+      const text = await navigator.clipboard.readText()
+      if (latestImportText.current !== importText) {
+        setPasteHint('Text changed while reading the clipboard. Paste again to insert it.')
+        return
+      }
+      if (text) {
+        // Insert at the selection like native Paste; do not discard existing source.
+        const input = pasteInputRef.current
+        const start = input?.selectionStart ?? importText.length
+        const end = input?.selectionEnd ?? start
+        onImportTextChange(importText.slice(0, start) + text + importText.slice(end))
+        setPasteHint('Text pasted. Review before saving.')
+      } else setPasteHint('Clipboard is empty. Paste recipe text below.')
+    } catch {
+      setPasteHint('Touch and hold in the text box, then choose Paste. You can also use your keyboard.')
+    } finally {
+      pasteInFlight.current = false
+      setIsPasting(false)
+      pasteInputRef.current?.focus()
+    }
+  }
   const previewRecipe = importStep === "preview" ? parsedPreview : livePreview
   const ingredientGroups = previewRecipe ? getIngredientGroups(previewRecipe) : []
   const instructionGroups = previewRecipe ? getInstructionGroups(previewRecipe) : []
@@ -330,8 +363,24 @@ export function RecipeImportSection({
     ))
   )
   const applyLivePreviewLabel = isReplacement
-    ? "Apply to Current Recipe"
+    ? "Review changes"
     : "Apply to Form"
+
+  if (isReplacement) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4" data-testid="replacement-input">
+        <h2 className="text-xl font-semibold">Replace text</h2>
+        <p className="text-sm text-muted-foreground">Paste an updated recipe for {currentRecipeName || 'this recipe'}. Review changes before saving. Sections missing from the text stay the same.</p>
+        <Button type="button" variant="outline" className="min-h-11" disabled={isPasting} onClick={handlePaste}>{isPasting ? 'Pasting…' : 'Paste'}</Button>
+        <p role="status" className="text-sm text-muted-foreground">{pasteHint || 'You can also touch and hold in the text box to paste.'}</p>
+        <Label htmlFor="replace-text">Recipe text</Label>
+        <Textarea ref={pasteInputRef} id="replace-text" value={importText} onChange={event => onImportTextChange(event.target.value)}
+          placeholder={'Recipe title\nYield: 4 servings\n\nIngredients:\n1/2 cup rice\n\nInstructions:\n1. Cook the rice.\n\nNotes:\nAdd any other recipe information here.'}
+          className="min-h-[40dvh] resize-y !text-base leading-relaxed" />
+        {parseError && <p role="alert" className="text-sm text-destructive">{parseError}</p>}
+      </div>
+    )
+  }
 
   if (compactMobile) {
     return (
