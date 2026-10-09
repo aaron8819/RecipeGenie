@@ -514,4 +514,37 @@ describe("RecipeDetailContent", () => {
     expect(screen.getByText("No instructions available.")).toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Notes" })).not.toBeInTheDocument()
   })
+  it("shows saved tags and notes without inventing nutrition or related recipes", () => {
+    renderDetail(
+      makeRecipe({
+        tags: ["Family favorite", "Freezer"],
+        notes: ["Saved note."],
+      })
+    )
+    const tags = screen.getByRole("region", { name: "Tags" })
+    expect(within(tags).getByText("Family favorite")).toBeInTheDocument()
+    expect(within(tags).getByText("Freezer")).toBeInTheDocument()
+    expect(document.getElementById("notes")).toHaveTextContent("Saved note.")
+    expect(screen.getByRole("region", { name: "Nutrition" })).toHaveTextContent(
+      "Unavailable"
+    )
+    expect(
+      screen.getByRole("region", { name: "Related recipes" })
+    ).toHaveTextContent("Coming later")
+    expect(screen.queryByText("Tip", { exact: true })).not.toBeInTheDocument()
+    expect(
+      screen.getAllByRole("button", { name: "Add to Shopping List" })
+    ).toHaveLength(1)
+  })
+
+  it("offers honest empty states for missing saved content", () => {
+    renderDetail(makeRecipe({ image_url: null, tags: [], notes: [] }))
+    expect(screen.getByText("No photo saved")).toBeInTheDocument()
+    expect(screen.getByRole("region", { name: "Tags" })).toHaveTextContent(
+      "No tags saved."
+    )
+    expect(document.getElementById("notes")).toHaveTextContent(
+      "No notes saved."
+    )
+  })
 })

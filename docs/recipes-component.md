@@ -296,3 +296,11 @@ The local inspection suite covers mobile import state transitions at 360x800,
 Last updated: 2026-08-03
 
 Shopping Slice 8 validates owned recipe sources inside the existing owner-locked commit boundary. Recipe deletion remains an admitted `deleteRecipe` command; direct deletion stays fenced. Frozen Shopping evidence survives recipe edits, while deletion removes the current selection and prevents later refresh/Undo from reviving it. See [Shopping Slice 8](shopping-slice8.md).
+
+## Recipe roadmap
+
+- Nutrition: add a verified nutrition source, explicit per-serving/yield scaling and provenance.
+  Until implemented, recipe detail marks Nutrition unavailable and shows no estimated numbers.
+- Related recipes: design real suggestions from the owner's accessible saved recipes, with useful
+  matching criteria and permission-aware fetching. Until implemented, show only a coming-later
+  placeholder; do not fabricate recipe cards or infer dietary tags.
