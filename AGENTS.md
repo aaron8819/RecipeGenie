@@ -97,19 +97,19 @@ an unsafe-target blocker.
 ## Authorization boundaries
 
 Codex may run local checks and explicitly requested read-only remote checks.
-Codex may commit authorized local changes after appropriate checks and review
-pass, without separate approval. Stage only task-specific changes and preserve
-unrelated owner work. Checks that require a clean committed worktree may run
-immediately after the local commit; report failures and stop before publication.
+Codex may commit authorized local changes, push task branches, and open draft
+PRs after appropriate checks and review pass, without separate approval.
+Stage only task-specific changes and preserve unrelated owner work. Checks that
+require a clean committed worktree may run immediately after the local commit;
+report failures and stop before publication.
 
-Stop before any push, merge, deployment, redeployment, rollback, alias
+Stop before any merge, deployment, redeployment, rollback, alias
 reassignment, environment change, Supabase link change, migration application
 or repair, database repair, backup creation, restore execution, production data
 write, or other production change. One user message may authorize multiple
-stages when it explicitly names them. For example, a request to implement,
-commit, push, and open a draft PR authorizes those four stages without repeated
-approval; any unmentioned later stage remains unauthorized. Production writes,
-migrations, restores, destructive actions, and other materially risky
+protected stages when it explicitly names them; any unmentioned protected
+stage remains unauthorized. Production writes, migrations, restores,
+destructive actions, and other materially risky
 operations remain separately protected unless the user explicitly includes
 them.
 
