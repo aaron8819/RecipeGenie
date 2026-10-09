@@ -98,7 +98,7 @@ Release mode additionally permits only the named non-secret `RG_REPOSITORY`,
 Supabase, database, provider, and cloud credentials remain excluded. Prefer
 explicit release CLI options over environment inputs.
 
-Focused verification is an iteration aid for an explicit bounded scope:
+Focused verification covers mapped bounded iterations and prose-only publishing:
 
 ```powershell
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 focused --base origin/main
@@ -113,7 +113,10 @@ tests and lint checks. An application, CI, package, migration SQL, unknown path,
 or unresolved base automatically runs the PR tier instead. A focused result
 explicitly says that it is not full PR confidence.
 
-PR verification is the complete local pre-PR gate:
+PR verification is the complete local pre-PR gate for behavioral, build, package,
+CI, migration, security, or unknown-scope changes. Prose-only changes use the
+mapped focused tier plus command/link/whitespace checks and focused review under
+`AGENTS.md`; do not run full builds or browser/database harnesses solely for prose:
 
 ```powershell
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 pr
@@ -313,9 +316,11 @@ outside the corrected range may carry forward. Worktree cleanliness, changed
 files, head bindings, migration/documentation integrity, required checks,
 mergeability, review requests, and unresolved-thread counts must always be
 refreshed at the exact head. Focused verification is sufficient only for a
-mapped bounded iteration or narrow documentation correction; PR verification
-is mandatory before publishing or after behavioral, build, package, CI,
-migration, security, or unknown-scope changes. Reviewers must expand scope when
+mapped bounded iteration or prose-only publication, including narrow documentation
+corrections. PR verification is mandatory before publishing behavioral, build,
+package, CI, migration, security, or unknown-scope changes. Required exact-head CI
+checks still apply to every PR; this local prose exception does not waive them.
+Reviewers must expand scope when
 a correction crosses those boundaries or invalidates reused evidence. Merge is
 blocked by a dirty or mismatched reviewed head, failed/pending/incomplete
 required checks, unresolved required review, migration/schema inconsistency,

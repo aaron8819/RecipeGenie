@@ -103,20 +103,24 @@ an unsafe-target blocker.
 
 ## Authorization boundaries
 
-Codex may run local checks and explicitly requested read-only remote checks.
-Codex may commit authorized local changes, push task branches, and open draft
-PRs after appropriate checks and review pass, without separate approval.
+Codex may run task-relevant local checks, builds, and read-only remote checks.
+Task-authorized implementation includes appropriate verification, commits,
+task-branch pushes, draft PRs, CI follow-through, and independent review without
+repeat owner approval. Use proportionate checks for the change as described above.
 Stage only task-specific changes and preserve unrelated owner work. Checks that
 require a clean committed worktree may run immediately after the local commit;
 report failures and stop before publication.
 
-Stop before any merge, deployment, redeployment, rollback, alias
+Unless already covered by explicit task authorization, stop before any merge,
+deployment, redeployment, rollback, alias
 reassignment, environment change, Supabase link change, migration application
 or repair, database repair, backup creation, restore execution, production data
 write, or other production change. One user message may authorize multiple
-protected stages when it explicitly names them; any unmentioned protected
-stage remains unauthorized. Production writes, migrations, restores,
-destructive actions, and other materially risky
+protected stages when it explicitly names them. A bounded approval naming merge
+and release authorizes those stages for that task; it is not blanket permission
+for future releases. Do not ask again for a stage already covered by that approval.
+Any unmentioned protected stage remains unauthorized. Production writes,
+migrations, restores, destructive actions, and other materially risky
 operations remain separately protected unless the user explicitly includes
 them.
 
