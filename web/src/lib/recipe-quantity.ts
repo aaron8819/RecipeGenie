@@ -994,6 +994,13 @@ export function quantityMatchesLegacy(
   if (amount == null) {
     return quantity.kind === "qualitative" || quantity.kind === "unparsed"
   }
+  // Numeric compatibility amounts are produced by this same conversion. Parsing
+  // their decimal rendering back to a rational loses repeating fractions (1/3)
+  // and can exceed parser precision limits. Require exact numeric agreement;
+  // authored string amounts still use the rational comparison below.
+  if (typeof amount === "number" && quantity.kind === "exact") {
+    return Number.isFinite(amount) && quantityToLegacyAmount(quantity) === amount
+  }
   const legacy = parseQuantityV1(String(amount), "legacy-synthesized")
   if (quantity.kind === "exact" && legacy.kind === "exact") {
     return sameRational(quantity.value, legacy.value)

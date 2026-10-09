@@ -165,6 +165,16 @@ export function parseRecipeText(text: string): ParsedRecipe {
     notes = notesSections.flatMap((section) => parseNotesSection(section.lines))
   }
 
+  // The recipe model has only prep/cook/total fields. Keep other authored timing
+  // attributes verbatim in Notes instead of inventing a persisted field.
+  const preservedTiming = preludeMetadata.remainingLines
+    .filter(line => sections.length > 0 && isUnsupportedTimingLine(line.trimmed))
+    .map(line => line.trimmed)
+  notes = [...preservedTiming, ...notes]
+  for (const timing of preservedTiming) {
+    warnings.push(`"${timing}" was preserved in Notes; no dedicated timing field exists.`)
+  }
+
   const unparsedContent = [...ignoredContent, ...preludeMetadata.unparsedContent]
   if (sections.length === 0) {
     // Heuristic legacy inference cannot establish complete source coverage for a replacement.
@@ -172,7 +182,8 @@ export function parseRecipeText(text: string): ParsedRecipe {
   } else {
     const title = preludeMetadata.titleLine || name
     for (const line of preludeMetadata.remainingLines) {
-      if (!line.trimmed || cleanDetectedTitle(line.trimmed) === title) continue
+      if (!line.trimmed || cleanDetectedTitle(line.trimmed) === title ||
+          preservedTiming.includes(line.trimmed)) continue
       if (ingredientsSections.length === 0 && !hasMarkdownSections) continue
       unparsedContent.push(line.trimmed)
     }
@@ -181,9 +192,13 @@ export function parseRecipeText(text: string): ParsedRecipe {
         ? parseIngredientSection(section.lines)
         : parseInstructionSection(section.lines))
         .flatMap(group => group.label ? [group.label] : [])
-      for (const line of section.lines) {
+      for (const [index, line] of section.lines.entries()) {
         const label = parseMarkdownHeading(line.trimmed)?.label ||
-          (isSubsectionLabel(line.trimmed) ? stripTrailingColon(line.trimmed) : null)
+          (isSubsectionLabel(line.trimmed) ? stripTrailingColon(line.trimmed) : null) ||
+          (section.kind === 'ingredients' && isBareIngredientHeading(section.lines, index)
+            ? line.trimmed : null) ||
+          (section.kind === 'instructions' && isNumberedInstructionHeading(section.lines, index)
+            ? stripInstructionMarker(line.trimmed) : null)
         if (label && section.kind !== 'notes') {
           const index = parsedLabels.indexOf(label)
           if (index < 0) unparsedContent.push(line.trimmed)
@@ -745,7 +760,7 @@ function parseIngredientSection(lines: RecipeLine[]): ParsedIngredientGroup[] {
     pendingMarkdownItem = null
   }
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (!line.trimmed) {
       flushPendingMarkdownItem()
       continue
@@ -767,7 +782,7 @@ function parseIngredientSection(lines: RecipeLine[]): ParsedIngredientGroup[] {
       continue
     }
 
-    if (isSubsectionLabel(line.trimmed)) {
+    if (isSubsectionLabel(line.trimmed) || isBareIngredientHeading(lines, index)) {
       flushPendingMarkdownItem()
       pushCurrentGroup()
       currentGroup = {
@@ -821,7 +836,7 @@ function parseInstructionSection(lines: RecipeLine[]): ParsedInstructionGroup[] 
     groups.push(currentGroup)
   }
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     const trimmed = line.trimmed
 
     if (!trimmed) {
@@ -843,10 +858,11 @@ function parseInstructionSection(lines: RecipeLine[]): ParsedInstructionGroup[] 
       continue
     }
 
-    if (isSubsectionLabel(trimmed)) {
+    if (isSubsectionLabel(trimmed) || isNumberedInstructionHeading(lines, index)) {
       pushCurrentGroup()
       currentGroup = {
-        label: stripTrailingColon(trimmed),
+        label: isSubsectionLabel(trimmed)
+          ? stripTrailingColon(trimmed) : stripInstructionMarker(trimmed),
         steps: [],
       }
       continue
@@ -936,6 +952,46 @@ function shouldWarnMissingIngredientAmount(
   }
 
   return true
+}
+
+function isUnsupportedTimingLine(line: string): boolean {
+  return !parsePreludeAttribute(line) &&
+    /^[A-Za-z][A-Za-z ]*\s+time\s*:\s*\S/i.test(stripMarkdownInlineSyntax(line))
+}
+
+// Bare labels require layout evidence: an isolated title followed by a bullet
+// list. Ordinary amountless lines within a list stay ingredients. Explicit
+// Markdown/colon headings remain available for inherently ambiguous prose.
+function isPlainTitle(line: string): boolean {
+  const words = line.split(/\s+/)
+  return words.length <= 8 && /^[A-Z]/.test(line) &&
+    words.every(word => !/^[a-z]/.test(word) ||
+      /^(?:and|or|for|the|of|with|to|in)$/.test(word))
+}
+
+function isBareIngredientHeading(lines: RecipeLine[], index: number): boolean {
+  const line = lines[index].trimmed
+  if (!line || (index > 0 && lines[index - 1].trimmed) ||
+      lines[index + 1]?.trimmed || isBulletItem(line) ||
+      parseIngredientQuantityPrefix(line) || isRecipeMetadataLine(line) ||
+      /[.:!?(),\d]/.test(line) || line.length > 80) return false
+  if (!isPlainTitle(line)) return false
+  const next = lines.slice(index + 1).find(candidate => candidate.trimmed)
+  return !!next && isBulletItem(next.trimmed)
+}
+
+// A numbered title separated from its prose is a section label; conventional
+// numbered sentences and wrapped list items are still instruction steps.
+function isNumberedInstructionHeading(lines: RecipeLine[], index: number): boolean {
+  const line = lines[index].trimmed
+  if (!/^\d+[.)]\s+[A-Z]/.test(line) ||
+      (index > 0 && lines[index - 1].trimmed) || lines[index + 1]?.trimmed ||
+      /[.!?:]$/.test(line) || line.length > 100 ||
+      !isPlainTitle(stripInstructionMarker(line)) ||
+      stripInstructionMarker(line).split(/\s+/).length < 2) return false
+  const next = lines.slice(index + 1).find(candidate => candidate.trimmed)
+  return !!next && !isInstructionStepStart(next.trimmed) &&
+    !parseMarkdownHeading(next.trimmed) && !isSubsectionLabel(next.trimmed)
 }
 
 function isSubsectionLabel(line: string): boolean {
