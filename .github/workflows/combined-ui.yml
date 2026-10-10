@@ -2,6 +2,11 @@ name: Combined Recipe Planner qualification
 
 on:
   workflow_dispatch:
+    inputs:
+      windows_gate:
+        description: 'Also run independent Windows platform qualification'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -11,7 +16,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ci-admission:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout exact dispatched commit
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Setup pinned Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: web/.nvmrc
+      - name: Require successful exact-head normal CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMBINED_UI_EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/admit-combined-ui-ci.mjs
+      - name: Preserve exact-head CI admission evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: combined-ci-admission-${{ github.sha }}
+          path: .codex-artifacts/combined-ui/ci-admission.json
+          if-no-files-found: warn
+          retention-days: 7
+
   trusted-pr-gate:
+    if: ${{ inputs.windows_gate }}
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -91,7 +130,7 @@ jobs:
           retention-days: 7
 
   combined-ui:
-    needs: trusted-pr-gate
+    needs: ci-admission
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:
