@@ -1,1 +1,6 @@
 src/lib/__tests__/__snapshots__/recipe-workflow-fixtures.test.ts.snap -text
+
+# Canonical authored-text fixtures: identical expected lines on Windows and POSIX.
+src/lib/__tests__/fixtures/coffee-cake.txt text eol=lf
+src/lib/__tests__/fixtures/coffee-cake-revised.txt text eol=lf
+src/components/recipes/__tests__/fixtures/coffee-cake.txt text eol=lf
