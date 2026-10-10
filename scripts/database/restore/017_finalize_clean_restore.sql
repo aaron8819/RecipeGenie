@@ -30,6 +30,24 @@ begin
     raise exception 'migration 017 recovery finalization requires the restored post-016 schema';
   end if;
 
+  if not exists (
+    select 1
+    from pg_catalog.pg_attribute a
+    join pg_catalog.pg_attrdef d
+      on d.adrelid = a.attrelid
+     and d.adnum = a.attnum
+    where a.attrelid = 'public.recipe_history'::regclass
+      and a.attname = 'id'
+      and not a.attisdropped
+      and a.attidentity = ''
+      and pg_catalog.pg_get_expr(d.adbin, d.adrelid) ~
+          '^nextval\(''(public\.)?recipe_history_id_seq''::regclass\)$'
+      and pg_catalog.pg_get_serial_sequence('public.recipe_history', 'id') =
+          'public.recipe_history_id_seq'
+  ) then
+    raise exception 'migration 017 recovery finalization requires the restored recipe_history.id sequence default';
+  end if;
+
   if exists (
     select 1
     from pg_catalog.pg_trigger

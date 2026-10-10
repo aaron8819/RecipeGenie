@@ -171,15 +171,32 @@ try {
     if ($hasBoundRestoreEvidence -and $manifest.restoreVerified -eq $true) {
         $restoreTimestamp = [DateTimeOffset]::MinValue
         $restore = $manifest.restoreVerification
+        $procedureUpgrade = $definition.PendingMigrationVersion -eq '017' -and
+            $null -ne $restore -and
+            $null -ne $restore.PSObject.Properties['recoveryToolingCommitSha']
+        $procedureEvidenceValid = if ($procedureUpgrade) {
+            $upgradeBase = if ($definition.PSObject.Properties['RestoreProcedureUpgradeBaseCommitSha']) {
+                [string]$definition.RestoreProcedureUpgradeBaseCommitSha
+            } else { '' }
+            $upgradeBase -match '^[0-9a-f]{40}$' -and
+                $manifest.toolingCommitSha -ceq $upgradeBase -and
+                $restore.recoveryToolingCommitSha -match '^[0-9a-f]{40}$' -and
+                $restore.assertionCommitSha -ceq $restore.recoveryToolingCommitSha -and
+                $restore.assertionSha256 -match '^[0-9a-f]{64}$' -and
+                $restore.preparationSha256 -match '^[0-9a-f]{64}$' -and
+                $restore.finalizationSha256 -match '^[0-9a-f]{64}$'
+        } else {
+            $restore.assertionCommitSha -eq $manifest.toolingCommitSha -and
+                $restore.assertionSha256 -eq $manifest.restoreAssertion.sha256 -and
+                $restore.preparationSha256 -eq $manifest.restoreProcedure.preparation.sha256 -and
+                $restore.finalizationSha256 -eq $manifest.restoreProcedure.finalization.sha256
+        }
         if ($null -eq $restore -or
             -not [DateTimeOffset]::TryParse([string]$restore.verifiedAtUtc, [ref]$restoreTimestamp) -or
             $restore.targetType -ne 'local-loopback-disposable' -or
             -not ([string]$restore.archiveSha256).Equals([string]$artifact.sha256, [StringComparison]::OrdinalIgnoreCase) -or
             $restore.assertionPath -ne [string]$definition.RestoreAssertionPath -or
-            $restore.assertionCommitSha -ne $manifest.toolingCommitSha -or
-            $restore.assertionSha256 -ne $manifest.restoreAssertion.sha256 -or
-            $restore.preparationSha256 -ne $manifest.restoreProcedure.preparation.sha256 -or
-            $restore.finalizationSha256 -ne $manifest.restoreProcedure.finalization.sha256 -or
+            -not $procedureEvidenceValid -or
             (@($restore.migrationBaseline) -join ',') -cne ($definition.ExpectedAppliedMigrationVersions -join ',') -or
             $restore.authTriggerPresent -ne $true -or
             $restore.recipeCountMatched -ne $true -or
@@ -190,7 +207,8 @@ try {
         if ($definition.PendingMigrationVersion -eq '017' -and
             ($restore.canonicalColumnsPresent -ne $true -or
              $restore.canonicalConstraintsPresent -ne $true -or
-             $restore.recipesCanonical -ne $true)) {
+             $restore.recipesCanonical -ne $true -or
+             $restore.recipeHistoryIdGenerationPresent -ne $true)) {
             throw 'Migration 017 canonical restore evidence is incomplete or invalid.'
         }
     }
