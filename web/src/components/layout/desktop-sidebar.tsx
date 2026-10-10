@@ -77,9 +77,9 @@ export function DesktopSidebar({
           <Image
             src="/recipe-genie-lockup.png"
             alt=""
-            width={689}
-            height={576}
-            className="h-auto w-[6.25rem]"
+            width={481}
+            height={473}
+            className="h-auto w-full rounded-lg"
             priority
             unoptimized
             aria-hidden="true"

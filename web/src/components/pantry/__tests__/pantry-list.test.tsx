@@ -147,8 +147,10 @@ describe("PantryList", () => {
       expect(addPantryItemsMutateAsync).toHaveBeenCalledWith("garlic, salt")
     })
 
-    expect(screen.getByDisplayValue("salt")).toBeInTheDocument()
-    expect(screen.getByText(/Pantry items: Added: garlic\. Already existed: pepper\. Needs retry: salt\./i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("salt")).toBeInTheDocument()
+      expect(screen.getByText(/Pantry items: Added: garlic\. Already existed: pepper\. Needs retry: salt\./i)).toBeInTheDocument()
+    })
   })
 
   it("preserves text edited while an exclusion save is pending", async () => {

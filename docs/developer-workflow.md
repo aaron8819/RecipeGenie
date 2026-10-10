@@ -274,7 +274,8 @@ Request it when changes affect recipe/Shopping saves, Planner mutations or retur
 navigation, Undo, auth/ownership, dialogs, focus or responsive interactions.
 Existing component/hook tests remain the first checks for isolated logic changes.
 
-Explicitly run the preserved suite on a reviewed repository branch or tag:
+After normal CI passes at the reviewed head, run the preserved browser suite on
+a reviewed repository branch or tag:
 
 ```powershell
 gh workflow run combined-ui.yml --repo aaron8819/RecipeGenie --ref <reviewed-branch-or-tag>
@@ -284,8 +285,24 @@ The dispatch event's `github.sha` binds both checkouts, expected-source guards a
 artifact names to the same immutable commit. Confirm that SHA in the run and
 receipts matches the reviewed candidate. Manual dispatch becomes available after
 the workflow is present on the default branch; do not substitute a local harness
-or a different trigger. It retains the trusted gate, hosted disposable runners,
-loopback database, owner isolation, sanitized evidence and cleanup controls.
+or a different trigger. Browser acceptance requires the latest successful normal
+CI run and successful quality/migration jobs at that exact SHA. Missing, pending,
+failed or mismatched evidence fails admission; wait for CI before dispatch.
+Hosted disposable runners, loopback database, owner isolation, sanitized evidence
+and cleanup controls remain unchanged.
+
+The broad Windows trusted PR gate is independent and opt-in, so unrelated Windows
+unit-test failures cannot prevent browser acceptance. Request it with
+`-f windows_gate=true` when changing runtime/launcher, Windows path or shell
+handling, checkout policies, or migration tooling. Keep its result distinct from
+browser acceptance; neither result replaces required exact-head normal CI or the
+local PR gate. A requested Windows failure remains a failure and needs correction
+or an explicit owner waiver before accepting that platform qualification.
+
+The dispatcher already exists on the default branch. After publishing a reviewed
+change to a repository branch, wait for that new head's normal CI and dispatch
+with `--ref` pointing to that branch; a preliminary merge to main is unnecessary.
+Do not reuse CI evidence from the parent head.
 
 This invocation still runs the full Chromium/WebKit, desktop/mobile suite; it
 adds no selective runner or parallel smoke framework. Existing shell/navigation

@@ -7,6 +7,16 @@ const source = readFileSync("src/lib/__tests__/fixtures/coffee-cake.txt", "utf8"
 const sourceLine = "- Source: https://sallysbakingaddiction.com/coffee-cake-recipe/"
 
 describe("coffee cake replacement persistence", () => {
+  it.each(["coffee-cake.txt", "coffee-cake-revised.txt"])(
+    "preserves all parsed content for real CRLF paste from %s", (filename) => {
+      const lfText = readFileSync(`src/lib/__tests__/fixtures/${filename}`, "utf8")
+      expect(lfText).not.toContain("\r")
+      const crlfText = lfText.replace(/\n/g, "\r\n")
+      expect(crlfText).toContain("\r\n")
+      expect(parseRecipeText(crlfText)).toEqual(parseRecipeText(lfText))
+    }
+  )
+
   it("preserves the revised paste with hard breaks, bold steps and a Markdown source link", () => {
     const text = readFileSync("src/lib/__tests__/fixtures/coffee-cake-revised.txt", "utf8")
     const parsed = parseRecipeText(text)
