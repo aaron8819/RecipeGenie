@@ -308,8 +308,16 @@ for (const viewport of [
       const shoppingDialog = () => page.getByRole('dialog');
       const yieldControl = () => shoppingDialog().getByRole('spinbutton',
         { name: `Selected yield for ${main.name}`, exact: true });
-      const submit = () => shoppingDialog().getByRole('button',
-        { name: 'Add selected ingredients', exact: true });
+      const submit = async (selectedCount: number) => {
+        await expect(shoppingDialog().getByRole('checkbox', {
+          name: /ingredient \d+$/, checked: true,
+        })).toHaveCount(selectedCount);
+        const control = shoppingDialog().getByRole('button', {
+          name: `Add ${selectedCount} ingredients`, exact: true,
+        });
+        await expect(control).toBeEnabled();
+        await control.click();
+      };
       const assertSaved = async () => {
         stage = 'saved selector: yield';
         await expect(yieldControl()).toHaveValue('5');
@@ -390,12 +398,12 @@ for (const viewport of [
           status: 400,
           contentType: 'application/json', body: '{"status":"InvalidInput"}'
         }));
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog().getByRole('alert')).toBeVisible();
         await assertSaved();
         expect(await readShopping()).toEqual(before);
         await page.unroute('**/api/shopping');
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog()).toHaveCount(0);
         await expect.poll(async () => (await readShopping()).document
           .recipeEntries[main.id]?.selectedServings).toBe(5);
@@ -485,7 +493,7 @@ for (const viewport of [
           }
           return route.continue();
         });
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog()).toHaveCount(0);
         await page.unroute('**/api/shopping');
         expect(lost).toBe(true);
@@ -496,7 +504,7 @@ for (const viewport of [
         expect(after.document.recipeEntries[main.id].ingredients).toHaveLength(2);
         await cardMenu(main, 'Add to Shopping List');
         await yieldControl().fill('5');
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog()).toHaveCount(0);
       });
       checks.push('shopping-response-loss-dedup');
@@ -516,10 +524,16 @@ for (const viewport of [
         await expect(page.getByTestId('recipe-detail-page')).toBeVisible();
         stage = 'detail: recipe heading visible';
         await expect(page.getByRole('heading', { level: 1, name: main.name })).toBeVisible();
+        stage = 'detail: open yield adjustment';
+        await page.getByRole('button', { name: 'Adjust yield', exact: true }).click();
         for (let index = 0;index < 5;index++) {
           stage = 'detail: increase displayed yield';
           await page.getByRole('button', { name: 'Increase yield', exact: true }).click();
         }
+        stage = 'detail: close yield adjustment';
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('button', { name: 'Increase yield', exact: true }))
+          .toHaveCount(0);
         const trigger = page.getByRole('button', { name: 'Add to Shopping List', exact: true });
         stage = 'detail: open Shopping selector';
         await trigger.click();
@@ -560,7 +574,8 @@ for (const viewport of [
         stage = 'planner: full-week selector geometry';
         await geometry(page, shoppingDialog());
         stage = 'planner: submit full-week Shopping selection';
-        await submit().click();
+        // Main retains two selected ordinals; cooked and unassigned each include all four.
+        await submit(10);
         stage = 'planner: full-week selector closed';
         await expect(shoppingDialog()).toHaveCount(0);
         stage = 'planner: cooked contribution persisted';
@@ -743,7 +758,7 @@ for (const viewport of [
           .eq('recipe_uuid', main.id)
           .eq('user_id', primary.id);
         requireResult(updated.error, true, 'change disposable recipe behind cached selector');
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog().getByRole('alert')).toBeVisible();
         await expect(yieldControl()).toHaveValue('5');
         expect(await readShopping()).toEqual(before);
