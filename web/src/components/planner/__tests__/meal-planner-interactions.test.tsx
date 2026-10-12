@@ -242,16 +242,21 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     children,
     onClick,
     disabled,
+    ...props
   }: {
     children: React.ReactNode
     onClick?: () => void
     disabled?: boolean
+    title?: string
   }) => (
-    <button type="button" onClick={onClick} disabled={disabled}>
+    <button type="button" onClick={onClick} disabled={disabled} {...props}>
       {children}
     </button>
   ),
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuSub: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuSubTrigger: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
+  DropdownMenuSubContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 vi.mock("@/components/ui/alert-dialog", () => ({
@@ -330,9 +335,11 @@ vi.mock("../meal-planner-components", () => ({
   PlannerDaySection: React.forwardRef<HTMLElement, {
     children: React.ReactNode
     header?: React.ReactNode
-  }>(function MockPlannerDaySection({ children, header }, ref) {
+    headerClassName?: string
+    as?: string
+  } & React.HTMLAttributes<HTMLElement>>(function MockPlannerDaySection({ children, header, headerClassName: _headerClassName, as: _as, ...props }, ref) {
     return (
-      <section ref={ref}>
+      <section ref={ref} {...props}>
         {header}
         {children}
       </section>
@@ -472,6 +479,38 @@ describe("MealPlanner interactions", () => {
     window.sessionStorage.clear()
   })
 
+  it.each([true, false])('Today jumps to its day without filtering the mobile week (empty=%s)', async (empty) => {
+    setDesktopMatchMedia(false)
+    if (empty) {
+      currentWeeklyPlan = weeklyPlanFixture({ recipe_ids: [] })
+      currentWeeklyPlanRecipes = []
+    }
+    const scroll = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll })
+    render(<MealPlanner routeWeek="2026-08-10" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' }))
+    expect(requestedWeekDate).toBe(getWeekStartDate(new Date(), 1))
+    expect(document.querySelectorAll('[data-day-date]')).toHaveLength(7)
+    expect(document.activeElement).toHaveAttribute('data-day-date')
+    expect(markRecipeMadeMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('keeps cooked, Swap and Shopping controls visible for a cooked mobile meal', () => {
+    setDesktopMatchMedia(false)
+    currentWeeklyPlan = weeklyPlanFixture({ recipe_ids: ['recipe-1'], made_recipe_ids: ['recipe-1'], day_assignments: { 'recipe-1': 1 } })
+    currentShoppingSourceRecipes = ['recipe-1']
+    render(<MealPlanner />)
+    expect(screen.getByRole('button', { name: 'Mark Planner Recipe as not cooked' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Swap Planner Recipe' })).toBeDisabled()
+    const shopping = screen.getByRole('button', { name: 'Add Planner Recipe ingredients to Shopping' })
+    expect(shopping).toBeEnabled()
+    expect(screen.getByText('In shopping list')).toBeInTheDocument()
+    fireEvent.click(shopping)
+    expect(screen.getByRole('button', { name: 'Add selected ingredients' })).toBeInTheDocument()
+    expect(addToShoppingListMutateAsync).not.toHaveBeenCalled()
+  })
+
   it.each([true, false])('hides unavailable meals and replacement controls after a failed read (cached: %s), and retries without writes', (hasData) => {
     planReadFailed = true
     planReadHasData = hasData
@@ -501,7 +540,7 @@ describe("MealPlanner interactions", () => {
     currentWeeklyPlan = weeklyPlanFixture({ recipe_ids: [] })
     currentWeeklyPlanRecipes = []
     render(<MealPlanner />)
-    expect(screen.getByRole('button', { name: 'Add meal' })).toBeEnabled()
+    expect(screen.getAllByRole('button', { name: 'Add meal' })[0]).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Generate Plan' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
   })
@@ -509,7 +548,7 @@ describe("MealPlanner interactions", () => {
   it.each(['Add Planner Recipe ingredients to Shopping', 'Add planned meal ingredients to Shopping'])(
     'returns focus to the actual pointer trigger: %s', (name) => {
       render(<MealPlanner />)
-      const previous = screen.getByRole('button', { name: 'Next week' })
+      const previous = screen.getAllByRole('button', { name: 'Next week' })[0]
       previous.focus()
       const trigger = screen.getByRole('button', { name })
       // fireEvent, like WebKit pointer opening, does not focus the clicked button.
@@ -664,7 +703,7 @@ describe("MealPlanner interactions", () => {
 
     render(<MealPlanner />)
 
-    expect(screen.getAllByText("In shopping").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("In shopping list").length).toBeGreaterThan(0)
     expect(
       screen.getByText("All planned recipes are already in Shopping. Re-adding merges any ingredient changes.")
     ).toBeInTheDocument()
@@ -791,7 +830,7 @@ describe("MealPlanner interactions", () => {
 
     expect(screen.getAllByRole('button', { name: /^Add meal to / })).toHaveLength(7)
     expect(screen.getAllByRole('button', { name: 'Previous week' })).toHaveLength(1)
-    expect(screen.getAllByRole('button', { name: 'Next week' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Next week' })).toHaveLength(2)
     const title = screen.getByRole('button', { name: 'Planner Recipe' })
     expect(title.querySelector('button')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Swap Planner Recipe' }))

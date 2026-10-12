@@ -31,6 +31,8 @@ import {
   Minus,
   X,
   UtensilsCrossed,
+  MoreHorizontal,
+  Circle,
 } from "lucide-react"
 import Image from "next/image"
 import "./planner-layout.css"
@@ -60,6 +62,7 @@ import {
 } from "@/hooks/use-planner"
 import { useAddToShoppingList, useShoppingList } from "@/hooks/use-shopping"
 import { useUndoToast } from "@/hooks/use-undo-toast"
+import { useIsDesktop } from "@/hooks/use-is-desktop"
 import { useCategories, useToggleFavorite, useRecipes } from "@/hooks/use-recipes"
 import { EmptyState } from "@/components/ui/empty-state"
 import { BookOpen, Save, FolderOpen } from "lucide-react"
@@ -80,12 +83,10 @@ import {
   formatLocalISODate,
   formatWeekLabel,
   getDayOfWeekForWeekIndex,
-  getThisAndNextWeekStarts,
   getWeekDays,
   getWeekDayIndexForDate,
   getWeekStartDate,
   navigateWeek,
-  resolveEffectiveMobileWeekTab,
   resolveWeekDateForMobileTab,
   type MobileWeekTab,
 } from "./meal-planner.utils"
@@ -103,7 +104,6 @@ import {
   PlannerDaySection,
   PlannerDesktopWeekShell,
   PlannerEmptyWeekPanel,
-  PlannerMobileTabBar,
   PlannerSectionShell,
 } from "./meal-planner-components"
 import {
@@ -111,6 +111,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
@@ -373,6 +376,7 @@ function DayColumn({
       as="section"
       data-day-index={dayIndex}
       data-day-date={formatLocalISODate(day.date)}
+      tabIndex={-1}
       header={<>
         <h2>{day.date.toLocaleDateString("en-US", { weekday: "long" })} <span className="planner-day-date">{day.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span></h2>
         <PlannerDayAddButton desktop onClick={() => onAddMeal(dayIndex)} ariaLabel={"Add meal to " + day.dayName} />
@@ -442,7 +446,7 @@ function DayColumn({
 
         </div>
       ) : (
-        <p className="planner-day-empty">No meals planned</p>
+        <PlannerEmptyDay onAdd={() => onAddMeal(dayIndex)} />
       )}
     </PlannerDaySection>
   )
@@ -510,6 +514,7 @@ function MobileDayColumn({
       headerClassName="planner-day-header"
       data-day-index={dayIndex}
       data-day-date={formatLocalISODate(day.date)}
+      tabIndex={-1}
     >
       {dayRecipes.length > 0 ? (
         <div>
@@ -547,16 +552,22 @@ function MobileDayColumn({
 
         </div>
       ) : (
-        <p className="planner-day-empty">No meals planned</p>
+        <PlannerEmptyDay onAdd={() => onAddMeal(dayIndex)} />
       )}
     </PlannerDaySection>
   )
 }
 
-/**
- * Shared horizontal meal presentation. Action ownership stays in MealPlanner;
- * workflow consolidation belongs to Slice 5.
- */
+/** Compact empty day with a shortcut to the existing recipe picker. */
+function PlannerEmptyDay({ onAdd }: { onAdd: () => void }) {
+  return <div className="planner-day-empty">
+    <UtensilsCrossed className="h-7 w-7 opacity-40" aria-hidden />
+    <p>No meal planned</p>
+    <p className="text-xs">Add a recipe to make this day delicious.</p>
+    <Button variant="secondary" onClick={onAdd} className="mt-2 h-10"><Plus className="mr-2 h-4 w-4" />Add meal</Button>
+  </div>
+}
+
 function StitchRecipeCard({
   recipe,
   isMade,
@@ -606,43 +617,46 @@ function StitchRecipeCard({
     <article className={cn("planner-meal-card", isMade && "planner-meal-cooked", isToday && "planner-meal-today")}>
       <div className="planner-meal-photo">
         {recipeImageUrl ? (
-          <Image src={recipeImageUrl} alt="" fill sizes="52px" unoptimized={unoptimizedImage} draggable={false} className="object-cover" />
+          <Image src={recipeImageUrl} alt="" fill sizes="84px" unoptimized={unoptimizedImage} draggable={false} className="object-cover" />
         ) : <UtensilsCrossed className="h-5 w-5 text-primary/50" aria-hidden />}
       </div>
       <div className="planner-meal-copy">
         <h3><button type="button" onClick={onView} className="planner-meal-title">{recipe.name}</button></h3>
         <p className="planner-meal-meta">
-          {recipe.category}{recipe.total_time_minutes ? " · " + recipe.total_time_minutes + " min" : ""} · {recipe.servings} servings
+          {recipe.total_time_minutes ? recipe.total_time_minutes + " min · " : ""}{recipe.servings} servings
         </p>
-        {isInShopping && <p className="planner-meal-meta text-primary">In shopping</p>}
+        <div className="planner-meal-states">
+          {isMade && <span className="planner-cooked-badge"><CheckCircle className="h-3 w-3" aria-hidden />Cooked</span>}
+          {isInShopping && <span className="planner-shopping-badge"><ShoppingCart className="h-3 w-3" aria-hidden />In shopping list</span>}
+        </div>
         {(timesMade > 0 || lastMade) && <p className="planner-meal-history">
           Made {timesMade} time{timesMade !== 1 ? "s" : ""}{lastMade && " · Last: " + new Date(lastMade).toLocaleDateString()}
         </p>}
-        {isMade && <span className="planner-cooked-badge"><Check className="h-3 w-3" aria-hidden />Cooked</span>}
       </div>
       <div className="planner-meal-actions">
-        {!isMade && <>
-          <button type="button" onClick={onMarkMade} disabled={isMarkingThis} title="Mark as cooked" aria-label={"Mark " + recipe.name + " as cooked"}>
-            {isMarkingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+          <button type="button" onClick={onMarkMade} disabled={isMarkingThis} className={isMade ? "planner-action-selected" : undefined} aria-pressed={isMade} title={isMade ? "Mark as not cooked" : "Mark as cooked"} aria-label={isMade ? "Mark " + recipe.name + " as not cooked" : "Mark " + recipe.name + " as cooked"}>
+            {isMarkingThis ? <Loader2 className="h-5 w-5 animate-spin" /> : isMade ? <CheckCircle className="h-5 w-5" /> : <Circle className="h-5 w-5" />}<span>{isMade ? "Cooked" : "Mark cooked"}</span>
           </button>
-          <button type="button" onClick={onSwap} disabled={isSwapping} title="Swap recipe" aria-label={"Swap " + recipe.name}>
-            {isSwapping ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />}
+          <button type="button" onClick={onSwap} disabled={isSwapping || isMade} title={isMade ? "Cooked meals cannot be swapped" : "Swap recipe"} aria-label={"Swap " + recipe.name}>
+            {isSwapping ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowLeftRight className="h-5 w-5" />}<span>Swap</span>
           </button>
           <button type="button" onClick={(event) => onAddToCart(event.currentTarget)} disabled={isAddingToCart} title={isInShopping ? "Add recipe ingredients again to merge any updates in Shopping" : "Add recipe ingredients to Shopping"} aria-label={"Add " + recipe.name + " ingredients to Shopping"}>
-            {isAddingToCart ? <Loader2 className="h-4 w-4 animate-spin" /> : isJustAddedToCart ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+            {isAddingToCart ? <Loader2 className="h-5 w-5 animate-spin" /> : isJustAddedToCart ? <Check className="h-5 w-5" /> : <ShoppingCart className="h-5 w-5" />}<span>Add to shopping</span>
           </button>
-        </>}
-        <button type="button" onClick={onRemove} disabled={isRemoving} title="Remove" aria-label={"Remove " + recipe.name + " from plan"}>
-          {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
-        </button>
-        {showMoveToDay && <DropdownMenu>
-          <DropdownMenuTrigger asChild><button type="button" title="Move to another day" aria-label="Move to another day"><CalendarIcon className="h-4 w-4" /></button></DropdownMenuTrigger>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><button type="button" title="More meal actions" aria-label={"More actions for " + recipe.name} disabled={isRemoving}><MoreHorizontal className="h-5 w-5" /><span>More</span></button></DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {showMoveToDay && <DropdownMenuSub>
+              <DropdownMenuSubTrigger className="min-h-11"><CalendarIcon className="h-4 w-4 mr-2" />Move meal</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
             {weekDays.map((d, idx) => <DropdownMenuItem key={idx} className="min-h-11" onClick={() => onMoveToDay(idx)} disabled={currentDayIndex?.[recipe.id] === d.date.getDay()}>
               <CalendarIcon className="h-4 w-4 mr-2" />{d.dayName}, {d.date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}
             </DropdownMenuItem>)}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>}
+            <DropdownMenuItem className="min-h-11 text-destructive" onClick={onRemove} disabled={isRemoving} title="Remove" aria-label={"Remove " + recipe.name + " from plan"}><X className="h-4 w-4 mr-2" />Remove</DropdownMenuItem>
           </DropdownMenuContent>
-        </DropdownMenu>}
+        </DropdownMenu>
       </div>
     </article>
   )
@@ -675,9 +689,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = useState(false)
   const [isLoadTemplateOpen, setIsLoadTemplateOpen] = useState(false)
-  const [mobileWeekTab, setMobileWeekTab] = useState<MobileWeekTab>(
-    "thisWeek"
-  )
+  const [todayJumpPending, setTodayJumpPending] = useState(false)
   const dialogTrigger = useRef<HTMLElement | null>(null)
   const plannerFocusFallback = useRef<HTMLDivElement>(null)
   function rememberDialogTrigger(trigger?: HTMLElement) {
@@ -690,27 +702,14 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     if (trigger?.isConnected && !trigger.matches(':disabled')) trigger.focus()
     else plannerFocusFallback.current?.focus()
   }
-  const mobileDaysContainerRef = useRef<HTMLDivElement>(null)
   const [activeRecipeId, setActiveRecipeId] = useState<string | null>(null)
   const [pendingAssignmentOverlays, setPendingAssignmentOverlays] = useState<Record<string, Record<string, number>>>({})
   const [pendingAssignmentCounts, setPendingAssignmentCounts] = useState<Record<string, number>>({})
-  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true
-    return window.matchMedia("(min-width: 1024px)").matches
-  })
+  const isDesktop = useIsDesktop()
 
   const handleOpenRecipe = useCallback((recipe: Recipe) => {
     openRecipeDetail(router, recipe.id, "planner")
   }, [router])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const mq = window.matchMedia("(min-width: 1024px)")
-    const handler = (event: MediaQueryListEvent) => setIsDesktop(event.matches)
-    setIsDesktop(mq.matches)
-    mq.addEventListener("change", handler)
-    return () => mq.removeEventListener("change", handler)
-  }, [])
 
   // Hook to save day assignments to database
   const saveDayAssignments = useSaveDayAssignments()
@@ -771,27 +770,13 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
     [config?.week_start_day]
   )
   const isCurrentWeek = currentWeekDate === currentWeekStart
-  const isTodayMode = mobileWeekTab === "today" && isCurrentWeek
 
   // Get week days for calendar view (needed early for handleMarkMade)
   const weekDays = useMemo(() => {
     return getWeekDays(currentWeekDate)
   }, [currentWeekDate])
 
-  // Mobile: "Today" only applies when viewing the current week.
-  const mobileDays = useMemo(() => {
-    if (mobileWeekTab === "today" && isCurrentWeek) {
-      const t = new Date().toDateString()
-      return weekDays.filter((d) => d.date.toDateString() === t)
-    }
-    return weekDays
-  }, [weekDays, mobileWeekTab, isCurrentWeek])
 
-  // Compute effective tab based on currentWeekDate to keep visual indicator in sync
-  // This prevents tab/date desync when using chevron navigation beyond this/next week
-  const effectiveTab = useMemo((): MobileWeekTab | null => {
-    return resolveEffectiveMobileWeekTab(mobileWeekTab, currentWeekDate, config?.week_start_day ?? 1)
-  }, [currentWeekDate, mobileWeekTab, config?.week_start_day])
 
   const { data: recipes } = useWeeklyPlanRecipes(weeklyPlan?.recipe_ids || [])
   const { data: history } = useRecentRecipeHistory()
@@ -844,21 +829,17 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const handlePrevWeek = () => {
     const next = navigateWeek(currentWeekDate, "prev")
     navigateToWeek(next)
-    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day ?? 1)
-    if (next === thisWeekStart) setMobileWeekTab("thisWeek")
-    else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
+    setTodayJumpPending(false)
   }
 
   const handleNextWeek = () => {
     const next = navigateWeek(currentWeekDate, "next")
     navigateToWeek(next)
-    const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day ?? 1)
-    if (next === thisWeekStart) setMobileWeekTab("thisWeek")
-    else if (next === nextWeekStart) setMobileWeekTab("nextWeek")
+    setTodayJumpPending(false)
   }
 
   const handleMobileWeekTab = (tab: MobileWeekTab) => {
-    setMobileWeekTab(tab)
+    setTodayJumpPending(tab === "today")
     navigateToWeek(
       resolveWeekDateForMobileTab(tab, config?.week_start_day ?? 1)
     )
@@ -1130,6 +1111,21 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const totalMeals = deriveTotalMeals(selection)
 
   const displayedRecipes = recipes
+
+  useEffect(() => {
+    if (!todayJumpPending || !isCurrentWeek || planLoading || planPending || planReadFailed || !allRecipes) return
+    const day = plannerFocusFallback.current?.querySelector<HTMLElement>(
+      `[data-day-date="${formatLocalISODate(new Date())}"]`
+    )
+    if (!day) {
+      plannerFocusFallback.current?.focus()
+      setTodayJumpPending(false)
+      return
+    }
+    day.scrollIntoView({ behavior: "smooth", block: "start" })
+    day.focus({ preventScroll: true })
+    setTodayJumpPending(false)
+  }, [todayJumpPending, isCurrentWeek, planLoading, planPending, planReadFailed, isDesktop, allRecipes, displayedRecipes])
   const shoppingRecipeIds = useMemo(
     () => new Set(shoppingSelections.map((selection) => selection.recipeId)),
     [shoppingSelections]
@@ -1238,7 +1234,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   if (planReadFailed || planPending || planLoading) {
     return (
       <div className="planner-layout space-y-4 pb-6" ref={plannerFocusFallback} tabIndex={-1} aria-label="Meal planner">
-        <h1 className="font-display text-3xl font-bold text-primary">Planner</h1>
+        <div><h1 className="font-display text-3xl font-bold">Planner</h1><p className="planner-subtitle">Plan your meals, stay organized, and make mealtime easier.</p></div>
         {planReadFailed ? (
           <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3">
             <p role="alert" className="text-sm text-destructive">
@@ -1258,7 +1254,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
   const plannerContent = (
     <div className="planner-layout space-y-4 pb-6" ref={plannerFocusFallback} tabIndex={-1} aria-label="Meal planner">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-3xl font-bold text-primary">Planner</h1>
+        <div><h1 className="font-display text-3xl font-bold">Planner</h1><p className="planner-subtitle">Plan your meals, stay organized, and make mealtime easier.</p></div>
         {!isDesktop && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1299,16 +1295,23 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                 navigateToWeek(weekStart)
                 setIsDatePickerOpenDesktop(false)
                 setIsDatePickerOpenMobile(false)
-                const { thisWeekStart, nextWeekStart } = getThisAndNextWeekStarts(new Date(), config?.week_start_day ?? 1)
-                if (weekStart === thisWeekStart) setMobileWeekTab("thisWeek")
-                else if (weekStart === nextWeekStart) setMobileWeekTab("nextWeek")
+                setTodayJumpPending(false)
               }
             }} />
           </PopoverContent>
         </Popover>
         <Button variant="outline" className="h-11 w-11 p-0" onClick={handleNextWeek} aria-label="Next week"><ChevronRight className="h-4 w-4" /></Button>
-        <Button variant="ghost" className="planner-current-week h-11" onClick={() => handleMobileWeekTab("thisWeek")}>This week</Button>
-        <Button variant="ghost" className="h-11 w-11 p-0" onClick={() => setIsSettingsModalOpen(true)} aria-label="Open planner settings"><Settings className="h-4 w-4" /></Button>
+        <div className="planner-week-shortcuts">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="ghost" className="h-11"><CalendarIcon className="mr-2 h-4 w-4" />{isCurrentWeek ? "This week" : "Choose week"}<ChevronRight className="ml-2 h-3 w-3 rotate-90" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem className="min-h-11" onClick={() => handleMobileWeekTab("thisWeek")}>This week</DropdownMenuItem>
+              <DropdownMenuItem className="min-h-11" onClick={() => handleMobileWeekTab("nextWeek")}>Next week</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" className="h-11" onClick={() => handleMobileWeekTab("today")}><CheckCircle className="mr-2 h-4 w-4" />Today</Button>
+          <Button variant="ghost" className="h-11 w-11 p-0" onClick={() => setIsSettingsModalOpen(true)} aria-label="Open planner settings"><Settings className="h-4 w-4" /></Button>
+        </div>
       </div>
       <div className="planner-progress" aria-label="Weekly progress">
         <span>{progress.made} of {progress.total} meals cooked</span>
@@ -1334,18 +1337,7 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
         </div>
       ) : null}
 
-      {/* Week navigation (mobile) + Add to Cart */}
-      <PlannerActionBar
-        leading={!isDesktop ? (
-          <PlannerMobileTabBar
-            tabs={[
-              { key: "today", label: "Today", isActive: effectiveTab === "today", onClick: () => handleMobileWeekTab("today") },
-              { key: "thisWeek", label: "This Week", isActive: effectiveTab === "thisWeek", onClick: () => handleMobileWeekTab("thisWeek") },
-              { key: "nextWeek", label: "Next Week", isActive: effectiveTab === "nextWeek", onClick: () => handleMobileWeekTab("nextWeek") },
-            ]}
-          />
-        ) : undefined}
-      >
+      <PlannerActionBar>
           <Button
             onClick={() => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(null); setIsAddRecipeModalOpen(true); }}
             disabled={!hasAnyRecipes}
@@ -1407,9 +1399,9 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
       </PlannerActionBar>
 
       {plannerShoppingSummary ? (
-        <div className="rounded-2xl border border-stone-200/80 bg-stone-50/80 px-4 py-3 text-sm text-slate-600">
+        <div className="planner-shopping-summary text-xs text-muted-foreground">
           <p>{plannerShoppingSummary}</p>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="sr-only">
             Shopping rows keep recipe source labels, so you can trace each item back to this plan.
           </p>
         </div>
@@ -1554,46 +1546,44 @@ export function MealPlanner({ routeWeek }: { routeWeek?: string | null }) {
                 })}
             </PlannerDesktopWeekShell>
             )}
-
-            {/* Mobile: calendar view — Stitch calendarview_redesign_mobile: week strip + day sections */}
-            {!isDesktop && (
-            <div className="space-y-6">
-              <div className="planner-agenda" ref={mobileDaysContainerRef}>
-                {mobileDays.map((day) => {
-                  const dayIndex = getWeekDayIndexForDate(weekDays, day.date)
-                  const dayRecipes = getRecipesByDay(dayIndex >= 0 ? dayIndex : 0)
-                  return (
-                    <MobileDayColumn
-                      key={day.date.toISOString()}
-                      day={day}
-                      dayIndex={dayIndex >= 0 ? dayIndex : 0}
-                      dayRecipes={dayRecipes}
-                      isRecipeMade={isRecipeMade}
-                      markingRecipeId={markingRecipeId}
-                      addingToCartRecipeId={addingToCartRecipeId}
-                      swappingRecipeId={swappingRecipeId}
-                      cartAddedRecipeId={cartAddedRecipeId}
-                      removingRecipeId={removingRecipeId}
-                      isInShopping={isRecipeInShopping}
-                      onViewRecipe={handleOpenRecipe}
-                      onSwapRecipe={handleSwapRecipe}
-                      onMarkMade={handleMarkMade}
-                      onAddToCart={handleAddRecipeToCart}
-                      onRemoveRecipe={handleRemoveFromPlan}
-                      onMoveToDay={handleMoveToDay}
-                      onAddMeal={(dayIndex) => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(dayIndex ?? null); setIsAddRecipeModalOpen(true); }}
-                      weekDays={weekDays}
-                      currentDayIndex={recipeDayAssignments}
-                      statsMap={statsMap}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-            )}
-
           </>
         )}
+      {/* Keep the full mobile week visible, including empty weeks. */}
+      {!isDesktop && hasAnyRecipes && (
+      <div className="space-y-6">
+        <div className="planner-agenda">
+          {weekDays.map((day) => {
+            const dayIndex = getWeekDayIndexForDate(weekDays, day.date)
+            const dayRecipes = getRecipesByDay(dayIndex >= 0 ? dayIndex : 0)
+            return (
+              <MobileDayColumn
+                key={day.date.toISOString()}
+                day={day}
+                dayIndex={dayIndex >= 0 ? dayIndex : 0}
+                dayRecipes={dayRecipes}
+                isRecipeMade={isRecipeMade}
+                markingRecipeId={markingRecipeId}
+                addingToCartRecipeId={addingToCartRecipeId}
+                swappingRecipeId={swappingRecipeId}
+                cartAddedRecipeId={cartAddedRecipeId}
+                removingRecipeId={removingRecipeId}
+                isInShopping={isRecipeInShopping}
+                onViewRecipe={handleOpenRecipe}
+                onSwapRecipe={handleSwapRecipe}
+                onMarkMade={handleMarkMade}
+                onAddToCart={handleAddRecipeToCart}
+                onRemoveRecipe={handleRemoveFromPlan}
+                onMoveToDay={handleMoveToDay}
+                onAddMeal={(dayIndex) => { rememberDialogTrigger(); setAddRecipeTargetDayIndex(dayIndex ?? null); setIsAddRecipeModalOpen(true); }}
+                weekDays={weekDays}
+                currentDayIndex={recipeDayAssignments}
+                statsMap={statsMap}
+              />
+            )
+          })}
+        </div>
+      </div>
+      )}
       {isDesktop && (
         <PlannerSectionShell
           className="planner-generation"
