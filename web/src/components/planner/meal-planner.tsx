@@ -446,7 +446,7 @@ function DayColumn({
 
         </div>
       ) : (
-        <PlannerEmptyDay onAdd={() => onAddMeal(dayIndex)} />
+        <PlannerEmptyDay dayLabel={day.date.toLocaleDateString("en-US", { weekday: "long" })} onAdd={() => onAddMeal(dayIndex)} />
       )}
     </PlannerDaySection>
   )
@@ -552,19 +552,19 @@ function MobileDayColumn({
 
         </div>
       ) : (
-        <PlannerEmptyDay onAdd={() => onAddMeal(dayIndex)} />
+        <PlannerEmptyDay dayLabel={dayNameLong} onAdd={() => onAddMeal(dayIndex)} />
       )}
     </PlannerDaySection>
   )
 }
 
 /** Compact empty day with a shortcut to the existing recipe picker. */
-function PlannerEmptyDay({ onAdd }: { onAdd: () => void }) {
+function PlannerEmptyDay({ dayLabel, onAdd }: { dayLabel: string; onAdd: () => void }) {
   return <div className="planner-day-empty">
     <UtensilsCrossed className="h-7 w-7 opacity-40" aria-hidden />
     <p>No meal planned</p>
     <p className="text-xs">Add a recipe to make this day delicious.</p>
-    <Button variant="secondary" onClick={onAdd} className="mt-2 h-10"><Plus className="mr-2 h-4 w-4" />Add meal</Button>
+    <Button variant="secondary" onClick={onAdd} aria-label={"Add meal for " + dayLabel} className="mt-2 h-10"><Plus className="mr-2 h-4 w-4" />Add meal</Button>
   </div>
 }
 

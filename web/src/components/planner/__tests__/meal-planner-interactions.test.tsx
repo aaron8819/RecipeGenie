@@ -829,6 +829,8 @@ describe("MealPlanner interactions", () => {
     render(<MealPlanner />)
 
     expect(screen.getAllByRole('button', { name: /^Add meal to / })).toHaveLength(7)
+    expect(screen.getAllByRole('button', { name: 'Add meal' })).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Add meal for Tuesday' })).toBeEnabled()
     expect(screen.getAllByRole('button', { name: 'Previous week' })).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: 'Next week' })).toHaveLength(2)
     const title = screen.getByRole('button', { name: 'Planner Recipe' })

@@ -605,6 +605,7 @@ for (const viewport of [
         await page.goto('/planner');
         stage = 'return week: select next week';
         await page.getByRole('button', { name: 'Next week', exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/planner\\?week=${monday(7)}$`));
         const selectedURL = page.url();
         stage = 'return week: open recipe detail';
         await page.locator('.planner-meal-title').filter({ hasText: main.name }).click();
@@ -642,6 +643,12 @@ for (const viewport of [
         await expect(page).toHaveURL(selectedURL);
         stage = 'return week: recovered plan unchanged';
         expect(await readPlan(monday(7))).toEqual(before);
+        stage = 'Today: return to current week without filtering days';
+        await page.getByRole('button', { name: 'Today', exact: true }).click();
+        await expect(page).toHaveURL(/\/planner$/);
+        await expect(page.locator('[data-day-date]')).toHaveCount(7);
+        await expect(page.locator(`[data-day-date="${new Date().toISOString().slice(0, 10)}"]`))
+          .toBeFocused();
       });
       checks.push('planner-return-week-read-retry');
 
@@ -658,9 +665,10 @@ for (const viewport of [
         expect(await readPlan()).toEqual(duplicateBefore);
         await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
         const meal = () => page.locator('.planner-meal-card').filter({ hasText: main.name });
-        await meal().getByRole('button', { name: 'Move to another day', exact: true }).click();
-        await page.locator('[role="menuitem"]:not([data-disabled]):not([aria-disabled="true"])')
-          .first().click();
+        await meal().getByRole('button', { name: `More actions for ${main.name}`, exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Move meal', exact: true }).click();
+        const moveDay = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][(today + 1) % 7];
+        await page.getByRole('menuitem', { name: new RegExp(`^${moveDay}, `) }).click();
         await expect.poll(async () => {
           const assignments = (await readPlan()).day_assignment_recipe_uuids;
           if (!assignments || typeof assignments !== 'object' || Array.isArray(assignments)) {
@@ -672,7 +680,8 @@ for (const viewport of [
           .click();
         await page.getByRole('button', { name: 'Undo', exact: true }).click();
         await expect.poll(async () => (await readPlan()).made_recipe_uuids).toEqual([cooked.id]);
-        await meal().getByRole('button', { name: `Remove ${main.name} from plan`, exact: true })
+        await meal().getByRole('button', { name: `More actions for ${main.name}`, exact: true }).click();
+        await page.getByRole('menuitem', { name: `Remove ${main.name} from plan`, exact: true })
           .click();
         await page.getByRole('button', { name: 'Undo', exact: true }).click();
         await expect.poll(async () => (await readPlan()).recipe_uuids).toContain(main.id);
