@@ -10,6 +10,10 @@ import {
 } from "@/test/recipe-fixtures"
 import { createEmptyShoppingDocument } from "@/lib/shopping-document"
 
+vi.mock("@/hooks/use-pantry", () => ({
+  usePantryItems: () => ({ data: [], isLoading: false, isError: false }),
+}))
+
 vi.mock("@/hooks/shopping/use-shopping-document", () => ({
   useShoppingDocumentState: () => ({ data: { document: createEmptyShoppingDocument() }, isLoading: false, isError: false }),
 }))
@@ -501,7 +505,7 @@ describe("RecipeList", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
     expect(addToShoppingListMutateAsync).not.toHaveBeenCalled()
     expect(screen.getByLabelText("Selected yield for Chicken Soup")).toHaveValue(4)
-    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ ingredients?$/ }))
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
@@ -519,7 +523,7 @@ describe("RecipeList", () => {
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
-    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ ingredients?$/ }))
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({

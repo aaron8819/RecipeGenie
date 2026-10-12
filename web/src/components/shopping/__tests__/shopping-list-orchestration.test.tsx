@@ -1188,6 +1188,8 @@ describe("ShoppingListView orchestration", () => {
     }
   })
 
+  // Dense render + DOM queries took 22.14s under full-suite concurrency.
+  // Bound this fixture workload separately; retain the global 15s timeout.
   it("keeps a 92-row list interactive while multiple writes are unresolved", () => {
     currentShoppingList = makeList({
       items: Array.from({ length: 92 }, (_, index) => makeItem(
@@ -1220,7 +1222,7 @@ describe("ShoppingListView orchestration", () => {
         p95Ms: Number(sorted[Math.ceil(sorted.length * 0.95) - 1].toFixed(3)),
       }))
     }
-  })
+  }, 30_000)
 
   it("keeps the newest same-row intent through an older successful write", async () => {
     currentShoppingList = makeList({ items: [makeItem("apples")] })

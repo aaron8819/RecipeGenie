@@ -33,6 +33,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { clampRecipeServings } from "./recipe-dialog.defaults"
 import type { Ingredient, RecipeInstructionGroup } from "@/types/database"
 import type { ParsedRecipe } from "@/lib/recipe-parser"
+import { formatRecipeQuantity } from "@/lib/recipe-quantity"
+import { readableRecipeQuantity } from "@/lib/recipe-plain-text"
 import { getIngredientDisplayUnit } from "@/lib/ingredient-units"
 import {
   createEmptyInstructionGroup,
@@ -370,7 +372,7 @@ export function RecipeImportSection({
     return (
       <div className="mx-auto max-w-3xl space-y-4" data-testid="replacement-input">
         <h2 className="text-xl font-semibold">Replace text</h2>
-        <p className="text-sm text-muted-foreground">Paste an updated recipe for {currentRecipeName || 'this recipe'}. Review changes before saving. Sections missing from the text stay the same.</p>
+        <p className="text-sm text-muted-foreground">Paste an updated recipe for {currentRecipeName || 'this recipe'}. Preview the recipe before saving. Sections missing from the text stay the same.</p>
         <Button type="button" variant="outline" className="min-h-11" disabled={isPasting} onClick={handlePaste}>{isPasting ? 'Pasting…' : 'Paste'}</Button>
         <p role="status" className="text-sm text-muted-foreground">{pasteHint || 'You can also touch and hold in the text box to paste.'}</p>
         <Label htmlFor="replace-text">Recipe text</Label>
@@ -888,7 +890,7 @@ Instructions:
                       {group.ingredients.slice(0, 4).map((ingredient, index) => (
                         <div key={`${groupIndex}-${index}`} className="flex items-start gap-3">
                           <span className="mt-0.5 min-w-[70px] flex-shrink-0 text-right font-mono text-xs text-muted-foreground">
-                            {formatIngredientAmount(ingredient)}
+                            {readableRecipeQuantity(formatRecipeQuantity(ingredient, 1, 1).text)}
                           </span>
                           <span className="flex-1">{formatIngredientText(ingredient)}</span>
                         </div>

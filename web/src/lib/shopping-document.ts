@@ -1263,6 +1263,55 @@ function derivedClassification(
   return { bucket: "items" }
 }
 
+/** Explicit review inclusion uses the existing trip/row visibility contract.
+ * Aggregated purchases share visibility; saved grocery preferences stay unchanged.
+ */
+export function includeReviewedShoppingIngredients(
+  document: ShoppingDocumentV3,
+  entries: ShoppingRecipeEntryV2[],
+): ShoppingDocumentV3 {
+  const next = structuredClone(document);
+  const keys = new Set(entries.flatMap(entry => entry.ingredients.map(item => item.purchaseKey)));
+  if (next.schemaVersion === 4) {
+    next.tripVisibility = { ...next.tripVisibility };
+    for (const key of keys) next.tripVisibility[key] = 'items';
+    for (const item of next.manualItems) {
+      if (item.identity && keys.has(item.identity.purchaseKey) &&
+          item.identity.meaning !== 'legacyIndependent' && item.bucket !== 'items') {
+        item.bucket = 'items';
+        item.identity.version++;
+      }
+    }
+  }
+  for (const entry of Object.values(next.recipeEntries)) {
+    for (const item of entry.ingredients) {
+      if (!keys.has(item.purchaseKey)) continue;
+      const override = { ...next.itemOverrides[item.aggregateKey], bucket: 'items' as const };
+      delete override.suppressed;
+      next.itemOverrides[item.aggregateKey] = override;
+    }
+  }
+  return next;
+}
+
+/** Uses exactly the same Pantry and exclusion policy as Shopping projection. */
+export function shoppingIngredientDefaultBucket(
+  ingredient: ShoppingRecipeIngredientV2,
+  document: ShoppingDocumentV3,
+  pantryItems: PantryItem[],
+): ShoppingBucket {
+  return derivedClassification(
+    [{ ...ingredient, recipeId: '', recipeName: '' }],
+    resolvePantrySemanticEvidence(pantryItems),
+    document.preferences.excludedIngredientKeys.map(item =>
+      resolveShoppingIngredientSemantics({ item })),
+    {
+      exclude_salt_variants: document.preferences.excludeSaltVariants,
+      exclude_black_pepper_variants: document.preferences.excludeBlackPepperVariants,
+    },
+  ).bucket;
+}
+
 export function projectShoppingDocument(
   document: ShoppingDocumentV3,
   pantryItems: PantryItem[] = []

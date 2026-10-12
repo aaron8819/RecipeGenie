@@ -28,7 +28,7 @@ import {
   parseIngredientQuantityPrefix,
   parseQuantityV1,
   parseYieldMetadata,
-  quantityToLegacyAmount,
+  quantityToPersistenceAmount,
   resolveIngredientQuantity,
 } from "@/lib/recipe-quantity"
 import {
@@ -359,7 +359,7 @@ export function normalizeRecipeIngredient(
       (quantityV1.kind === "exact" || quantityV1.kind === "range")
         ? preserveAuthoredAmount
           ? quantityV1.authored
-          : quantityToLegacyAmount(quantityV1)
+          : quantityToPersistenceAmount(quantityV1)
         : safeIngredient.amount,
     quantityV1,
     authoredUnit:
