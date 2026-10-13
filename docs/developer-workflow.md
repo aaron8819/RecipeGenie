@@ -107,7 +107,13 @@ Focused verification covers mapped bounded iterations and prose-only publishing:
 ```
 
 The auditable mapping covers documentation, workflow scripts, database
-preflight scripts, fixtures, and migration metadata. It runs migration-reference
+preflight scripts, fixtures, migration metadata, and the single existing
+`web/qualification/combined-ui.spec.ts` test. A change confined to that test
+uses scoped lint, whole-project typecheck, and test-skip integrity checks;
+it still requires affected hosted acceptance and normal exact-head CI before
+merge. Adding application code, configuration, fixture tooling or an unknown
+test path escalates to the PR tier. This is a bounded iteration exception,
+not application confidence. It runs migration-reference
 integrity for every mapped scope, plus the relevant workflow or preflight unit
 tests and lint checks. An application, CI, package, migration SQL, unknown path,
 or unresolved base automatically runs the PR tier instead. A focused result
@@ -267,15 +273,28 @@ headers cannot contaminate machine output.
 
 ## Browser qualification selection
 
+Normal CI retains both required check identities. `migration-smoke-and-drift`
+omits only historical migration 014 parity and canonical migration/rollback
+rehearsals when the complete base-to-head diff contains only component CSS,
+global CSS, or inert public PNG/JPEG/WebP/ICO assets. Application logic, tests,
+contracts, database files, tooling, unknown paths and unresolved/empty scope run
+full rehearsals. The local database reset, security contracts, reference audits
+and schema-type drift always run. Renames include both old and new paths.
+
 Routine releases use normal CI (`quality-guards` and `migration-smoke-and-drift`),
 focused tests for the affected code, and the existing release-status check.
 The full combined browser suite does not run automatically on every web PR.
-Request it when changes affect recipe/Shopping saves, Planner mutations or return
-navigation, Undo, auth/ownership, dialogs, focus or responsive interactions.
-Existing component/hook tests remain the first checks for isolated logic changes.
+Select database-backed qualification when changes affect recipe/Shopping saves,
+Planner mutations, Undo or auth/ownership, or cross-feature return navigation.
+For isolated presentation, focus or responsive edits, start with affected
+component/hook checks and supported Chrome desktop/mobile interaction captures;
+expand to the combined suite only when those changed boundaries require its
+persistence or cross-feature coverage. Unknown scope stays conservative.
+No visual smoke or screenshot replaces relevant persisted readback, ownership,
+Shopping recovery or migration checks.
 
-After normal CI passes at the reviewed head, run the preserved browser suite on
-a reviewed repository branch or tag:
+After pushing the reviewed head, run the preserved browser suite on a reviewed
+repository branch or tag while normal CI runs independently:
 
 ```powershell
 gh workflow run combined-ui.yml --repo aaron8819/RecipeGenie --ref <reviewed-branch-or-tag>
@@ -285,9 +304,13 @@ The dispatch event's `github.sha` binds both checkouts, expected-source guards a
 artifact names to the same immutable commit. Confirm that SHA in the run and
 receipts matches the reviewed candidate. Manual dispatch becomes available after
 the workflow is present on the default branch; do not substitute a local harness
-or a different trigger. Browser acceptance requires the latest successful normal
-CI run and successful quality/migration jobs at that exact SHA. Missing, pending,
-failed or mismatched evidence fails admission; wait for CI before dispatch.
+or a different trigger. Browser results are provisional until the final `ci-admission` job succeeds.
+That job runs after successful browser testing and cleanup, requires the latest
+successful normal CI run and both successful quality/migration jobs at the exact
+SHA, and waits at most fifteen minutes for pending CI. Missing, failed, skipped,
+truncated or mismatched evidence fails closed. A browser job or its receipts alone
+never establish accepted qualification; the complete workflow and CI admission
+must pass before merge.
 Hosted disposable runners, loopback database, owner isolation, sanitized evidence
 and cleanup controls remain unchanged.
 
@@ -300,8 +323,9 @@ local PR gate. A requested Windows failure remains a failure and needs correctio
 or an explicit owner waiver before accepting that platform qualification.
 
 The dispatcher already exists on the default branch. After publishing a reviewed
-change to a repository branch, wait for that new head's normal CI and dispatch
-with `--ref` pointing to that branch; a preliminary merge to main is unnecessary.
+change to a repository branch, dispatch with `--ref` pointing to that branch;
+preparation and browser testing overlap normal CI. A preliminary merge to main
+is unnecessary.
 Do not reuse CI evidence from the parent head.
 
 This invocation still runs the full Chromium/WebKit, desktop/mobile suite; it
@@ -315,6 +339,30 @@ PR82's existing return-week URL assertion failure remains unresolved, with
 
 ## Proportional review
 
+One owner keeps the verified integration base, task worktree, approved scope and
+release authorization through the task. Reconcile the current remote integration
+SHA before implementation; a clean but stale local branch is not the current base.
+Preserve unrelated owner changes. Reuse the owned setup when dependency/runtime
+inputs are unchanged; replace only task-owned resources when those inputs change.
+
+At the start, select the smallest existing checks that cover the changed behavior
+and required gates. Run independent checks concurrently, including hosted CI and
+browser qualification; their successful exact-head results still gate acceptance.
+Capture requested screenshots from the actual test app during the affected browser
+work, with synthetic fixtures and successfully decoded images. Those captures do
+not qualify database persistence unless the fixture uses the supported database
+journey. No separate screenshot-only environment or extra approval round is needed
+unless the owner requests it or the visual result materially changes.
+
+Keep progressing through setup, diagnosis, scoped corrections, review and every
+authorized release stage. Compare failures against the unchanged base and repair
+recoverable in-scope causes before broadening checks. Present a decision only for
+material scope, access or risk changes, unapproved protected operations, or a blocker
+that cannot safely be resolved in scope. A failed required check remains a failure;
+pending CI remains ongoing work. Never accept a historical failure without the
+existing explicit risk-decision rules.
+
+
 - Behavioral code change: implementation, independent review, corrections,
   focused re-review of corrected ranges when appropriate, then the final merge
   gate.
@@ -323,9 +371,10 @@ PR82's existing return-week URL assertion failure remains unresolved, with
 - A narrow documentation-only correction requires automated scope and integrity
   validation plus focused re-review; it does not restart an unrelated full
   review.
-- Full re-review is required when the approved head, behavioral scope,
-  migration/schema impact, security posture, or deployment risk materially
-  changes.
+- Full re-review is required when behavioral scope, migration/schema impact,
+  security posture or deployment risk materially changes. A new head alone
+  requires fresh identity and changed-range review, not repetition of unchanged
+  behavioral review.
 
 Evidence may be reused only when its inputs and affected code are unchanged:
 design rationale, unchanged test results, prior discussion, and review findings
@@ -335,10 +384,12 @@ mergeability, review requests, and unresolved-thread counts must always be
 refreshed at the exact head. Focused verification is sufficient only for a
 mapped bounded iteration or prose-only publication, including narrow documentation
 corrections. PR verification is mandatory before publishing behavioral, build,
-package, CI, migration, security, or unknown-scope changes. Required exact-head CI
-checks still apply to every PR; this local prose exception does not waive them.
-Reviewers must expand scope when
-a correction crosses those boundaries or invalidates reused evidence. Merge is
+package, CI, migration, security, or unknown-scope changes. The single mapped
+qualification-test correction may use focused verification, affected hosted
+acceptance and required exact-head CI instead of an unrelated local full gate.
+Required exact-head CI checks still apply to every PR; bounded local exceptions
+do not waive them. Reviewers expand scope when a correction crosses those
+boundaries or invalidates reused evidence. Merge is
 blocked by a dirty or mismatched reviewed head, failed/pending/incomplete
 required checks, unresolved required review, migration/schema inconsistency,
 security regression, conflict, or missing exact-head evidence.
@@ -346,9 +397,11 @@ security regression, conflict, or missing exact-head evidence.
 ## Release status
 
 `rg:doctor` answers whether the local environment is capable.
-The existing `scripts/rg-verify.ps1 release` launcher is the default first check
-after a merge or deployment, or
-when verifying an expected production release:
+After merge/deployment, observe the exact merge-head CI and deployment readiness
+without rerunning unchanged qualification. Pending readiness is ongoing work;
+investigate a terminal failure. Once ready, the existing
+`scripts/rg-verify.ps1 release` launcher is the first read-only consistency check,
+or may be used when verifying an expected production release:
 
 ```powershell
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 release `

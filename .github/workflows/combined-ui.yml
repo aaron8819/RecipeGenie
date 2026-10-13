@@ -17,8 +17,9 @@ concurrency:
 
 jobs:
   ci-admission:
+    needs: combined-ui
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read
@@ -130,7 +131,6 @@ jobs:
           retention-days: 7
 
   combined-ui:
-    needs: ci-admission
     runs-on: ubuntu-latest
     timeout-minutes: 45
     defaults:

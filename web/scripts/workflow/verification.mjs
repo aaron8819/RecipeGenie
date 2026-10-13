@@ -580,6 +580,7 @@ function isDocumentationPath(path) {
 
 function focusedCategory(path) {
   if (isDocumentationPath(path)) return "documentation"
+  if (path === "web/qualification/combined-ui.spec.ts") return "qualification-test"
   if (/^web\/scripts\/workflow\/[^/]+\.mjs$/u.test(path)) return "workflow"
   if (
     /^web\/scripts\/db-preflight(?:-core)?(?:\.test)?\.mjs$/u.test(path)
@@ -615,6 +616,21 @@ export function planFocusedVerification(changedFiles, { windowsRuntime = null } 
 
   const uniqueCategories = [...new Set(categories)].sort()
   const checks = [MIGRATION_CHECK]
+  if (uniqueCategories.includes("qualification-test")) {
+    checks.push(npmCheck(
+      "qualification-lint",
+      ["exec", "--", "eslint", "qualification/combined-ui.spec.ts"],
+      "Linted the existing hosted qualification test.",
+    ))
+    checks.push(npmCheck(
+      "qualification-typecheck", ["run", "typecheck"],
+      "Typechecked the qualification test against application and database contracts.",
+    ))
+    checks.push(npmCheck(
+      "qualification-test-integrity", ["run", "check:no-new-test-skip"],
+      "Checked for new skipped tests; hosted acceptance remains required.",
+    ))
+  }
   if (uniqueCategories.includes("workflow")) {
     checks.push(npmCheck(
       "workflow-unit-tests",

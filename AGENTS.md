@@ -66,20 +66,29 @@ new gates. Keep secrets, local auth state and raw private diagnostics out of
 commits and uploaded artifacts. Preserve ignored `.codex-artifacts/` receipts;
 never delete evidence, shared previews or processes as incidental cleanup.
 
-After opening or updating a PR, monitor CI for the current head through its
-terminal result and proceed with PR review without another owner prompt.
-Investigate failures and make authorized fixes; refresh affected checks and
-review after corrections. Report actual blockers instead of treating pending
-CI as a completed handoff. Flag measured opportunities to shorten the
-build-to-review cycle without silently skipping or weakening required checks.
+Keep one implementation owner from the verified current integration base through
+the authorized release stages. Choose affected checks once from the actual diff,
+then revise that selection only when scope, inputs or a demonstrated failure changes.
+Use the workflow guide's evidence-reuse rules; parallelize independent checks and
+capture requested screenshots during affected qualification. Do not add a separate
+handoff or approval step for routine setup, diagnosis, a corrected test or pending CI.
+
+After opening or updating a PR, follow current-head CI to its terminal result,
+complete review and continue every already-authorized stage. Diagnose failures
+against the unchanged base before expanding repair scope. Fix recoverable in-scope
+issues, refresh affected checks/review and continue without a diagnosis-only handoff.
+Stop for a material scope, access or risk decision, an unapproved protected action,
+or a blocker that cannot safely be resolved within scope. Required checks must still
+pass before publication/merge as applicable; never relabel failures or weaken gates.
 
 Run `npm run rg:doctor` before environment-sensitive verification or operational
 work involving Supabase, Vercel, GitHub, PostgreSQL, migrations, backups or
 restores. It is optional for clearly local low-risk/prose changes and is local
 capability evidence, not remote health evidence.
 
-After a merge/deployment, use `scripts/rg-verify.ps1 release` as the first
-read-only release consistency check. The workflow guide owns its syntax and
+After a merge/deployment, observe exact-head CI and deployment readiness, then use
+`scripts/rg-verify.ps1 release` as the first read-only release consistency check.
+Pending readiness is ongoing work, not a reason to restart qualification. The workflow guide owns its syntax and
 identity binding. Use `npm run verify:production` only when fuller database-backed
 verification is required. Missing optional Vercel control-plane evidence is a
 warning when authoritative GitHub checks and `/api/version` agree.
@@ -109,7 +118,8 @@ task-branch pushes, draft PRs, CI follow-through, and independent review without
 repeat owner approval. Use proportionate checks for the change as described above.
 Stage only task-specific changes and preserve unrelated owner work. Checks that
 require a clean committed worktree may run immediately after the local commit;
-report failures and stop before publication.
+retain failures and repair authorized defects before publication. Continue under
+the same bounded approval; no stage already covered needs approval again.
 
 Unless already covered by explicit task authorization, stop before any merge,
 deployment, redeployment, rollback, alias
