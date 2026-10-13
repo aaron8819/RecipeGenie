@@ -6,13 +6,22 @@ import { admitExactCi, requireCiJobs, selectExactCiRun } from './admit-combined-
 
 const sha = 'a'.repeat(40);
 const run = {
-  id: 42, run_attempt: 2, head_sha: sha, path: '.github/workflows/ci.yml',
+  id: 42,
+  run_attempt: 2,
+  head_sha: sha,
+  path: '.github/workflows/ci.yml',
   repository: { full_name: 'aaron8819/RecipeGenie' },
   head_repository: { full_name: 'aaron8819/RecipeGenie' },
-  event: 'pull_request', status: 'completed', conclusion: 'success',
+  event: 'pull_request',
+  status: 'completed',
+  conclusion: 'success',
 };
-const jobs = ['quality-guards', 'migration-smoke-and-drift'].map(name => ({
-  name, run_id: 42, head_sha: sha, status: 'completed', conclusion: 'success',
+const jobs = ['quality-guards', 'migration-smoke-and-drift'].map((name) => ({
+  name,
+  run_id: 42,
+  head_sha: sha,
+  status: 'completed',
+  conclusion: 'success',
 }));
 
 test('admits exact source CI and both successful required jobs', () => {
@@ -51,8 +60,10 @@ test('reads only fixed repository CI endpoints and returns bounded evidence', as
   const request = async (url, options) => {
     urls.push(url);
     assert.equal(options.method, undefined); // GET only.
-    return { ok: true, json: async () => urls.length === 1
-      ? { workflow_runs: [run] } : { total_count: 2, jobs } };
+    return {
+      ok: true,
+      json: async () => (urls.length === 1 ? { workflow_runs: [run] } : { total_count: 2, jobs }),
+    };
   };
   const result = await admitExactCi({ sha, token: 'fixture-only', request });
   assert.deepEqual(urls, [
@@ -68,17 +79,27 @@ test('reads only fixed repository CI endpoints and returns bounded evidence', as
 });
 
 test('fails closed on unavailable or truncated remote evidence', async () => {
-  await assert.rejects(() => admitExactCi({ sha, token: 'fixture-only',
-    request: async () => ({ ok: false }) }));
+  await assert.rejects(() =>
+    admitExactCi({ sha, token: 'fixture-only', request: async () => ({ ok: false }) }),
+  );
   let reads = 0;
-  await assert.rejects(() => admitExactCi({ sha, token: 'fixture-only',
-    request: async () => ({ ok: true, json: async () => ++reads === 1
-      ? { workflow_runs: [run] } : { total_count: 3, jobs } }) }));
+  await assert.rejects(() =>
+    admitExactCi({
+      sha,
+      token: 'fixture-only',
+      request: async () => ({
+        ok: true,
+        json: async () => (++reads === 1 ? { workflow_runs: [run] } : { total_count: 3, jobs }),
+      }),
+    }),
+  );
 });
 
 test('browser admission is independent of optional Windows qualification', () => {
-  const workflow = readFileSync(new URL('../../.github/workflows/combined-ui.yml',
-    import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+  const workflow = readFileSync(
+    new URL('../../.github/workflows/combined-ui.yml', import.meta.url),
+    'utf8',
+  ).replace(/\r\n/g, '\n');
   const admission = workflow.split('  ci-admission:')[1].split('  trusted-pr-gate:')[0];
   const windows = workflow.split('  trusted-pr-gate:')[1].split('  combined-ui:')[0];
   const browser = workflow.split('  combined-ui:')[1];
@@ -86,10 +107,100 @@ test('browser admission is independent of optional Windows qualification', () =>
   assert.match(admission, /run: node scripts\/admit-combined-ui-ci\.mjs/);
   assert.match(windows, /if: \$\{\{ inputs\.windows_gate \}\}/);
   assert.match(workflow, /windows_gate:[\s\S]*?type: boolean\n        default: false/);
-  assert.match(browser, /needs: ci-admission/);
+  assert.match(admission, /needs: combined-ui/);
+  assert.doesNotMatch(browser, /needs: ci-admission/);
   assert.doesNotMatch(browser, /needs: trusted-pr-gate|GH_TOKEN/);
   assert.match(browser, /ref: \$\{\{ github\.sha \}\}/);
   assert.match(browser, /run: node scripts\/prepare-combined-ui\.mjs/);
   assert.match(browser, /run: npm run build/);
   assert.match(browser, /supabase stop --no-backup/);
+});
+
+test('waits for pending exact-head CI without accepting it prematurely', async () => {
+  let elapsed = 0,
+    reads = 0;
+  const request = async (url) => ({
+    ok: true,
+    json: async () =>
+      url.includes('/jobs?')
+        ? { total_count: 2, jobs }
+        : {
+            workflow_runs: [
+              ++reads === 1 ? { ...run, status: 'in_progress', conclusion: null } : run,
+            ],
+          },
+  });
+  const result = await admitExactCi({
+    sha,
+    token: 'fixture-only',
+    request,
+    waitMs: 60_000,
+    now: () => elapsed,
+    sleep: async (ms) => {
+      elapsed += ms;
+    },
+  });
+  assert.equal(elapsed, 30_000);
+  assert.equal(result.result, 'PASS');
+});
+
+test('bounded pending wait times out, and never accepts skipped or failed jobs', async () => {
+  let elapsed = 0;
+  const pending = { ...run, status: 'in_progress', conclusion: null };
+  await assert.rejects(
+    () =>
+      admitExactCi({
+        sha,
+        token: 'fixture-only',
+        waitMs: 30_000,
+        now: () => elapsed,
+        sleep: async (ms) => {
+          elapsed += ms;
+        },
+        request: async () => ({ ok: true, json: async () => ({ workflow_runs: [pending] }) }),
+      }),
+    /admission budget/,
+  );
+  assert.equal(elapsed, 30_000);
+  for (const conclusion of ['failure', 'skipped', 'cancelled']) {
+    assert.throws(() => selectExactCiRun([{ ...run, conclusion }], sha, { allowPending: true }));
+  }
+});
+
+test('a newer failed run ends a pending wait instead of using an old pass', async () => {
+  let reads = 0;
+  await assert.rejects(() =>
+    admitExactCi({
+      sha,
+      token: 'fixture-only',
+      waitMs: 60_000,
+      now: () => 0,
+      sleep: async () => {},
+      request: async () => ({
+        ok: true,
+        json: async () => ({
+          workflow_runs:
+            ++reads === 1
+              ? [{ ...run, id: 43, status: 'in_progress', conclusion: null }, run]
+              : [{ ...run, id: 43, conclusion: 'failure' }, run],
+        }),
+      }),
+    }),
+  );
+});
+
+test('rejects invalid wait budgets and truncated run evidence', async () => {
+  for (const waitMs of [-1, 900_001, NaN]) {
+    await assert.rejects(() => admitExactCi({ sha, token: 'fixture-only', waitMs }));
+  }
+  await assert.rejects(() =>
+    admitExactCi({
+      sha,
+      token: 'fixture-only',
+      request: async () => ({
+        ok: true,
+        json: async () => ({ total_count: 101, workflow_runs: [run] }),
+      }),
+    }),
+  );
 });

@@ -107,7 +107,13 @@ Focused verification covers mapped bounded iterations and prose-only publishing:
 ```
 
 The auditable mapping covers documentation, workflow scripts, database
-preflight scripts, fixtures, and migration metadata. It runs migration-reference
+preflight scripts, fixtures, migration metadata, and the single existing
+`web/qualification/combined-ui.spec.ts` test. A change confined to that test
+uses scoped lint, whole-project typecheck, and test-skip integrity checks;
+it still requires affected hosted acceptance and normal exact-head CI before
+merge. Adding application code, configuration, fixture tooling or an unknown
+test path escalates to the PR tier. This is a bounded iteration exception,
+not application confidence. It runs migration-reference
 integrity for every mapped scope, plus the relevant workflow or preflight unit
 tests and lint checks. An application, CI, package, migration SQL, unknown path,
 or unresolved base automatically runs the PR tier instead. A focused result
@@ -267,6 +273,14 @@ headers cannot contaminate machine output.
 
 ## Browser qualification selection
 
+Normal CI retains both required check identities. `migration-smoke-and-drift`
+omits only historical migration 014 parity and canonical migration/rollback
+rehearsals when the complete base-to-head diff contains only component CSS,
+global CSS, or inert public PNG/JPEG/WebP/ICO assets. Application logic, tests,
+contracts, database files, tooling, unknown paths and unresolved/empty scope run
+full rehearsals. The local database reset, security contracts, reference audits
+and schema-type drift always run. Renames include both old and new paths.
+
 Routine releases use normal CI (`quality-guards` and `migration-smoke-and-drift`),
 focused tests for the affected code, and the existing release-status check.
 The full combined browser suite does not run automatically on every web PR.
@@ -274,8 +288,8 @@ Request it when changes affect recipe/Shopping saves, Planner mutations or retur
 navigation, Undo, auth/ownership, dialogs, focus or responsive interactions.
 Existing component/hook tests remain the first checks for isolated logic changes.
 
-After normal CI passes at the reviewed head, run the preserved browser suite on
-a reviewed repository branch or tag:
+After pushing the reviewed head, run the preserved browser suite on a reviewed
+repository branch or tag while normal CI runs independently:
 
 ```powershell
 gh workflow run combined-ui.yml --repo aaron8819/RecipeGenie --ref <reviewed-branch-or-tag>
@@ -285,9 +299,13 @@ The dispatch event's `github.sha` binds both checkouts, expected-source guards a
 artifact names to the same immutable commit. Confirm that SHA in the run and
 receipts matches the reviewed candidate. Manual dispatch becomes available after
 the workflow is present on the default branch; do not substitute a local harness
-or a different trigger. Browser acceptance requires the latest successful normal
-CI run and successful quality/migration jobs at that exact SHA. Missing, pending,
-failed or mismatched evidence fails admission; wait for CI before dispatch.
+or a different trigger. Browser results are provisional until the final `ci-admission` job succeeds.
+That job runs after successful browser testing and cleanup, requires the latest
+successful normal CI run and both successful quality/migration jobs at the exact
+SHA, and waits at most fifteen minutes for pending CI. Missing, failed, skipped,
+truncated or mismatched evidence fails closed. A browser job or its receipts alone
+never establish accepted qualification; the complete workflow and CI admission
+must pass before merge.
 Hosted disposable runners, loopback database, owner isolation, sanitized evidence
 and cleanup controls remain unchanged.
 
@@ -300,8 +318,9 @@ local PR gate. A requested Windows failure remains a failure and needs correctio
 or an explicit owner waiver before accepting that platform qualification.
 
 The dispatcher already exists on the default branch. After publishing a reviewed
-change to a repository branch, wait for that new head's normal CI and dispatch
-with `--ref` pointing to that branch; a preliminary merge to main is unnecessary.
+change to a repository branch, dispatch with `--ref` pointing to that branch;
+preparation and browser testing overlap normal CI. A preliminary merge to main
+is unnecessary.
 Do not reuse CI evidence from the parent head.
 
 This invocation still runs the full Chromium/WebKit, desktop/mobile suite; it
@@ -335,8 +354,10 @@ mergeability, review requests, and unresolved-thread counts must always be
 refreshed at the exact head. Focused verification is sufficient only for a
 mapped bounded iteration or prose-only publication, including narrow documentation
 corrections. PR verification is mandatory before publishing behavioral, build,
-package, CI, migration, security, or unknown-scope changes. Required exact-head CI
-checks still apply to every PR; this local prose exception does not waive them.
+package, CI, migration, security, or unknown-scope changes. The single mapped
+qualification-test correction may use focused verification, affected hosted
+acceptance and required exact-head CI instead of an unrelated local full gate. Required exact-head CI
+checks still apply to every PR; bounded local exceptions do not waive them.
 Reviewers must expand scope when
 a correction crosses those boundaries or invalidates reused evidence. Merge is
 blocked by a dirty or mismatched reviewed head, failed/pending/incomplete

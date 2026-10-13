@@ -110,6 +110,25 @@ describe("focused verification planning", () => {
     ])
   })
 
+  it("maps only the existing qualification test to bounded checks", () => {
+    const plan = planFocusedVerification(["web/qualification/combined-ui.spec.ts"])
+    expect(plan.escalated).toBe(false)
+    expect(plan.checks.map((item) => item.name)).toEqual([
+      "migration-reference-integrity", "qualification-lint", "qualification-typecheck",
+      "qualification-test-integrity",
+    ])
+  })
+
+  it.each([
+    "web/src/components/planner/meal-planner.tsx",
+    "web/qualification/new.spec.ts",
+    "web/playwright.combined-ui.config.ts",
+    "web/scripts/prepare-combined-ui.mjs",
+  ])("does not treat %s as a qualification-only correction", (path) => {
+    expect(planFocusedVerification(["web/qualification/combined-ui.spec.ts", path])
+      .escalated).toBe(true)
+  })
+
   it("escalates an unknown changed-file scope to the PR tier", () => {
     const plan = planFocusedVerification(["web/src/app/page.tsx"])
     expect(plan.escalated).toBe(true)
