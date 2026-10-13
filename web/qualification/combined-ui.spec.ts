@@ -738,7 +738,8 @@ for (const viewport of [
           await page.getByRole('button', { name: 'Undo', exact: true }).click();
           await expect(page.getByRole('button', { name: 'Retry Undo', exact: true })).toBeVisible();
           expect((await readHistory()).some(row => row.id === added.id)).toBe(true);
-          const newer = await admin.from('recipe_history').insert({
+          stage = 'history: seed newer exact row as its authenticated owner';
+          const newer = await primary.client.from('recipe_history').insert({
             user_id: primary.id, recipe_uuid: main.id,
           }).select('id').single();
           requireResult(newer.error, newer.data, 'seed newer exact history row');
