@@ -1,16 +1,16 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import dynamic from "next/dynamic"
-import { ArrowLeft, FileText, PenTool, Plus, Trash2, X } from "lucide-react"
-import type { DragEndEvent } from "@dnd-kit/core"
+import { useState, useEffect, useCallback, useRef } from "react";
+import dynamic from "next/dynamic";
+import { ArrowLeft, Plus, Trash2, X } from "lucide-react";
+import type { DragEndEvent } from "@dnd-kit/core";
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogFooter,
   DialogClose,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,29 +20,30 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from "@/components/ui/tabs"
-import { useCreateRecipe, useUpdateRecipe, useAllTags, useTagsWithCounts, useRecipe } from "@/hooks/use-recipes"
-import { useRecipeImageStorage } from "@/hooks/use-recipe-image-storage"
-import { useUndoToast } from "@/hooks/use-undo-toast"
-import { useDebouncedCallback } from "@/hooks/use-debounce"
-import { useIsDesktop } from "@/hooks/use-is-desktop"
-import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser"
-import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import"
+  useCreateRecipe,
+  useUpdateRecipe,
+  useAllTags,
+  useTagsWithCounts,
+  useRecipe,
+} from "@/hooks/use-recipes";
+import { useRecipeImageStorage } from "@/hooks/use-recipe-image-storage";
+import { useUndoToast } from "@/hooks/use-undo-toast";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
+import { useIsDesktop } from "@/hooks/use-is-desktop";
+import { parseIngredientLine, type ParsedRecipe } from "@/lib/recipe-parser";
+import { useImportRecipeFromUrl } from "@/hooks/use-recipe-import";
 import type {
   Recipe,
   Ingredient,
   IngredientSection,
   RecipeInstructionGroup,
-} from "@/types/database"
-import { createRecipeUuid } from "@/lib/recipe-identity"
+} from "@/types/database";
+import { createRecipeUuid } from "@/lib/recipe-identity";
 import {
   RecipeDialogActions,
   RecipeIngredientsSection,
@@ -51,20 +52,21 @@ import {
   RecipeImportSection,
   RecipeMetadataSection,
   RecipeNotesSection,
-} from "./recipe-dialog-components"
+} from "./recipe-dialog-components";
 import {
   applyParsedRecipeToFormValues,
   buildEditingRecipeDialogFormValues,
   buildNewRecipeDialogFormValues,
   buildRecipeSubmissionData,
   hasValidRecipeIngredients,
+  getRecipeCreationPreviewError,
   isEditingRecipeDialogDirty,
   isNewRecipeDialogDirty,
   normalizeRecipeIngredientsForEditing,
   updateRecipeIngredientAlternatives,
   updateRecipeIngredientField,
-} from "./recipe-dialog.defaults"
-import { ingredientSectionsToEditorIngredients } from "@/lib/recipe-structure"
+} from "./recipe-dialog.defaults";
+import { ingredientSectionsToEditorIngredients } from "@/lib/recipe-structure";
 import {
   addIngredientSection,
   addIngredientToSection,
@@ -75,7 +77,7 @@ import {
   removeIngredientFromSection,
   renameIngredientSection,
   reorderIngredientsWithinSection,
-} from "@/lib/recipe-ingredient-editor"
+} from "@/lib/recipe-ingredient-editor";
 import {
   getImportErrorMessage,
   IMPORT_URL_FAILURE_ERROR,
@@ -83,13 +85,13 @@ import {
   parseRecipeImportText,
   toParsedRecipeImport,
   validateRecipeImportUrl,
-} from "./recipe-import.parser"
+} from "./recipe-import.parser";
 import {
   analyzeIngredientDuplicates,
   autoFixIngredients,
   countBlockingIngredientIssues,
   countIngredientsWithIssues,
-} from "./recipe-dialog.validation"
+} from "./recipe-dialog.validation";
 import {
   canReviewImportedRecipe,
   getInvalidImportReviewSection,
@@ -97,26 +99,28 @@ import {
   mapImportWarningToSection,
   shouldConfirmCandidateReplacement,
   type ImportReviewSection,
-} from "./recipe-import-review"
+} from "./recipe-import-review";
 
 // Lazy-loaded so @dnd-kit (~60–90 KB gzipped) is excluded from the initial bundle
 const SortableIngredientList = dynamic(
-  () => import("./recipe-sortable-ingredients").then((m) => m.SortableIngredientList),
-  { ssr: false }
-)
+  () =>
+    import("./recipe-sortable-ingredients").then(
+      (m) => m.SortableIngredientList,
+    ),
+  { ssr: false },
+);
 
 interface RecipeDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  recipe?: Recipe
-  recipeId?: string
-  categories: string[]
-  onRecipeCreated?: (recipe: Recipe) => void
-  onCloseAutoFocus?: (event: Event) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  recipe?: Recipe;
+  recipeId?: string;
+  categories: string[];
+  onRecipeCreated?: (recipe: Recipe) => void;
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
-
-import { RecipeReplacementReview } from './recipe-replacement-review'
+import { RecipeReplacementReview } from "./recipe-replacement-review";
 
 export function RecipeDialog({
   open,
@@ -127,171 +131,201 @@ export function RecipeDialog({
   onRecipeCreated,
   onCloseAutoFocus,
 }: RecipeDialogProps) {
-  const resolvedRecipeId = recipeId ?? recipe?.id ?? null
-  const { data: liveRecipe } = useRecipe(open && !!resolvedRecipeId ? resolvedRecipeId : null)
-  const editingRecipe = liveRecipe ?? recipe
-  const isEditing = !!resolvedRecipeId
-  const createRecipe = useCreateRecipe()
-  const updateRecipe = useUpdateRecipe()
-  const { uploadImage, deleteImage } = useRecipeImageStorage()
-  const undoToast = useUndoToast()
+  const resolvedRecipeId = recipeId ?? recipe?.id ?? null;
+  const { data: liveRecipe } = useRecipe(
+    open && !!resolvedRecipeId ? resolvedRecipeId : null,
+  );
+  const editingRecipe = liveRecipe ?? recipe;
+  const isEditing = !!resolvedRecipeId;
+  const createRecipe = useCreateRecipe();
+  const updateRecipe = useUpdateRecipe();
+  const { uploadImage, deleteImage } = useRecipeImageStorage();
+  const undoToast = useUndoToast();
 
-  const [mode, setMode] = useState<"manual" | "import">("manual")
-  const [replacementPhase, setReplacementPhase] = useState<'input' | 'review'>('input')
-  const [replacementSource, setReplacementSource] = useState<string | null>(null)
-  const [replacementBaseline, setReplacementBaseline] = useState<ReturnType<typeof buildNewRecipeDialogFormValues> | null>(null)
-  const [replacementWarnings, setReplacementWarnings] = useState<string[]>([])
-  const [replacementUnparsed, setReplacementUnparsed] = useState<string[]>([])
-  const [saveError, setSaveError] = useState<string | null>(null)
+  const [mode, setMode] = useState<"manual" | "import" | "url">("import");
+  const activeMethodRef = useRef<"manual" | "import" | "url">("import");
+  const urlRequestRef = useRef(0);
+  const [replacementPhase, setReplacementPhase] = useState<"input" | "review">(
+    "input",
+  );
+  const [replacementSource, setReplacementSource] = useState<string | null>(
+    null,
+  );
+  const [replacementBaseline, setReplacementBaseline] = useState<ReturnType<
+    typeof buildNewRecipeDialogFormValues
+  > | null>(null);
+  const [replacementWarnings, setReplacementWarnings] = useState<string[]>([]);
+  const [replacementUnparsed, setReplacementUnparsed] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [editTab, setEditTab] = useState<
     "details" | "ingredients" | "instructions" | "replace"
-  >("details")
-  const isDesktop = useIsDesktop()
-  const [name, setName] = useState("")
-  const [category, setCategory] = useState("")
-  const [servings, setServings] = useState(4)
-  const [yieldText, setYieldText] = useState("4 servings")
-  const [prepTimeMinutes, setPrepTimeMinutes] = useState<number | null>(null)
-  const [cookTimeMinutes, setCookTimeMinutes] = useState<number | null>(null)
-  const [totalTimeMinutes, setTotalTimeMinutes] = useState<number | null>(null)
-  const [tags, setTags] = useState<string[]>([])
+  >("details");
+  const isDesktop = useIsDesktop();
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [servings, setServings] = useState(4);
+  const [yieldText, setYieldText] = useState("4 servings");
+  const [prepTimeMinutes, setPrepTimeMinutes] = useState<number | null>(null);
+  const [cookTimeMinutes, setCookTimeMinutes] = useState<number | null>(null);
+  const [totalTimeMinutes, setTotalTimeMinutes] = useState<number | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
   const [ingredientSections, setIngredientSections] = useState<
     IngredientSection[]
-  >([])
-  const [instructionGroups, setInstructionGroups] = useState<RecipeInstructionGroup[]>([])
-  const [notes, setNotes] = useState("")
-  
+  >([]);
+  const [instructionGroups, setInstructionGroups] = useState<
+    RecipeInstructionGroup[]
+  >([]);
+  const [notes, setNotes] = useState("");
+
   // Image state
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
-  const [imageUrl, setImageUrl] = useState<string | null>(null)
-  const [isUploadingImage, setIsUploadingImage] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const wasOpenRef = useRef(false)
-  const hydratedRecipeIdRef = useRef<string | null>(null)
-  const pendingCreateUuidRef = useRef<string | null>(null)
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const submitInFlightRef = useRef(false)
-  const loadedDraftRef = useRef<ReturnType<typeof buildNewRecipeDialogFormValues> | null>(null)
-  const confirmationGuardRef = useRef(false)
-  const rawSourceRef = useRef("")
-  const importUrlRef = useRef("")
-  const [isSubmitLocked, setIsSubmitLocked] = useState(false)
-  
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const wasOpenRef = useRef(false);
+  const hydratedRecipeIdRef = useRef<string | null>(null);
+  const pendingCreateUuidRef = useRef<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const submitInFlightRef = useRef(false);
+  const loadedDraftRef = useRef<ReturnType<
+    typeof buildNewRecipeDialogFormValues
+  > | null>(null);
+  const confirmationGuardRef = useRef(false);
+  const rawSourceRef = useRef("");
+  const importUrlRef = useRef("");
+  const [isSubmitLocked, setIsSubmitLocked] = useState(false);
+
   // Import state
-  const [rawSource, setRawSource] = useState("")
-  const [importUrl, setImportUrl] = useState("")
-  const [parseError, setParseError] = useState<string | null>(null)
-  const [importStep, setImportStep] = useState<'input' | 'preview'>('input')
-  const [parsedPreview, setParsedPreview] = useState<ParsedRecipe | null>(null)
-  const [parsedCandidate, setParsedCandidate] = useState<ParsedRecipe | null>(null)
-  const [parsedCandidateKey, setParsedCandidateKey] = useState<string | null>(null)
-  const [isParsing, setIsParsing] = useState(false)
-  const [mobileImportPhase, setMobileImportPhase] = useState<'input' | 'review'>('input')
-  const [reviewSection, setReviewSection] = useState<ImportReviewSection>('details')
-  const [appliedDraftSnapshot, setAppliedDraftSnapshot] = useState<
-    ReturnType<typeof buildNewRecipeDialogFormValues> | null
-  >(null)
-  const [appliedRawSource, setAppliedRawSource] = useState<string | null>(null)
-  const [appliedCandidateKey, setAppliedCandidateKey] = useState<string | null>(null)
-  const [showReplacementConfirm, setShowReplacementConfirm] = useState(false)
-  const importFromUrl = useImportRecipeFromUrl()
+  const [rawSource, setRawSource] = useState("");
+  const [importUrl, setImportUrl] = useState("");
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [importStep, setImportStep] = useState<"input" | "preview">("input");
+  const [parsedPreview, setParsedPreview] = useState<ParsedRecipe | null>(null);
+  const [parsedCandidate, setParsedCandidate] = useState<ParsedRecipe | null>(
+    null,
+  );
+  const [parsedCandidateKey, setParsedCandidateKey] = useState<string | null>(
+    null,
+  );
+  const [isParsing, setIsParsing] = useState(false);
+  const [mobileImportPhase, setMobileImportPhase] = useState<
+    "input" | "review"
+  >("input");
+  const [creationEditing, setCreationEditing] = useState(false);
+  const [creationUnparsed, setCreationUnparsed] = useState<string[]>([]);
+  const [reviewSection, setReviewSection] =
+    useState<ImportReviewSection>("details");
+  const [appliedDraftSnapshot, setAppliedDraftSnapshot] = useState<ReturnType<
+    typeof buildNewRecipeDialogFormValues
+  > | null>(null);
+  const [appliedRawSource, setAppliedRawSource] = useState<string | null>(null);
+  const [appliedCandidateKey, setAppliedCandidateKey] = useState<string | null>(
+    null,
+  );
+  const [showReplacementConfirm, setShowReplacementConfirm] = useState(false);
+  const importFromUrl = useImportRecipeFromUrl();
 
-  const { data: allTags = [] } = useAllTags()
-  const { data: tagCounts = [] } = useTagsWithCounts()
+  const { data: allTags = [] } = useAllTags();
+  const { data: tagCounts = [] } = useTagsWithCounts();
 
-  const applyFormValues = useCallback((formValues: ReturnType<typeof buildNewRecipeDialogFormValues>) => {
-    loadedDraftRef.current = formValues
-    setName(formValues.name)
-    setCategory(formValues.category)
-    setServings(formValues.servings)
-    setYieldText(formValues.yieldText ?? `${formValues.servings} servings`)
-    setPrepTimeMinutes(formValues.prepTimeMinutes)
-    setCookTimeMinutes(formValues.cookTimeMinutes)
-    setTotalTimeMinutes(formValues.totalTimeMinutes)
-    setTags(formValues.tags)
-    setIngredientSections(formValues.ingredientSections)
-    setInstructionGroups(formValues.instructionGroups)
-    setNotes(formValues.notes)
-    setImageUrl(formValues.imageUrl)
-    setImageFile(null)
-    setImagePreview(null)
-    setMode("manual")
-    setEditTab("details")
-    setReplacementPhase('input')
-    setReplacementSource(null)
-    setReplacementBaseline(null)
-    setReplacementWarnings([])
-    setReplacementUnparsed([])
-    setSaveError(null)
-    setRawSource("")
-    rawSourceRef.current = ""
-    setImportUrl("")
-    importUrlRef.current = ""
-    setParseError(null)
-    setImportStep('input')
-    setParsedPreview(null)
-    setParsedCandidate(null)
-    setParsedCandidateKey(null)
-    setIsParsing(false)
-    setMobileImportPhase('input')
-    setReviewSection('details')
-    setAppliedDraftSnapshot(null)
-    setAppliedRawSource(null)
-    setAppliedCandidateKey(null)
-    setShowReplacementConfirm(false)
-    setIsSubmitLocked(false)
-    submitInFlightRef.current = false
-    confirmationGuardRef.current = false
-  }, [])
+  const applyFormValues = useCallback(
+    (formValues: ReturnType<typeof buildNewRecipeDialogFormValues>) => {
+      loadedDraftRef.current = formValues;
+      setName(formValues.name);
+      setCategory(formValues.category);
+      setServings(formValues.servings);
+      setYieldText(formValues.yieldText ?? `${formValues.servings} servings`);
+      setPrepTimeMinutes(formValues.prepTimeMinutes);
+      setCookTimeMinutes(formValues.cookTimeMinutes);
+      setTotalTimeMinutes(formValues.totalTimeMinutes);
+      setTags(formValues.tags);
+      setIngredientSections(formValues.ingredientSections);
+      setInstructionGroups(formValues.instructionGroups);
+      setNotes(formValues.notes);
+      setImageUrl(formValues.imageUrl);
+      setImageFile(null);
+      setImagePreview(null);
+      setMode(isEditing ? "manual" : "import");
+      activeMethodRef.current = isEditing ? "manual" : "import";
+      urlRequestRef.current += 1;
+      setCreationEditing(false);
+      setCreationUnparsed([]);
+      setEditTab("details");
+      setReplacementPhase("input");
+      setReplacementSource(null);
+      setReplacementBaseline(null);
+      setReplacementWarnings([]);
+      setReplacementUnparsed([]);
+      setSaveError(null);
+      setRawSource("");
+      rawSourceRef.current = "";
+      setImportUrl("");
+      importUrlRef.current = "";
+      setParseError(null);
+      setImportStep("input");
+      setParsedPreview(null);
+      setParsedCandidate(null);
+      setParsedCandidateKey(null);
+      setIsParsing(false);
+      setMobileImportPhase("input");
+      setReviewSection("details");
+      setAppliedDraftSnapshot(null);
+      setAppliedRawSource(null);
+      setAppliedCandidateKey(null);
+      setShowReplacementConfirm(false);
+      setIsSubmitLocked(false);
+      submitInFlightRef.current = false;
+      confirmationGuardRef.current = false;
+    },
+    [isEditing],
+  );
 
   // Reset form when the dialog opens or the edited recipe target changes.
   useEffect(() => {
     if (!open) {
-      wasOpenRef.current = false
-      hydratedRecipeIdRef.current = null
-      pendingCreateUuidRef.current = null
-      return
+      wasOpenRef.current = false;
+      hydratedRecipeIdRef.current = null;
+      pendingCreateUuidRef.current = null;
+      return;
     }
 
-    const justOpened = !wasOpenRef.current
-    wasOpenRef.current = true
+    const justOpened = !wasOpenRef.current;
+    wasOpenRef.current = true;
 
     if (isEditing) {
       if (!editingRecipe || !resolvedRecipeId) {
-        return
+        return;
       }
 
       if (justOpened || hydratedRecipeIdRef.current !== resolvedRecipeId) {
-        applyFormValues(buildEditingRecipeDialogFormValues(editingRecipe))
-        hydratedRecipeIdRef.current = resolvedRecipeId
+        applyFormValues(buildEditingRecipeDialogFormValues(editingRecipe));
+        hydratedRecipeIdRef.current = resolvedRecipeId;
       }
-      return
+      return;
     }
 
     const shouldHydrateNewRecipe =
       justOpened ||
-      (
-        !isNewRecipeDialogDirty({
-          name,
-          defaultCategory: categories[0] || "",
-          category,
-          yieldText,
-          tags,
-          prepTimeMinutes,
-          cookTimeMinutes,
-          totalTimeMinutes,
-          ingredientSections,
-          instructionGroups,
-          notes,
-          imageReference: imagePreview ?? imageUrl,
-        }) &&
+      (!isNewRecipeDialogDirty({
+        name,
+        defaultCategory: categories[0] || "",
+        category,
+        yieldText,
+        tags,
+        prepTimeMinutes,
+        cookTimeMinutes,
+        totalTimeMinutes,
+        ingredientSections,
+        instructionGroups,
+        notes,
+        imageReference: imagePreview ?? imageUrl,
+      }) &&
         !category &&
-        categories.length > 0
-      )
+        categories.length > 0);
 
     if (shouldHydrateNewRecipe) {
-      applyFormValues(buildNewRecipeDialogFormValues(categories))
+      applyFormValues(buildNewRecipeDialogFormValues(categories));
     }
   }, [
     open,
@@ -312,278 +346,297 @@ export function RecipeDialog({
     notes,
     imagePreview,
     imageUrl,
-  ])
+  ]);
 
-  const ingredients = ingredientSectionsToEditorIngredients(ingredientSections)
+  const ingredients = ingredientSectionsToEditorIngredients(ingredientSections);
 
-  const updateIngredientSection = useCallback((
-    sectionIndex: number,
-    updater: (section: IngredientSection) => IngredientSection
-  ) => {
-    setIngredientSections((current) =>
-      current.map((section, index) =>
-        index === sectionIndex ? updater(section) : section
-      )
-    )
-  }, [])
+  const updateIngredientSection = useCallback(
+    (
+      sectionIndex: number,
+      updater: (section: IngredientSection) => IngredientSection,
+    ) => {
+      setIngredientSections((current) =>
+        current.map((section, index) =>
+          index === sectionIndex ? updater(section) : section,
+        ),
+      );
+    },
+    [],
+  );
 
   const handleAddIngredient = (sectionIndex: number) => {
     setIngredientSections((current) =>
-      addIngredientToSection(current, sectionIndex)
-    )
-  }
+      addIngredientToSection(current, sectionIndex),
+    );
+  };
 
   const handleAddUnsectionedIngredient = () => {
-    setIngredientSections(addUnsectionedIngredient)
-  }
+    setIngredientSections(addUnsectionedIngredient);
+  };
 
   const handleAddIngredientSection = () => {
-    setIngredientSections(addIngredientSection)
-  }
+    setIngredientSections(addIngredientSection);
+  };
 
   const handleRemoveIngredient = (sectionIndex: number, index: number) => {
     setIngredientSections((current) =>
-      removeIngredientFromSection(current, sectionIndex, index)
-    )
-  }
+      removeIngredientFromSection(current, sectionIndex, index),
+    );
+  };
 
   const handleIngredientChange = (
     sectionIndex: number,
     index: number,
     field: keyof Ingredient,
-    value: string | number | null
+    value: string | number | null,
   ) => {
     updateIngredientSection(sectionIndex, (section) => ({
       ...section,
       ingredients: section.ingredients.map((ingredient, itemIndex) =>
         itemIndex === index
           ? updateRecipeIngredientField(ingredient, field, value)
-          : ingredient
+          : ingredient,
       ),
-    }))
-  }
+    }));
+  };
 
   const handleIngredientAlternativesChange = (
     sectionIndex: number,
     index: number,
-    alternatives: string[]
+    alternatives: string[],
   ) => {
     updateIngredientSection(sectionIndex, (section) => ({
       ...section,
       ingredients: section.ingredients.map((ingredient, itemIndex) =>
         itemIndex === index
           ? updateRecipeIngredientAlternatives(ingredient, alternatives)
-          : ingredient
+          : ingredient,
       ),
-    }))
-  }
+    }));
+  };
 
-  const handleIngredientParsed = useCallback((
-    sectionIndex: number,
-    index: number,
-    parsed: Ingredient
-  ) => {
-    updateIngredientSection(sectionIndex, (section) => {
-      const [normalized] = normalizeRecipeIngredientsForEditing([parsed])
-      return {
-        ...section,
-        ingredients: section.ingredients.map((ingredient, itemIndex) =>
-          itemIndex === index && normalized ? normalized : ingredient
-        ),
+  const handleIngredientParsed = useCallback(
+    (sectionIndex: number, index: number, parsed: Ingredient) => {
+      updateIngredientSection(sectionIndex, (section) => {
+        const [normalized] = normalizeRecipeIngredientsForEditing([parsed]);
+        return {
+          ...section,
+          ingredients: section.ingredients.map((ingredient, itemIndex) =>
+            itemIndex === index && normalized ? normalized : ingredient,
+          ),
+        };
+      });
+    },
+    [updateIngredientSection],
+  );
+
+  const handleReorderIngredients = useCallback(
+    (sectionIndex: number, event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (over && active.id !== over.id) {
+        setIngredientSections((current) => {
+          const section = current[sectionIndex];
+          if (!section) return current;
+          const oldIndex = section.ingredients.findIndex(
+            (_, index) => index.toString() === active.id,
+          );
+          const newIndex = section.ingredients.findIndex(
+            (_, index) => index.toString() === over.id,
+          );
+          if (oldIndex < 0 || newIndex < 0) return current;
+
+          return reorderIngredientsWithinSection(
+            current,
+            sectionIndex,
+            oldIndex,
+            newIndex,
+          );
+        });
       }
-    })
-  }, [updateIngredientSection])
+    },
+    [],
+  );
 
-  const handleReorderIngredients = useCallback((
-    sectionIndex: number,
-    event: DragEndEvent
-  ) => {
-    const { active, over } = event
+  const handleBulkPasteIngredients = useCallback(
+    (sectionIndex: number, startIndex: number, text: string) => {
+      const parsedLines = text
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => parseIngredientLine(line))
+        .filter((ingredient) => ingredient.item);
 
-    if (over && active.id !== over.id) {
-      setIngredientSections((current) => {
-        const section = current[sectionIndex]
-        if (!section) return current
-        const oldIndex = section.ingredients.findIndex(
-          (_, index) => index.toString() === active.id
-        )
-        const newIndex = section.ingredients.findIndex(
-          (_, index) => index.toString() === over.id
-        )
-        if (oldIndex < 0 || newIndex < 0) return current
-
-        return reorderIngredientsWithinSection(
-          current,
-          sectionIndex,
-          oldIndex,
-          newIndex
-        )
-      })
-    }
-  }, [])
-
-  const handleBulkPasteIngredients = useCallback((
-    sectionIndex: number,
-    startIndex: number,
-    text: string
-  ) => {
-    const parsedLines = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => parseIngredientLine(line))
-      .filter((ingredient) => ingredient.item)
-
-    if (parsedLines.length === 0) {
-      return
-    }
-
-    updateIngredientSection(sectionIndex, (section) => {
-      const nextIngredients = [...section.ingredients]
-
-      while (nextIngredients.length < startIndex + parsedLines.length) {
-        nextIngredients.push({ item: "", amount: null, unit: "" })
+      if (parsedLines.length === 0) {
+        return;
       }
 
-      parsedLines.forEach((ingredient, offset) => {
-        nextIngredients[startIndex + offset] = {
-          ...nextIngredients[startIndex + offset],
-          ...ingredient,
+      updateIngredientSection(sectionIndex, (section) => {
+        const nextIngredients = [...section.ingredients];
+
+        while (nextIngredients.length < startIndex + parsedLines.length) {
+          nextIngredients.push({ item: "", amount: null, unit: "" });
         }
-      })
 
-      return {
-        ...section,
-        ingredients: normalizeRecipeIngredientsForEditing(nextIngredients),
-      }
-    })
-  }, [updateIngredientSection])
+        parsedLines.forEach((ingredient, offset) => {
+          nextIngredients[startIndex + offset] = {
+            ...nextIngredients[startIndex + offset],
+            ...ingredient,
+          };
+        });
+
+        return {
+          ...section,
+          ingredients: normalizeRecipeIngredientsForEditing(nextIngredients),
+        };
+      });
+    },
+    [updateIngredientSection],
+  );
 
   const handleIngredientSectionLabelChange = (
     sectionIndex: number,
-    label: string
+    label: string,
   ) => {
     setIngredientSections((current) =>
-      renameIngredientSection(current, sectionIndex, label)
-    )
-  }
+      renameIngredientSection(current, sectionIndex, label),
+    );
+  };
 
   const handleRemoveIngredientSection = (sectionIndex: number) => {
-    const section = ingredientSections[sectionIndex]
+    const section = ingredientSections[sectionIndex];
     if (section && !isIngredientSectionEmpty(section)) {
       undoToast.show({
         message: "Move or delete this section's ingredients first.",
         duration: 4000,
-      })
-      return
+      });
+      return;
     }
 
     setIngredientSections((current) =>
-      removeEmptyIngredientSection(current, sectionIndex)
-    )
-  }
+      removeEmptyIngredientSection(current, sectionIndex),
+    );
+  };
 
   const handleMoveIngredient = (
     sourceSectionIndex: number,
     ingredientIndex: number,
-    targetSectionIndex: number | null
+    targetSectionIndex: number | null,
   ) => {
     setIngredientSections((current) =>
       moveIngredientToSection(
         current,
         sourceSectionIndex,
         ingredientIndex,
-        targetSectionIndex
-      )
-    )
-  }
+        targetSectionIndex,
+      ),
+    );
+  };
 
   // Debounced live preview parser
-  const debouncedParse = useDebouncedCallback(((text: string) => {
-    if (text !== rawSourceRef.current) return
-    setParsedCandidate(parseRecipeImportPreview(text))
-    setParsedCandidateKey(`text:${text}`)
-    setIsParsing(false)
-  }) as (...args: unknown[]) => void, 300);
+  const debouncedParse = useDebouncedCallback(
+    ((text: string) => {
+      if (
+        text !== rawSourceRef.current ||
+        (!isEditing && activeMethodRef.current !== "import")
+      )
+        return;
+      setParsedCandidate(parseRecipeImportPreview(text));
+      setParsedCandidateKey(`text:${text}`);
+      setIsParsing(false);
+    }) as (...args: unknown[]) => void,
+    300,
+  );
 
   const handleUrlImport = async () => {
-    const validation = validateRecipeImportUrl(importUrl)
+    const validation = validateRecipeImportUrl(importUrl);
 
     if (!validation.normalizedUrl) {
-      setParseError(validation.error)
-      return
+      setParseError(validation.error);
+      return;
     }
 
-    setParseError(null)
+    setParseError(null);
+    const requestId = ++urlRequestRef.current;
     try {
-      const result = await importFromUrl.mutateAsync(validation.normalizedUrl)
-      if (validateRecipeImportUrl(importUrlRef.current).normalizedUrl !== validation.normalizedUrl) {
-        return
+      const result = await importFromUrl.mutateAsync(validation.normalizedUrl);
+      if (
+        requestId !== urlRequestRef.current ||
+        activeMethodRef.current !== "url" ||
+        validateRecipeImportUrl(importUrlRef.current).normalizedUrl !==
+          validation.normalizedUrl
+      ) {
+        return;
       }
-      const importedCandidate = toParsedRecipeImport(result)
-      if (isDesktop) {
-        setParsedPreview(importedCandidate)
-        setImportStep('preview')
-      } else {
-        setParsedCandidate(importedCandidate)
-        setParsedCandidateKey(`url:${validation.normalizedUrl}`)
-      }
+      const importedCandidate = toParsedRecipeImport(result);
+      setParsedCandidate(importedCandidate);
+      setParsedCandidateKey(`url:${validation.normalizedUrl}`);
       // Store the extracted image URL for later
       if (result.imageUrl) {
-        setImageUrl(result.imageUrl)
+        setImageUrl(result.imageUrl);
       }
     } catch (err) {
-      setParseError(getImportErrorMessage(err, IMPORT_URL_FAILURE_ERROR))
+      if (
+        requestId !== urlRequestRef.current ||
+        activeMethodRef.current !== "url" ||
+        validateRecipeImportUrl(importUrlRef.current).normalizedUrl !==
+          validation.normalizedUrl
+      )
+        return;
+      setParseError(getImportErrorMessage(err, IMPORT_URL_FAILURE_ERROR));
     }
-  }
+  };
 
-  const applyPreviewToCurrentForm = useCallback((preview: ParsedRecipe) => {
-    const formValues = applyParsedRecipeToFormValues(
-      {
-        name,
-        category,
-        servings,
-        yieldText,
-        prepTimeMinutes,
-        cookTimeMinutes,
-        totalTimeMinutes,
-        tags,
-        ingredientSections,
-        instructionGroups,
-        notes,
-        imageUrl,
-      },
-      preview,
-      { applyCategory: !isEditing, categories }
-    )
+  const applyPreviewToCurrentForm = useCallback(
+    (preview: ParsedRecipe) => {
+      const formValues = applyParsedRecipeToFormValues(
+        {
+          name,
+          category,
+          servings,
+          yieldText,
+          prepTimeMinutes,
+          cookTimeMinutes,
+          totalTimeMinutes,
+          tags,
+          ingredientSections,
+          instructionGroups,
+          notes,
+          imageUrl,
+        },
+        preview,
+        { applyCategory: !isEditing, categories },
+      );
 
-    setName(formValues.name)
-    setCategory(formValues.category)
-    setServings(formValues.servings)
-    setYieldText(formValues.yieldText ?? `${formValues.servings} servings`)
-    setPrepTimeMinutes(formValues.prepTimeMinutes)
-    setCookTimeMinutes(formValues.cookTimeMinutes)
-    setTotalTimeMinutes(formValues.totalTimeMinutes)
-    setIngredientSections(formValues.ingredientSections)
-    setInstructionGroups(formValues.instructionGroups)
-    setNotes(formValues.notes)
-    return formValues
-  }, [
-    name,
-    category,
-    servings,
-    yieldText,
-    prepTimeMinutes,
-    cookTimeMinutes,
-    totalTimeMinutes,
-    tags,
-    ingredientSections,
-    instructionGroups,
-    notes,
-    imageUrl,
-    isEditing,
-    categories,
-  ])
+      setName(formValues.name);
+      setCategory(formValues.category);
+      setServings(formValues.servings);
+      setYieldText(formValues.yieldText ?? `${formValues.servings} servings`);
+      setPrepTimeMinutes(formValues.prepTimeMinutes);
+      setCookTimeMinutes(formValues.cookTimeMinutes);
+      setTotalTimeMinutes(formValues.totalTimeMinutes);
+      setIngredientSections(formValues.ingredientSections);
+      setInstructionGroups(formValues.instructionGroups);
+      setNotes(formValues.notes);
+      return formValues;
+    },
+    [
+      name,
+      category,
+      servings,
+      yieldText,
+      prepTimeMinutes,
+      cookTimeMinutes,
+      totalTimeMinutes,
+      tags,
+      ingredientSections,
+      instructionGroups,
+      notes,
+      imageUrl,
+      isEditing,
+      categories,
+    ],
+  );
 
   const currentDraft = {
     name,
@@ -598,264 +651,353 @@ export function RecipeDialog({
     instructionGroups,
     notes,
     imageUrl,
-  }
-  const draftCorrected = !!appliedDraftSnapshot && isEditingRecipeDialogDirty(
-    appliedDraftSnapshot,
-    { ...currentDraft, imageReference: imagePreview ?? imageUrl }
-  )
+  };
+  const draftCorrected =
+    !!appliedDraftSnapshot &&
+    isEditingRecipeDialogDirty(appliedDraftSnapshot, {
+      ...currentDraft,
+      imageReference: imagePreview ?? imageUrl,
+    });
   const applyCandidateForReview = () => {
-    if (!parsedCandidate || !parsedCandidateKey || !canReviewImportedRecipe(parsedCandidate)) return
-    const appliedDraft = applyPreviewToCurrentForm(parsedCandidate)
-    setAppliedDraftSnapshot(appliedDraft)
-    setAppliedRawSource(rawSource)
-    setAppliedCandidateKey(parsedCandidateKey)
-    if (isDesktop) {
-      setMode('manual')
-    } else {
-      setMobileImportPhase('review')
-      setReviewSection('details')
-    }
-  }
+    if (
+      !parsedCandidate ||
+      !parsedCandidateKey ||
+      !canReviewImportedRecipe(parsedCandidate)
+    )
+      return;
+    const appliedDraft = applyPreviewToCurrentForm(parsedCandidate);
+    setAppliedDraftSnapshot(appliedDraft);
+    setAppliedRawSource(rawSource);
+    setAppliedCandidateKey(parsedCandidateKey);
+    setCreationUnparsed(parsedCandidate.unparsedContent ?? []);
+    setCreationEditing(false);
+    setMobileImportPhase("review");
+    setReviewSection("details");
+  };
+
+  const creationPreviewError =
+    !isEditing && mobileImportPhase === "review"
+      ? getRecipeCreationPreviewError(currentDraft)
+      : null;
+
+  const candidateMatchesMethod =
+    mode === "url"
+      ? parsedCandidateKey ===
+        `url:${validateRecipeImportUrl(importUrl).normalizedUrl}`
+      : mode === "import" && parsedCandidateKey === `text:${rawSource}`;
 
   const handleReviewCandidate = () => {
-    if (!parsedCandidate || !parsedCandidateKey || !canReviewImportedRecipe(parsedCandidate)) return
+    if (!candidateMatchesMethod) return;
+    if (
+      !parsedCandidate ||
+      !parsedCandidateKey ||
+      !canReviewImportedRecipe(parsedCandidate)
+    )
+      return;
 
     if (appliedCandidateKey === parsedCandidateKey && appliedDraftSnapshot) {
-      if (isDesktop) setMode('manual')
-      else setMobileImportPhase('review')
-      return
+      setCreationEditing(false);
+      setMobileImportPhase("review");
+      return;
     }
 
-    if (shouldConfirmCandidateReplacement({
-      appliedRawSource: appliedCandidateKey,
-      nextRawSource: parsedCandidateKey,
-      draftCorrected,
-    })) {
-      confirmationGuardRef.current = true
-      setShowReplacementConfirm(true)
-      return
+    if (
+      shouldConfirmCandidateReplacement({
+        appliedRawSource: appliedCandidateKey,
+        nextRawSource: parsedCandidateKey,
+        draftCorrected,
+      })
+    ) {
+      confirmationGuardRef.current = true;
+      setShowReplacementConfirm(true);
+      return;
     }
 
-    applyCandidateForReview()
-  }
+    applyCandidateForReview();
+  };
 
   const handleApplyPreview = () => {
-    if (!parsedPreview) return
-    const appliedDraft = applyPreviewToCurrentForm(parsedPreview)
-    setAppliedDraftSnapshot(appliedDraft)
-    setAppliedRawSource(rawSource)
-    setAppliedCandidateKey(parsedCandidateKey)
+    if (!parsedPreview) return;
+    const appliedDraft = applyPreviewToCurrentForm(parsedPreview);
+    setAppliedDraftSnapshot(appliedDraft);
+    setAppliedRawSource(rawSource);
+    setAppliedCandidateKey(parsedCandidateKey);
 
-    // Switch to manual mode to allow editing
-    setMode("manual")
-    setEditTab("ingredients")
-    setImportStep('input')
-    setParsedPreview(null)
-  }
+    setCreationUnparsed(parsedPreview.unparsedContent ?? []);
+    setCreationEditing(false);
+    setMobileImportPhase("review");
+    setEditTab("ingredients");
+    setImportStep("input");
+    setParsedPreview(null);
+  };
 
   const handleApplyReplacementPreview = (discardCorrections = false) => {
-    if (submitInFlightRef.current) return
-    const candidate = parseRecipeImportText(rawSource)
-    if (!candidate.parsedRecipe || !candidate.parsedRecipe.ingredientSections.some(section => section.ingredients.length)) {
-      setParseError(candidate.error || 'No ingredients found. Add an Ingredients section and try again.')
-      return
+    if (submitInFlightRef.current) return;
+    const candidate = parseRecipeImportText(rawSource);
+    if (
+      !candidate.parsedRecipe ||
+      !candidate.parsedRecipe.ingredientSections.some(
+        (section) => section.ingredients.length,
+      )
+    ) {
+      setParseError(
+        candidate.error ||
+          "No ingredients found. Add an Ingredients section and try again.",
+      );
+      return;
     }
-    const parsed = candidate.parsedRecipe
-    if (parsed.unparsedContent?.includes('Use Ingredients and Instructions headings so every section can be reviewed.')) {
-      setParseError('Could not read a recipe. Add Ingredients and Instructions headings and try again.')
-      return
+    const parsed = candidate.parsedRecipe;
+    if (
+      parsed.unparsedContent?.includes(
+        "Use Ingredients and Instructions headings so every section can be reviewed.",
+      )
+    ) {
+      setParseError(
+        "Could not read a recipe. Add Ingredients and Instructions headings and try again.",
+      );
+      return;
     }
-    if (!discardCorrections && replacementSource !== null && replacementSource !== rawSource && appliedDraftSnapshot && draftCorrected) {
-      confirmationGuardRef.current = true
-      setShowReplacementConfirm(true)
-      return
+    if (
+      !discardCorrections &&
+      replacementSource !== null &&
+      replacementSource !== rawSource &&
+      appliedDraftSnapshot &&
+      draftCorrected
+    ) {
+      confirmationGuardRef.current = true;
+      setShowReplacementConfirm(true);
+      return;
     }
     if (replacementSource !== rawSource) {
-      const baseline = replacementBaseline ?? currentDraft
+      const baseline = replacementBaseline ?? currentDraft;
       const next = applyParsedRecipeToFormValues(baseline, {
         ...parsed,
-        name: parsed.warnings.some(warning => warning.startsWith('No recipe name')) ? baseline.name : parsed.name,
-      })
-      setReplacementBaseline(baseline)
-      setAppliedDraftSnapshot(next)
-      setName(next.name); setServings(next.servings); setYieldText(next.yieldText ?? '')
-      setPrepTimeMinutes(next.prepTimeMinutes); setCookTimeMinutes(next.cookTimeMinutes); setTotalTimeMinutes(next.totalTimeMinutes)
-      setIngredientSections(next.ingredientSections); setInstructionGroups(next.instructionGroups); setNotes(next.notes)
-      setReplacementSource(rawSource)
-      const retainedTags = `tags: ${baseline.tags.join(', ')}`.toLowerCase()
-      const unparsed = (parsed.unparsedContent ?? []).filter(text => text.toLowerCase() !== retainedTags)
-      setReplacementUnparsed(unparsed)
+        name: parsed.warnings.some((warning) =>
+          warning.startsWith("No recipe name"),
+        )
+          ? baseline.name
+          : parsed.name,
+      });
+      setReplacementBaseline(baseline);
+      setAppliedDraftSnapshot(next);
+      setName(next.name);
+      setServings(next.servings);
+      setYieldText(next.yieldText ?? "");
+      setPrepTimeMinutes(next.prepTimeMinutes);
+      setCookTimeMinutes(next.cookTimeMinutes);
+      setTotalTimeMinutes(next.totalTimeMinutes);
+      setIngredientSections(next.ingredientSections);
+      setInstructionGroups(next.instructionGroups);
+      setNotes(next.notes);
+      setReplacementSource(rawSource);
+      const retainedTags = `tags: ${baseline.tags.join(", ")}`.toLowerCase();
+      const unparsed = (parsed.unparsedContent ?? []).filter(
+        (text) => text.toLowerCase() !== retainedTags,
+      );
+      setReplacementUnparsed(unparsed);
       setReplacementWarnings([
         ...parsed.warnings,
-        ...(parsed.category && parsed.category.toLowerCase() !== baseline.category.toLowerCase()
-          ? [`Pasted category: ${parsed.category}. This recipe keeps category ${baseline.category}.`]
+        ...(parsed.category &&
+        parsed.category.toLowerCase() !== baseline.category.toLowerCase()
+          ? [
+              `Pasted category: ${parsed.category}. This recipe keeps category ${baseline.category}.`,
+            ]
           : []),
-      ])
+      ]);
     }
-    setParseError(null)
-    setReplacementPhase('review')
-  }
+    setParseError(null);
+    setReplacementPhase("review");
+  };
 
   const handleBackToInput = () => {
-    setImportStep('input')
-    setParsedPreview(null)
-  }
+    setImportStep("input");
+    setParsedPreview(null);
+  };
 
   // Handle auto-fix for validation issues
   const handleAutoFix = useCallback(() => {
-    const result = autoFixIngredients(ingredients)
-    let offset = 0
+    const result = autoFixIngredients(ingredients);
+    let offset = 0;
     setIngredientSections((current) =>
       current.map((section) => {
         const nextIngredients = result.ingredients.slice(
           offset,
-          offset + section.ingredients.length
-        )
-        offset += section.ingredients.length
-        return { ...section, ingredients: nextIngredients }
-      })
-    )
+          offset + section.ingredients.length,
+        );
+        offset += section.ingredients.length;
+        return { ...section, ingredients: nextIngredients };
+      }),
+    );
 
     if (result.fixedCount > 0) {
       undoToast.show({
         message: `Auto-fixed ${result.fixedCount} ingredient(s)`,
-        duration: 3000
-      })
+        duration: 3000,
+      });
     }
-  }, [ingredients, undoToast])
+  }, [ingredients, undoToast]);
 
   const handleRemoveExactDuplicates = useCallback(() => {
     const duplicateIndexes = new Set(
       analyzeIngredientDuplicates(ingredients).exactGroups.flatMap((group) =>
-        group.rowIndexes.slice(1)
-      )
-    )
+        group.rowIndexes.slice(1),
+      ),
+    );
     if (duplicateIndexes.size === 0) {
-      return
+      return;
     }
 
-    let globalIndex = 0
+    let globalIndex = 0;
     setIngredientSections((current) =>
       current.map((section) => ({
         ...section,
         ingredients: section.ingredients.filter(() => {
-          const shouldKeep = !duplicateIndexes.has(globalIndex)
-          globalIndex += 1
-          return shouldKeep
+          const shouldKeep = !duplicateIndexes.has(globalIndex);
+          globalIndex += 1;
+          return shouldKeep;
         }),
-      }))
-    )
+      })),
+    );
     undoToast.show({
       message: `Removed ${duplicateIndexes.size} exact duplicate ingredient row(s)`,
       duration: 3000,
-    })
-  }, [ingredients, undoToast])
-
+    });
+  }, [ingredients, undoToast]);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0];
+    if (!file) return;
 
     // Validate file type
-    if (!file.type.startsWith('image/')) {
-      undoToast.show({ message: 'Please select an image file', duration: 4000 })
-      return
+    if (!file.type.startsWith("image/")) {
+      undoToast.show({
+        message: "Please select an image file",
+        duration: 4000,
+      });
+      return;
     }
 
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
-      undoToast.show({ message: 'Image size must be less than 5MB', duration: 4000 })
-      return
+      undoToast.show({
+        message: "Image size must be less than 5MB",
+        duration: 4000,
+      });
+      return;
     }
 
-    setImageFile(file)
-    const reader = new FileReader()
+    setImageFile(file);
+    const reader = new FileReader();
     reader.onloadend = () => {
-      setImagePreview(reader.result as string)
-    }
-    reader.readAsDataURL(file)
-  }
+      setImagePreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleRemoveImage = () => {
-    setImageFile(null)
-    setImagePreview(null)
-    setImageUrl(null)
+    setImageFile(null);
+    setImagePreview(null);
+    setImageUrl(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      fileInputRef.current.value = "";
     }
-  }
+  };
 
   const handleSubmit = async () => {
-    if (submitInFlightRef.current) return
-    if (isEditing && (rawSource.trim() || replacementSource !== null) &&
-        (replacementSource !== rawSource || replacementUnparsed.length > 0 || replacementPhase !== 'review' || editTab !== 'replace')) {
-      setEditTab('replace')
-      setParseError('Review all replacement text before saving.')
-      return
+    if (submitInFlightRef.current) return;
+    if (
+      isEditing &&
+      (rawSource.trim() || replacementSource !== null) &&
+      (replacementSource !== rawSource ||
+        replacementUnparsed.length > 0 ||
+        replacementPhase !== "review" ||
+        editTab !== "replace")
+    ) {
+      setEditTab("replace");
+      setParseError("Review all replacement text before saving.");
+      return;
     }
-    setSaveError(null)
+    if (
+      !isEditing &&
+      (mobileImportPhase !== "review" || creationUnparsed.length > 0)
+    ) {
+      setSaveError(
+        "Review the recipe and resolve all unrecognized text before saving.",
+      );
+      return;
+    }
+    setSaveError(null);
 
     // P3: Validate ingredients before submitting (only blocking issues)
-    const blockingIssuesCount = countBlockingIngredientIssues(ingredients)
+    const blockingIssuesCount = countBlockingIngredientIssues(ingredients);
 
-    if (!isDesktop && mobileImportPhase === 'review' && !isEditing) {
+    if (mode !== "manual" && mobileImportPhase === "review" && !isEditing) {
       const invalidSection = getInvalidImportReviewSection({
         name,
         category,
         ingredients,
         instructionGroups,
         blockingIngredientIssues: blockingIssuesCount,
-      })
+      });
 
       if (invalidSection) {
-        setReviewSection(invalidSection)
+        setCreationEditing(true);
+        setReviewSection(invalidSection);
         undoToast.show({
           message: `Review the ${invalidSection} section before saving.`,
           duration: 5000,
-        })
-        return
+        });
+        return;
       }
     }
 
     if (blockingIssuesCount > 0) {
-      if (!isDesktop && mobileImportPhase === 'review') {
-        setReviewSection('ingredients')
+      if (!isEditing && mobileImportPhase === "review") {
+        setCreationEditing(true);
+        setReviewSection("ingredients");
       }
       undoToast.show({
         message: `${blockingIssuesCount} ingredient(s) have critical issues. Please fix them before saving.`,
-        duration: 5000
-      })
-      document.querySelector('[data-has-issues="true"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      return
+        duration: 5000,
+      });
+      document
+        .querySelector('[data-has-issues="true"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
     }
 
-    submitInFlightRef.current = true
-    setIsSubmitLocked(true)
+    submitInFlightRef.current = true;
+    setIsSubmitLocked(true);
     try {
-      let finalImageUrl = imageUrl
-      const nextRecipeId = editingRecipe?.id ??
-        (pendingCreateUuidRef.current ||= createRecipeUuid())
+      let finalImageUrl = imageUrl;
+      const nextRecipeId =
+        editingRecipe?.id ??
+        (pendingCreateUuidRef.current ||= createRecipeUuid());
 
       // Upload new image if one was selected
       if (imageFile) {
-        setIsUploadingImage(true)
+        setIsUploadingImage(true);
         try {
-          finalImageUrl = await uploadImage(nextRecipeId, imageFile)
+          finalImageUrl = await uploadImage(nextRecipeId, imageFile);
         } catch (error) {
-          console.error("Failed to upload image:", error)
-          undoToast.show({ message: "Failed to upload image. Recipe will be saved without image.", duration: 5000 })
-          finalImageUrl = imageUrl // Keep existing image if upload fails
+          console.error("Failed to upload image:", error);
+          undoToast.show({
+            message:
+              "Failed to upload image. Recipe will be saved without image.",
+            duration: 5000,
+          });
+          finalImageUrl = imageUrl; // Keep existing image if upload fails
         } finally {
-          setIsUploadingImage(false)
+          setIsUploadingImage(false);
         }
       }
 
       // Delete old image if it was removed
       if (editingRecipe?.image_url && !imageFile && !imageUrl) {
         try {
-          await deleteImage(editingRecipe.image_url)
+          await deleteImage(editingRecipe.image_url);
         } catch (error) {
-          console.error("Failed to delete old image:", error)
+          console.error("Failed to delete old image:", error);
           // Continue anyway - image deletion failure shouldn't block recipe save
         }
       }
@@ -873,42 +1015,53 @@ export function RecipeDialog({
         instructionGroups,
         notes,
         imageUrl: finalImageUrl,
-      })
+      });
 
       if (isEditing) {
         await updateRecipe.mutateAsync({
           id: editingRecipe!.id,
           updates: recipeData,
-        })
+        });
       } else {
         const created = await createRecipe.mutateAsync({
           ...recipeData,
           recipeUuid: nextRecipeId,
-        })
-        onRecipeCreated?.(created as Recipe)
+        });
+        undoToast.show({ message: "Recipe saved." });
+        onRecipeCreated?.(created as Recipe);
       }
-      onOpenChange(false)
+      onOpenChange(false);
     } catch (error) {
-      console.error("Failed to save recipe:", error)
-      setSaveError('Could not save changes. Your edits are still here. Try again.')
-      undoToast.show({ message: 'Failed to save recipe. Please try again.', duration: 6000 })
+      console.error("Failed to save recipe:", error);
+      setSaveError(
+        "Could not save changes. Your edits are still here. Try again.",
+      );
+      undoToast.show({
+        message: "Failed to save recipe. Please try again.",
+        duration: 6000,
+      });
     } finally {
-      submitInFlightRef.current = false
-      setIsSubmitLocked(false)
+      submitInFlightRef.current = false;
+      setIsSubmitLocked(false);
     }
-  }
+  };
 
-  const isSubmitting = isSubmitLocked || createRecipe.isPending || updateRecipe.isPending || isUploadingImage
+  const isSubmitting =
+    isSubmitLocked ||
+    createRecipe.isPending ||
+    updateRecipe.isPending ||
+    isUploadingImage;
 
   // Check if there's at least one valid ingredient
-  const hasValidIngredients = hasValidRecipeIngredients(ingredientSections)
+  const hasValidIngredients = hasValidRecipeIngredients(ingredientSections);
 
-  const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe"
+  const dialogTitle = isEditing ? "Edit Recipe" : "Add Recipe";
 
-  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
-  const initialEditingFormValues = isEditing ? loadedDraftRef.current : null
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const initialEditingFormValues = isEditing ? loadedDraftRef.current : null;
   const hasDirtyForm = isEditing
-    ? !!initialEditingFormValues && isEditingRecipeDialogDirty(initialEditingFormValues, {
+    ? !!initialEditingFormValues &&
+      isEditingRecipeDialogDirty(initialEditingFormValues, {
         name,
         category,
         servings,
@@ -936,777 +1089,1064 @@ export function RecipeDialog({
         instructionGroups,
         notes,
         imageReference: imagePreview ?? imageUrl,
-      })
-  const isDirty = hasDirtyForm || isImportWorkDirty({
-    rawSource,
-    importUrl,
-    hasParsedCandidate: parsedCandidate !== null,
-    hasAppliedCandidate: appliedRawSource !== null,
-  })
-  const dirtyRef = useRef(isDirty)
-  dirtyRef.current = isDirty
-  const openChangeRef = useRef(onOpenChange)
-  openChangeRef.current = onOpenChange
+      });
+  const isDirty =
+    hasDirtyForm ||
+    isImportWorkDirty({
+      rawSource,
+      importUrl,
+      hasParsedCandidate: parsedCandidate !== null,
+      hasAppliedCandidate: appliedRawSource !== null,
+    });
+  const dirtyRef = useRef(isDirty);
+  dirtyRef.current = isDirty;
+  const openChangeRef = useRef(onOpenChange);
+  openChangeRef.current = onOpenChange;
   useEffect(() => {
-    if (!open || !isEditing) return
+    if (!open || !isEditing) return;
     // One same-route history entry makes browser Back dismiss the editor through
     // the same discard protection as Cancel, before it can leave the recipe.
-    const pushEditorEntry = () => window.history.pushState(
-      { ...window.history.state, recipeGenieEditor: true }, '', window.location.href
-    )
-    let ownsEntry = true
-    pushEditorEntry()
+    const pushEditorEntry = () =>
+      window.history.pushState(
+        { ...window.history.state, recipeGenieEditor: true },
+        "",
+        window.location.href,
+      );
+    let ownsEntry = true;
+    pushEditorEntry();
     const handleBack = () => {
-      ownsEntry = false
+      ownsEntry = false;
       if (submitInFlightRef.current || dirtyRef.current) {
-        pushEditorEntry()
-        ownsEntry = true
+        pushEditorEntry();
+        ownsEntry = true;
         if (!submitInFlightRef.current) {
-          confirmationGuardRef.current = true
-          setShowDiscardConfirm(true)
+          confirmationGuardRef.current = true;
+          setShowDiscardConfirm(true);
         }
-      } else openChangeRef.current(false)
-    }
-    window.addEventListener('popstate', handleBack)
+      } else openChangeRef.current(false);
+    };
+    window.addEventListener("popstate", handleBack);
     return () => {
-      window.removeEventListener('popstate', handleBack)
-      if (ownsEntry && window.history.state?.recipeGenieEditor) window.history.back()
-    }
-  }, [open, isEditing])
-  const isMobileImportInput = !isDesktop && !isEditing && mode === 'import' &&
-    mobileImportPhase === 'input'
-  const isMobileImportReview = !isDesktop && !isEditing && mode === 'import' &&
-    mobileImportPhase === 'review'
+      window.removeEventListener("popstate", handleBack);
+      if (ownsEntry && window.history.state?.recipeGenieEditor)
+        window.history.back();
+    };
+  }, [open, isEditing]);
+  const isMobileImportInput =
+    !isEditing && mode !== "manual" && mobileImportPhase === "input";
+  const isMobileImportReview = !isEditing && mobileImportPhase === "review";
   const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen && submitInFlightRef.current) return
+    if (!nextOpen && submitInFlightRef.current) return;
     if (!nextOpen && confirmationGuardRef.current) {
-      return
+      return;
     }
     if (!nextOpen && isDirty) {
-      confirmationGuardRef.current = true
-      setShowDiscardConfirm(true)
-      return
+      confirmationGuardRef.current = true;
+      setShowDiscardConfirm(true);
+      return;
     }
-    onOpenChange(nextOpen)
-  }
+    onOpenChange(nextOpen);
+  };
 
   useEffect(() => {
-    if (!open || !isDirty) return
-    const protect = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-    window.addEventListener('beforeunload', protect)
-    return () => window.removeEventListener('beforeunload', protect)
-  }, [open, isDirty])
+    if (!open || !isDirty) return;
+    const protect = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", protect);
+    return () => window.removeEventListener("beforeunload", protect);
+  }, [open, isDirty]);
 
   const handleKeepEditing = () => {
-    setShowDiscardConfirm(false)
+    setShowDiscardConfirm(false);
     window.setTimeout(() => {
-      confirmationGuardRef.current = false
-      closeButtonRef.current?.focus()
-    }, 0)
-  }
+      confirmationGuardRef.current = false;
+      closeButtonRef.current?.focus();
+    }, 0);
+  };
 
   const handleKeepCurrentDraft = () => {
-    setShowReplacementConfirm(false)
+    setShowReplacementConfirm(false);
     window.setTimeout(() => {
-      confirmationGuardRef.current = false
-    }, 0)
-  }
+      confirmationGuardRef.current = false;
+    }, 0);
+  };
 
   const handleConfirmationOpenChange = (
     setOpen: (open: boolean) => void,
-    nextOpen: boolean
+    nextOpen: boolean,
   ) => {
-    setOpen(nextOpen)
+    setOpen(nextOpen);
     if (!nextOpen) {
       window.setTimeout(() => {
-        confirmationGuardRef.current = false
-      }, 0)
+        confirmationGuardRef.current = false;
+      }, 0);
     }
-  }
+  };
 
   return (
     <>
-    <AlertDialog
-      open={showDiscardConfirm}
-      onOpenChange={(nextOpen) => handleConfirmationOpenChange(setShowDiscardConfirm, nextOpen)}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
-          <AlertDialogDescription>
-            You have unsaved changes that will be lost. Are you sure you want to discard them?
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={handleKeepEditing}>Keep editing</AlertDialogCancel>
-          <AlertDialogAction onClick={() => {
-            confirmationGuardRef.current = false
-            setShowDiscardConfirm(false)
-            onOpenChange(false)
-          }}>
-            Discard
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-    <AlertDialog
-      open={showReplacementConfirm}
-      onOpenChange={(nextOpen) => handleConfirmationOpenChange(setShowReplacementConfirm, nextOpen)}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Replace your draft corrections?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Applying the reparsed source will replace the corrections you made in the current draft.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={handleKeepCurrentDraft}>
-            Keep current draft
-          </AlertDialogCancel>
-          <AlertDialogAction onClick={() => {
-            setShowReplacementConfirm(false)
-            if (isEditing) handleApplyReplacementPreview(true)
-            else applyCandidateForReview()
-            window.setTimeout(() => {
-              confirmationGuardRef.current = false
-            }, 0)
-          }}>
-            Replace corrections
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        onCloseAutoFocus={onCloseAutoFocus}
-        hideCloseButton
-        className={
-          isEditing || isMobileImportReview
-            ? "max-w-6xl w-full sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-t-3xl rounded-b-none sm:rounded-3xl overflow-hidden bg-card h-[100dvh] max-h-[100dvh] sm:h-[90vh] sm:max-h-[90vh] flex flex-col !top-0 !translate-y-0 sm:!top-1/2 sm:!-translate-y-1/2"
-            : "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92dvh] flex flex-col"
+      <AlertDialog
+        open={showDiscardConfirm}
+        onOpenChange={(nextOpen) =>
+          handleConfirmationOpenChange(setShowDiscardConfirm, nextOpen)
         }
       >
-        <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
-        {isEditing && (
-          <div className="sticky top-0 z-20 px-4 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-6 flex justify-between items-center border-b border-stone-200 dark:border-zinc-800 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-            {editTab === 'replace' && replacementPhase === 'review' ? <>
-              <Button type="button" variant="ghost" className="min-h-11 px-0" disabled={isSubmitting} onClick={() => setReplacementPhase('input')}>
-                <ArrowLeft className="mr-2 h-4 w-4" />Back to edit
-              </Button>
-              <h1 className="text-lg font-semibold sm:text-2xl">Preview recipe</h1>
-              <Button type="button" variant="ghost" className="min-h-11 px-0" disabled={isSubmitting} onClick={() => handleOpenChange(false)}>Cancel</Button>
-            </> : <>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-primary">Edit Recipe</h1>
-              <p className="text-sm text-muted-foreground">Edit details or replace with recipe text.</p>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes that will be lost. Are you sure you want
+              to discard them?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleKeepEditing}>
+              Keep editing
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                confirmationGuardRef.current = false;
+                setShowDiscardConfirm(false);
+                onOpenChange(false);
+              }}
+            >
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={showReplacementConfirm}
+        onOpenChange={(nextOpen) =>
+          handleConfirmationOpenChange(setShowReplacementConfirm, nextOpen)
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace your draft corrections?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Applying the reparsed source will replace the corrections you made
+              in the current draft.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleKeepCurrentDraft}>
+              Keep current draft
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setShowReplacementConfirm(false);
+                if (isEditing) handleApplyReplacementPreview(true);
+                else applyCandidateForReview();
+                window.setTimeout(() => {
+                  confirmationGuardRef.current = false;
+                }, 0);
+              }}
+            >
+              Replace corrections
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          onCloseAutoFocus={onCloseAutoFocus}
+          hideCloseButton
+          className={
+            isEditing || isMobileImportReview
+              ? "max-w-6xl w-full sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-t-3xl rounded-b-none sm:rounded-3xl overflow-hidden bg-card h-[100dvh] max-h-[100dvh] sm:h-[90vh] sm:max-h-[90vh] flex flex-col !top-0 !translate-y-0 sm:!top-1/2 sm:!-translate-y-1/2"
+              : "max-w-6xl w-[calc(100%-1rem)] sm:w-[calc(100%-2rem)] p-0 gap-0 border border-stone-200 dark:border-zinc-800 shadow-2xl rounded-xl overflow-hidden bg-card max-h-[92dvh] flex flex-col"
+          }
+        >
+          <DialogTitle className="sr-only">{dialogTitle}</DialogTitle>
+          {isEditing && (
+            <div className="sticky top-0 z-20 px-4 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] pb-4 sm:py-6 flex justify-between items-center border-b border-stone-200 dark:border-zinc-800 flex-shrink-0 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+              {editTab === "replace" && replacementPhase === "review" ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-11 px-0"
+                    disabled={isSubmitting}
+                    onClick={() => setReplacementPhase("input")}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to edit
+                  </Button>
+                  <h1 className="text-lg font-semibold sm:text-2xl">
+                    Preview recipe
+                  </h1>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-11 px-0"
+                    disabled={isSubmitting}
+                    onClick={() => handleOpenChange(false)}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-bold text-primary">
+                      Edit Recipe
+                    </h1>
+                    <p className="text-sm text-muted-foreground">
+                      Edit details or replace with recipe text.
+                    </p>
+                  </div>
+                  <DialogClose asChild>
+                    <button
+                      ref={closeButtonRef}
+                      type="button"
+                      className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                      aria-label="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </DialogClose>
+                </>
+              )}
             </div>
-            <DialogClose asChild>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </DialogClose>
-            </>}
-          </div>
-        )}
+          )}
 
-        {isMobileImportReview && (
-          <div className="sticky top-0 z-20 flex flex-shrink-0 items-center justify-between border-b border-stone-200 bg-card/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur dark:border-zinc-800">
-            <div>
-              <h1 className="text-lg font-bold text-primary">Review imported recipe</h1>
-              <p className="text-xs text-muted-foreground">Edit each section before saving.</p>
-            </div>
-            <DialogClose asChild>
-              <button
-                ref={closeButtonRef}
-                type="button"
-                className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </DialogClose>
-          </div>
-        )}
-
-        {!isEditing && !isMobileImportReview && (
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "manual" | "import")} className="flex-1 min-h-0 flex flex-col">
-            <div className="px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 flex justify-between items-center border-b border-stone-100 dark:border-zinc-900 flex-shrink-0 gap-2">
-              <TabsList className="flex w-fit rounded-full p-1 bg-stone-100 dark:bg-zinc-900 gap-0 min-w-0">
-                <TabsTrigger
-                  value="manual"
-                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 rounded-full text-xs font-bold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
-                >
-                  <PenTool className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
-                  <span>{isDesktop ? "Manual Entry" : "Manual"}</span>
-                </TabsTrigger>
-                <TabsTrigger
-                  value="import"
-                  className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-1.5 rounded-full text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-primary data-[state=inactive]:text-stone-500 dark:data-[state=inactive]:text-stone-400 transition-all"
-                >
-                  <FileText className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
-                  Import
-                </TabsTrigger>
-              </TabsList>
+          {isMobileImportReview && (
+            <div className="sticky top-0 z-20 flex flex-shrink-0 items-center justify-between border-b border-stone-200 bg-card/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur dark:border-zinc-800">
+              <div>
+                <h1 className="text-lg font-bold text-primary">
+                  Review your recipe
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Read it through. Edit anything before saving.
+                </p>
+              </div>
               <DialogClose asChild>
                 <button
                   ref={closeButtonRef}
                   type="button"
-                  className="p-2 hover:bg-stone-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-stone-400 shrink-0"
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   aria-label="Close"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </DialogClose>
             </div>
-            <TabsContent value="import" className="space-y-4 mt-0 flex-1 overflow-y-auto pb-6 sm:pb-8 px-4 sm:px-8 scrollbar-recipe-dialog data-[state=inactive]:hidden">
-              <RecipeImportSection
-                importStep={importStep}
-                importUrl={importUrl}
-                importText={rawSource}
-                parseError={parseError}
-                livePreview={parsedCandidate}
-                parsedPreview={parsedPreview}
-                isImportingFromUrl={importFromUrl.isPending}
-                compactMobile={!isDesktop}
-                isParsing={isParsing}
-                onImportUrlChange={(value) => {
-                  importUrlRef.current = value
-                  setImportUrl(value)
-                  setParseError(null)
-                  if (parsedCandidateKey?.startsWith('url:')) {
-                    setParsedCandidate(null)
-                    setParsedCandidateKey(null)
-                  }
-                }}
-                onImportTextChange={(value) => {
-                  rawSourceRef.current = value
-                  setRawSource(value)
-                  setParseError(null)
-                  setParsedCandidate(null)
-                  setParsedCandidateKey(null)
-                  setIsParsing(!!value.trim())
-                  if (value.trim()) {
-                    debouncedParse(value)
-                  } else {
-                    setIsParsing(false)
-                  }
-                }}
-                onImportUrl={handleUrlImport}
-                onApplyLivePreview={() => {
-                  if (!parsedCandidate) return
-                  handleReviewCandidate()
-                }}
-                onBackToInput={handleBackToInput}
-                onApplyPreview={handleApplyPreview}
-              />
-            </TabsContent>
+          )}
 
-            <TabsContent value="manual" className="mt-0 flex-1 overflow-y-auto min-h-0 scrollbar-recipe-dialog data-[state=inactive]:hidden">
-              <RecipeFormContent
-                name={name}
-                setName={setName}
-                category={category}
-                setCategory={setCategory}
-                servings={servings}
-                setServings={setServings}
-                yieldText={yieldText}
-                setYieldText={setYieldText}
-                prepTimeMinutes={prepTimeMinutes}
-                setPrepTimeMinutes={setPrepTimeMinutes}
-                cookTimeMinutes={cookTimeMinutes}
-                setCookTimeMinutes={setCookTimeMinutes}
-                totalTimeMinutes={totalTimeMinutes}
-                setTotalTimeMinutes={setTotalTimeMinutes}
-                tags={tags}
-                setTags={setTags}
-                allTags={allTags}
-                tagCounts={tagCounts}
-                ingredientSections={ingredientSections}
-                instructionGroups={instructionGroups}
-                setInstructionGroups={setInstructionGroups}
-                notes={notes}
-                setNotes={setNotes}
-                categories={categories}
-                onAddIngredient={handleAddIngredient}
-                onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
-                onAddIngredientSection={handleAddIngredientSection}
-                onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
-                onRemoveIngredientSection={handleRemoveIngredientSection}
-                onMoveIngredient={handleMoveIngredient}
-                onRemoveIngredient={handleRemoveIngredient}
-                onIngredientChange={handleIngredientChange}
-                onIngredientAlternativesChange={handleIngredientAlternativesChange}
-                onIngredientParsed={handleIngredientParsed}
-                isEditing={false}
-                onReorderIngredients={handleReorderIngredients}
-                onBulkPasteIngredients={handleBulkPasteIngredients}
-                handleAutoFix={handleAutoFix}
-                onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                isWideViewport={isDesktop}
-                imagePreview={imagePreview}
-                imageUrl={imageUrl}
-                onImageSelect={handleImageSelect}
-                onRemoveImage={handleRemoveImage}
-                fileInputRef={fileInputRef}
-              />
-            </TabsContent>
-          </Tabs>
-        )}
-
-        {isMobileImportReview && (
-          <Tabs
-            value={reviewSection}
-            onValueChange={(value) => setReviewSection(value as ImportReviewSection)}
-            className="flex min-h-0 flex-1 flex-col"
-          >
-            <div className="flex-shrink-0 border-b border-stone-200 bg-card px-3 py-2 dark:border-zinc-800">
-              <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
-                <TabsTrigger value="details" className="min-h-11 rounded-lg text-sm font-semibold">Details</TabsTrigger>
-                <TabsTrigger value="ingredients" className="rounded-lg text-xs font-semibold">Ingredients</TabsTrigger>
-                <TabsTrigger value="instructions" className="rounded-lg text-xs font-semibold">Instructions</TabsTrigger>
-              </TabsList>
-              {parsedCandidate?.warnings.length ? (
-                <div className="mt-2 flex gap-2 overflow-x-auto pb-1" aria-label="Import warnings">
-                  {parsedCandidate.warnings.map((warning, index) => (
-                    <button
-                      key={`${warning}-${index}`}
-                      type="button"
-                      onClick={() => setReviewSection(mapImportWarningToSection(warning))}
-                      className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
-                    >
-                      {warning}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <div
-              className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-recipe-dialog"
-              data-testid="import-review-scroller"
-            >
-              <RecipeFormContent
-                editSection={reviewSection}
-                name={name}
-                setName={setName}
-                category={category}
-                setCategory={setCategory}
-                servings={servings}
-                setServings={setServings}
-                yieldText={yieldText}
-                setYieldText={setYieldText}
-                prepTimeMinutes={prepTimeMinutes}
-                setPrepTimeMinutes={setPrepTimeMinutes}
-                cookTimeMinutes={cookTimeMinutes}
-                setCookTimeMinutes={setCookTimeMinutes}
-                totalTimeMinutes={totalTimeMinutes}
-                setTotalTimeMinutes={setTotalTimeMinutes}
-                tags={tags}
-                setTags={setTags}
-                allTags={allTags}
-                tagCounts={tagCounts}
-                ingredientSections={ingredientSections}
-                instructionGroups={instructionGroups}
-                setInstructionGroups={setInstructionGroups}
-                notes={notes}
-                setNotes={setNotes}
-                categories={categories}
-                onAddIngredient={handleAddIngredient}
-                onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
-                onAddIngredientSection={handleAddIngredientSection}
-                onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
-                onRemoveIngredientSection={handleRemoveIngredientSection}
-                onMoveIngredient={handleMoveIngredient}
-                onRemoveIngredient={handleRemoveIngredient}
-                onIngredientChange={handleIngredientChange}
-                onIngredientAlternativesChange={handleIngredientAlternativesChange}
-                onIngredientParsed={handleIngredientParsed}
-                isEditing={true}
-                onReorderIngredients={handleReorderIngredients}
-                onBulkPasteIngredients={handleBulkPasteIngredients}
-                handleAutoFix={handleAutoFix}
-                onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                isWideViewport={false}
-                imagePreview={imagePreview}
-                imageUrl={imageUrl}
-                onImageSelect={handleImageSelect}
-                onRemoveImage={handleRemoveImage}
-                fileInputRef={fileInputRef}
-              />
-            </div>
-          </Tabs>
-        )}
-
-        {isEditing && (
-          <Tabs
-            value={editTab}
-            onValueChange={(value) => { if (!isSubmitting) setEditTab(value as typeof editTab) }}
-            className="flex flex-1 min-h-0 flex-col"
-          >
-            <div hidden={editTab === 'replace' && replacementPhase === 'review'} className="border-b border-stone-200 bg-card px-4 py-3 dark:border-zinc-800 sm:px-8">
-              <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:inline-grid sm:w-auto sm:grid-cols-4">
-                <TabsTrigger value="details" className="rounded-lg text-xs font-semibold">
-                  Details
-                </TabsTrigger>
-                <TabsTrigger value="ingredients" className="rounded-lg text-xs font-semibold">
-                  Ingredients
-                </TabsTrigger>
-                <TabsTrigger value="instructions" className="rounded-lg text-xs font-semibold">
-                  Instructions
-                </TabsTrigger>
-                <TabsTrigger value="replace" className="rounded-lg text-xs font-semibold">
-                  Replace text
-                </TabsTrigger>
-              </TabsList>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4 sm:p-6 lg:p-8 scrollbar-recipe-dialog">
-              <TabsContent value="details" className="mt-0 data-[state=inactive]:hidden">
-                <RecipeFormContent
-                  editSection="details"
-                  name={name}
-                  setName={setName}
-                  category={category}
-                  setCategory={setCategory}
-                  servings={servings}
-                  setServings={setServings}
-                  yieldText={yieldText}
-                  setYieldText={setYieldText}
-                  prepTimeMinutes={prepTimeMinutes}
-                  setPrepTimeMinutes={setPrepTimeMinutes}
-                  cookTimeMinutes={cookTimeMinutes}
-                  setCookTimeMinutes={setCookTimeMinutes}
-                  totalTimeMinutes={totalTimeMinutes}
-                  setTotalTimeMinutes={setTotalTimeMinutes}
-                  tags={tags}
-                  setTags={setTags}
-                  allTags={allTags}
-                  tagCounts={tagCounts}
-                  ingredientSections={ingredientSections}
-                  instructionGroups={instructionGroups}
-                  setInstructionGroups={setInstructionGroups}
-                  notes={notes}
-                  setNotes={setNotes}
-                  categories={categories}
-                  onAddIngredient={handleAddIngredient}
-                  onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
-                  onAddIngredientSection={handleAddIngredientSection}
-                  onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
-                  onRemoveIngredientSection={handleRemoveIngredientSection}
-                  onMoveIngredient={handleMoveIngredient}
-                  onRemoveIngredient={handleRemoveIngredient}
-                  onIngredientChange={handleIngredientChange}
-                  onIngredientAlternativesChange={handleIngredientAlternativesChange}
-                  onIngredientParsed={handleIngredientParsed}
-                  isEditing={true}
-                  onReorderIngredients={handleReorderIngredients}
-                  onBulkPasteIngredients={handleBulkPasteIngredients}
-                  handleAutoFix={handleAutoFix}
-                  onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                  isWideViewport={isDesktop}
-                  imagePreview={imagePreview}
-                  imageUrl={imageUrl}
-                  onImageSelect={handleImageSelect}
-                  onRemoveImage={handleRemoveImage}
-                  fileInputRef={fileInputRef}
-                />
-              </TabsContent>
-              <TabsContent value="ingredients" className="mt-0 data-[state=inactive]:hidden">
-                <RecipeFormContent
-                  editSection="ingredients"
-                  name={name}
-                  setName={setName}
-                  category={category}
-                  setCategory={setCategory}
-                  servings={servings}
-                  setServings={setServings}
-                  yieldText={yieldText}
-                  setYieldText={setYieldText}
-                  prepTimeMinutes={prepTimeMinutes}
-                  setPrepTimeMinutes={setPrepTimeMinutes}
-                  cookTimeMinutes={cookTimeMinutes}
-                  setCookTimeMinutes={setCookTimeMinutes}
-                  totalTimeMinutes={totalTimeMinutes}
-                  setTotalTimeMinutes={setTotalTimeMinutes}
-                  tags={tags}
-                  setTags={setTags}
-                  allTags={allTags}
-                  tagCounts={tagCounts}
-                  ingredientSections={ingredientSections}
-                  instructionGroups={instructionGroups}
-                  setInstructionGroups={setInstructionGroups}
-                  notes={notes}
-                  setNotes={setNotes}
-                  categories={categories}
-                  onAddIngredient={handleAddIngredient}
-                  onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
-                  onAddIngredientSection={handleAddIngredientSection}
-                  onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
-                  onRemoveIngredientSection={handleRemoveIngredientSection}
-                  onMoveIngredient={handleMoveIngredient}
-                  onRemoveIngredient={handleRemoveIngredient}
-                  onIngredientChange={handleIngredientChange}
-                  onIngredientAlternativesChange={handleIngredientAlternativesChange}
-                  onIngredientParsed={handleIngredientParsed}
-                  isEditing={true}
-                  onReorderIngredients={handleReorderIngredients}
-                  onBulkPasteIngredients={handleBulkPasteIngredients}
-                  handleAutoFix={handleAutoFix}
-                  onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                  isWideViewport={isDesktop}
-                  imagePreview={imagePreview}
-                  imageUrl={imageUrl}
-                  onImageSelect={handleImageSelect}
-                  onRemoveImage={handleRemoveImage}
-                  fileInputRef={fileInputRef}
-                />
-              </TabsContent>
-              <TabsContent value="instructions" className="mt-0 data-[state=inactive]:hidden">
-                <RecipeFormContent
-                  editSection="instructions"
-                  name={name}
-                  setName={setName}
-                  category={category}
-                  setCategory={setCategory}
-                  servings={servings}
-                  setServings={setServings}
-                  yieldText={yieldText}
-                  setYieldText={setYieldText}
-                  prepTimeMinutes={prepTimeMinutes}
-                  setPrepTimeMinutes={setPrepTimeMinutes}
-                  cookTimeMinutes={cookTimeMinutes}
-                  setCookTimeMinutes={setCookTimeMinutes}
-                  totalTimeMinutes={totalTimeMinutes}
-                  setTotalTimeMinutes={setTotalTimeMinutes}
-                  tags={tags}
-                  setTags={setTags}
-                  allTags={allTags}
-                  tagCounts={tagCounts}
-                  ingredientSections={ingredientSections}
-                  instructionGroups={instructionGroups}
-                  setInstructionGroups={setInstructionGroups}
-                  notes={notes}
-                  setNotes={setNotes}
-                  categories={categories}
-                  onAddIngredient={handleAddIngredient}
-                  onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
-                  onAddIngredientSection={handleAddIngredientSection}
-                  onIngredientSectionLabelChange={handleIngredientSectionLabelChange}
-                  onRemoveIngredientSection={handleRemoveIngredientSection}
-                  onMoveIngredient={handleMoveIngredient}
-                  onRemoveIngredient={handleRemoveIngredient}
-                  onIngredientChange={handleIngredientChange}
-                  onIngredientAlternativesChange={handleIngredientAlternativesChange}
-                  onIngredientParsed={handleIngredientParsed}
-                  isEditing={true}
-                  onReorderIngredients={handleReorderIngredients}
-                  onBulkPasteIngredients={handleBulkPasteIngredients}
-                  handleAutoFix={handleAutoFix}
-                  onRemoveExactDuplicates={handleRemoveExactDuplicates}
-                  isWideViewport={isDesktop}
-                  imagePreview={imagePreview}
-                  imageUrl={imageUrl}
-                  onImageSelect={handleImageSelect}
-                  onRemoveImage={handleRemoveImage}
-                  fileInputRef={fileInputRef}
-                />
-              </TabsContent>
-              <TabsContent value="replace" className="mt-0 data-[state=inactive]:hidden">
-                {replacementPhase === 'review' && replacementBaseline ? (
-                  <RecipeReplacementReview updated={currentDraft} unparsed={replacementUnparsed} warnings={replacementWarnings} />
-                ) : <RecipeImportSection
-                  variant="replace"
-                  showUrlImport={false}
-                  currentRecipeName={name}
-                  requireInstructions={false}
-                  importStep="input"
-                  importUrl={importUrl}
-                  importText={rawSource}
-                  parseError={parseError}
-                  livePreview={parsedCandidate}
-                  parsedPreview={null}
-                  isImportingFromUrl={false}
-                  onImportUrlChange={(value) => {
-                    importUrlRef.current = value
-                    setImportUrl(value)
-                    setParseError(null)
-                    if (parsedCandidateKey?.startsWith('url:')) {
-                      setParsedCandidate(null)
-                      setParsedCandidateKey(null)
-                    }
-                  }}
-                  onImportTextChange={(value) => {
-                    rawSourceRef.current = value
-                    setRawSource(value)
-                    setParseError(null)
-                    setParsedCandidate(null)
-                    setParsedCandidateKey(null)
-                    setIsParsing(!!value.trim())
-                    if (value.trim()) debouncedParse(value)
-                  }}
-                  onImportUrl={handleUrlImport}
-                  onApplyLivePreview={handleApplyReplacementPreview}
-                  onBackToInput={handleBackToInput}
-                  onApplyPreview={handleApplyPreview}
-                />}
-              </TabsContent>
-            </div>
-          </Tabs>
-        )}
-
-        {(isEditing || mode === 'manual' || isMobileImportInput || isMobileImportReview) && (
-          <DialogFooter
-          className={
-            isEditing || isMobileImportReview
-              ? "sticky bottom-0 z-20 px-4 sm:px-8 py-4 sm:py-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-muted/85 dark:bg-zinc-900/85 border-t border-stone-200 dark:border-zinc-800 backdrop-blur supports-[backdrop-filter]:bg-muted/70 flex flex-col items-end flex-shrink-0"
-              : "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col items-end flex-shrink-0"
-          }
-        >
-          {saveError && <p role="alert" className="mb-3 w-full text-sm text-destructive">{saveError}</p>}
-          {isEditing && editTab === 'replace' ? (
-            <div className="w-full space-y-2">
-              <div className="flex w-full gap-3">
-                <Button type="button" variant="outline" className="min-h-11 flex-1" disabled={isSubmitting} onClick={() => replacementPhase === 'review' ? setReplacementPhase('input') : handleOpenChange(false)}>
-                  {replacementPhase === 'review' ? 'Back to edit' : 'Cancel'}
-                </Button>
-                <Button type="button" className="min-h-11 flex-1" onClick={() => replacementPhase === 'review' ? handleSubmit() : handleApplyReplacementPreview()}
-                  disabled={isSubmitting || !rawSource.trim() || (replacementPhase === 'review' && (replacementUnparsed.length > 0 || replacementSource !== rawSource || !name.trim() || !hasValidIngredients))}>
-                  {isSubmitting ? 'Saving…' : replacementPhase === 'review' ? 'Save changes' : 'Review changes'}
-                </Button>
+          {!isEditing && !isMobileImportReview && (
+            <>
+              <div className="border-b px-4 py-5 sm:px-8">
+                <h1 className="font-display text-3xl font-semibold text-primary">
+                  Add a recipe
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Bring a recipe you love into your collection.
+                </p>
               </div>
-              <p className="text-center text-xs text-muted-foreground">Nothing changes until you save.</p>
-            </div>
-          ) : isMobileImportInput ? (
-            <Button
-              type="button"
-              onClick={handleReviewCandidate}
-              disabled={!canReviewImportedRecipe(parsedCandidate) || isParsing}
-              className="w-full"
-              size="lg"
+              <Tabs
+                value={mode}
+                onValueChange={(v) => {
+                  setMode(v as "manual" | "import" | "url");
+                  activeMethodRef.current = v as "manual" | "import" | "url";
+                  urlRequestRef.current += 1;
+                  setIsParsing(false);
+                  if (v === "import" && rawSource.trim()) {
+                    setIsParsing(true);
+                    debouncedParse(rawSource);
+                  } else if (v === "import") {
+                    setParsedCandidate(null);
+                    setParsedCandidateKey(null);
+                  } else if (
+                    v === "url" &&
+                    !parsedCandidateKey?.startsWith("url:")
+                  ) {
+                    setParsedCandidate(null);
+                    setParsedCandidateKey(null);
+                  }
+                }}
+                className="flex-1 min-h-0 flex flex-col"
+              >
+                <div className="px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 flex justify-between items-center border-b border-stone-100 dark:border-zinc-900 flex-shrink-0 gap-2">
+                  <TabsList className="flex w-fit rounded-full p-1 bg-stone-100 dark:bg-zinc-900 gap-0 min-w-0">
+                    <TabsTrigger
+                      value="import"
+                      className="min-h-11 rounded-full px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      Paste text
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="url"
+                      className="min-h-11 rounded-full px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      From URL
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="manual"
+                      className="min-h-11 rounded-full px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      Manual
+                    </TabsTrigger>
+                  </TabsList>
+                  <DialogClose asChild>
+                    <button
+                      ref={closeButtonRef}
+                      type="button"
+                      className="min-h-11 min-w-11 p-2 hover:bg-stone-100 dark:hover:bg-zinc-800 rounded-full transition-colors text-stone-400 shrink-0"
+                      aria-label="Close"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </DialogClose>
+                </div>
+                <TabsContent
+                  value={mode === "url" ? "url" : "import"}
+                  className="space-y-4 mt-0 flex-1 overflow-y-auto pb-6 sm:pb-8 px-4 sm:px-8 scrollbar-recipe-dialog data-[state=inactive]:hidden"
+                >
+                  <RecipeImportSection
+                    importStep={importStep}
+                    importUrl={importUrl}
+                    importText={rawSource}
+                    parseError={parseError}
+                    livePreview={parsedCandidate}
+                    parsedPreview={parsedPreview}
+                    isImportingFromUrl={importFromUrl.isPending}
+                    compactMobile
+                    showUrlImport={mode === "url"}
+                    showTextImport={mode !== "url"}
+                    isParsing={isParsing}
+                    onImportUrlChange={(value) => {
+                      importUrlRef.current = value;
+                      setImportUrl(value);
+                      setParseError(null);
+                      if (parsedCandidateKey?.startsWith("url:")) {
+                        setParsedCandidate(null);
+                        setParsedCandidateKey(null);
+                      }
+                    }}
+                    onImportTextChange={(value) => {
+                      rawSourceRef.current = value;
+                      setRawSource(value);
+                      setParseError(null);
+                      setParsedCandidate(null);
+                      setParsedCandidateKey(null);
+                      setIsParsing(!!value.trim());
+                      if (value.trim()) {
+                        debouncedParse(value);
+                      } else {
+                        setIsParsing(false);
+                      }
+                    }}
+                    onImportUrl={handleUrlImport}
+                    onApplyLivePreview={() => {
+                      if (!parsedCandidate) return;
+                      handleReviewCandidate();
+                    }}
+                    onBackToInput={handleBackToInput}
+                    onApplyPreview={handleApplyPreview}
+                  />
+                </TabsContent>
+
+                <TabsContent
+                  value="manual"
+                  className="mt-0 flex-1 overflow-y-auto min-h-0 scrollbar-recipe-dialog data-[state=inactive]:hidden"
+                >
+                  <RecipeFormContent
+                    name={name}
+                    setName={setName}
+                    category={category}
+                    setCategory={setCategory}
+                    servings={servings}
+                    setServings={setServings}
+                    yieldText={yieldText}
+                    setYieldText={setYieldText}
+                    prepTimeMinutes={prepTimeMinutes}
+                    setPrepTimeMinutes={setPrepTimeMinutes}
+                    cookTimeMinutes={cookTimeMinutes}
+                    setCookTimeMinutes={setCookTimeMinutes}
+                    totalTimeMinutes={totalTimeMinutes}
+                    setTotalTimeMinutes={setTotalTimeMinutes}
+                    tags={tags}
+                    setTags={setTags}
+                    allTags={allTags}
+                    tagCounts={tagCounts}
+                    ingredientSections={ingredientSections}
+                    instructionGroups={instructionGroups}
+                    setInstructionGroups={setInstructionGroups}
+                    notes={notes}
+                    setNotes={setNotes}
+                    categories={categories}
+                    onAddIngredient={handleAddIngredient}
+                    onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                    onAddIngredientSection={handleAddIngredientSection}
+                    onIngredientSectionLabelChange={
+                      handleIngredientSectionLabelChange
+                    }
+                    onRemoveIngredientSection={handleRemoveIngredientSection}
+                    onMoveIngredient={handleMoveIngredient}
+                    onRemoveIngredient={handleRemoveIngredient}
+                    onIngredientChange={handleIngredientChange}
+                    onIngredientAlternativesChange={
+                      handleIngredientAlternativesChange
+                    }
+                    onIngredientParsed={handleIngredientParsed}
+                    isEditing={false}
+                    onReorderIngredients={handleReorderIngredients}
+                    onBulkPasteIngredients={handleBulkPasteIngredients}
+                    handleAutoFix={handleAutoFix}
+                    onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                    isWideViewport={isDesktop}
+                    imagePreview={imagePreview}
+                    imageUrl={imageUrl}
+                    onImageSelect={handleImageSelect}
+                    onRemoveImage={handleRemoveImage}
+                    fileInputRef={fileInputRef}
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+
+          {isMobileImportReview && (
+            <Tabs
+              value={reviewSection}
+              onValueChange={(value) =>
+                setReviewSection(value as ImportReviewSection)
+              }
+              className="flex min-h-0 flex-1 flex-col"
             >
-              Review imported recipe
-            </Button>
-          ) : isMobileImportReview ? (
-            <div className="flex w-full gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setMobileImportPhase('input')}
-                className="flex-1"
+              {creationEditing && (
+                <div className="flex-shrink-0 border-b border-stone-200 bg-card px-3 py-2 dark:border-zinc-800">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="min-h-11"
+                    onClick={() => setCreationEditing(false)}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Back to preview
+                  </Button>
+                  <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+                    <TabsTrigger
+                      value="details"
+                      className="min-h-11 rounded-lg text-sm font-semibold"
+                    >
+                      Details
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="ingredients"
+                      className="rounded-lg text-xs font-semibold"
+                    >
+                      Ingredients
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="instructions"
+                      className="rounded-lg text-xs font-semibold"
+                    >
+                      Instructions
+                    </TabsTrigger>
+                  </TabsList>
+                  {parsedCandidate?.warnings.length ? (
+                    <div
+                      className="mt-2 flex gap-2 overflow-x-auto pb-1"
+                      aria-label="Import warnings"
+                    >
+                      {parsedCandidate.warnings.map((warning, index) => (
+                        <button
+                          key={`${warning}-${index}`}
+                          type="button"
+                          onClick={() =>
+                            setReviewSection(mapImportWarningToSection(warning))
+                          }
+                          className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-300"
+                        >
+                          {warning}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              <div
+                className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-recipe-dialog"
+                data-testid="import-review-scroller"
               >
-                Back to imported text
-              </Button>
-              <Button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!name.trim() || !category || !hasValidIngredients || isSubmitting}
-                className="flex-1"
+                {!creationEditing ? (
+                  <RecipeReplacementReview
+                    variant="create"
+                    compact={!isDesktop}
+                    updated={currentDraft}
+                    unparsed={creationUnparsed}
+                    warnings={parsedCandidate?.warnings ?? []}
+                    onEdit={(section) => {
+                      if (isSubmitting) return;
+                      setReviewSection(section);
+                      setCreationEditing(true);
+                    }}
+                    onEditSource={() => {
+                      if (!isSubmitting) setMobileImportPhase("input");
+                    }}
+                    onKeepUnparsed={() => {
+                      if (isSubmitting) return;
+                      setNotes((current) =>
+                        [current, ...creationUnparsed]
+                          .filter(Boolean)
+                          .join("\n"),
+                      );
+                      setCreationUnparsed([]);
+                    }}
+                  />
+                ) : (
+                  <RecipeFormContent
+                    editSection={reviewSection}
+                    name={name}
+                    setName={setName}
+                    category={category}
+                    setCategory={setCategory}
+                    servings={servings}
+                    setServings={setServings}
+                    yieldText={yieldText}
+                    setYieldText={setYieldText}
+                    prepTimeMinutes={prepTimeMinutes}
+                    setPrepTimeMinutes={setPrepTimeMinutes}
+                    cookTimeMinutes={cookTimeMinutes}
+                    setCookTimeMinutes={setCookTimeMinutes}
+                    totalTimeMinutes={totalTimeMinutes}
+                    setTotalTimeMinutes={setTotalTimeMinutes}
+                    tags={tags}
+                    setTags={setTags}
+                    allTags={allTags}
+                    tagCounts={tagCounts}
+                    ingredientSections={ingredientSections}
+                    instructionGroups={instructionGroups}
+                    setInstructionGroups={setInstructionGroups}
+                    notes={notes}
+                    setNotes={setNotes}
+                    categories={categories}
+                    onAddIngredient={handleAddIngredient}
+                    onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                    onAddIngredientSection={handleAddIngredientSection}
+                    onIngredientSectionLabelChange={
+                      handleIngredientSectionLabelChange
+                    }
+                    onRemoveIngredientSection={handleRemoveIngredientSection}
+                    onMoveIngredient={handleMoveIngredient}
+                    onRemoveIngredient={handleRemoveIngredient}
+                    onIngredientChange={handleIngredientChange}
+                    onIngredientAlternativesChange={
+                      handleIngredientAlternativesChange
+                    }
+                    onIngredientParsed={handleIngredientParsed}
+                    isEditing={true}
+                    onReorderIngredients={handleReorderIngredients}
+                    onBulkPasteIngredients={handleBulkPasteIngredients}
+                    handleAutoFix={handleAutoFix}
+                    onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                    isWideViewport={isDesktop}
+                    imagePreview={imagePreview}
+                    imageUrl={imageUrl}
+                    onImageSelect={handleImageSelect}
+                    onRemoveImage={handleRemoveImage}
+                    fileInputRef={fileInputRef}
+                  />
+                )}
+              </div>
+            </Tabs>
+          )}
+
+          {isEditing && (
+            <Tabs
+              value={editTab}
+              onValueChange={(value) => {
+                if (!isSubmitting) setEditTab(value as typeof editTab);
+              }}
+              className="flex flex-1 min-h-0 flex-col"
+            >
+              <div
+                hidden={editTab === "replace" && replacementPhase === "review"}
+                className="border-b border-stone-200 bg-card px-4 py-3 dark:border-zinc-800 sm:px-8"
               >
-                {isSubmitting ? 'Saving…' : 'Save Recipe'}
-              </Button>
-            </div>
-          ) : (
-            <RecipeDialogActions
-              isEditing={isEditing}
-              isSubmitting={isSubmitting}
-              isUploadingImage={isUploadingImage}
-              canSubmit={!!name.trim() && !!category && hasValidIngredients && !isSubmitting && (!isEditing || !!editingRecipe)}
-              onCancel={() => handleOpenChange(false)}
-              onSubmit={handleSubmit}
-            />
+                <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-muted p-1 sm:inline-grid sm:w-auto sm:grid-cols-4">
+                  <TabsTrigger
+                    value="details"
+                    className="rounded-lg text-xs font-semibold"
+                  >
+                    Details
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="ingredients"
+                    className="rounded-lg text-xs font-semibold"
+                  >
+                    Ingredients
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="instructions"
+                    className="rounded-lg text-xs font-semibold"
+                  >
+                    Instructions
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="replace"
+                    className="rounded-lg text-xs font-semibold"
+                  >
+                    Replace text
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-4 sm:p-6 lg:p-8 scrollbar-recipe-dialog">
+                <TabsContent
+                  value="details"
+                  className="mt-0 data-[state=inactive]:hidden"
+                >
+                  <RecipeFormContent
+                    editSection="details"
+                    name={name}
+                    setName={setName}
+                    category={category}
+                    setCategory={setCategory}
+                    servings={servings}
+                    setServings={setServings}
+                    yieldText={yieldText}
+                    setYieldText={setYieldText}
+                    prepTimeMinutes={prepTimeMinutes}
+                    setPrepTimeMinutes={setPrepTimeMinutes}
+                    cookTimeMinutes={cookTimeMinutes}
+                    setCookTimeMinutes={setCookTimeMinutes}
+                    totalTimeMinutes={totalTimeMinutes}
+                    setTotalTimeMinutes={setTotalTimeMinutes}
+                    tags={tags}
+                    setTags={setTags}
+                    allTags={allTags}
+                    tagCounts={tagCounts}
+                    ingredientSections={ingredientSections}
+                    instructionGroups={instructionGroups}
+                    setInstructionGroups={setInstructionGroups}
+                    notes={notes}
+                    setNotes={setNotes}
+                    categories={categories}
+                    onAddIngredient={handleAddIngredient}
+                    onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                    onAddIngredientSection={handleAddIngredientSection}
+                    onIngredientSectionLabelChange={
+                      handleIngredientSectionLabelChange
+                    }
+                    onRemoveIngredientSection={handleRemoveIngredientSection}
+                    onMoveIngredient={handleMoveIngredient}
+                    onRemoveIngredient={handleRemoveIngredient}
+                    onIngredientChange={handleIngredientChange}
+                    onIngredientAlternativesChange={
+                      handleIngredientAlternativesChange
+                    }
+                    onIngredientParsed={handleIngredientParsed}
+                    isEditing={true}
+                    onReorderIngredients={handleReorderIngredients}
+                    onBulkPasteIngredients={handleBulkPasteIngredients}
+                    handleAutoFix={handleAutoFix}
+                    onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                    isWideViewport={isDesktop}
+                    imagePreview={imagePreview}
+                    imageUrl={imageUrl}
+                    onImageSelect={handleImageSelect}
+                    onRemoveImage={handleRemoveImage}
+                    fileInputRef={fileInputRef}
+                  />
+                </TabsContent>
+                <TabsContent
+                  value="ingredients"
+                  className="mt-0 data-[state=inactive]:hidden"
+                >
+                  <RecipeFormContent
+                    editSection="ingredients"
+                    name={name}
+                    setName={setName}
+                    category={category}
+                    setCategory={setCategory}
+                    servings={servings}
+                    setServings={setServings}
+                    yieldText={yieldText}
+                    setYieldText={setYieldText}
+                    prepTimeMinutes={prepTimeMinutes}
+                    setPrepTimeMinutes={setPrepTimeMinutes}
+                    cookTimeMinutes={cookTimeMinutes}
+                    setCookTimeMinutes={setCookTimeMinutes}
+                    totalTimeMinutes={totalTimeMinutes}
+                    setTotalTimeMinutes={setTotalTimeMinutes}
+                    tags={tags}
+                    setTags={setTags}
+                    allTags={allTags}
+                    tagCounts={tagCounts}
+                    ingredientSections={ingredientSections}
+                    instructionGroups={instructionGroups}
+                    setInstructionGroups={setInstructionGroups}
+                    notes={notes}
+                    setNotes={setNotes}
+                    categories={categories}
+                    onAddIngredient={handleAddIngredient}
+                    onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                    onAddIngredientSection={handleAddIngredientSection}
+                    onIngredientSectionLabelChange={
+                      handleIngredientSectionLabelChange
+                    }
+                    onRemoveIngredientSection={handleRemoveIngredientSection}
+                    onMoveIngredient={handleMoveIngredient}
+                    onRemoveIngredient={handleRemoveIngredient}
+                    onIngredientChange={handleIngredientChange}
+                    onIngredientAlternativesChange={
+                      handleIngredientAlternativesChange
+                    }
+                    onIngredientParsed={handleIngredientParsed}
+                    isEditing={true}
+                    onReorderIngredients={handleReorderIngredients}
+                    onBulkPasteIngredients={handleBulkPasteIngredients}
+                    handleAutoFix={handleAutoFix}
+                    onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                    isWideViewport={isDesktop}
+                    imagePreview={imagePreview}
+                    imageUrl={imageUrl}
+                    onImageSelect={handleImageSelect}
+                    onRemoveImage={handleRemoveImage}
+                    fileInputRef={fileInputRef}
+                  />
+                </TabsContent>
+                <TabsContent
+                  value="instructions"
+                  className="mt-0 data-[state=inactive]:hidden"
+                >
+                  <RecipeFormContent
+                    editSection="instructions"
+                    name={name}
+                    setName={setName}
+                    category={category}
+                    setCategory={setCategory}
+                    servings={servings}
+                    setServings={setServings}
+                    yieldText={yieldText}
+                    setYieldText={setYieldText}
+                    prepTimeMinutes={prepTimeMinutes}
+                    setPrepTimeMinutes={setPrepTimeMinutes}
+                    cookTimeMinutes={cookTimeMinutes}
+                    setCookTimeMinutes={setCookTimeMinutes}
+                    totalTimeMinutes={totalTimeMinutes}
+                    setTotalTimeMinutes={setTotalTimeMinutes}
+                    tags={tags}
+                    setTags={setTags}
+                    allTags={allTags}
+                    tagCounts={tagCounts}
+                    ingredientSections={ingredientSections}
+                    instructionGroups={instructionGroups}
+                    setInstructionGroups={setInstructionGroups}
+                    notes={notes}
+                    setNotes={setNotes}
+                    categories={categories}
+                    onAddIngredient={handleAddIngredient}
+                    onAddUnsectionedIngredient={handleAddUnsectionedIngredient}
+                    onAddIngredientSection={handleAddIngredientSection}
+                    onIngredientSectionLabelChange={
+                      handleIngredientSectionLabelChange
+                    }
+                    onRemoveIngredientSection={handleRemoveIngredientSection}
+                    onMoveIngredient={handleMoveIngredient}
+                    onRemoveIngredient={handleRemoveIngredient}
+                    onIngredientChange={handleIngredientChange}
+                    onIngredientAlternativesChange={
+                      handleIngredientAlternativesChange
+                    }
+                    onIngredientParsed={handleIngredientParsed}
+                    isEditing={true}
+                    onReorderIngredients={handleReorderIngredients}
+                    onBulkPasteIngredients={handleBulkPasteIngredients}
+                    handleAutoFix={handleAutoFix}
+                    onRemoveExactDuplicates={handleRemoveExactDuplicates}
+                    isWideViewport={isDesktop}
+                    imagePreview={imagePreview}
+                    imageUrl={imageUrl}
+                    onImageSelect={handleImageSelect}
+                    onRemoveImage={handleRemoveImage}
+                    fileInputRef={fileInputRef}
+                  />
+                </TabsContent>
+                <TabsContent
+                  value="replace"
+                  className="mt-0 data-[state=inactive]:hidden"
+                >
+                  {replacementPhase === "review" && replacementBaseline ? (
+                    <RecipeReplacementReview
+                      updated={currentDraft}
+                      unparsed={replacementUnparsed}
+                      warnings={replacementWarnings}
+                    />
+                  ) : (
+                    <RecipeImportSection
+                      variant="replace"
+                      showUrlImport={false}
+                      currentRecipeName={name}
+                      requireInstructions={false}
+                      importStep="input"
+                      importUrl={importUrl}
+                      importText={rawSource}
+                      parseError={parseError}
+                      livePreview={parsedCandidate}
+                      parsedPreview={null}
+                      isImportingFromUrl={false}
+                      onImportUrlChange={(value) => {
+                        importUrlRef.current = value;
+                        setImportUrl(value);
+                        setParseError(null);
+                        if (parsedCandidateKey?.startsWith("url:")) {
+                          setParsedCandidate(null);
+                          setParsedCandidateKey(null);
+                        }
+                      }}
+                      onImportTextChange={(value) => {
+                        rawSourceRef.current = value;
+                        setRawSource(value);
+                        setParseError(null);
+                        setParsedCandidate(null);
+                        setParsedCandidateKey(null);
+                        setIsParsing(!!value.trim());
+                        if (value.trim()) debouncedParse(value);
+                      }}
+                      onImportUrl={handleUrlImport}
+                      onApplyLivePreview={handleApplyReplacementPreview}
+                      onBackToInput={handleBackToInput}
+                      onApplyPreview={handleApplyPreview}
+                    />
+                  )}
+                </TabsContent>
+              </div>
+            </Tabs>
           )}
-          {!isMobileImportInput && !hasValidIngredients && !isSubmitting && (
-            <p className="text-xs text-muted-foreground text-right mt-1">
-              Add at least one ingredient to save
-            </p>
+
+          {(isEditing ||
+            mode === "manual" ||
+            isMobileImportInput ||
+            isMobileImportReview) && (
+            <DialogFooter
+              className={
+                isEditing || isMobileImportReview
+                  ? "sticky bottom-0 z-20 px-4 sm:px-8 py-4 sm:py-6 pb-[max(1rem,env(safe-area-inset-bottom))] bg-muted/85 dark:bg-zinc-900/85 border-t border-stone-200 dark:border-zinc-800 backdrop-blur supports-[backdrop-filter]:bg-muted/70 flex flex-col items-end flex-shrink-0"
+                  : "px-4 sm:px-8 py-4 sm:py-6 pb-[env(safe-area-inset-bottom)] border-t border-stone-100 dark:border-zinc-900 bg-white/40 dark:bg-black/20 backdrop-blur-md flex flex-col items-end flex-shrink-0"
+              }
+            >
+              {saveError && (
+                <p
+                  role="alert"
+                  className="mb-3 w-full text-sm text-destructive"
+                >
+                  {saveError}
+                </p>
+              )}
+              {isEditing && editTab === "replace" ? (
+                <div className="w-full space-y-2">
+                  <div className="flex w-full gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11 flex-1"
+                      disabled={isSubmitting}
+                      onClick={() =>
+                        replacementPhase === "review"
+                          ? setReplacementPhase("input")
+                          : handleOpenChange(false)
+                      }
+                    >
+                      {replacementPhase === "review"
+                        ? "Back to edit"
+                        : "Cancel"}
+                    </Button>
+                    <Button
+                      type="button"
+                      className="min-h-11 flex-1"
+                      onClick={() =>
+                        replacementPhase === "review"
+                          ? handleSubmit()
+                          : handleApplyReplacementPreview()
+                      }
+                      disabled={
+                        isSubmitting ||
+                        !rawSource.trim() ||
+                        (replacementPhase === "review" &&
+                          (replacementUnparsed.length > 0 ||
+                            replacementSource !== rawSource ||
+                            !name.trim() ||
+                            !hasValidIngredients))
+                      }
+                    >
+                      {isSubmitting
+                        ? "Saving…"
+                        : replacementPhase === "review"
+                          ? "Save changes"
+                          : "Review changes"}
+                    </Button>
+                  </div>
+                  <p className="text-center text-xs text-muted-foreground">
+                    Nothing changes until you save.
+                  </p>
+                </div>
+              ) : isMobileImportInput ? (
+                <Button
+                  type="button"
+                  onClick={handleReviewCandidate}
+                  disabled={
+                    !candidateMatchesMethod ||
+                    !canReviewImportedRecipe(parsedCandidate) ||
+                    isParsing
+                  }
+                  className="w-full"
+                  size="lg"
+                >
+                  Review recipe
+                </Button>
+              ) : isMobileImportReview ? (
+                <div className="flex w-full gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSubmitting}
+                    onClick={() => setMobileImportPhase("input")}
+                    className="flex-1"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={
+                      !name.trim() ||
+                      !category ||
+                      !hasValidIngredients ||
+                      creationUnparsed.length > 0 ||
+                      creationPreviewError !== null ||
+                      isSubmitting
+                    }
+                    className="flex-1"
+                  >
+                    {isSubmitting ? "Saving…" : "Save Recipe"}
+                  </Button>
+                </div>
+              ) : (
+                <RecipeDialogActions
+                  isEditing={isEditing}
+                  isSubmitting={isSubmitting}
+                  isUploadingImage={isUploadingImage}
+                  canSubmit={
+                    !!name.trim() &&
+                    !!category &&
+                    hasValidIngredients &&
+                    !isSubmitting &&
+                    (!isEditing || !!editingRecipe)
+                  }
+                  onCancel={() => handleOpenChange(false)}
+                  submitLabel={!isEditing ? "Review recipe" : undefined}
+                  onSubmit={
+                    isEditing
+                      ? handleSubmit
+                      : () => {
+                          setCreationEditing(false);
+                          setMobileImportPhase("review");
+                        }
+                  }
+                />
+              )}
+              {isMobileImportReview && (!name.trim() || !category) && (
+                <p className="mt-2 text-sm text-destructive" role="status">
+                  {!name.trim()
+                    ? "Add a recipe name in Details."
+                    : "Choose a category in Details."}
+                </p>
+              )}
+              {!isMobileImportInput &&
+                !hasValidIngredients &&
+                !isSubmitting && (
+                  <p className="text-xs text-muted-foreground text-right mt-1">
+                    Add at least one ingredient to save
+                  </p>
+                )}
+            </DialogFooter>
           )}
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
     </>
-  )
+  );
 }
 
 // Extracted form content component for reuse
 interface RecipeFormContentProps {
-  name: string
-  setName: (name: string) => void
-  category: string
-  setCategory: (category: string) => void
-  servings: number
-  setServings: (servings: number) => void
-  yieldText: string
-  setYieldText: (yieldText: string) => void
-  prepTimeMinutes: number | null
-  setPrepTimeMinutes: (value: number | null) => void
-  cookTimeMinutes: number | null
-  setCookTimeMinutes: (value: number | null) => void
-  totalTimeMinutes: number | null
-  setTotalTimeMinutes: (value: number | null) => void
-  tags: string[]
-  setTags: (tags: string[]) => void
-  allTags: string[]
-  tagCounts?: Array<{ tag: string; count: number }>
-  ingredientSections: IngredientSection[]
-  instructionGroups: RecipeInstructionGroup[]
-  setInstructionGroups: (instructionGroups: RecipeInstructionGroup[]) => void
-  notes: string
-  setNotes: (notes: string) => void
-  categories: string[]
-  onAddIngredient: (sectionIndex: number) => void
-  onAddUnsectionedIngredient: () => void
-  onAddIngredientSection: () => void
-  onIngredientSectionLabelChange: (sectionIndex: number, label: string) => void
-  onRemoveIngredientSection: (sectionIndex: number) => void
+  name: string;
+  setName: (name: string) => void;
+  category: string;
+  setCategory: (category: string) => void;
+  servings: number;
+  setServings: (servings: number) => void;
+  yieldText: string;
+  setYieldText: (yieldText: string) => void;
+  prepTimeMinutes: number | null;
+  setPrepTimeMinutes: (value: number | null) => void;
+  cookTimeMinutes: number | null;
+  setCookTimeMinutes: (value: number | null) => void;
+  totalTimeMinutes: number | null;
+  setTotalTimeMinutes: (value: number | null) => void;
+  tags: string[];
+  setTags: (tags: string[]) => void;
+  allTags: string[];
+  tagCounts?: Array<{ tag: string; count: number }>;
+  ingredientSections: IngredientSection[];
+  instructionGroups: RecipeInstructionGroup[];
+  setInstructionGroups: (instructionGroups: RecipeInstructionGroup[]) => void;
+  notes: string;
+  setNotes: (notes: string) => void;
+  categories: string[];
+  onAddIngredient: (sectionIndex: number) => void;
+  onAddUnsectionedIngredient: () => void;
+  onAddIngredientSection: () => void;
+  onIngredientSectionLabelChange: (sectionIndex: number, label: string) => void;
+  onRemoveIngredientSection: (sectionIndex: number) => void;
   onMoveIngredient: (
     sourceSectionIndex: number,
     ingredientIndex: number,
-    targetSectionIndex: number | null
-  ) => void
-  onRemoveIngredient: (sectionIndex: number, index: number) => void
+    targetSectionIndex: number | null,
+  ) => void;
+  onRemoveIngredient: (sectionIndex: number, index: number) => void;
   onIngredientChange: (
     sectionIndex: number,
     index: number,
     field: keyof Ingredient,
-    value: string | number | null
-  ) => void
+    value: string | number | null,
+  ) => void;
   onIngredientAlternativesChange: (
     sectionIndex: number,
     index: number,
-    alternatives: string[]
-  ) => void
+    alternatives: string[],
+  ) => void;
   onIngredientParsed: (
     sectionIndex: number,
     index: number,
-    ingredient: Ingredient
-  ) => void
-  isEditing: boolean
-  onReorderIngredients: (sectionIndex: number, event: DragEndEvent) => void
+    ingredient: Ingredient,
+  ) => void;
+  isEditing: boolean;
+  onReorderIngredients: (sectionIndex: number, event: DragEndEvent) => void;
   onBulkPasteIngredients: (
     sectionIndex: number,
     index: number,
-    text: string
-  ) => void
-  handleAutoFix: () => void
-  onRemoveExactDuplicates: () => void
-  isWideViewport: boolean
-  editSection?: "details" | "ingredients" | "instructions"
+    text: string,
+  ) => void;
+  handleAutoFix: () => void;
+  onRemoveExactDuplicates: () => void;
+  isWideViewport: boolean;
+  editSection?: "details" | "ingredients" | "instructions";
 }
 
 // SortableIngredientRow and IngredientDragOverlay have been moved to
 // recipe-sortable-ingredients.tsx (lazy-loaded via next/dynamic above).
 
 interface RecipeFormContentPropsWithImage extends RecipeFormContentProps {
-  imagePreview?: string | null
-  imageUrl?: string | null
-  onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void
-  onRemoveImage?: () => void
-  fileInputRef?: React.RefObject<HTMLInputElement | null>
+  imagePreview?: string | null;
+  imageUrl?: string | null;
+  onImageSelect?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onRemoveImage?: () => void;
+  fileInputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 function RecipeFormContent({
@@ -1757,64 +2197,83 @@ function RecipeFormContent({
   onRemoveExactDuplicates,
   editSection,
 }: RecipeFormContentPropsWithImage) {
-  const ingredients = ingredientSectionsToEditorIngredients(ingredientSections)
-  const ingredientIssueCount = countIngredientsWithIssues(ingredients)
-  const duplicateAnalysis = analyzeIngredientDuplicates(ingredients)
+  const ingredients = ingredientSectionsToEditorIngredients(ingredientSections);
+  const ingredientIssueCount = countIngredientsWithIssues(ingredients);
+  const duplicateAnalysis = analyzeIngredientDuplicates(ingredients);
   const exactDuplicateCount = duplicateAnalysis.exactGroups.reduce(
     (total, group) => total + group.rowIndexes.length - 1,
-    0
-  )
+    0,
+  );
   const nearDuplicateCount = duplicateAnalysis.nearGroups.reduce(
     (total, group) => total + group.rowIndexes.length - 1,
-    0
-  )
-  const activeEditSection = editSection ?? "details"
+    0,
+  );
+  const activeEditSection = editSection ?? "details";
   const ingredientSectionOptions = ingredientSections.map((section, index) => ({
     value: index,
     label: getIngredientSectionOptionLabel(ingredientSections, index),
-  }))
+  }));
   const hasUnsectionedSection = ingredientSections.some(
-    (section) => section.label === null
-  )
+    (section) => section.label === null,
+  );
   const ingredientEditor = (
-    <div className={isEditing ? "space-y-4" : "space-y-5"} data-testid="ingredient-sections-editor">
+    <div
+      className={isEditing ? "space-y-4" : "space-y-5"}
+      data-testid="ingredient-sections-editor"
+    >
       {ingredientSections.map((section, sectionIndex) => {
         const ingredientOffset = ingredientSections
           .slice(0, sectionIndex)
-          .reduce((total, current) => total + current.ingredients.length, 0)
+          .reduce((total, current) => total + current.ingredients.length, 0);
         const duplicateWarningsByRow = Object.fromEntries(
           Object.entries(duplicateAnalysis.rowWarnings)
-            .map(([globalIndex, warnings]) => [Number(globalIndex), warnings] as const)
-            .filter(([globalIndex]) =>
-              globalIndex >= ingredientOffset &&
-              globalIndex < ingredientOffset + section.ingredients.length
+            .map(
+              ([globalIndex, warnings]) =>
+                [Number(globalIndex), warnings] as const,
+            )
+            .filter(
+              ([globalIndex]) =>
+                globalIndex >= ingredientOffset &&
+                globalIndex < ingredientOffset + section.ingredients.length,
             )
             .map(([globalIndex, warnings]) => [
               globalIndex - ingredientOffset,
               warnings,
-            ])
-        )
+            ]),
+        );
 
         return (
           <section
             key={`ingredient-section-${sectionIndex}`}
-            className={isEditing
-              ? "rounded-xl border border-stone-200 bg-background px-3 py-2 dark:border-zinc-800 sm:px-4"
-              : "rounded-2xl border border-stone-200 bg-muted/20 p-3 dark:border-zinc-800 sm:p-4"}
+            className={
+              isEditing
+                ? "rounded-xl border border-stone-200 bg-background px-3 py-2 dark:border-zinc-800 sm:px-4"
+                : "rounded-2xl border border-stone-200 bg-muted/20 p-3 dark:border-zinc-800 sm:p-4"
+            }
             aria-label={`Ingredient section ${sectionIndex + 1}`}
           >
-            <div className={isEditing ? "mb-1 flex items-center gap-2 border-b border-stone-200 pb-1 dark:border-zinc-800" : "mb-3 flex items-center gap-2"}>
+            <div
+              className={
+                isEditing
+                  ? "mb-1 flex items-center gap-2 border-b border-stone-200 pb-1 dark:border-zinc-800"
+                  : "mb-3 flex items-center gap-2"
+              }
+            >
               <Input
                 aria-label={`Ingredient section ${sectionIndex + 1} label`}
                 value={section.label ?? ""}
                 onChange={(event) =>
                   onIngredientSectionLabelChange(
                     sectionIndex,
-                    event.target.value
+                    event.target.value,
                   )
                 }
                 placeholder="Unsectioned"
-                className={isEditing ? "h-9 min-w-0 flex-1 border-0 bg-transparent px-1 text-sm font-bold uppercase tracking-wide shadow-none" : "min-w-0 flex-1 font-semibold"}
+                className={
+                  isEditing
+                    ? "h-9 min-w-0 flex-1 border-0 bg-transparent px-1 text-sm font-bold uppercase tracking-wide shadow-none"
+                    : "min-w-0 flex-1 font-semibold"
+                }
               />
               <Button
                 type="button"
@@ -1853,7 +2312,7 @@ function RecipeFormContent({
                   onIngredientAlternativesChange(
                     sectionIndex,
                     index,
-                    alternatives
+                    alternatives,
                   )
                 }
                 onIngredientParsed={(index, ingredient) =>
@@ -1863,11 +2322,7 @@ function RecipeFormContent({
                 sectionOptions={ingredientSectionOptions}
                 includeNewUnsectionedOption={!hasUnsectionedSection}
                 onMoveIngredient={(index, targetSectionIndex) =>
-                  onMoveIngredient(
-                    sectionIndex,
-                    index,
-                    targetSectionIndex
-                  )
+                  onMoveIngredient(sectionIndex, index, targetSectionIndex)
                 }
               />
             ) : (
@@ -1885,10 +2340,10 @@ function RecipeFormContent({
               Add ingredient
             </button>
           </section>
-        )
+        );
       })}
     </div>
-  )
+  );
 
   if (isEditing) {
     if (activeEditSection === "details") {
@@ -1936,7 +2391,7 @@ function RecipeFormContent({
             />
           </div>
         </div>
-      )
+      );
     }
 
     if (activeEditSection === "ingredients") {
@@ -1955,7 +2410,7 @@ function RecipeFormContent({
             {ingredientEditor}
           </RecipeIngredientsSection>
         </div>
-      )
+      );
     }
 
     return (
@@ -1971,7 +2426,7 @@ function RecipeFormContent({
           onNotesChange={setNotes}
         />
       </div>
-    )
+    );
   }
 
   // Add Recipe manual: 2-col layout per reference/addrecipemodal_redesign
@@ -2039,22 +2494,22 @@ function RecipeFormContent({
         />
       </div>
     </div>
-  )
+  );
 }
 
 function getIngredientSectionOptionLabel(
   sections: IngredientSection[],
-  sectionIndex: number
+  sectionIndex: number,
 ): string {
-  const baseLabel = sections[sectionIndex].label?.trim() || "Unsectioned"
+  const baseLabel = sections[sectionIndex].label?.trim() || "Unsectioned";
   const matchingIndexes = sections
     .map((section, index) => ({
       index,
       label: section.label?.trim() || "Unsectioned",
     }))
     .filter(({ label }) => label === baseLabel)
-    .map(({ index }) => index)
+    .map(({ index }) => index);
 
-  if (matchingIndexes.length === 1) return baseLabel
-  return `${baseLabel} (${matchingIndexes.indexOf(sectionIndex) + 1})`
+  if (matchingIndexes.length === 1) return baseLabel;
+  return `${baseLabel} (${matchingIndexes.indexOf(sectionIndex) + 1})`;
 }
