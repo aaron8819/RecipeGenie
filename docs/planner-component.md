@@ -11,19 +11,24 @@ This is a domain reference. Canonical project-wide boundaries live in [`./ARCHIT
 - `meal-planner.tsx` is intentionally still orchestration-heavy.
 - No planner hook extraction is recommended right now.
 
-## Slice 4 layout
+## Planner layout
 
 Planner uses compact title/week controls, visible Add meal and full-week Shopping
-actions, and broad chronological day panels: three columns from 1200px, two from
-768px, and one below 768px. The authenticated shell still switches at 1024px.
-Mobile Today/This Week/Next Week filtering and cooking progress remain available.
-Each day has one stable header Add target, with complete wrapping meal titles,
-small photo/fallback frames and cooked badges. Meal titles are buttons separate
+actions, and chronological day panels: two columns from 768px and one below
+768px. The authenticated shell still switches at 1024px. A week menu selects
+this or next week; Today returns to the current week and scrolls/focuses today's
+day without filtering other days. Cooking progress remains available.
+Each day has a stable header Add target; compact empty cards also offer Add meal.
+Meals have wrapping titles, photo/fallback frames and cooked/shopping badges.
+Meal titles are buttons separate
 from their action controls. Desktop pointer drag/drop still uses the original
 day targets and recipe identities; mobile retains the move-menu alternative.
 
-The explicit meal action row, template controls and generation category editor
-remain accessible. Slice 5's workflow/menu consolidation is separate. Generation
+Cooked, Swap and Add to shopping remain visible in the meal action row. Cooked
+is a toggle; Swap remains disabled for cooked meals. More contains Move meal
+(with a day submenu) and Remove, which retains the existing confirmed-write
+Undo flow. Template controls and the generation category editor remain
+accessible. Generation
 is below the desktop agenda to keep planning content first. The real handlers,
 dialogs, hooks and selectors are unchanged. Unassigned meals retain their current
 distributed placement; there is no Move to Unassigned or Clear week. The

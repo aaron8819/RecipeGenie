@@ -227,6 +227,9 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
     </button>
   ),
   DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuSub: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DropdownMenuSubTrigger: ({ children }: { children: React.ReactNode }) => <button>{children}</button>,
+  DropdownMenuSubContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
 vi.mock("@/components/ui/alert-dialog", () => ({
@@ -489,7 +492,7 @@ describe("MealPlanner template loading", () => {
     })
   })
 
-  it("shows an explicit move-to-day control on desktop recipe cards", () => {
+  it("offers Move meal inside each meal More menu", () => {
     currentWeeklyPlan = weeklyPlanFixture({
       recipe_ids: ["existing-1"],
       day_assignments: {
@@ -505,10 +508,10 @@ describe("MealPlanner template loading", () => {
 
     render(<MealPlanner />)
 
-    expect(screen.getByRole("button", { name: "Move to another day" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Move meal" })).toBeInTheDocument()
   })
 
-  it("removes the redundant mobile week strip while keeping mobile tabs visible", () => {
+  it("replaces mobile filtering tabs with week navigation and a Today shortcut", () => {
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation(() => ({
@@ -538,7 +541,8 @@ describe("MealPlanner template loading", () => {
 
     render(<MealPlanner />)
 
-    expect(screen.getByText("Mobile tabs")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Today" })).toBeInTheDocument()
+    expect(screen.queryByText("Mobile tabs")).not.toBeInTheDocument()
     expect(screen.queryByText("Mobile week strip")).not.toBeInTheDocument()
   })
 })
