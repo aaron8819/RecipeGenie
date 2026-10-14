@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import { localMigrationToolingRequired } from "./migration-rehearsal-scope.mjs"
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs"
 import { delimiter, dirname, join, posix, resolve, win32 } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -438,21 +439,20 @@ const MIGRATION_CHECK = Object.freeze({
 function prChecks({
   platform = process.platform,
   windowsRuntime = null,
+  includeMigrationTooling = true,
 } = {}) {
-  const powerShellExecutable = platform === "win32" && !windowsRuntime
-    ? "<trusted-powershell>"
-    : resolveTrustedPowerShell({ platform, windowsRuntime })
+  const powerShellExecutable = !includeMigrationTooling
+    ? null
+    : platform === "win32" && !windowsRuntime
+      ? "<trusted-powershell>"
+      : resolveTrustedPowerShell({ platform, windowsRuntime })
   return [
     npmCheck(
       "repository-verification",
       ["run", "verify"],
       "Ran artifact and secret guards, migration-reference integrity, lint, typecheck, unit tests, error/skip guards, identity/write guards, and cycle analysis.",
     ),
-    npmCheck(
-      "production-build",
-      ["run", "build"],
-      "Ran the production Next.js build.",
-    ),
+    npmCheck("production-build", ["run", "build"], "Ran the production Next.js build."),
     {
       name: "migration-tooling-tests",
       command: powerShellExecutable,
@@ -462,7 +462,8 @@ function prChecks({
         resolve(repositoryRoot, "scripts", "database", "tests", "Run-Tests.ps1"),
       ],
       commandLabel: "<trusted-powershell> -NoProfile -File <migration-tooling-tests>",
-      coverage: "Ran the repository's PowerShell migration backup, assertion, and preflight tooling tests.",
+      coverage:
+        "Ran the repository's PowerShell migration backup, assertion, and preflight tooling tests.",
     },
   ]
 }
@@ -724,30 +725,54 @@ function finishReport(report) {
 export function runPrVerification(options = {}) {
   const commandRunner = options.commandRunner ?? defaultCommandRunner
   const platform = options.platform ?? process.platform
-  const windowsRuntime = platform === "win32"
-    ? options.windowsRuntime ?? resolveTrustedWindowsRuntime({ platform })
-    : null
-  const childEnvironment = options.childEnvironment ?? createTrustedChildEnvironment({
+  const windowsRuntime =
+    platform === "win32"
+      ? (options.windowsRuntime ?? resolveTrustedWindowsRuntime({ platform }))
+      : null
+  const childEnvironment =
+    options.childEnvironment ??
+    createTrustedChildEnvironment({
+      platform,
+      windowsRuntime,
+    })
+  const runtimeAuthority = runRuntimeProbe(commandRunner, childEnvironment)
+  const migrationToolingRequired =
+    options.migrationToolingRequired ??
+    (options.commandRunner ? true : localMigrationToolingRequired())
+  const definitions = prChecks({
     platform,
     windowsRuntime,
-  })
-  const runtimeAuthority = runRuntimeProbe(commandRunner, childEnvironment)
-  const definitions = prChecks({ platform, windowsRuntime })
+    includeMigrationTooling: migrationToolingRequired,
+  }).filter(
+    (definition) => definition.name !== "migration-tooling-tests" || migrationToolingRequired,
+  )
   const checks = [runtimeAuthority]
+  if (!migrationToolingRequired)
+    checks.push(
+      check(
+        "migration-tooling-tests",
+        "SKIPPED",
+        "Complete clean candidate diff proves presentation/docs-only changes; database tooling unchanged.",
+        "scope-based omission",
+      ),
+    )
   if (runtimeAuthority.status === "PASS") {
-    checks.push(...definitions.map((definition) => runCheck(
-      definition,
-      commandRunner,
-      webDirectory,
-      childEnvironment,
-    )))
+    checks.push(
+      ...definitions.map((definition) =>
+        runCheck(definition, commandRunner, webDirectory, childEnvironment),
+      ),
+    )
   } else {
-    checks.push(...definitions.map((definition) => check(
-      definition.name,
-      "SKIPPED",
-      "Required execution was not started because nested runtime authority failed.",
-      definition.commandLabel ?? commandLabel(definition.command, definition.args),
-    )))
+    checks.push(
+      ...definitions.map((definition) =>
+        check(
+          definition.name,
+          "SKIPPED",
+          "Required execution was not started because nested runtime authority failed.",
+          definition.commandLabel ?? commandLabel(definition.command, definition.args),
+        ),
+      ),
+    )
   }
   return finishReport({
     schemaVersion: 1,
@@ -756,7 +781,7 @@ export function runPrVerification(options = {}) {
     status: "PASS",
     scope: null,
     checks,
-    note: "PR verification composes repository integrity, full local verification, build, and migration-tooling tests. Exact-head CI migration smoke remains a separate merge gate.",
+    note: "PR verification composes repository integrity, full local verification, build, and scope-selected migration-tooling tests. Exact-head CI migration smoke remains a separate merge gate.",
   })
 }
 

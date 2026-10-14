@@ -276,10 +276,18 @@ headers cannot contaminate machine output.
 Normal CI retains both required check identities. `migration-smoke-and-drift`
 omits only historical migration 014 parity and canonical migration/rollback
 rehearsals when the complete base-to-head diff contains only component CSS,
-global CSS, or inert public PNG/JPEG/WebP/ICO assets. Application logic, tests,
+global CSS, inert public PNG/JPEG/WebP/ICO assets, documentation Markdown/images,
+or content-proven install-icon version substitutions. The manifest exception preserves all
+non-icon-src fields; root layout and branding test exceptions preserve all code except
+known quoted icon/manifest version URLs. Application logic, other tests,
 contracts, database files, tooling, unknown paths and unresolved/empty scope run
 full rehearsals. The local database reset, security contracts, reference audits
 and schema-type drift always run. Renames include both old and new paths.
+
+The local PR gate uses the same proof to omit only PowerShell database-tooling tests
+for a clean committed candidate against origin/main. Dirty/untracked files, missing
+base/history, empty scope or unreadable content retain tooling. Verify/build and
+migration-reference integrity remain required. Scope decisions are reported explicitly.
 
 Routine releases use normal CI (`quality-guards` and `migration-smoke-and-drift`),
 focused tests for the affected code, and the existing release-status check.
