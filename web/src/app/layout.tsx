@@ -29,7 +29,7 @@ const cormorantGaramond = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "Recipe Genie",
   description: "Meal planning and recipe management made easy",
-  manifest: "/manifest.json?v=home-icon-v3",
+  manifest: "/manifest.json?v=home-icon-v4",
   icons: {
     icon: [
       {
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     ],
     apple: [
       {
-        url: "/apple-touch-icon-v3.png",
+        url: "/apple-touch-icon-v4.png",
         sizes: "180x180",
         type: "image/png",
       },

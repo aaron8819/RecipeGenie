@@ -1,40 +1,42 @@
 # Home Screen icon
 
-The v3 artwork follows the chat attachment: simplified cream chef/genie,
-gold serving dome and short thick curled tail on dark green. The built-in
-imagegen edit removed the white exterior and rounded background corners,
-preserving the supplied design. The prompt requested crisp edges, opaque
-full-bleed green, balanced framing and no added details, shine or distortion.
+The v4 install artwork is Aaron's selected local original,
+`C:\Users\aabloch\Downloads\rgicon`: an extensionless PNG containing a cream RG
+monogram and light-green leaf on a dark forest-green square. The 1254 x 1254
+opaque standard master is copied byte-for-byte from that file. No imagegen,
+redrawing, crop, colour adjustment or reinterpretation was used.
 
-## Files
+## Assets
 
-- docs/assets/home-screen-icon-v3.png: 1254 x 1254 opaque square master.
-- docs/assets/home-screen-icon-maskable-v3.png: separate 1254 x 1254 master.
-- web/public/apple-touch-icon-v3.png: 180 x 180.
-- web/public/pwa-icon-{192,512}-v3.png: standard icons, purpose any.
-- web/public/pwa-icon-maskable-{192,512}-v3.png: purpose maskable.
+- `assets/home-screen-icon-v4.png`: unchanged supplied square master.
+- `assets/home-screen-icon-maskable-v4.png`: uniformly reduced derivative with
+  background extended from edge pixels for mask-safe framing.
+- `web/public/apple-touch-icon-v4.png`: 180 x 180 opaque PNG.
+- `web/public/pwa-icon-{192,512}-v4.png`: standard icons, purpose `any`.
+- `web/public/pwa-icon-maskable-{192,512}-v4.png`: purpose `maskable`.
 
-Runtime PNGs are resized with Sharp from the masters. Maskable artwork is
-scaled to 78%; the green background extends by copying edge pixels, avoiding
-a visible inner tile. Detected cream/gold foreground radius is 31.48% of the
-canvas, within the centered 40%-radius safe circle. PNGs have no alpha channel.
-No system corner mask is baked into any install asset.
+Runtime PNGs use the existing Sharp dependency. The separate maskable composition
+scales the entire source to 78% and extends its green edge pixels, preserving
+letter and leaf proportions. Foreground positioning is checked against the
+centered 40%-radius safe circle, with visual inspection of the circular crop.
+The install images are square and opaque; system corners are not baked in.
 
-Metadata points to /apple-touch-icon-v3.png and
-/manifest.json?v=home-icon-v3. The manifest uses v3 filenames with separate
-standard and maskable entries. Existing app identity, /dashboard launch URL,
-scope, shell logos and browser favicons are preserved. Existing installed
-shortcuts may retain cached artwork; versioning targets new installations.
+Metadata uses `/apple-touch-icon-v4.png` and
+`/manifest.json?v=home-icon-v4`, with separate v4 standard/maskable manifest
+entries. Earlier versioned assets remain available. App identity, `/dashboard`
+launch URL, scope, in-app shell logos and browser favicons are unchanged.
 
-## Review evidence
+## Review and limits
 
-Ignored .codex-artifacts/icon-review contains the preparation script,
-asset checks, actual Next.js HTTP checks and previews. The iPhone simulation
-uses the actual Apple touch PNG at 60 points in a 390-point-wide layout.
-Its system corner mask and neighboring icons are approximations.
-It is not a physical iPhone screenshot or installation test.
+The ignored `.codex-artifacts/icon-review/` packet retains source identity,
+asset checks, actual Next.js served metadata/manifest/PNG verification, the
+full master, circular crop, and an accurately labeled 390-point Home Screen
+simulation using the real Apple touch asset at 60 points beside neighboring
+icons. The wallpaper, neighboring icons and system corner mask are approximations.
+This is not a physical iPhone screenshot or an installation test.
 
-Local verification covers dimensions, opacity, mask-safe positioning,
-served Next.js page metadata, manifest URLs and matching served PNG bytes.
-Only local placeholder auth configuration is used; no database-backed
-scenario is run. Visual approval is required before publication.
+Versioned URLs avoid reusing the previous install-asset URLs, but do not guarantee
+that an already-installed iPhone shortcut changes automatically. After release,
+inspect the icon while adding a fresh shortcut; preserve the existing one until
+the new shortcut works. Actual cache refresh and installed appearance remain
+physical-device checks. No production data or application behavior is changed.
