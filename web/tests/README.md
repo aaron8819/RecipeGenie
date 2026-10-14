@@ -71,7 +71,10 @@ Smoke tests are selected by explicit `@smoke` tags in test titles.
 npm run test:e2e:smoke:list
 ```
 
-This command lists smoke tests and fails if fewer than 5 are selected.
+This command lists the three required smoke-owning files and verifies all nine
+named auth, navigation, reload, Shopping and recipe-mutation journeys. Missing or
+duplicate identities fail even if unrelated tests keep the total count high.
+It does not run browser assertions or load unrelated historical fixture suites.
 
 ### Run full cross-browser matrix
 ```bash
@@ -156,9 +159,9 @@ npm run test:e2e:debug
 
 ### Run specific test file
 ```bash
-npx playwright test authentication.spec.ts
-npx playwright test recipes.spec.ts
-npx playwright test responsive.spec.ts
+npx playwright test authentication.spec.ts --project=chromium
+npx playwright test recipes.spec.ts --project=chromium
+npx playwright test responsive.spec.ts --project=chromium
 ```
 
 ### Run tests for specific browser

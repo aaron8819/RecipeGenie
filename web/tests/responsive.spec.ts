@@ -37,14 +37,12 @@ test.describe('Responsive contracts @extended', () => {
     await dismissNextDevTools(page)
 
     const searchInput = page.getByRole('textbox', { name: /search recipes by name or category/i })
-    const addRecipeFab = page.getByTestId('recipes-add-fab')
+    const addRecipeFab = page.getByTestId('recipes-add-button')
     const filterToggle = page.getByTestId('recipes-filter-toggle')
     const filterPanel = page.getByTestId('recipes-filter-panel')
-    const utilitySection = page.locator('section[aria-label="Recipe mobile utilities"]')
-    const gridButton = utilitySection.getByRole('button', { name: 'Grid view' })
-    const listButton = utilitySection.getByRole('button', { name: 'List view' })
-    const sharedButton = utilitySection.getByRole('button', { name: 'Shared' })
-    const settingsButton = utilitySection.getByRole('button', { name: 'Settings' })
+    const gridButton = page.getByRole('button', { name: 'Grid view', exact: true })
+    const listButton = page.getByRole('button', { name: 'List view', exact: true })
+    const collectionActions = page.getByRole('button', { name: 'Collection actions', exact: true })
     const bottomNav = page.getByRole('navigation', { name: /bottom navigation/i })
 
     await expect(searchInput).toBeVisible()
@@ -55,6 +53,9 @@ test.describe('Responsive contracts @extended', () => {
     await filterToggle.click()
     await expect(filterPanel).toBeVisible()
     await expect(filterPanel.getByRole('button', { name: 'Favorites' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(filterPanel).toHaveCount(0)
 
     const searchBox = await searchInput.boundingBox()
     const addRecipeBox = await addRecipeFab.boundingBox()
@@ -68,13 +69,27 @@ test.describe('Responsive contracts @extended', () => {
     expect(addRecipeBox!.x + addRecipeBox!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
     expect(addRecipeBox!.y + addRecipeBox!.height).toBeLessThan(bottomNavBox!.y)
 
-    for (const control of [filterToggle, gridButton, listButton, sharedButton, settingsButton]) {
+    for (const control of [filterToggle, gridButton, listButton, collectionActions]) {
       const box = await control.boundingBox()
       expect(box).not.toBeNull()
       expect(box!.height).toBeGreaterThanOrEqual(44)
       expect(box!.x).toBeGreaterThanOrEqual(0)
       expect(box!.x + box!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
     }
+    await collectionActions.click()
+    const menu = page.getByRole('menu')
+    for (const name of ['Shared recipes', 'Recipe settings']) {
+      const item = menu.getByRole('menuitem', { name, exact: true })
+      await expect(item).toBeVisible()
+      const box = await item.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.height).toBeGreaterThanOrEqual(44)
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
+    }
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(collectionActions).toBeFocused()
   })
 
   test('keeps shopping list primary controls reachable above the mobile shell chrome', async ({ page, setupAuth, navigateToRoute }) => {

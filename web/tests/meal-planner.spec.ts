@@ -1,4 +1,10 @@
-import { test, expect, VIEWPORTS } from './fixtures'
+import {
+  test,
+  expect,
+  VIEWPORTS,
+  reviewCreatedRecipe,
+  saveReviewedRecipe,
+} from './fixtures'
 import type { Page, Locator } from '@playwright/test'
 
 type RecipeDraft = {
@@ -31,6 +37,7 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
   const dialog = page.getByRole('dialog').first()
 
   await expect(dialog).toBeVisible()
+  await dialog.getByRole('tab', { name: 'Manual', exact: true }).click()
   await dialog.locator('#name-add').fill(recipe.name)
   await dialog.getByRole('combobox').first().click()
   await page.getByRole('option', { name: new RegExp(`^${escapeRegex(recipe.category)}$`, 'i') }).click()
@@ -46,7 +53,8 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
   }
 
   await dialog.locator('textarea').first().fill(recipe.instructions)
-  await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+  await reviewCreatedRecipe(page)
+  await saveReviewedRecipe(page)
   await expect(
     page.getByTestId('recipe-detail-page').getByRole('heading', {
       name: recipe.name,
@@ -66,11 +74,11 @@ async function jumpWeeks(page: Page, count: number) {
 }
 
 function plannerWeekLabel(page: Page): Locator {
-  return page.locator('h2').filter({ hasText: /[A-Za-z]+ \d{1,2}/ }).first()
+  return page.getByRole('button', { name: 'Open calendar to pick a week', exact: true })
 }
 
 async function openPlannerTab(page: Page) {
-  await page.locator('header').getByRole('link', { name: /^planner$/i }).click()
+  await page.getByRole('complementary').getByRole('link', { name: /^planner$/i }).click()
 }
 
 async function handleGeneratePlan(page: Page) {
@@ -87,14 +95,14 @@ async function handleGeneratePlan(page: Page) {
     await confirmButton.click()
   }
 
-  await expect(page.getByRole('button', { name: /move to another day/i }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /^More actions for / }).first()).toBeVisible()
 }
 
 async function addRecipeToCurrentWeek(page: Page, recipeName: string) {
-  await page.getByRole('button', { name: /^add recipe$/i }).click()
+  await page.getByRole('button', { name: /^add meal$/i }).click()
   const dialog = page.getByRole('dialog').first()
 
-  await expect(page.getByText(/add recipe to plan/i)).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'Add Recipe to Plan', exact: true })).toBeVisible()
   await dialog.getByPlaceholder(/search recipes/i).fill(recipeName)
   await dialog.locator('li button').filter({ hasText: recipeName }).first().click()
   await dialog.getByRole('button', { name: /^add to plan$/i }).click()
@@ -104,15 +112,18 @@ async function addRecipeToCurrentWeek(page: Page, recipeName: string) {
 }
 
 function plannerRecipeCard(page: Page, recipeName: string): Locator {
-  return page.locator(`xpath=//h4[normalize-space()="${recipeName}"]/ancestor::div[.//button[@aria-label="Move to another day"]][1]`)
+  return page.getByRole('article').filter({
+    has: page.getByRole('button', { name: recipeName, exact: true }),
+  })
 }
 
 async function moveRecipeToAnotherDay(page: Page, recipeName: string): Promise<string> {
   const card = plannerRecipeCard(page, recipeName)
   await expect(card).toBeVisible()
-  await card.getByRole('button', { name: /move to another day/i }).click()
+  await card.getByRole('button', { name: `More actions for ${recipeName}`, exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Move meal', exact: true }).click()
 
-  const menuItems = page.getByRole('menuitem')
+  const menuItems = page.getByRole('menuitem').filter({ hasText: /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat), / })
   const count = await menuItems.count()
 
   for (let index = 0; index < count; index += 1) {
@@ -137,9 +148,12 @@ async function moveRecipeToAnotherDay(page: Page, recipeName: string): Promise<s
 async function expectAssignedDayDisabled(page: Page, recipeName: string, assignedDayLabel: string) {
   const card = plannerRecipeCard(page, recipeName)
   await expect(card).toBeVisible()
-  await card.getByRole('button', { name: /move to another day/i }).click()
+  await card.getByRole('button', { name: `More actions for ${recipeName}`, exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Move meal', exact: true }).click()
   await expect(page.getByRole('menuitem', { name: assignedDayLabel, exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
 }
 
 test.describe.configure({ mode: 'serial' })
@@ -166,7 +180,7 @@ test.describe('Meal Planner', () => {
     await openPlannerTab(page)
 
     await expect(plannerWeekLabel(page)).toHaveText(weekLabel || '')
-    await expect(page.getByRole('button', { name: /move to another day/i }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /^More actions for / }).first()).toBeVisible()
   })
 
   test('adds a created recipe to plan, moves it to another day, and preserves the assignment after reload @core', async ({ page, navigateToRoute }) => {
@@ -183,7 +197,7 @@ test.describe('Meal Planner', () => {
     await expectAssignedDayDisabled(page, recipe.name, assignedDayLabel)
 
     const selectedWeekLabel = await plannerWeekLabel(page).textContent()
-    await plannerRecipeCard(page, recipe.name).click()
+    await plannerRecipeCard(page, recipe.name).getByRole('button', { name: recipe.name, exact: true }).click()
     await expect(page).toHaveURL(/\/recipes\/[^/?]+\?from=planner/)
     await expect(
       page.getByRole('heading', { name: recipe.name, level: 1 })
@@ -210,6 +224,23 @@ test.describe('Meal Planner', () => {
     await addRecipeToCurrentWeek(page, recipe.name)
 
     await page.getByRole('button', { name: /add planned meal ingredients to shopping/i }).click()
+    const review = page.getByRole('dialog')
+    await expect(review).toBeVisible()
+    for (let index = 0; index < recipe.ingredients.length; index += 1) {
+      await expect(review.getByRole('checkbox', {
+        name: `${recipe.name} ingredient ${index + 1}`, exact: true,
+      })).toBeChecked()
+    }
+    const selectedCount = await review.getByRole('checkbox', {
+      name: / ingredient \d+$/, checked: true,
+    }).count()
+    expect(selectedCount).toBeGreaterThanOrEqual(recipe.ingredients.length)
+    const submit = review.getByRole('button', {
+      name: `Add ${selectedCount} ingredients`, exact: true,
+    })
+    await expect(submit).toBeEnabled()
+    await submit.click()
+    await expect(review).toHaveCount(0)
 
     await navigateToRoute('shopping')
     await expect(page.getByText(new RegExp(recipe.ingredients[0].item, 'i')).first()).toBeVisible()

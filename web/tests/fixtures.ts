@@ -209,7 +209,7 @@ export const test = base.extend<RecipeGenieFixtures>({
 
       await page.getByRole('button', { name: /add recipe/i }).first().click()
       await dialog.waitFor({ state: 'visible', timeout: 5000 })
-      await page.waitForTimeout(500)
+      await dialog.getByRole('tab', { name: 'Manual', exact: true }).click()
 
       const uniqueName = `${recipe.name} ${Date.now()}`
       const nameInput = dialog.locator('#name-add, #name-edit').first()
@@ -277,49 +277,8 @@ export const test = base.extend<RecipeGenieFixtures>({
         await instructionsTextarea.fill(recipe.instructions)
       }
 
-      const saveButton = dialog.getByRole('button', { name: /save changes|add recipe/i }).first()
-      await saveButton.scrollIntoViewIfNeeded()
-
-      const isEnabled = await saveButton.isEnabled().catch(() => false)
-      if (!isEnabled) {
-        const nameValue = await nameInput.inputValue().catch(() => 'unknown')
-        const ingredientCount = await dialog.locator('input[placeholder="Ingredient"]').count()
-        console.log(`Save button disabled. Name: "${nameValue}", Ingredients: ${ingredientCount}`)
-
-        const title = await saveButton.getAttribute('title')
-        if (title) {
-          console.log(`Button disabled reason: ${title}`)
-        }
-      }
-
-      await expect(saveButton).toBeEnabled({ timeout: 5000 })
-      await saveButton.click()
-
-      for (let attempt = 0; attempt < 30; attempt++) {
-        await page.waitForTimeout(500)
-        const stillOpen = await dialog.isVisible().catch(() => false)
-        if (!stillOpen) {
-          return
-        }
-
-        const buttonText = await saveButton.textContent().catch(() => '')
-        if (buttonText?.includes('Saving') || buttonText?.includes('Uploading')) {
-          continue
-        }
-
-        if (await saveButton.isEnabled().catch(() => false)) {
-          if (attempt === 10) {
-            console.log('Dialog still open after save, trying again...')
-            await saveButton.click()
-          }
-        }
-      }
-
-      if (await dialog.isVisible().catch(() => false)) {
-        const buttonText = await saveButton.textContent().catch(() => 'unknown')
-        const errorText = await dialog.locator('.text-destructive, .text-red-500').textContent().catch(() => null)
-        throw new Error(`Recipe dialog did not close. Button: "${buttonText}", Error: ${errorText || 'none visible'}`)
-      }
+      await reviewCreatedRecipe(page)
+      await saveReviewedRecipe(page)
     }
 
     await use(addRecipe)
@@ -396,4 +355,21 @@ export async function measureTouchTarget(locator: Locator): Promise<{ width: num
     throw new Error('Element not visible')
   }
   return { width: box.width, height: box.height }
+}
+
+export async function reviewCreatedRecipe(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog')
+  const review = dialog.getByRole('button', { name: 'Review recipe', exact: true })
+  await expect(review).toBeEnabled()
+  await review.click()
+  await expect(dialog.getByRole('heading', { name: 'Review your recipe', exact: true }))
+    .toBeVisible()
+}
+
+export async function saveReviewedRecipe(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog')
+  const save = dialog.getByRole('button', { name: 'Save Recipe', exact: true })
+  await expect(save).toBeEnabled()
+  await save.click()
+  await expect(dialog).toHaveCount(0)
 }

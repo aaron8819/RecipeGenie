@@ -1,4 +1,9 @@
-import { test, expect } from './fixtures'
+import {
+  test,
+  expect,
+  reviewCreatedRecipe,
+  saveReviewedRecipe,
+} from './fixtures'
 import type { Page, Request } from '@playwright/test'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
@@ -159,6 +164,7 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
   await openAddRecipeDialog(page)
 
   const dialog = page.getByRole('dialog').first()
+  await dialog.getByRole('tab', { name: 'Manual', exact: true }).click()
   await dialog.locator('#name-add').fill(recipe.name)
 
   await dialog.getByRole('combobox').first().click()
@@ -179,7 +185,8 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
   }
 
   await dialog.locator('textarea').first().fill(recipe.instructions)
-  await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+  await reviewCreatedRecipe(page)
+  await saveReviewedRecipe(page)
 
   await expect(page).toHaveURL(/\/recipes\/[^/?]+/)
   await expect(
@@ -353,15 +360,19 @@ test.describe('Recipes', () => {
 
     await openAddRecipeDialog(page)
     const dialog = page.getByRole('dialog').first()
-    await dialog.getByRole('tab', { name: /^import$/i }).click()
+    await dialog.getByRole('tab', { name: 'Paste text', exact: true }).click()
     await dialog.getByLabel('Paste Recipe Text').fill(`${recipeName}\nServes 2\n\nIngredients:\n1 cup ${ingredient}\n\nInstructions:\n1. Cook until ready.`)
 
-    await expect(dialog.getByText(recipeName, { exact: true })).toBeVisible()
-    await dialog.getByRole('button', { name: /apply to form/i }).click()
+    await reviewCreatedRecipe(page)
+    await expect(dialog.getByRole('heading', { name: recipeName, exact: true })).toBeVisible()
+    await dialog.getByRole('button', { name: 'Edit details', exact: true }).click()
     await expect(dialog.locator('#name-add')).toHaveValue(recipeName)
+    await dialog.getByRole('button', { name: 'Back to preview', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Edit ingredients', exact: true }).click()
     await expect(dialog.locator('input[placeholder="Ingredient"]').first()).toHaveValue(ingredient)
 
-    await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+    await dialog.getByRole('button', { name: 'Back to preview', exact: true }).click()
+    await saveReviewedRecipe(page)
     await expect(
       page.getByTestId('recipe-detail-page').getByRole('heading', {
         name: recipeName,
@@ -377,7 +388,7 @@ test.describe('Recipes', () => {
 
     await openAddRecipeDialog(page)
     const dialog = page.getByRole('dialog').first()
-    await dialog.getByRole('tab', { name: /^import$/i }).click()
+    await dialog.getByRole('tab', { name: 'Paste text', exact: true }).click()
     await dialog.getByLabel('Paste Recipe Text').fill(`${recipeName}
 Serves 2
 
@@ -387,14 +398,16 @@ Ingredients:
     Instructions:
 1. Mix until ready.`)
 
-    await dialog.getByRole('button', { name: /apply to form/i }).click()
+    await reviewCreatedRecipe(page)
+    await dialog.getByRole('button', { name: 'Edit ingredients', exact: true }).click()
     const amountInput = dialog.locator('input[placeholder="Amt"]').first()
     await expect(amountInput).toHaveValue('½–1')
     await amountInput.fill('0.5-1')
     await amountInput.press('Tab')
     await expect(amountInput).toHaveValue('0.5-1')
 
-    await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+    await dialog.getByRole('button', { name: 'Back to preview', exact: true }).click()
+    await saveReviewedRecipe(page)
     let detailPage = page.getByTestId('recipe-detail-page')
     await expect(detailPage.getByText('0.5-1 tsp', { exact: true })).toBeVisible()
     await expect(detailPage.getByText(ingredient, { exact: true })).toBeVisible()
