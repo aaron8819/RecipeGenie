@@ -39,7 +39,11 @@ test.describe('Recipe Genie branding', () => {
       .locator('link[rel="icon"]')
       .evaluateAll((links) => links.map((link) => link.getAttribute('href')))
     expect(iconHrefs).toEqual(
-      expect.arrayContaining(['/favicon-32x32.png', '/favicon.ico'])
+      expect.arrayContaining([
+        '/favicon-16x16-v4.png',
+        '/favicon-32x32-v4.png',
+        '/favicon-v4.ico',
+      ])
     )
 
     const manifestResponse = await page.request.get('/manifest.json?v=home-icon-v4')
@@ -74,8 +78,10 @@ test.describe('Recipe Genie branding', () => {
     })
 
     for (const asset of [
-      '/favicon-32x32.png',
+      '/favicon-16x16-v4.png',
       '/favicon.ico',
+      '/favicon-32x32-v4.png',
+      '/favicon-v4.ico',
       '/apple-touch-icon-v4.png',
       '/pwa-icon-192-v4.png',
       '/pwa-icon-512-v4.png',

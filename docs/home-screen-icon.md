@@ -40,3 +40,14 @@ that an already-installed iPhone shortcut changes automatically. After release,
 inspect the icon while adding a fresh shortcut; preserve the existing one until
 the new shortcut works. Actual cache refresh and installed appearance remain
 physical-device checks. No production data or application behavior is changed.
+
+## Browser tab artwork
+
+Browser favicons now use the same unchanged v4 RG master approved in PR #99.
+Sharp resizes the square master with Lanczos3 to opaque 16-, 32- and 48-pixel
+PNGs. The ICO bundles all three PNG sizes. Metadata uses versioned v4 PNG/ICO
+URLs; the unversioned favicon.ico and favicon-32x32.png compatibility endpoints
+also contain the new artwork for clients that request those conventional paths.
+The Apple touch/manifest install artwork and in-app shell logos are unchanged.
+Small-size inspection checks legibility only; existing browser caches may retain
+older icons until refreshed. No physical-device cache refresh is claimed.
