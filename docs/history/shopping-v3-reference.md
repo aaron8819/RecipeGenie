@@ -1,5 +1,9 @@
 # Historical V3 reference — superseded
 
+Historical record, indexed 2026-10-14. Current operating commands are in
+[developer-workflow.md](../developer-workflow.md).
+
+
 This preserves pre-foundation guidance. Use [the current Shopping reference](../shopping-component.md) for production behavior. Temporary Slice 1–5 limitations below are historical, not current V4 gates.
 
 > Slice 9 adds [shared organization controls](../shopping-slice9.md), targeted field history and conditional organization Undo. Earlier V3 guidance below remains historical.

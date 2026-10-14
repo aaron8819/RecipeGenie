@@ -255,11 +255,17 @@ export function planDatabaseChecks(files, readVersions) {
             if (flag === "parity" || flag === "canonical") select("database");
           }
         }
-      } else if (changedInput(file, read, project)) select("database", "parity", "canonical");
+      } else if (changedInput(file, read, project)) {
+        // CI execution context also owns the hosted recovery-tooling fixture.
+        if (file === ".github/workflows/ci.yml") select(...FLAGS);
+        else select("database", "parity", "canonical");
+      }
       continue;
     }
     if (
       [
+        "web/scripts/check-smoke-tests.mjs",
+        "web/scripts/check-smoke-tests.test.mjs",
         "web/scripts/admit-combined-ui-ci.mjs",
         "web/scripts/admit-combined-ui-ci.test.mjs",
         "web/scripts/local-e2e-runtime.mjs",

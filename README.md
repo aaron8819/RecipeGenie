@@ -32,137 +32,38 @@ A cloud-hosted weekly meal planning application with automatic shopping list gen
 For verification and release commands, use the existing
 [developer workflow guide](docs/developer-workflow.md).
 
-## Quick Start
+## Start developing
 
-### Prerequisites
+Read [AGENTS.md](AGENTS.md), then the
+[normal task path](docs/developer-workflow.md#normal-task-path) for setup,
+focused checks, early drafts, hosted acceptance and release commands. Work from
+an isolated cloud task by default when that is the authorized environment.
+Runtime and dependency pins live in `web/.nvmrc`, `web/package.json` and the lockfile.
+No production account, copied credentials or local database is needed for routine
+editing and credential-free checks.
 
-- Node.js 22.23.1 (run `nvm use` from `web/`)
-- npm 10.9.8 (included with the declared Node.js release)
-- A Supabase account (free tier available at [supabase.com](https://supabase.com))
+Use [the E2E guide](web/tests/README.md) for development-mode browser diagnostics,
+[local auth fixtures](web/tests/LOCAL_AUTH_BROWSER.md) for explicitly selected local
+inspection, and [operational verification](docs/operational-verification.md) for
+read-only production checks. These specialist paths do not add default gates.
 
-### 1. Create Supabase Project
+### Schema bootstrap and operations
 
-1. Go to [supabase.com](https://supabase.com) and create a new project
-2. Follow the migration workflow in
-   [`supabase/SCHEMA.md`](supabase/SCHEMA.md) to apply the complete tracked
-   migration chain. Do not apply `001_baseline.sql` by itself.
-3. Go to **Authentication > Providers** and ensure Email auth is enabled
-4. Go to **Storage** in the dashboard and verify the `recipe-images` bucket was created
-5. **(Optional)** To show default images for the 8 built-in recipes, place the default images in `web/.cursor/images/` and run: `cd web && npm run upload:default-recipe-images` (requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`)
+Canonical bootstrap is baseline-first and applies every tracked file in
+`supabase/migrations/`, currently `001_baseline.sql` through
+`033_fix_recipe_quantity_rational_comparison.sql`. The
+[schema/migration runbook](supabase/SCHEMA.md) owns setup, local reset, type
+regeneration, preflight and authorized remote changes. Never apply the baseline
+alone, rewrite the migration chain, or treat a pending-migration preflight option
+as permission to push. Pre-baseline migrations under
+`supabase/migrations/archive/2026-03-09-pre-028-squash/` are historical only.
 
-### Schema Bootstrap Strategy
-
-- Canonical bootstrap is baseline-first and applies every tracked file in
-  `supabase/migrations/`, currently `001_baseline.sql` through
-  `033_fix_recipe_quantity_rational_comparison.sql`.
-- Pre-baseline incremental migrations are retained under
-  `supabase/migrations/archive/2026-03-09-pre-028-squash/` for historical
-  context only.
-- New schema changes must be added after the current active tip; migration
-  history must not be rewritten.
-- The operational migration runbook, preflight checklist, drift detection guidance, and baseline-squash repair procedure live in `supabase/SCHEMA.md`.
-
-For local Supabase CLI workflows, use:
-
-```bash
-supabase start
-supabase db reset
-```
-
-This should rebuild from the baseline-forward migration chain deterministically.
-
-### 2. Configure Environment
-
-```bash
-cd web
-cp .env.example .env.local
-```
-
-Edit the ignored `.env.local` copy with your Supabase credentials (found in
-Project Settings > API). Keep `SUPABASE_SERVICE_ROLE_KEY` server-only and omit
-it unless a server-side administrative workflow requires it.
-
-```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
-```
-
-### 3. Install Dependencies
-
-```bash
-npm ci
-```
-
-### 4. Run Development Server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## Testing
-
-- **Unit tests (Vitest):** `npm run test` or `npm run test:watch`. Tests live in `src/hooks/__tests__/`, `src/lib/__tests__/`, and similar.
-- **E2E tests (Playwright):** `npm run test:e2e:core` runs the core CI project and
-  starts its configured web server. For the guarded local authenticated
-  workflow, run `npm run local:e2e:bootstrap` and then
-  `npm run test:e2e:inspect`; it uses the ignored `.env.e2e.local` contract and
-  creates isolated per-test state under `.playwright/auth/`. See
-  [`web/tests/README.md`](web/tests/README.md).
-
-## Supabase Types Baseline
-
-To regenerate the Supabase TypeScript baseline using the same local workflow CI validates against:
-
-```bash
-npx supabase start
-npx supabase db reset --local
-cd web
-npm run db:types:regen
-```
-
-This updates `web/src/types/database.generated.ts` from the local Supabase schema.
-
-Then run the deterministic schema/type parity check:
-
-```bash
-npm run db:types:check
-```
-
-`db:types:check` is CI-equivalent: it generates to a temporary file and fails if it differs from `src/types/database.generated.ts`.
-
-For linked remote workflows after a schema push, run:
-
-```bash
-cd web
-npm run db:types:regen:linked
-```
-
-Before any remote `supabase db push`, run:
-
-```bash
-cd web
-npm run db:preflight
-```
-
-This checks linked migration identifiers and order, and verifies every active
-local migration against `supabase/migration-checksums.json`. It points you to
-the repair runbook if the repo's squashed-baseline case is the reason for a
-mismatch. The command does not receive remote names, statements, or checksums
-from `supabase migration list` and does not claim to verify them. The default
-fails on every local-only migration. During an explicitly reviewed
-single-migration rollout, name the sole expected pending tail migration:
-
-```bash
-npm run db:preflight -- --expected-pending 016
-```
-
-The opt-in is accepted only when `--expected-pending` is present in that
-command's argv and names that exact one-migration local tail. npm configuration,
-environment variables, and `.npmrc` values cannot supply it. It does not
-authorize `db push`.
+For a separately authorized new installation, use the schema runbook to create
+the full schema, enable Email auth and verify the `recipe-images` bucket. App
+configuration is documented in `web/.env.example`; keep copies ignored and
+service-role credentials server-only. Default recipe-image uploads remain an
+optional specialist operation (`upload:default-recipe-images`) using images in
+`web/.cursor/images/` and an authorized server-side credential.
 
 ## Deployment to Vercel
 

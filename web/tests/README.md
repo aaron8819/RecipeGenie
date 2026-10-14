@@ -1,5 +1,11 @@
 # Recipe Genie E2E Tests
 
+Ordinary Playwright here starts the development server and is for selected local
+fixture/debugging diagnostics. It is not the normal release gate. Use the
+[developer workflow](../../docs/developer-workflow.md#normal-task-path) for
+hosted production-build qualification and acceptance selection.
+
+
 > **When to read:** You're writing, debugging, or modifying E2E tests, or setting up Playwright fixtures and auth.
 
 *Last updated: 2026-07-26*
@@ -61,12 +67,13 @@ and checks manual edits, unchanged frozen sources/order, and no read writes at
 1440×900 and 390×844. The operability test additionally intercepts read failures
 and invalid responses; those responses are not persisted database fixtures.
 
-### Run the core CI project
+### Run the development-mode core project
 ```bash
 npm run test:e2e:core
 ```
 
-This is the canonical core CI command; it is not the full browser matrix.
+This legacy-named project is a development-mode diagnostic, not hosted CI or
+production-browser acceptance.
 
 ### Run smoke tests (critical flow, Chromium-only)
 ```bash

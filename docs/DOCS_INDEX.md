@@ -1,6 +1,8 @@
 # Documentation Index
 
-Start here when you need project documentation. This file defines which docs
+Normal startup is [AGENTS.md](../AGENTS.md) → the
+[normal task path](developer-workflow.md#normal-task-path). Read this index only
+to locate specialist project documentation. This file defines which docs
 own each kind of guidance, which are supporting references, and which are
 historical only. When documents disagree, use the owner listed here rather
 than combining conflicting instructions.
@@ -13,7 +15,7 @@ than combining conflicting instructions.
 | [`../README.md`](../README.md) | Human onboarding, supported local setup, feature overview, and entry points to specialist documentation. |
 | [`developer-workflow.md`](developer-workflow.md) | Supported runtime, verification and release command usage. |
 | [`project_overview.md`](project_overview.md) | Current architecture overview: layers, domains, data flow, and where logic lives. |
-| [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTURE_GUARDRAILS.md) | Canonical contributor guardrails: non-negotiable boundaries, refactor stopping points, and verification baseline. |
+| [`ARCHITECTURE_GUARDRAILS.md`](ARCHITECTURE_GUARDRAILS.md) | Canonical contributor guardrails: non-negotiable boundaries, refactor stopping points, and architecture constraints. |
 | [`operational-verification.md`](operational-verification.md) | Read-only deployment manifest, production verification, and data-integrity audit commands. |
 | [`../supabase/SCHEMA.md`](../supabase/SCHEMA.md) | Current database shape, active migration chain, compatibility behavior, and migration runbook. |
 | [`../decisions.md`](../decisions.md) | Durable architecture decision log; superseded decisions remain historical context. |
@@ -40,6 +42,9 @@ These files are retained so older references still resolve. They are not active 
 | [`archive/execution-plan.md`](archive/execution-plan.md) | Compatibility pointer for older references. |
 | [`recipe-identity-migration.md`](recipe-identity-migration.md) | Historical identity-migration design, audits, and rollout evidence; current state belongs in `supabase/SCHEMA.md`. |
 
+- [Hosted qualification history](recipe-planner-hosted-qualification.md) and
+  `docs/history/` retain dated evidence, not current operating instructions.
+
 ## Documentation Rules
 
 1. Keep canonical docs small and stable.
@@ -48,4 +53,4 @@ These files are retained so older references still resolve. They are not active 
 4. Record future architecture decisions in [`../decisions.md`](../decisions.md).
 5. If a doc becomes historical, add a superseded notice instead of leaving it looking active.
 
-Last updated: 2026-07-23
+Last updated: 2026-10-14

@@ -1,5 +1,9 @@
 # Combined UI hosted qualification candidate
 
+Historical qualification receipt. Retained as of 2026-10-14; current commands
+and acceptance requirements belong to [developer-workflow.md](developer-workflow.md).
+
+
 > Historical preparation report. PR #78 merged and released on 2026-10-07 with
 > the new combined-browser coverage exception. The frozen checkpoint below is
 > retained as evidence, not current startup instructions.

@@ -781,7 +781,7 @@ export function runPrVerification(options = {}) {
     status: "PASS",
     scope: null,
     checks,
-    note: "PR verification composes repository integrity, full local verification, build, and scope-selected migration-tooling tests. Exact-head CI migration smoke remains a separate merge gate.",
+    note: "Optional PR diagnostic composes repository integrity, full local verification, build, and scope-selected migration-tooling tests. Hosted exact-candidate CI owns merge acceptance; this is not a duplicate required gate.",
   })
 }
 

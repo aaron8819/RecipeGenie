@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const REQUIRED_SMOKE_JOURNEYS = [
   [
@@ -59,17 +59,35 @@ export function validateSmokeJourneys(output) {
   return found.size
 }
 
-if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
-  // Use the existing list command through this runtime's bundled npm, never a shell.
-  const npmCli = process.env.npm_execpath
-  if (!npmCli) throw new Error('Run this guard through npm run test:e2e:smoke:list')
-  const files = [...new Set(REQUIRED_SMOKE_JOURNEYS.map(([file]) => `tests/${file}`))]
-  const result = spawnSync(process.execPath, [
-    npmCli, 'run', 'test:e2e:smoke', '--', ...files, '--list',
-  ], {
-    encoding: 'utf8',
-    windowsHide: true,
+// Discovery never inherits target credentials, npm lifecycle hooks or preloads.
+// Playwright --list does not run fixtures, browsers or webServer. The fixed
+// loopback values satisfy config parsing only, and cannot identify a real user.
+export function smokeDiscoveryInvocation(environment = process.env) {
+  const env = Object.fromEntries(['PATH', 'Path', 'SystemRoot', 'WINDIR', 'HOME',
+    'USERPROFILE', 'TEMP', 'TMP', 'TMPDIR', 'LANG', 'LC_ALL'].filter(key => environment[key])
+    .map(key => [key, environment[key]]))
+  Object.assign(env, {
+    CI: 'true',
+    RECIPE_GENIE_E2E_TARGET: 'local',
+    RECIPE_GENIE_E2E_LOCAL_ONLY: 'true',
+    RECIPE_GENIE_E2E_BASE_URL: 'http://127.0.0.1:3107',
+    RECIPE_GENIE_E2E_EMAIL: 'discovery-only@example.invalid',
+    RECIPE_GENIE_E2E_PASSWORD: 'discovery-only-placeholder',
+    NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'discovery-only-placeholder',
   })
+  const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  return { command: process.execPath, args: [
+    path.join(web, 'node_modules', '@playwright', 'test', 'cli.js'), 'test',
+    '--config', path.join(web, 'playwright.config.ts'), '--project=smoke',
+    ...new Set(REQUIRED_SMOKE_JOURNEYS.map(([file]) => `tests/${file}`)),
+    '--list', '--reporter=list',
+  ], options: { cwd: web, env, encoding: 'utf8', windowsHide: true } }
+}
+
+if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
+  const { command, args, options } = smokeDiscoveryInvocation()
+  const result = spawnSync(command, args, options)
   process.stdout.write(result.stdout ?? '')
   process.stderr.write(result.stderr ?? '')
   if (result.error || result.status !== 0) process.exit(result.status ?? 1)

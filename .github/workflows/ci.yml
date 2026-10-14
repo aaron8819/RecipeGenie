@@ -6,8 +6,45 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
+  candidate-source:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      tree: ${{ steps.source.outputs.tree }}
+      base: ${{ steps.source.outputs.base }}
+      build: ${{ steps.source.outputs.build }}
+    steps:
+      - name: Checkout integrated candidate head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup pinned Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: web/.nvmrc
+      - name: Record actual checkout and require base ancestry
+        id: source
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CANDIDATE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node web/scripts/workflow/candidate-source.mjs
+      - name: Preserve candidate source provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: candidate-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .codex-artifacts/ci/candidate-source.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
   quality-guards:
+    needs: candidate-source
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -15,6 +52,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.candidate-source.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -33,12 +74,15 @@ jobs:
         run: npm run verify
 
   migration-smoke-and-drift:
+    needs: candidate-source
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          ref: ${{ needs.candidate-source.outputs.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -53,7 +97,7 @@ jobs:
       - name: Select migration rehearsal scope
         id: rehearsal-scope
         env:
-          REHEARSAL_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          REHEARSAL_BASE_SHA: ${{ needs.candidate-source.outputs.base }}
         run: node web/scripts/workflow/migration-rehearsal-scope.mjs
 
       - name: Setup Supabase CLI
@@ -203,3 +247,90 @@ jobs:
       - name: Stop Local Supabase
         if: always() && steps.rehearsal-scope.outputs.database != 'false'
         run: supabase stop --no-backup
+
+  production-build:
+    needs: candidate-source
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.candidate-source.outputs.sha }}
+          persist-credentials: false
+      - name: Setup pinned Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Discover all nine smoke journeys without services or credentials
+        run: npm run test:e2e:smoke:list
+      - name: Build production candidate
+        if: needs.candidate-source.outputs.build != 'false'
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: disposable-build-only
+          SUPABASE_SERVICE_ROLE_KEY: disposable-build-only
+        run: npm run build
+      - name: Record proven prose-only build exception
+        if: needs.candidate-source.outputs.build == 'false'
+        run: echo 'Build not needed for the complete known prose-only diff; smoke discovery still passed.'
+
+  recovery-tooling:
+    needs: candidate-source
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ needs.candidate-source.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup pinned Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version-file: web/.nvmrc
+      - name: Select recovery tooling scope
+        id: scope
+        env:
+          REHEARSAL_BASE_SHA: ${{ needs.candidate-source.outputs.base }}
+        run: node web/scripts/workflow/migration-rehearsal-scope.mjs
+      - name: Explicit unrelated recovery no-op
+        if: steps.scope.outputs.tooling == 'false'
+        run: Write-Output 'Complete candidate diff leaves recovery tooling inputs unchanged.'
+      - name: Prepare existing historical recovery fixtures
+        if: steps.scope.outputs.tooling != 'false'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Ephemeral runner required' }
+          if (git status --porcelain) { throw 'Clean source required' }
+          $evidenceCommit = '172958fe5a413f4c8ced08b431b3ead82dc92bf7'
+          git fetch --no-tags --no-write-fetch-head origin $evidenceCommit
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned tooling evidence acquisition failed' }
+          $resolved = git rev-parse --verify "$evidenceCommit^{commit}"
+          if ($LASTEXITCODE -ne 0 -or $resolved -ne $evidenceCommit) { throw 'Pinned evidence mismatch' }
+          git worktree add --detach (Join-Path $env:RUNNER_TEMP 'recovery-tooling-peer') HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Recovery peer fixture creation failed' }
+      - name: Run only existing recovery tooling tests
+        if: steps.scope.outputs.tooling != 'false'
+        run: |
+          & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File scripts/database/tests/Run-Tests.ps1
+          exit $LASTEXITCODE
+      - name: Clean only owned recovery peer fixture
+        if: always() && steps.scope.outputs.tooling != 'false'
+        run: |
+          $peer = Join-Path $env:RUNNER_TEMP 'recovery-tooling-peer'
+          if (Test-Path $peer) {
+            git worktree remove $peer
+            if ($LASTEXITCODE -ne 0) { throw 'Recovery peer cleanup failed' }
+          }
