@@ -41,6 +41,15 @@ test.describe('My unauthenticated tests', () => {
 })
 ```
 
+### Shopping fixture semantics
+
+Recipe additions use ingredient review and successful command receipts (Applied or
+Unchanged). Explicit inclusion makes selected purchases active, including Pantry
+and excluded ingredients. Restore-control fixtures may seed default availability
+once through the authenticated Shopping command API, then reload persisted state.
+Never reset visibility after the replacement being tested: assert its real outcome.
+Lifecycle coverage checks Restore, explicit re-add, preference retention, and reload persistence.
+
 ## Running Tests
 
 Shopping Slice 5: `node node_modules/@playwright/test/cli.js test
@@ -71,7 +80,10 @@ Smoke tests are selected by explicit `@smoke` tags in test titles.
 npm run test:e2e:smoke:list
 ```
 
-This command lists smoke tests and fails if fewer than 5 are selected.
+This command lists the three required smoke-owning files and verifies all nine
+named auth, navigation, reload, Shopping and recipe-mutation journeys. Missing or
+duplicate identities fail even if unrelated tests keep the total count high.
+It does not run browser assertions or load unrelated historical fixture suites.
 
 ### Run full cross-browser matrix
 ```bash
@@ -156,9 +168,9 @@ npm run test:e2e:debug
 
 ### Run specific test file
 ```bash
-npx playwright test authentication.spec.ts
-npx playwright test recipes.spec.ts
-npx playwright test responsive.spec.ts
+npx playwright test authentication.spec.ts --project=chromium
+npx playwright test recipes.spec.ts --project=chromium
+npx playwright test responsive.spec.ts --project=chromium
 ```
 
 ### Run tests for specific browser

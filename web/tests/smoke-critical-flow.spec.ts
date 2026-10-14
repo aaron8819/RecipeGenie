@@ -35,7 +35,12 @@ async function activateBottomNavRoute(
   routeName: RegExp
 ) {
   const link = page.getByRole('navigation', { name: /bottom navigation/i }).getByRole('link', { name: routeName })
-  await link.dispatchEvent('click')
+  await link.click()
+  const destination = await link.getAttribute('href')
+  expect(destination).toMatch(/^\/(planner|shopping|pantry)$/)
+  await expect(page).toHaveURL(new RegExp(`${destination}(?:\\?|$)`))
+  await expect(link).toHaveAttribute('aria-current', 'page')
+  await expect(page.locator('[data-app-screen]')).toHaveCount(1)
 }
 
 test.describe('Smoke Baseline', () => {
