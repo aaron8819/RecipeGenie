@@ -16,6 +16,18 @@ Vercel automatically provides `VERCEL_GIT_COMMIT_SHA` when [Automatically expose
 
 The build timestamp defaults to the time Next.js evaluates `next.config.js`. For a reproducible external build timestamp, set `RECIPE_GENIE_BUILD_TIMESTAMP` to an ISO-8601 value in the build command environment. `RECIPE_GENIE_GIT_SHA` may similarly override Vercel's SHA for a controlled non-Vercel build. Do not set either value to a secret.
 
+## Normal release check
+
+After an authorized merge/deployment and exact-head CI/deployment readiness, start
+with the trusted `scripts/rg-verify.ps1 release` launcher described in the
+[developer workflow](developer-workflow.md#release-status). It verifies source,
+manifest and project identity without connecting to a database. Pending readiness
+is ongoing work, not a reason to restart qualification or run every deeper audit.
+
+The database-backed verifier below adds schema/data assurance when the task needs
+it and the read-only target is authorized. It is not a second mandatory gate for
+every release and does not replace mutation-specific approvals or safety runbooks.
+
 ## Production verification
 
 Run with explicit target identity. The command never guesses a production target and opens the database transaction as `READ ONLY`:

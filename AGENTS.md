@@ -79,7 +79,8 @@ against the unchanged base before expanding repair scope. Fix recoverable in-sco
 issues, refresh affected checks/review and continue without a diagnosis-only handoff.
 Stop for a material scope, access or risk decision, an unapproved protected action,
 or a blocker that cannot safely be resolved within scope. Required checks must still
-pass before publication/merge as applicable; never relabel failures or weaken gates.
+pass before merge. Draft publication may precede the full gate under the workflow guide;
+never relabel failures, pending work or a draft as acceptance.
 
 Run `npm run rg:doctor` before environment-sensitive verification or operational
 work involving Supabase, Vercel, GitHub, PostgreSQL, migrations, backups or
@@ -118,8 +119,9 @@ task-branch pushes, draft PRs, CI follow-through, and independent review without
 repeat owner approval. Use proportionate checks for the change as described above.
 Stage only task-specific changes and preserve unrelated owner work. Checks that
 require a clean committed worktree may run immediately after the local commit;
-retain failures and repair authorized defects before publication. Continue under
-the same bounded approval; no stage already covered needs approval again.
+retain failures and repair authorized defects before acceptance or merge. Draft PRs
+may expose incomplete checks so CI and review can start; report that state explicitly.
+Continue under the same bounded approval; no stage already covered needs approval again.
 
 Unless already covered by explicit task authorization, stop before any merge,
 deployment, redeployment, rollback, alias
