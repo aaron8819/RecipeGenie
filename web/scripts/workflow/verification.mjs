@@ -752,7 +752,7 @@ export function runPrVerification(options = {}) {
       check(
         "migration-tooling-tests",
         "SKIPPED",
-        "Complete clean candidate diff proves presentation/docs-only changes; database tooling unchanged.",
+        "Complete clean candidate diff leaves recovery-tooling inputs unchanged.",
         "scope-based omission",
       ),
     )

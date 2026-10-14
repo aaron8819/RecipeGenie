@@ -2,264 +2,394 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  RECOVERY_MIGRATION_VERSIONS,
+  databaseScope,
   localMigrationToolingRequired,
-  rehearsalScope,
-  requiresMigrationRehearsals,
+  planDatabaseChecks,
 } from "./migration-rehearsal-scope.mjs";
+const NONE = { database: false, parity: false, canonical: false, tooling: false };
+const FULL = { database: true, parity: true, canonical: true, tooling: true };
+const DB = { ...NONE, database: true };
+const RUNTIME = { ...DB, parity: true, canonical: true };
+const plan = (file, read) => planDatabaseChecks([file], read);
+const versions = (a, b) => () => [JSON.stringify(a), JSON.stringify(b)];
+const copy = (value) => structuredClone(value);
+const pkg = {
+  name: "recipe-genie",
+  private: true,
+  engines: { node: ">=22 <23" },
+  packageManager: "npm@10.9.8",
+  scripts: {
+    "test:migration014-preflight-parity": "node scripts/014.mjs",
+    "test:canonical-recipe-structure-migration": "node scripts/canonical.mjs",
+  },
+  dependencies: { react: "19", "@supabase/supabase-js": "2" },
+  devDependencies: { supabase: "2.109.1" },
+};
+const lock = {
+  lockfileVersion: 3,
+  packages: {
+    "": {},
+    "node_modules/supabase": {
+      version: "2.109.1",
+      dependencies: { helper: "1" },
+      optionalDependencies: { binary: "1" },
+    },
+    "node_modules/helper": { version: "1", integrity: "sha512-helper" },
+    "node_modules/binary": { version: "1", os: ["linux"] },
+    "node_modules/react": { version: "19" },
+  },
+};
 
-describe("migration rehearsal scope", () => {
-  it("omits only historical rehearsals for styles and inert images", () => {
-    expect(
-      requiresMigrationRehearsals([
-        "web/src/components/planner/planner-layout.css",
-        "web/src/app/globals.css",
-        "web/public/recipe-genie-mark.png",
-      ]),
-    ).toBe(false);
-  });
+describe("actual-input selection", () => {
   it.each([
-    "supabase/migrations/033.sql",
-    "supabase/config.toml",
-    "supabase/tests/owner.sql",
+    "AGENTS.md",
+    "docs/architecture.md",
+    "docs/assets/icon.png",
+    "supabase/SCHEMA.md",
+    "web/src/app/layout.tsx",
+    "web/src/app/api/recipes/route.ts",
+    "web/src/hooks/use-shopping.ts",
+    "web/src/lib/recipe-structure.ts",
+    "web/src/lib/supabase/client.ts",
     "web/src/components/planner/meal-planner.tsx",
-    "web/src/hooks/use-planner.ts",
-    "web/src/lib/shopping.ts",
-    "web/src/types/database.ts",
-    "web/qualification/combined-ui.spec.ts",
-    "web/scripts/workflow/verification.mjs",
-    "scripts/database/tests/Run-Tests.ps1",
-    ".github/workflows/ci.yml",
-    "web/package-lock.json",
-    "unknown.css",
-    "web/src/components/../hooks/owner.css",
-    "web/src/components/planner/../../app/globals.css",
+    "web/src/app/globals.css",
+    "web/public/manifest.json",
     "web/public/logo.svg",
-  ])("retains rehearsals for sensitive or unknown %s", (file) => {
-    expect(requiresMigrationRehearsals(["web/src/app/globals.css", file])).toBe(
-      true,
-    );
+    "web/tests/branding.spec.ts",
+    "web/qualification/combined-ui.spec.ts",
+    "web/next.config.ts",
+    "web/vitest.config.ts",
+    "web/playwright.combined-ui.config.ts",
+    "web/scripts/workflow/migration-rehearsal-scope.mjs",
+    "web/scripts/workflow/pr-evidence.mjs",
+    "web/scripts/workflow/release-status.mjs",
+    "web/scripts/workflow/verification.test.mjs",
+    "web/scripts/db-preflight.mjs",
+    ".github/workflows/combined-ui.yml",
+  ])("omits unrelated DB work for %s", (file) => expect(plan(file)).toEqual(NONE));
+  it.each([
+    "supabase/migrations/034_new_function.sql",
+    "supabase/tests/security.sql",
+    "supabase/verification/active_planner_reference_audit.sql",
+    "supabase/seed.sql",
+    "web/src/types/database.generated.ts",
+    "web/scripts/generate-db-types.mjs",
+  ])("keeps current DB checks without historical work for %s", (file) =>
+    expect(plan(file)).toEqual(DB),
+  );
+  it("maps historical prefixes and recovery fixtures independently", () => {
+    expect(plan("supabase/migrations/008_old.sql")).toEqual(RUNTIME);
+    expect(plan("supabase/migrations/014_add_recipe_yield_metadata.sql")).toEqual(FULL);
+    expect(plan("supabase/migrations/015_dependency.sql")).toEqual({ ...DB, canonical: true });
+    expect(plan("supabase/migrations/016_canonical_recipe_structure_cutover.sql")).toEqual({
+      ...DB,
+      canonical: true,
+      tooling: true,
+    });
+    expect(plan("supabase/migrations/033_fix_recipe_quantity_rational_comparison.sql")).toEqual({
+      ...DB,
+      tooling: true,
+    });
+    expect(plan("scripts/database/preflight/014_add_recipe_yield_metadata.sql")).toEqual({
+      ...DB,
+      parity: true,
+      tooling: true,
+    });
+    expect(plan("web/scripts/run-migration014-preflight-parity.mjs")).toEqual({
+      ...DB,
+      parity: true,
+    });
+    expect(plan("web/scripts/run-canonical-recipe-structure-migration.mjs")).toEqual({
+      ...DB,
+      canonical: true,
+    });
+    expect(plan("scripts/database/RecipeGenieBackup.Common.ps1")).toEqual({
+      ...NONE,
+      tooling: true,
+    });
+    expect(plan("scripts/rg-verify.ps1")).toEqual({ ...NONE, tooling: true });
   });
-  it("fails closed for empty, malformed, missing or unresolved scope", () => {
-    for (const files of [
-      [],
-      null,
-      [null],
-      [""],
-      ["web\\src\\app\\globals.css"],
-    ]) {
-      expect(requiresMigrationRehearsals(files)).toBe(true);
-    }
-    expect(rehearsalScope("0".repeat(40), "a".repeat(40))).toBe(true);
+  it.each(["supabase/config.toml", "web/.nvmrc", ".npmrc"])(
+    "selects shared execution risks for %s",
+    (file) => expect(plan(file)).toEqual(RUNTIME),
+  );
+  it.each([
+    "unknown.sh",
+    "web/scripts/new-helper.mjs",
+    "supabase/migrations/bad.sql",
+    "supabase/functions/unknown.ts",
+    "web/src/../scripts/unknown.mjs",
+    "web\\src\\file.ts",
+    "",
+  ])("fails full for unknown/malformed %s", (file) => expect(plan(file)).toEqual(FULL));
+  it("fails full for empty scope and combines risks", () => {
+    for (const files of [[], null, [null]]) expect(planDatabaseChecks(files)).toEqual(FULL);
     expect(
-      rehearsalScope("a".repeat(40), "b".repeat(40), () => {
-        throw Error();
-      }),
-    ).toBe(true);
-  });
-  it("includes both sides of renames and cannot hide a removed persistence file", () => {
-    const base = "a".repeat(40),
-      head = "b".repeat(40);
-    const calls = [];
-    const git = (args) => {
-      calls.push(args);
-      return args[0] === "rev-parse"
-        ? `${args[2].slice(0, 40)}\n`
-        : "web/src/hooks/use-planner.ts\0web/src/components/planner/new.css\0";
-    };
-    expect(rehearsalScope(base, head, git)).toBe(true);
-    expect(calls.at(-1)).toEqual([
-      "diff",
-      "--no-renames",
-      "--name-only",
-      "-z",
-      base,
-      head,
-      "--",
-    ]);
-  });
-  it("requires complete resolved scope before omitting rehearsals", () => {
-    const base = "a".repeat(40),
-      head = "b".repeat(40);
-    const git = (args) =>
-      args[0] === "rev-parse"
-        ? args[2].slice(0, 40)
-        : "web/src/app/globals.css\0";
-    expect(rehearsalScope(base, head, git)).toBe(false);
-    expect(
-      rehearsalScope(base, head, (args) =>
-        args[0] === "rev-parse" ? head : "",
-      ),
-    ).toBe(true);
-    expect(
-      rehearsalScope(base, head, (args) =>
-        args[0] === "rev-parse"
-          ? args[2].slice(0, 40)
-          : "web/src/app/globals.css",
-      ),
-    ).toBe(true);
-  });
-
-  it("keeps required job identity and database contracts outside the conditional", () => {
-    const workflow = readFileSync(
-      new URL("../../../.github/workflows/ci.yml", import.meta.url),
-      "utf8",
-    );
-    expect(workflow).toContain("  migration-smoke-and-drift:");
-    expect(
-      workflow.match(/if: steps.rehearsal-scope.outputs.full != 'false'/g),
-    ).toHaveLength(2);
-    expect(workflow).toContain("run: supabase test db --local supabase/tests");
-    expect(workflow).toContain("run: npm run db:types:check");
-    expect(workflow).toContain("run: supabase db reset --local");
+      planDatabaseChecks([
+        "docs/guide.md",
+        "supabase/tests/security.sql",
+        "scripts/database/backup.ps1",
+      ]),
+    ).toEqual({ ...DB, tooling: true });
   });
 });
 
-describe("proven icon and documentation scope", () => {
-  const layout = "web/src/app/layout.tsx";
-  const branding = "web/tests/branding.spec.ts";
-  const manifest = "web/public/manifest.json";
-  const source =
-    'const icon = "/apple-touch-icon-v3.png"; const href = "/manifest.json?v=home-icon-v3";';
-  const updated = source.replaceAll("-v3", "-v4");
-  const manifestSource = JSON.stringify({
-    id: "/",
-    start_url: "/dashboard",
-    icons: [{ src: "/pwa-icon-192-v3.png", sizes: "192x192", purpose: "any" }],
+describe("content-dependent runtime inputs", () => {
+  it("omits unrelated UI/client SDK dependency and build-script updates", () => {
+    const after = copy(pkg);
+    after.dependencies.react = "20";
+    after.dependencies["@supabase/supabase-js"] = "3";
+    after.scripts.build = "next build --webpack";
+    expect(plan("web/package.json", versions(pkg, after))).toEqual(NONE);
+    const afterLock = copy(lock);
+    afterLock.packages["node_modules/react"].version = "20";
+    expect(plan("web/package-lock.json", versions(lock, afterLock))).toEqual(NONE);
   });
-  const versions = (file) =>
-    file === manifest
-      ? [manifestSource, manifestSource.replace("-v3", "-v4")]
-      : [source, updated];
-
-  it("omits rehearsals for the complete PR99 icon-only shape with content proof", () => {
-    expect(
-      requiresMigrationRehearsals(
-        [
-          "docs/home-screen-icon.md",
-          "docs/assets/home-screen-icon-v4.png",
-          "web/public/apple-touch-icon-v4.png",
-          manifest,
-          layout,
-          branding,
-        ],
-        versions,
-      ),
-    ).toBe(false);
-    expect(requiresMigrationRehearsals(["docs/component-guide.md"])).toBe(
-      false,
-    );
-  });
-  it.each([layout, branding, manifest])(
-    "requires readable before/after proof for %s",
-    (file) => {
-      expect(requiresMigrationRehearsals([file])).toBe(true);
-      for (const read of [
-        () => {
-          throw Error("missing");
-        },
-        () => ["", updated],
-        () => [source, null],
-        () => ["{bad", "{bad"],
-      ]) {
-        expect(requiresMigrationRehearsals([file], read)).toBe(true);
-      }
+  it.each(["cli", "engine", "packageManager", "lifecycle", "override"])(
+    "selects package execution risk %s",
+    (kind) => {
+      const after = copy(pkg);
+      if (kind === "cli") after.devDependencies.supabase = "2.110.0";
+      if (kind === "engine") after.engines.node = ">=24";
+      if (kind === "packageManager") after.packageManager = "npm@11";
+      if (kind === "lifecycle") after.scripts.postinstall = "node setup-db.mjs";
+      if (kind === "override") after.overrides = { helper: "2" };
+      expect(plan("web/package.json", versions(pkg, after))).toEqual(RUNTIME);
     },
   );
-  it.each([layout, branding])(
-    "does not hide executable changes in %s",
-    (file) => {
-      for (const after of [
-        updated + " await database.write();",
-        updated + '\nimport { headers } from "next/headers";',
-        updated.replace("const icon", "const nonce"),
-        updated.replace("/apple-touch-icon-v4.png", "/unrecognized.png"),
-      ]) {
-        expect(requiresMigrationRehearsals([file], () => [source, after])).toBe(
-          true,
-        );
-      }
+  it("binds package identity to recovery tooling separately", () => {
+    expect(plan("web/package.json", versions(pkg, { ...pkg, name: "wrong" }))).toEqual({
+      ...NONE,
+      tooling: true,
+    });
+  });
+  it.each(["node_modules/supabase", "node_modules/helper", "node_modules/binary"])(
+    "includes CLI transitive/optional input %s",
+    (location) => {
+      const after = copy(lock);
+      after.packages[location].version = "2";
+      expect(plan("web/package-lock.json", versions(lock, after))).toEqual(RUNTIME);
     },
   );
-  it("retains all manifest identity and non-src icon fields", () => {
-    for (const after of [
-      manifestSource.replace("/dashboard", "/recipes"),
-      manifestSource.replace("192x192", "512x512"),
-      manifestSource.replace("any", "maskable"),
-    ]) {
+  it.each(["web/package.json", "web/package-lock.json", ".github/workflows/ci.yml"])(
+    "fails full on unreadable/malformed %s",
+    (file) => {
+      expect(plan(file)).toEqual(FULL);
       expect(
-        requiresMigrationRehearsals([manifest], () => [manifestSource, after]),
-      ).toBe(true);
-    }
+        plan(file, () => {
+          throw Error("unreadable");
+        }),
+      ).toEqual(FULL);
+      expect(plan(file, () => ["{bad", "{}"])).toEqual(FULL);
+    },
+  );
+  it("fails full for links, unresolved graph and unknown lock schema", () => {
+    const linked = copy(lock);
+    linked.packages["node_modules/helper"].link = true;
+    const missing = copy(lock);
+    delete missing.packages["node_modules/helper"];
+    for (const after of [linked, missing, { ...lock, lockfileVersion: 1 }])
+      expect(plan("web/package-lock.json", versions(lock, after))).toEqual(FULL);
   });
-  it.each([
-    "supabase/SCHEMA.md",
-    "supabase/migrations/034.sql",
-    "supabase/rollback/034.sql",
-    "supabase/config.toml",
-    "supabase/tests/security.sql",
-    "scripts/database/backup.ps1",
-    "web/scripts/workflow/migration-rehearsal-scope.mjs",
-    ".github/workflows/ci.yml",
-    "web/src/lib/supabase/client.ts",
-    "web/src/app/api/recipes/route.ts",
-    "web/src/hooks/use-recipes.ts",
-    "web/src/types/database.ts",
-    "web/package.json",
-    "web/package-lock.json",
-    "web/next.config.ts",
-    "docs/../supabase/config.toml",
-    "docs/database.sql",
-    "unknown/file.ts",
-  ])("keeps the full gate when inert changes accompany %s", (file) => {
-    expect(requiresMigrationRehearsals(["docs/guide.md", file], versions)).toBe(
-      true,
-    );
+  it("preserves workflow execution context, disregarding only selection predicates and quality job", () => {
+    const source = readFileSync(
+      new URL("../../../.github/workflows/ci.yml", import.meta.url),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
+    const read = (after) => () => [source, after];
+    expect(
+      plan(".github/workflows/ci.yml", read(source.replaceAll("outputs.parity", "outputs.full"))),
+    ).toEqual(NONE);
+    expect(
+      plan(
+        ".github/workflows/ci.yml",
+        read(source.replace("Run Verification Baseline", "Quality check")),
+      ),
+    ).toEqual(NONE);
+    for (const after of [
+      source.replace("version: 2.109.1", "version: 2.110.0"),
+      source.replace("fetch-depth: 0", "fetch-depth: 1"),
+      source.replace("run: supabase start", "run: supabase start --exclude auth"),
+      source.replace(
+        "  migration-smoke-and-drift:",
+        "  migration-smoke-and-drift:\n    env:\n      NEW: value",
+      ),
+      source.replace("runs-on: ubuntu-latest\n    steps:", "runs-on: ubuntu-26.04\n    steps:"),
+    ])
+      expect(plan(".github/workflows/ci.yml", read(after))).toEqual(RUNTIME);
   });
-  it("uses the same content proof for CI and a clean committed local candidate", () => {
-    const base = "a".repeat(40),
-      head = "b".repeat(40);
-    const git = (args) => {
-      if (args[0] === "status") return "";
+});
+
+describe("complete scope and dependency drift guards", () => {
+  const base = "a".repeat(40),
+    head = "b".repeat(40);
+  const git =
+    (files, dirty = "") =>
+    (args) => {
+      if (args[0] === "status") return dirty;
       if (args[0] === "rev-parse")
         return args[2].startsWith("origin/main")
           ? base
           : args[2].startsWith("HEAD")
             ? head
             : args[2].slice(0, 40);
-      if (args[0] === "diff")
-        return `${layout}\0${manifest}\0${branding}\0docs/icon.md\0`;
-      const [ref, file] = args[1].split(":");
-      return versions(file)[ref === base ? 0 : 1];
+      return files;
     };
-    expect(rehearsalScope(base, head, git)).toBe(false);
-    expect(localMigrationToolingRequired(git)).toBe(false);
+  it("resolves NUL scope, including rename sources, and rejects incomplete reads", () => {
+    expect(databaseScope(base, head, git("web/src/app/layout.tsx\0"))).toEqual(NONE);
     expect(
-      localMigrationToolingRequired((args) =>
-        args[0] === "status" ? "?? unknown.ts" : git(args),
-      ),
-    ).toBe(true);
+      databaseScope(base, head, git("supabase/migrations/014_old.sql\0web/src/new.ts\0")),
+    ).toEqual(FULL);
+    expect(databaseScope(base, head, git("web/src/app/layout.tsx"))).toEqual(FULL);
+    expect(databaseScope("0".repeat(40), head, git(""))).toEqual(FULL);
     expect(
-      localMigrationToolingRequired(() => {
-        throw Error("missing base");
+      databaseScope(base, head, () => {
+        throw Error();
       }),
-    ).toBe(true);
-    expect(
-      rehearsalScope(base, head, (args) =>
-        args[0] === "show" ? updated + "database.write()" : git(args),
-      ),
-    ).toBe(true);
+    ).toEqual(FULL);
+  });
+  it("selects local recovery inputs and fails safe for dirty scope", () => {
+    expect(localMigrationToolingRequired(git("web/src/app/layout.tsx\0"))).toBe(false);
+    expect(localMigrationToolingRequired(git("scripts/database/backup.ps1\0"))).toBe(true);
+    expect(localMigrationToolingRequired(git("web/src/app/layout.tsx\0", "?? unknown"))).toBe(true);
+  });
+  it("requires deliberate mapping when historical runners gain imports or read inputs", () => {
+    const runners = [
+      [
+        "run-migration014-preflight-parity.mjs",
+        ["node:child_process", "node:fs", "node:url"],
+        ["../scripts/database/preflight/014_add_recipe_yield_metadata.sql"],
+      ],
+      [
+        "run-canonical-recipe-structure-migration.mjs",
+        ["node:child_process", "node:fs"],
+        [
+          "../supabase/migrations/016_canonical_recipe_structure_cutover.sql",
+          "../supabase/migrations/017_remove_legacy_recipe_structure.sql",
+        ],
+      ],
+    ];
+    for (const [file, imports, reads] of runners) {
+      const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      expect([...source.matchAll(/from ["']([^"']+)["']/g)].map((m) => m[1])).toEqual(imports);
+      expect([...source.matchAll(/readFileSync\(\s*["']([^"']+)["']/g)].map((m) => m[1])).toEqual(
+        reads,
+      );
+      expect([...source.matchAll(/readFileSync\(/g)]).toHaveLength(reads.length);
+    }
+  });
+  it("keeps required job identities and independent fail-safe predicates", () => {
+    const workflow = readFileSync(
+      new URL("../../../.github/workflows/ci.yml", import.meta.url),
+      "utf8",
+    ).replace(/\r\n/g, "\n");
+    expect(workflow).toContain("  migration-smoke-and-drift:");
+    for (const flag of ["parity", "canonical"])
+      expect(workflow).toContain(`if: steps.rehearsal-scope.outputs.${flag} != 'false'`);
+    for (const name of [
+      "Setup Supabase CLI",
+      "Start Local Supabase",
+      "Reset Local Database",
+      "Run Database Security Contracts",
+      "Check Deterministic Schema-Type Drift",
+    ])
+      expect(workflow).toContain(
+        `- name: ${name}\n        if: steps.rehearsal-scope.outputs.database != 'false'`,
+      );
+    expect(workflow).toContain("if: always() && steps.rehearsal-scope.outputs.database != 'false'");
   });
 });
 
-it("rejects malformed manifest icon entries instead of erasing their differences", () => {
-  for (const icons of [[1], [null], ["icon"], [{}], []]) {
-    const before = JSON.stringify({ icons });
-    const after = JSON.stringify({ icons: [{ src: "/pwa-icon-192-v4.png" }] });
+it.each([
+  "pretest:migration014-preflight-parity",
+  "test:migration014-preflight-parity",
+  "posttest:migration014-preflight-parity",
+])("maps npm event %s to parity only", (event) => {
+  const after = copy(pkg);
+  after.scripts[event] = "node changed.mjs";
+  expect(plan("web/package.json", versions(pkg, after))).toEqual({ ...DB, parity: true });
+});
+it.each([
+  "pretest:canonical-recipe-structure-migration",
+  "test:canonical-recipe-structure-migration",
+  "posttest:canonical-recipe-structure-migration",
+])("maps npm event %s to canonical only", (event) => {
+  const after = copy(pkg);
+  after.scripts[event] = "node changed.mjs";
+  expect(plan("web/package.json", versions(pkg, after))).toEqual({ ...DB, canonical: true });
+});
+it.each([
+  "preinstall",
+  "install",
+  "postinstall",
+  "prepublish",
+  "preprepare",
+  "prepare",
+  "postprepare",
+])("includes npm ci lifecycle %s", (event) => {
+  const after = copy(pkg);
+  after.scripts[event] = "node setup.mjs";
+  expect(plan("web/package.json", versions(pkg, after))).toEqual(RUNTIME);
+});
+it("keeps DB type-generation hooks separate from historical fixtures", () => {
+  const after = copy(pkg);
+  after.scripts["predb:types:regen:tmp"] = "node types.mjs";
+  expect(plan("web/package.json", versions(pkg, after))).toEqual(DB);
+});
+it("includes added/changed lifecycle-bearing dependencies outside the CLI closure", () => {
+  const before = copy(lock),
+    after = copy(lock);
+  after.packages["node_modules/react"].hasInstallScript = true;
+  expect(plan("web/package-lock.json", versions(before, after))).toEqual(RUNTIME);
+  before.packages["node_modules/react"].hasInstallScript = true;
+  after.packages["node_modules/react"].version = "20";
+  expect(plan("web/package-lock.json", versions(before, after))).toEqual(RUNTIME);
+});
+it("binds actual root install hooks and local-import assumptions to explicit map maintenance", () => {
+  const actual = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+  for (const event of [
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepublish",
+    "preprepare",
+    "prepare",
+    "postprepare",
+  ])
     expect(
-      requiresMigrationRehearsals(["web/public/manifest.json"], () => [
-        before,
-        after,
-      ]),
-    ).toBe(true);
-  }
+      actual.scripts[event],
+      "New install hooks need their transitive inputs mapped",
+    ).toBeUndefined();
+});
+
+it("pins recovery registry inputs so new supported migrations require classifier maintenance", () => {
+  const common = readFileSync(
+    new URL("../../../scripts/database/RecipeGenieBackup.Common.ps1", import.meta.url),
+    "utf8",
+  );
+  const versions = [...common.matchAll(/'supabase\/migrations\/(\d{3})_[^']+' \{/g)].map((match) =>
+    Number(match[1]),
+  );
+  expect([1, ...versions]).toEqual(RECOVERY_MIGRATION_VERSIONS);
+  expect(
+    [...common.matchAll(/PreflightPath = '(supabase\/verification\/[^']+)'/g)].map(
+      (match) => match[1],
+    ),
+  ).toEqual(["supabase/verification/canonical_recipe_structure_preflight.sql"]);
+  expect(plan("supabase/verification/canonical_recipe_structure_preflight.sql")).toEqual({
+    ...NONE,
+    tooling: true,
+  });
+  expect(plan("supabase/migration-checksums.json")).toEqual(NONE);
+});
+
+it("runs recovery safety assertions for root ignore rules without historical rehearsal", () => {
+  expect(plan(".gitignore")).toEqual({ ...NONE, tooling: true });
+  expect(plan("web/.gitignore")).toEqual(NONE);
+});
+it("fails full for unsupported array-valued lock package records", () => {
+  const after = copy(lock);
+  after.packages["node_modules/react"] = [];
+  expect(plan("web/package-lock.json", versions(lock, after))).toEqual(FULL);
 });
