@@ -73,6 +73,9 @@ it('hosted workflow replaces each unique local gate and keeps owned cleanup fail
   expect(recovery).toContain('scripts/database/tests/Run-Tests.ps1');
   expect(recovery).toContain("if: steps.scope.outputs.tooling == 'false'");
   expect(recovery).toContain("throw 'Recovery peer cleanup failed'");
+  expect(recovery).toContain("$gitDirectory = Join-Path $env:ProgramFiles 'Git/cmd'");
+  expect(recovery).toContain("throw 'Trusted runner Git executable is missing'");
+  expect(recovery).toContain("$env:Path = @(");
   expect(recovery).not.toMatch(/rg-verify|npm run verify|npm run build|continue-on-error/);
   expect(workflow).toContain('supabase stop --no-backup');
 });

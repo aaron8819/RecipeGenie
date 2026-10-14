@@ -324,6 +324,17 @@ jobs:
       - name: Run only existing recovery tooling tests
         if: steps.scope.outputs.tooling != 'false'
         run: |
+          $ErrorActionPreference = 'Stop'
+          $gitDirectory = Join-Path $env:ProgramFiles 'Git/cmd'
+          if (-not (Test-Path -LiteralPath (Join-Path $gitDirectory 'git.exe') -PathType Leaf)) {
+            throw 'Trusted runner Git executable is missing'
+          }
+          $env:Path = @(
+            $gitDirectory
+            $PSHOME
+            (Join-Path $env:SystemRoot 'System32')
+            $env:SystemRoot
+          ) -join ';'
           & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -File scripts/database/tests/Run-Tests.ps1
           exit $LASTEXITCODE
       - name: Clean only owned recovery peer fixture
