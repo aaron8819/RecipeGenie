@@ -147,6 +147,24 @@ function workflowInputs(source) {
     );
 }
 
+function attributeInputs(source) {
+  return source
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .filter((line) => {
+      const text = line.trim();
+      if (!text || text.startsWith("#")) return false;
+      const [pattern, ...attributes] = text.split(/\s+/);
+      const appOnly =
+        /^(?:src|public|tests|qualification)\//.test(pattern) &&
+        !pattern.split("/").some((part) => part === ".." || part === ".") &&
+        attributes.length > 0 &&
+        attributes.every((attribute) => /^(?:-?text|eol=(?:lf|crlf))$/.test(attribute));
+      return !appOnly;
+    })
+    .join("\n");
+}
+
 function changedInput(file, readVersions, project) {
   if (!readVersions) return true;
   try {
@@ -196,6 +214,10 @@ export function planDatabaseChecks(files, readVersions) {
       select("database", "parity", "canonical");
       continue;
     }
+    if (file === "web/.gitattributes") {
+      if (changedInput(file, readVersions, attributeInputs)) return all();
+      continue;
+    }
     if (
       file === "web/package.json" ||
       file === "web/package-lock.json" ||
@@ -236,6 +258,17 @@ export function planDatabaseChecks(files, readVersions) {
       } else if (changedInput(file, read, project)) select("database", "parity", "canonical");
       continue;
     }
+    if (
+      [
+        "web/scripts/admit-combined-ui-ci.mjs",
+        "web/scripts/admit-combined-ui-ci.test.mjs",
+        "web/scripts/local-e2e-runtime.mjs",
+        "web/scripts/local-e2e-runtime.test.mjs",
+        "web/scripts/verify-shopping-review-local.mjs",
+        "web/scripts/verify-shopping-selection-local.mjs",
+      ].includes(file)
+    )
+      continue;
     if (file.startsWith("scripts/database/")) {
       select("tooling");
       continue;

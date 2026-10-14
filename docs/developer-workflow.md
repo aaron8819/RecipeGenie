@@ -282,9 +282,9 @@ historical SQL fixtures do not execute application TypeScript and cannot replace
 | Changed inputs | Current DB contracts | 014 parity | 016/017 canonical | Recovery tooling |
 | --- | --- | --- | --- | --- |
 | Docs, UI/app code, browser tests, known unrelated tooling | No | No | No | No |
-| Migration001–014 | Yes | Yes | Yes | Supported recovery fixtures only |
-| Migration015–017 | Yes | No | Yes | Supported recovery fixtures only |
-| Migration018+ | Yes | No | No | Supported recovery fixtures only |
+| Migration 001–014 | Yes | Yes | Yes | Supported recovery fixtures only |
+| Migration 015–017 | Yes | No | Yes | Supported recovery fixtures only |
+| Migration 018+ | Yes | No | No | Supported recovery fixtures only |
 | 014 runner/preflight | Yes | Yes | No | Preflight also selects recovery tooling |
 | Canonical runner | Yes | No | Yes | No |
 | Current SQL security tests/audits, seed, generated DB types | Yes | No | No | No |
@@ -294,8 +294,8 @@ historical SQL fixtures do not execute application TypeScript and cannot replace
 
 The classifier maps the actual historical runner imports, embedded fixtures and
 SQL reads; regression guards require deliberate map maintenance when these inputs
-or the recovery registry change. Migration014 resets through013/014; canonical
-fixtures reset through015 and apply016/017. Their final latest-schema restores do
+or the recovery registry change. Migration 014 resets through 013/014; canonical
+fixtures reset through 015 and apply 016/017. Their final latest-schema restores do
 not make newer migrations historical-fixture inputs: the current database reset,
 security contracts, reference audits and schema drift cover the latest chain.
 
@@ -317,8 +317,8 @@ Windows gate in the manually dispatched combined-UI workflow is separately selec
 Release consistency checks do not execute historical rehearsals.
 
 PR85–99 audit found docs-only and app-only false positives and repeated equivalent
-PR/merge trees. Historical steps cost175–205 seconds/run in that sample; PR95–99
-repeated them for1976 aggregate seconds across ten runs (not wall-clock delay).
+PR/merge trees. Historical steps cost 175–205 seconds/run in that sample; PR95–99
+repeated them for 1,976 aggregate seconds across ten runs (not wall-clock delay).
 Cross-run caching/reuse is deliberately absent: future reuse must bind a successful
 source run, tested inputs and execution/runtime identity, not just an observed tree.
 The runners' existing restoration/failure cleanup remains unchanged in this patch.

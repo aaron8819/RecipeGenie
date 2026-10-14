@@ -393,3 +393,35 @@ it("fails full for unsupported array-valued lock package records", () => {
   after.packages["node_modules/react"] = [];
   expect(plan("web/package-lock.json", versions(lock, after))).toEqual(FULL);
 });
+
+it.each([
+  "admit-combined-ui-ci.mjs",
+  "admit-combined-ui-ci.test.mjs",
+  "local-e2e-runtime.mjs",
+  "local-e2e-runtime.test.mjs",
+  "verify-shopping-review-local.mjs",
+  "verify-shopping-selection-local.mjs",
+])("omits fixtures unrelated to the explicit harness %s", (file) => {
+  expect(plan(`web/scripts/${file}`)).toEqual(NONE);
+});
+it("proves app-only checkout attributes while rejecting broader rules", () => {
+  const before = "src/lib/__tests__/snapshot.snap -text\n";
+  const read = (after) => () => [before, after];
+  expect(
+    plan(
+      "web/.gitattributes",
+      read(before + "# app fixtures\nsrc/lib/fixtures/cake.txt text eol=lf\n"),
+    ),
+  ).toEqual(NONE);
+  for (const rule of [
+    "*.sql text",
+    "scripts/** text eol=lf",
+    "src/** filter=custom",
+    "src/../../scripts/** text",
+    "* working-tree-encoding=UTF-16",
+  ]) {
+    expect(plan("web/.gitattributes", read(before + rule + "\n"))).toEqual(FULL);
+  }
+  expect(plan("web/.gitattributes")).toEqual(FULL);
+  expect(plan(".gitattributes")).toEqual(FULL);
+});
