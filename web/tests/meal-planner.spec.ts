@@ -4,6 +4,7 @@ import {
   VIEWPORTS,
   reviewCreatedRecipe,
   saveReviewedRecipe,
+  expectShoppingSource,
 } from './fixtures'
 import type { Page, Locator } from '@playwright/test'
 
@@ -33,14 +34,19 @@ function buildRecipe(seed: string, category = 'Chicken'): RecipeDraft {
 }
 
 async function createRecipe(page: Page, recipe: RecipeDraft) {
-  await page.getByRole('button', { name: /add recipe/i }).first().click()
+  await page
+    .getByRole('button', { name: /add recipe/i })
+    .first()
+    .click()
   const dialog = page.getByRole('dialog').first()
 
   await expect(dialog).toBeVisible()
   await dialog.getByRole('tab', { name: 'Manual', exact: true }).click()
   await dialog.locator('#name-add').fill(recipe.name)
   await dialog.getByRole('combobox').first().click()
-  await page.getByRole('option', { name: new RegExp(`^${escapeRegex(recipe.category)}$`, 'i') }).click()
+  await page
+    .getByRole('option', { name: new RegExp(`^${escapeRegex(recipe.category)}$`, 'i') })
+    .click()
   await dialog.locator('input[type="number"]').first().fill(String(recipe.servings))
 
   for (let index = 0; index < recipe.ingredients.length; index += 1) {
@@ -48,8 +54,14 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
       await dialog.getByRole('button', { name: /add row|add ingredient/i }).click()
     }
 
-    await dialog.locator('input[placeholder="Amt"]').nth(index).fill(recipe.ingredients[index].amount)
-    await dialog.locator('input[placeholder="Ingredient"]').nth(index).fill(recipe.ingredients[index].item)
+    await dialog
+      .locator('input[placeholder="Amt"]')
+      .nth(index)
+      .fill(recipe.ingredients[index].amount)
+    await dialog
+      .locator('input[placeholder="Ingredient"]')
+      .nth(index)
+      .fill(recipe.ingredients[index].item)
   }
 
   await dialog.locator('textarea').first().fill(recipe.instructions)
@@ -59,7 +71,7 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
     page.getByTestId('recipe-detail-page').getByRole('heading', {
       name: recipe.name,
       level: 1,
-    })
+    }),
   ).toBeVisible()
   await page.getByRole('button', { name: /back to recipes/i }).click()
   await expect(page.getByTestId('recipe-detail-page')).toHaveCount(0)
@@ -68,7 +80,10 @@ async function createRecipe(page: Page, recipe: RecipeDraft) {
 async function jumpWeeks(page: Page, count: number) {
   for (let index = 0; index < count; index += 1) {
     const currentWeek = await plannerWeekLabel(page).textContent()
-    await page.getByRole('button', { name: /next week/i }).first().click()
+    await page
+      .getByRole('button', { name: /next week/i })
+      .first()
+      .click()
     await expect(plannerWeekLabel(page)).not.toHaveText(currentWeek || '')
   }
 }
@@ -78,7 +93,10 @@ function plannerWeekLabel(page: Page): Locator {
 }
 
 async function openPlannerTab(page: Page) {
-  await page.getByRole('complementary').getByRole('link', { name: /^planner$/i }).click()
+  await page
+    .getByRole('complementary')
+    .getByRole('link', { name: /^planner$/i })
+    .click()
 }
 
 async function handleGeneratePlan(page: Page) {
@@ -102,7 +120,9 @@ async function addRecipeToCurrentWeek(page: Page, recipeName: string) {
   await page.getByRole('button', { name: /^add meal$/i }).click()
   const dialog = page.getByRole('dialog').first()
 
-  await expect(dialog.getByRole('heading', { name: 'Add Recipe to Plan', exact: true })).toBeVisible()
+  await expect(
+    dialog.getByRole('heading', { name: 'Add Recipe to Plan', exact: true }),
+  ).toBeVisible()
   await dialog.getByPlaceholder(/search recipes/i).fill(recipeName)
   await dialog.locator('li button').filter({ hasText: recipeName }).first().click()
   await dialog.getByRole('button', { name: /^add to plan$/i }).click()
@@ -123,7 +143,9 @@ async function moveRecipeToAnotherDay(page: Page, recipeName: string): Promise<s
   await card.getByRole('button', { name: `More actions for ${recipeName}`, exact: true }).click()
   await page.getByRole('menuitem', { name: 'Move meal', exact: true }).click()
 
-  const menuItems = page.getByRole('menuitem').filter({ hasText: /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat), / })
+  const menuItems = page
+    .getByRole('menuitem')
+    .filter({ hasText: /^(Sun|Mon|Tue|Wed|Thu|Fri|Sat), / })
   const count = await menuItems.count()
 
   for (let index = 0; index < count; index += 1) {
@@ -165,7 +187,10 @@ test.describe('Meal Planner', () => {
     await openPlannerTab(page)
   })
 
-  test('generates a plan for the visible week and keeps that week populated after reload @core', async ({ page, navigateToRoute }) => {
+  test('generates a plan for the visible week and keeps that week populated after reload @core', async ({
+    page,
+    navigateToRoute,
+  }) => {
     const seed = `${Date.now()}-generate`
 
     await navigateToRoute('recipes')
@@ -183,7 +208,10 @@ test.describe('Meal Planner', () => {
     await expect(page.getByRole('button', { name: /^More actions for / }).first()).toBeVisible()
   })
 
-  test('adds a created recipe to plan, moves it to another day, and preserves the assignment after reload @core', async ({ page, navigateToRoute }) => {
+  test('adds a created recipe to plan, moves it to another day, and preserves the assignment after reload @core', async ({
+    page,
+    navigateToRoute,
+  }) => {
     const seed = `${Date.now()}-move`
     const recipe = buildRecipe(seed)
 
@@ -197,11 +225,11 @@ test.describe('Meal Planner', () => {
     await expectAssignedDayDisabled(page, recipe.name, assignedDayLabel)
 
     const selectedWeekLabel = await plannerWeekLabel(page).textContent()
-    await plannerRecipeCard(page, recipe.name).getByRole('button', { name: recipe.name, exact: true }).click()
+    await plannerRecipeCard(page, recipe.name)
+      .getByRole('button', { name: recipe.name, exact: true })
+      .click()
     await expect(page).toHaveURL(/\/recipes\/[^/?]+\?from=planner/)
-    await expect(
-      page.getByRole('heading', { name: recipe.name, level: 1 })
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: recipe.name, level: 1 })).toBeVisible()
     await page.getByRole('button', { name: /back to planner/i }).click()
     await expect(plannerWeekLabel(page)).toHaveText(selectedWeekLabel || '')
     await expect(plannerRecipeCard(page, recipe.name)).toBeVisible()
@@ -213,7 +241,10 @@ test.describe('Meal Planner', () => {
     await expectAssignedDayDisabled(page, recipe.name, assignedDayLabel)
   })
 
-  test('sends planned meal ingredients to Shopping and keeps the recipe linked back to Shopping on return @core', async ({ page, navigateToRoute }) => {
+  test('sends planned meal ingredients to Shopping and keeps the recipe linked back to Shopping on return @core', async ({
+    page,
+    navigateToRoute,
+  }) => {
     const seed = `${Date.now()}-shopping`
     const recipe = buildRecipe(seed)
 
@@ -227,16 +258,22 @@ test.describe('Meal Planner', () => {
     const review = page.getByRole('dialog')
     await expect(review).toBeVisible()
     for (let index = 0; index < recipe.ingredients.length; index += 1) {
-      await expect(review.getByRole('checkbox', {
-        name: `${recipe.name} ingredient ${index + 1}`, exact: true,
-      })).toBeChecked()
+      await expect(
+        review.getByRole('checkbox', {
+          name: `${recipe.name}: ${recipe.ingredients[index].item}, ingredient ${index + 1}`,
+        }),
+      ).toBeChecked()
     }
-    const selectedCount = await review.getByRole('checkbox', {
-      name: / ingredient \d+$/, checked: true,
-    }).count()
+    const selectedCount = await review
+      .getByRole('checkbox', {
+        name: / ingredient \d+$/,
+        checked: true,
+      })
+      .count()
     expect(selectedCount).toBeGreaterThanOrEqual(recipe.ingredients.length)
     const submit = review.getByRole('button', {
-      name: `Add ${selectedCount} ingredients`, exact: true,
+      name: `Add ${selectedCount} ingredients`,
+      exact: true,
     })
     await expect(submit).toBeEnabled()
     await submit.click()
@@ -244,13 +281,16 @@ test.describe('Meal Planner', () => {
 
     await navigateToRoute('shopping')
     await expect(page.getByText(new RegExp(recipe.ingredients[0].item, 'i')).first()).toBeVisible()
-    await expect(page.getByText(new RegExp(`from ${escapeRegex(recipe.name)}`, 'i')).first()).toBeVisible()
+    await expectShoppingSource(page, recipe.ingredients[0].item, recipe.name)
 
     await navigateToRoute('planner')
     await expect(plannerRecipeCard(page, recipe.name).getByText(/in shopping/i)).toBeVisible()
   })
 
-  test('loads a saved template into the currently visible week @extended', async ({ page, navigateToRoute }) => {
+  test('loads a saved template into the currently visible week @extended', async ({
+    page,
+    navigateToRoute,
+  }) => {
     const seed = `${Date.now()}-template`
     const recipe = buildRecipe(seed)
     const templateName = `E2E Template ${seed}`
@@ -268,7 +308,10 @@ test.describe('Meal Planner', () => {
     await saveDialog.getByRole('button', { name: /save template/i }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
 
-    await page.getByRole('button', { name: /next week/i }).first().click()
+    await page
+      .getByRole('button', { name: /next week/i })
+      .first()
+      .click()
     await expect(plannerRecipeCard(page, recipe.name)).toHaveCount(0)
 
     await page.getByRole('button', { name: /load template/i }).click()

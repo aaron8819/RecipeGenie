@@ -1,4 +1,11 @@
-import { expect, test } from './fixtures'
+import {
+  expect,
+  test,
+  reviewCreatedRecipe,
+  saveReviewedRecipe,
+  submitShoppingReview,
+  expectShoppingSource,
+} from './fixtures'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -37,28 +44,34 @@ function buildSmokeRecipe(seed: string): SmokeRecipe {
 
 async function shoppingHasVisibleState(page: import('@playwright/test').Page) {
   const activeCount = await page.locator('[data-checkbox="true"]').count()
-  const pantryVisible = await page.getByText(/^In Pantry$/i).first().isVisible().catch(() => false)
-  const excludedVisible = await page.getByText(/^Excluded$/i).first().isVisible().catch(() => false)
+  const pantryVisible = await page
+    .getByText(/^In Pantry$/i)
+    .first()
+    .isVisible()
+    .catch(() => false)
+  const excludedVisible = await page
+    .getByText(/^Excluded$/i)
+    .first()
+    .isVisible()
+    .catch(() => false)
   return activeCount > 0 || pantryVisible || excludedVisible
 }
 
 async function clearShoppingListIfNeeded(
   page: import('@playwright/test').Page,
-  navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>
+  navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>,
 ) {
   await navigateToRoute('shopping')
 
   for (let attempt = 0; attempt < 3; attempt++) {
     if (!(await shoppingHasVisibleState(page))) return
 
-    const clearButton = page
-      .getByRole('button', { name: /^clear$/i })
-      .or(page.getByLabel(/clear list/i))
-      .first()
-
-    if (!(await clearButton.isVisible().catch(() => false))) return
-
-    await clearButton.click()
+    await page.getByRole('button', { name: 'List actions', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Clear list', exact: true }).click()
+    const confirmation = page.getByRole('alertdialog')
+    if (await confirmation.isVisible().catch(() => false)) {
+      await confirmation.getByRole('button', { name: 'Clear list', exact: true }).click()
+    }
 
     const dismissButton = page.getByRole('button', { name: /^dismiss$/i })
     if (await dismissButton.isVisible().catch(() => false)) {
@@ -76,49 +89,37 @@ async function clearShoppingListIfNeeded(
 async function ensureRecipeAddedToShopping(
   page: import('@playwright/test').Page,
   navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>,
-  smokeRecipe: SmokeRecipe
+  smokeRecipe: SmokeRecipe,
 ) {
   await navigateToRoute('recipes')
 
-  const searchInput = page.getByPlaceholder(/search by recipe name or category/i)
-  if (await searchInput.isVisible().catch(() => false)) {
-    await searchInput.fill(smokeRecipe.name)
-    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(smokeRecipe.name)
-  }
-
-  let recipeCard = page
-    .locator('[data-recipe-name]')
-    .filter({ has: page.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') }) })
-  let recipeHeading = recipeCard.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') })
-
-  if (!(await recipeHeading.isVisible().catch(() => false))) {
-    await createSmokeRecipe(page, smokeRecipe)
-    await navigateToRoute('recipes')
-    await searchInput.fill(smokeRecipe.name)
-    await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(smokeRecipe.name)
-    recipeCard = page
-      .locator('[data-recipe-name]')
-      .filter({ has: page.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') }) })
-    recipeHeading = recipeCard.getByRole('heading', { level: 3, name: new RegExp(smokeRecipe.name, 'i') })
-  }
+  await createSmokeRecipe(page, smokeRecipe)
+  const searchInput = page.getByLabel(/search recipes by name or category/i)
+  await searchInput.fill(smokeRecipe.name)
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(smokeRecipe.name)
+  const recipeCard = page.locator('[data-recipe-name]').filter({
+    has: page.getByRole('heading', { level: 2, name: smokeRecipe.name, exact: true }),
+  })
+  const recipeHeading = recipeCard.getByRole('heading', {
+    level: 2,
+    name: smokeRecipe.name,
+    exact: true,
+  })
 
   await recipeHeading.waitFor({ state: 'visible', timeout: 15000 })
 
-  const viewport = page.viewportSize()
-  const isMobile = !!viewport && viewport.width < 768
-
-  if (isMobile) {
-    const directShoppingButton = recipeCard.getByRole('button', { name: /add to shopping list/i })
-    if (await directShoppingButton.isVisible().catch(() => false)) {
-      await directShoppingButton.click()
-    } else {
-      await recipeCard.getByRole('button', { name: /actions/i }).click()
-      await expect(page.getByRole('menuitem', { name: /add to shopping list/i })).toBeVisible()
-      await page.getByRole('menuitem', { name: /add to shopping list/i }).click()
-    }
-  } else {
-    await recipeCard.getByRole('button', { name: /^shop$/i }).click()
+  await recipeCard.getByRole('button', { name: /actions/i }).click()
+  await page.getByRole('menuitem', { name: /add to shopping list/i }).click()
+  const review = page.getByRole('dialog')
+  for (const [index, ingredient] of smokeRecipe.ingredients.entries()) {
+    await review
+      .getByRole('checkbox', {
+        name: `${smokeRecipe.name}: ${ingredient.item}, ingredient ${index + 1}`,
+        exact: true,
+      })
+      .check()
   }
+  await submitShoppingReview(page, true)
 
   await navigateToRoute('shopping')
   await expect
@@ -128,10 +129,7 @@ async function ensureRecipeAddedToShopping(
     .toBeGreaterThan(0)
 }
 
-async function createSmokeRecipe(
-  page: import('@playwright/test').Page,
-  smokeRecipe: SmokeRecipe
-) {
+async function createSmokeRecipe(page: import('@playwright/test').Page, smokeRecipe: SmokeRecipe) {
   await page
     .locator('[data-testid="recipes-add-button"], [data-testid="recipes-add-fab"]')
     .filter({ visible: true })
@@ -140,10 +138,13 @@ async function createSmokeRecipe(
   const dialog = page.getByRole('dialog', { name: /add recipe/i })
   await dialog.waitFor({ state: 'visible', timeout: 10000 })
 
-  await dialog.getByRole('textbox', { name: /e\.g\. grandma's roast chicken/i }).fill(smokeRecipe.name)
+  await dialog.getByRole('tab', { name: 'Manual', exact: true }).click()
+  await dialog.getByLabel('Recipe Name', { exact: true }).fill(smokeRecipe.name)
   await dialog.getByRole('combobox').first().click()
   await page.getByRole('option', { name: new RegExp(`^${smokeRecipe.category}$`, 'i') }).click()
-  await dialog.getByRole('spinbutton', { name: 'Scaling basis', exact: true }).fill(String(smokeRecipe.servings))
+  await dialog
+    .getByRole('spinbutton', { name: 'Scaling basis', exact: true })
+    .fill(String(smokeRecipe.servings))
 
   const ingredientInputs = dialog.getByPlaceholder('Ingredient')
   while ((await ingredientInputs.count()) < smokeRecipe.ingredients.length) {
@@ -153,16 +154,20 @@ async function createSmokeRecipe(
   for (const [index, ingredient] of smokeRecipe.ingredients.entries()) {
     await ingredientInputs.nth(index).fill(ingredient.item)
     await dialog.getByPlaceholder('Amt').nth(index).fill(ingredient.amount)
+    await dialog
+      .getByLabel(`Unit for ingredient ${index + 1}`, { exact: true })
+      .selectOption(ingredient.unit === 'cups' ? 'cup' : ingredient.unit)
   }
 
-  await dialog.getByRole('textbox', { name: 'Instruction group 1 step 1', exact: true }).fill(smokeRecipe.instructions)
-  await dialog.getByRole('button', { name: /^add recipe$/i }).click()
+  await dialog
+    .getByRole('textbox', { name: 'Instruction group 1 step 1', exact: true })
+    .fill(smokeRecipe.instructions)
+  await reviewCreatedRecipe(page)
+  await saveReviewedRecipe(page)
   await expect(dialog).toBeHidden({ timeout: 15000 })
 
   const detailPage = page.getByTestId('recipe-detail-page')
-  await expect(
-    detailPage.getByRole('heading', { name: smokeRecipe.name, level: 1 })
-  ).toBeVisible()
+  await expect(detailPage.getByRole('heading', { name: smokeRecipe.name, level: 1 })).toBeVisible()
   await detailPage.getByRole('button', { name: /back to recipes/i }).click()
   await expect(detailPage).toHaveCount(0)
 }
@@ -170,7 +175,7 @@ async function createSmokeRecipe(
 async function seedPantryAndExcludedState(
   page: import('@playwright/test').Page,
   navigateToRoute: (route: 'planner' | 'recipes' | 'shopping' | 'pantry') => Promise<void>,
-  smokeRecipe: SmokeRecipe
+  smokeRecipe: SmokeRecipe,
 ) {
   await navigateToRoute('pantry')
 
@@ -178,6 +183,7 @@ async function seedPantryAndExcludedState(
   await pantryInput.waitFor({ state: 'visible', timeout: 10000 })
   await pantryInput.fill(smokeRecipe.pantryItem)
   await page.keyboard.press('Enter')
+  await expect(page.getByText(smokeRecipe.pantryItem, { exact: true })).toBeVisible()
 
   const excludedInput = page.getByPlaceholder(/add excluded keyword/i)
   if (!(await excludedInput.isVisible().catch(() => false))) {
@@ -189,37 +195,7 @@ async function seedPantryAndExcludedState(
   await excludedInput.waitFor({ state: 'visible', timeout: 10000 })
   await excludedInput.fill(smokeRecipe.excludedItem)
   await page.keyboard.press('Enter')
-}
-
-async function revealMobileSwipeActions(row: import('@playwright/test').Locator) {
-  await row.scrollIntoViewIfNeeded()
-  const box = await row.boundingBox()
-  if (!box) throw new Error('Shopping row is not visible for swipe validation')
-
-  const startX = Math.round(box.x + box.width - 16)
-  const endX = Math.round(box.x + box.width - 140)
-  const y = Math.round(box.y + box.height / 2)
-
-  const dispatchTouch = async (type: 'touchstart' | 'touchmove' | 'touchend', x: number) => {
-    await row.evaluate(
-      (node, eventData) => {
-        const event = new Event(eventData.type, { bubbles: true, cancelable: true })
-        const touch = { clientX: eventData.x, clientY: eventData.y }
-        const activeTouches = eventData.type === 'touchend' ? [] : [touch]
-        Object.defineProperty(event, 'touches', { configurable: true, value: activeTouches })
-        Object.defineProperty(event, 'targetTouches', { configurable: true, value: activeTouches })
-        Object.defineProperty(event, 'changedTouches', { configurable: true, value: [touch] })
-        node.dispatchEvent(event)
-      },
-      { type, x, y }
-    )
-  }
-
-  await dispatchTouch('touchstart', startX)
-  await new Promise((resolve) => setTimeout(resolve, 50))
-  await dispatchTouch('touchmove', endX)
-  await new Promise((resolve) => setTimeout(resolve, 50))
-  await dispatchTouch('touchend', endX)
+  await expect(page.getByText(smokeRecipe.excludedItem, { exact: true })).toBeVisible()
 }
 
 test.describe('Shopping Mode Smoke @core', () => {
@@ -246,16 +222,29 @@ test.describe('Shopping Mode Smoke @core', () => {
       .locator('[data-checkbox="true"]')
       .click()
 
-    await expect(page.getByText(/recipes in list/i)).toBeVisible()
-    await expect(page.getByRole('button', {
-      name: new RegExp(`^${smokeRecipe.name} chicken · 4 servings$`, 'i'),
-    })).toBeVisible()
-    await expect(page.getByText(/^from /i).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
+    const activeProduce = `apples smoke ${Date.now()}`
+    await addItemInput.fill(activeProduce)
+    await page.keyboard.press('Enter')
+    await expect(page.getByText(activeProduce, { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: /^\d+ recipes/ }).click()
+    await expect(
+      page.getByRole('dialog').getByRole('heading', {
+        name: 'Recipes in list',
+        exact: true,
+      }),
+    ).toBeVisible()
+    const recipeLink = page.getByRole('button', { name: `View ${smokeRecipe.name}`, exact: true })
+    await expect(recipeLink).toBeVisible()
+    await expect(recipeLink.getByText('4 selected servings', { exact: false })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expectShoppingSource(page, smokeRecipe.ingredients[0].item, smokeRecipe.name)
+    await expect(page.getByRole('button', { name: /^Reorder /i })).toHaveCount(0)
     await expect(page.getByText(/manage mode/i)).toHaveCount(0)
 
-    const proteinHeading = page.getByRole('heading', { level: 3, name: /^Protein$/i })
-    const produceHeading = page.getByRole('heading', { level: 3, name: /^Fresh Produce$/i }).first()
+    const proteinHeading = page.getByRole('heading', { level: 2, name: /^Protein$/i })
+    const produceHeading = page.getByRole('heading', { level: 2, name: /^Fresh Produce$/i }).first()
     await expect(proteinHeading).toBeVisible()
     await expect(produceHeading).toBeVisible()
 
@@ -263,7 +252,7 @@ test.describe('Shopping Mode Smoke @core', () => {
     await page.getByRole('menuitem', { name: /enter manage mode/i }).click()
 
     await expect(page.getByText('Manage Mode', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: /drag to reorder/i }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /^Reorder /i }).first()).toBeVisible()
   })
 })
 
@@ -282,38 +271,48 @@ test.describe('Shopping Mode Smoke Mobile @extended', () => {
     await clearShoppingListIfNeeded(page, navigateToRoute)
     await ensureRecipeAddedToShopping(page, navigateToRoute, smokeRecipe)
 
-    await expect(page.getByText(/recipes in list/i)).toBeVisible()
-    const showRecipesButton = page.getByRole('button', { name: /show recipes in list/i })
-    await expect(showRecipesButton).toBeVisible()
-    await showRecipesButton.click()
+    await page.getByRole('button', { name: /^\d+ recipes/ }).click()
+    await expect(
+      page.getByRole('dialog').getByRole('heading', {
+        name: 'Recipes in list',
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('dialog').getByText(smokeRecipe.name, { exact: true }),
+    ).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
     const shoppingScreen = page.locator('[data-app-screen="shopping"]')
-    await expect(shoppingScreen.getByText(new RegExp(smokeRecipe.name, 'i')).first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /drag to reorder/i })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Reorder /i })).toHaveCount(0)
 
-    const expandPantry = page.getByRole('button', { name: /in pantry .*expand pantry items/i })
-    if (await expandPantry.isVisible().catch(() => false)) {
-      await expandPantry.click()
+    for (const name of ['Expand pantry items', 'Expand excluded items']) {
+      await page.getByRole('button', { name, exact: true }).click()
     }
 
-    const expandExcluded = page.getByRole('button', { name: /excluded .*expand excluded items/i })
-    if (await expandExcluded.isVisible().catch(() => false)) {
-      await expandExcluded.click()
-    }
-
-    await expect(page.getByRole('heading', { level: 3, name: /^In Pantry$/i })).toBeVisible()
-    await expect(page.getByRole('heading', { level: 3, name: /^Excluded$/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: new RegExp(`restore ${smokeRecipe.pantryItem}`, 'i') })).toBeVisible()
-    await expect(page.getByRole('button', { name: new RegExp(`restore ${smokeRecipe.excludedItem}`, 'i') })).toBeVisible()
-    await expect(page.getByText(new RegExp(`Excluded: ${smokeRecipe.excludedItem}`, 'i')).first()).toBeVisible()
+    await expect(page.getByRole('heading', { level: 2, name: /^In Pantry$/i })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 2, name: /^Excluded$/i })).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: new RegExp(`restore ${smokeRecipe.pantryItem}`, 'i') }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole('button', { name: new RegExp(`restore ${smokeRecipe.excludedItem}`, 'i') }),
+    ).toBeVisible()
+    await expect(
+      page.getByText(new RegExp(`Excluded: ${smokeRecipe.excludedItem}`, 'i')).first(),
+    ).toBeVisible()
 
     const chickenRow = shoppingScreen
       .locator('[data-testid^="shopping-row-"]')
       .filter({ hasText: smokeRecipe.ingredients[0].item })
       .first()
 
-    await revealMobileSwipeActions(chickenRow)
-
-    await expect(page.getByRole('button', { name: /quick add to pantry/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /quick remove item/i })).toBeVisible()
+    await chickenRow.getByRole('button', { name: /^Actions for / }).click()
+    await expect(page.getByRole('menuitem', { name: 'Add to pantry', exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('menuitem', { name: 'Remove from list', exact: true }),
+    ).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menu')).toHaveCount(0)
   })
 })

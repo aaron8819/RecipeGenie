@@ -41,6 +41,15 @@ test.describe('My unauthenticated tests', () => {
 })
 ```
 
+### Shopping fixture semantics
+
+Recipe additions use ingredient review and successful command receipts (Applied or
+Unchanged). Explicit inclusion makes selected purchases active, including Pantry
+and excluded ingredients. Restore-control fixtures may seed default availability
+once through the authenticated Shopping command API, then reload persisted state.
+Never reset visibility after the replacement being tested: assert its real outcome.
+Lifecycle coverage checks Restore, explicit re-add, preference retention, and reload persistence.
+
 ## Running Tests
 
 Shopping Slice 5: `node node_modules/@playwright/test/cli.js test

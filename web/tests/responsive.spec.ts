@@ -10,7 +10,10 @@ async function dismissNextDevTools(page: import('@playwright/test').Page) {
 test.describe.configure({ mode: 'serial' })
 
 test.describe('Responsive contracts @extended', () => {
-  test('keeps bottom navigation visible and actionable after mobile scrolling', async ({ page, setupAuth }) => {
+  test('keeps bottom navigation visible and actionable after mobile scrolling', async ({
+    page,
+    setupAuth,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
     await dismissNextDevTools(page)
@@ -30,7 +33,11 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('heading', { name: 'Shopping List' }).first()).toBeVisible()
   })
 
-  test('keeps the recipes mobile primary actions in viewport on small screens', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps the recipes mobile primary actions in viewport on small screens', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
     await navigateToRoute('recipes')
@@ -65,7 +72,9 @@ test.describe('Responsive contracts @extended', () => {
     expect(bottomNavBox).not.toBeNull()
     expect(searchBox!.x).toBeGreaterThanOrEqual(0)
     expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
-    expect(await searchInput.evaluate((input) => parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16)
+    expect(
+      await searchInput.evaluate((input) => parseFloat(getComputedStyle(input).fontSize)),
+    ).toBeGreaterThanOrEqual(16)
     expect(addRecipeBox!.x + addRecipeBox!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
     expect(addRecipeBox!.y + addRecipeBox!.height).toBeLessThan(bottomNavBox!.y)
 
@@ -81,6 +90,8 @@ test.describe('Responsive contracts @extended', () => {
     for (const name of ['Shared recipes', 'Recipe settings']) {
       const item = menu.getByRole('menuitem', { name, exact: true })
       await expect(item).toBeVisible()
+      // Wait for the menu's opening scale animation before measuring tap targets.
+      await expect.poll(async () => (await item.boundingBox())?.height).toBeGreaterThanOrEqual(44)
       const box = await item.boundingBox()
       expect(box).not.toBeNull()
       expect(box!.height).toBeGreaterThanOrEqual(44)
@@ -92,7 +103,11 @@ test.describe('Responsive contracts @extended', () => {
     await expect(collectionActions).toBeFocused()
   })
 
-  test('keeps shopping list primary controls reachable above the mobile shell chrome', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps shopping list primary controls reachable above the mobile shell chrome', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
     await navigateToRoute('shopping')
@@ -119,7 +134,11 @@ test.describe('Responsive contracts @extended', () => {
     expect(buttonBox!.y + buttonBox!.height).toBeLessThan(bottomNavBox!.y)
   })
 
-  test('keeps planner actions visible and touch targets usable at 320px', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps planner actions visible and touch targets usable at 320px', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
     await navigateToRoute('planner')
@@ -156,7 +175,11 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('menuitem', { name: 'Load template', exact: true })).toBeVisible()
   })
 
-  test('keeps shared header and pantry section controls mobile-sized', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps shared header and pantry section controls mobile-sized', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
     await navigateToRoute('pantry')
@@ -188,7 +211,11 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('heading', { name: /Pantry Items/i })).toBeHidden()
   })
 
-  test('keeps Pantry and Excluded panels adjacent on desktop', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps Pantry and Excluded panels adjacent on desktop', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.desktop)
     await setupAuth()
     await navigateToRoute('pantry')
@@ -206,7 +233,11 @@ test.describe('Responsive contracts @extended', () => {
     expect(pantryBox!.x).toBeLessThan(excludedBox!.x)
   })
 
-  test('uses a compact mobile shopping summary without horizontal overflow', async ({ page, setupAuth, navigateToRoute }) => {
+  test('uses a compact mobile shopping summary without horizontal overflow', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
     await navigateToRoute('shopping')
