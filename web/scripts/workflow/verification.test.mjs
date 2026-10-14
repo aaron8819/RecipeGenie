@@ -1138,3 +1138,32 @@ describe("verification CLI schema", () => {
     expect(child.stderr).not.toContain("Error:")
   })
 })
+
+describe("PR migration tooling selection", () => {
+  it("omits only database tooling for a proven inert candidate", () => {
+    const calls = []
+    const report = runPrVerification({
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
+      migrationToolingRequired: false,
+      commandRunner(command, args) { calls.push({ command, args }); return passingRunner() },
+    })
+    expect(report.status).toBe("PASS")
+    expect(calls).toHaveLength(3)
+    expect(calls[1].args.slice(-2)).toEqual(["run", "verify"])
+    expect(calls[2].args.slice(-2)).toEqual(["run", "build"])
+    expect(report.checks.find((item) => item.name === "migration-tooling-tests").status)
+      .toBe("SKIPPED")
+  })
+})
+
+it("does not resolve PowerShell when database tooling is omitted on Linux", () => {
+  const report = runPrVerification({
+    platform: "linux",
+    childEnvironment: {},
+    migrationToolingRequired: false,
+    commandRunner: passingRunner,
+  })
+  expect(report.status).toBe("PASS")
+  expect(report.checks.find((item) => item.name === "migration-tooling-tests").status)
+    .toBe("SKIPPED")
+})

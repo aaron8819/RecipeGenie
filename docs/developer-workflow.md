@@ -273,13 +273,55 @@ headers cannot contaminate machine output.
 
 ## Browser qualification selection
 
-Normal CI retains both required check identities. `migration-smoke-and-drift`
-omits only historical migration 014 parity and canonical migration/rollback
-rehearsals when the complete base-to-head diff contains only component CSS,
-global CSS, or inert public PNG/JPEG/WebP/ICO assets. Application logic, tests,
-contracts, database files, tooling, unknown paths and unresolved/empty scope run
-full rehearsals. The local database reset, security contracts, reference audits
-and schema-type drift always run. Renames include both old and new paths.
+Normal CI retains both required check identities. The database job always selects
+scope, reports its four independent flags, and succeeds without starting Supabase
+when no database inputs changed. Normal quality checks still run. Application
+persistence/auth/ownership changes need affected integration/browser coverage;
+historical SQL fixtures do not execute application TypeScript and cannot replace it.
+
+| Changed inputs | Current DB contracts | 014 parity | 016/017 canonical | Recovery tooling |
+| --- | --- | --- | --- | --- |
+| Docs, UI/app code, browser tests, known unrelated tooling | No | No | No | No |
+| Migration 001–014 | Yes | Yes | Yes | Supported recovery fixtures only |
+| Migration 015–017 | Yes | No | Yes | Supported recovery fixtures only |
+| Migration 018+ | Yes | No | No | Supported recovery fixtures only |
+| 014 runner/preflight | Yes | Yes | No | Preflight also selects recovery tooling |
+| Canonical runner | Yes | No | Yes | No |
+| Current SQL security tests/audits, seed, generated DB types | Yes | No | No | No |
+| Backup/restore scripts or recovery-only SQL | No | No | No | Yes |
+| DB config, Node/npm execution inputs, CLI dependency closure | Yes | Yes | Yes | Only if recovery inputs change |
+| Unknown or unreadable scope | Yes | Yes | Yes | Yes |
+
+The classifier maps the actual historical runner imports, embedded fixtures and
+SQL reads; regression guards require deliberate map maintenance when these inputs
+or the recovery registry change. Migration 014 resets through 013/014; canonical
+fixtures reset through 015 and apply 016/017. Their final latest-schema restores do
+not make newer migrations historical-fixture inputs: the current database reset,
+security contracts, reference audits and schema drift cover the latest chain.
+
+Package changes compare relevant commands plus automatic pre/post hooks, npm-ci
+lifecycle, execution settings, and the Supabase CLI's transitive/optional/platform
+closure. Unrelated dependencies without install scripts do not select database
+work. Changed lifecycle-bearing dependency entries do: npm ci executes them before
+the fixtures. Unresolved/link/unknown lock shapes fail full. Overrides/config that
+cannot be proven unrelated remain conservative. CI context proof preserves setup,
+environment, checkout/source binding and runtime; only exact selection predicates
+and the unrelated quality-job body are disregarded.
+
+The local PR gate omits only PowerShell recovery-tooling tests when a clean,
+committed complete diff against origin/main leaves their inputs unchanged.
+Dirty/untracked local state, missing history or empty scope retain tooling.
+Verify/build and migration-reference integrity remain required. Direct manual npm
+rehearsal commands remain explicit requests to run their fixtures. The optional
+Windows gate in the manually dispatched combined-UI workflow is separately selected.
+Release consistency checks do not execute historical rehearsals.
+
+PR85–99 audit found docs-only and app-only false positives and repeated equivalent
+PR/merge trees. Historical steps cost 175–205 seconds/run in that sample; PR95–99
+repeated them for 1,976 aggregate seconds across ten runs (not wall-clock delay).
+Cross-run caching/reuse is deliberately absent: future reuse must bind a successful
+source run, tested inputs and execution/runtime identity, not just an observed tree.
+The runners' existing restoration/failure cleanup remains unchanged in this patch.
 
 Routine releases use normal CI (`quality-guards` and `migration-smoke-and-drift`),
 focused tests for the affected code, and the existing release-status check.
