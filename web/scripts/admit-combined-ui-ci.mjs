@@ -1,10 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { requireCandidate } from './workflow/candidate-source.mjs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repository = 'aaron8819/RecipeGenie';
-const requiredJobs = ['quality-guards', 'migration-smoke-and-drift'];
+export const requiredJobs = ['candidate-source', 'quality-guards', 'migration-smoke-and-drift', 'production-build', 'recovery-tooling'];
 
 export function selectExactCiRun(runs, sha, { allowPending = false } = {}) {
   if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid expected source identity');
@@ -44,7 +46,7 @@ export function requireCiJobs(jobs, run) {
       matches[0].status !== 'completed' ||
       matches[0].conclusion !== 'success'
     ) {
-      throw new Error('Exact-head quality and migration CI evidence is incomplete');
+      throw new Error('Exact-head source, quality, migration, build and recovery CI evidence is incomplete');
     }
   }
 }
@@ -52,6 +54,8 @@ export function requireCiJobs(jobs, run) {
 export async function admitExactCi({
   sha,
   token,
+  tree,
+  readArtifact = readCandidateArtifact,
   request = fetch,
   waitMs = 0,
   now = Date.now,
@@ -93,6 +97,15 @@ export async function admitExactCi({
   const result = await read(`actions/runs/${run.id}/jobs?filter=latest&per_page=100`);
   if (result.total_count !== result.jobs?.length) throw new Error('CI job evidence is truncated');
   requireCiJobs(result.jobs, run);
+  const artifacts = await read(`actions/runs/${run.id}/artifacts?per_page=100`);
+  if (artifacts.total_count !== artifacts.artifacts?.length) throw new Error('CI artifacts truncated');
+  const matches = artifacts.artifacts.filter(artifact =>
+    artifact.name === `candidate-source-${run.id}-${run.run_attempt}` && !artifact.expired);
+  if (matches.length !== 1 || !Number.isSafeInteger(matches[0].id))
+    throw new Error('Exact-attempt candidate provenance artifact required');
+  const proof = await readArtifact(matches[0].id, { token, request });
+  const currentMain = await read('git/ref/heads/main');
+  requireCandidate(proof, { sha, tree, run, currentMain: currentMain.object?.sha });
   return {
     schema: 1,
     sha,
@@ -100,8 +113,33 @@ export async function admitExactCi({
     ciRunId: run.id,
     ciAttempt: run.run_attempt,
     requiredJobs,
+    candidate: proof,
     result: 'PASS',
   };
+}
+
+// Read one bounded, run-owned artifact, never execute or extract its paths.
+export async function readCandidateArtifact(id, { token, request = fetch }) {
+  const response = await request(`https://api.github.com/repos/${repository}/actions/artifacts/${id}/zip`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error('Candidate artifact unavailable');
+  const archive = Buffer.from(await response.arrayBuffer());
+  if (archive.length > 65_536) throw new Error('Candidate artifact exceeds bounds');
+  const directory = mkdtempSync(path.join(tmpdir(), 'rg-candidate-'));
+  try {
+    const file = path.join(directory, 'candidate.zip');
+    writeFileSync(file, archive);
+    const entries = execFileSync('unzip', ['-Z1', file], { encoding: 'utf8', maxBuffer: 8192 }).trim();
+    if (entries !== 'candidate-source.json') throw new Error('Unexpected candidate artifact contents');
+    const contents = execFileSync('unzip', ['-p', file, 'candidate-source.json'], {
+      encoding: 'utf8', maxBuffer: 8192,
+    });
+    return JSON.parse(contents);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
 async function main() {
@@ -120,7 +158,8 @@ async function main() {
   mkdirSync(directory, { recursive: true });
   let report = { schema: 1, sha, repository, result: 'FAIL' };
   try {
-    report = await admitExactCi({ sha, token, waitMs: 900_000 });
+    const tree = execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim();
+    report = await admitExactCi({ sha, tree, token, waitMs: 900_000 });
     console.log(`Exact-head CI admission PASS: run ${report.ciRunId}`);
   } finally {
     writeFileSync(path.join(directory, 'ci-admission.json'), JSON.stringify(report, null, 2));

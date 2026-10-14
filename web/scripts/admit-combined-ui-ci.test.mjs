@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
-import { admitExactCi, requireCiJobs, selectExactCiRun } from './admit-combined-ui-ci.mjs';
+import { admitExactCi, requiredJobs, requireCiJobs, selectExactCiRun } from './admit-combined-ui-ci.mjs';
 
 const sha = 'a'.repeat(40);
 const run = {
@@ -16,7 +16,7 @@ const run = {
   status: 'completed',
   conclusion: 'success',
 };
-const jobs = ['quality-guards', 'migration-smoke-and-drift'].map((name) => ({
+const jobs = requiredJobs.map((name) => ({
   name,
   run_id: 42,
   head_sha: sha,
@@ -55,27 +55,49 @@ test.each([
   assert.throws(() => requireCiJobs(evidence, run));
 });
 
-test('reads only fixed repository CI endpoints and returns bounded evidence', async () => {
+const tree = 'b'.repeat(40);
+const base = 'c'.repeat(40);
+const proof = { schema: 1, sha, tree, base, baseBranch: 'main',
+  repository: 'aaron8819/RecipeGenie', runId: 42, attempt: 2,
+  event: 'pull_request', buildRequired: true };
+const artifact = { id: 99, name: 'candidate-source-42-2', expired: false };
+const payload = (url) => url.includes('/jobs?') ? { total_count: jobs.length, jobs }
+  : url.includes('/artifacts?') ? { total_count: 1, artifacts: [artifact] }
+    : url.includes('git/ref/') ? { object: { sha: base } } : { workflow_runs: [run] };
+
+test('requires source provenance plus all successful jobs using read-only endpoints', async () => {
   const urls = [];
   const request = async (url, options) => {
     urls.push(url);
-    assert.equal(options.method, undefined); // GET only.
-    return {
-      ok: true,
-      json: async () => (urls.length === 1 ? { workflow_runs: [run] } : { total_count: 2, jobs }),
-    };
+    assert.equal(options.method, undefined);
+    return { ok: true, json: async () => payload(url) };
   };
-  const result = await admitExactCi({ sha, token: 'fixture-only', request });
-  assert.deepEqual(urls, [
-    'https://api.github.com/repos/aaron8819/RecipeGenie/actions/workflows/' +
-      `ci.yml/runs?head_sha=${sha}&per_page=100`,
-    'https://api.github.com/repos/aaron8819/RecipeGenie/actions/' +
-      'runs/42/jobs?filter=latest&per_page=100',
-  ]);
+  const result = await admitExactCi({ sha, tree, token: 'fixture-only', request,
+    readArtifact: async (id) => { assert.equal(id, 99); return proof; } });
+  assert.equal(urls.length, 4);
+  assert.ok(urls.every(url => url.startsWith('https://api.github.com/repos/aaron8819/RecipeGenie/')));
   assert.equal(result.ciRunId, 42);
   assert.equal(result.sha, sha);
   assert.equal(result.result, 'PASS');
+  assert.equal(result.candidate.tree, tree);
   assert.equal(JSON.stringify(result).includes('fixture-only'), false);
+});
+
+test.each([
+  ['missing artifact', { total_count: 0, artifacts: [] }],
+  ['stale attempt', { total_count: 1, artifacts: [{ ...artifact, name: 'candidate-source-42-1' }] }],
+  ['expired artifact', { total_count: 1, artifacts: [{ ...artifact, expired: true }] }],
+  ['truncated artifacts', { total_count: 2, artifacts: [artifact] }],
+])('rejects %s source evidence', async (_name, artifacts) => {
+  await assert.rejects(() => admitExactCi({ sha, tree, token: 'fixture-only',
+    request: async url => ({ ok: true, json: async () => url.includes('/artifacts?') ? artifacts : payload(url) }),
+    readArtifact: async () => proof }));
+});
+
+test.each(['recovery-tooling', 'production-build', 'candidate-source'])('requires successful %s', name => {
+  for (const conclusion of ['failure', 'skipped', 'cancelled', null]) {
+    assert.throws(() => requireCiJobs(jobs.map(job => job.name === name ? { ...job, conclusion } : job), run));
+  }
 });
 
 test('fails closed on unavailable or truncated remote evidence', async () => {
@@ -89,7 +111,7 @@ test('fails closed on unavailable or truncated remote evidence', async () => {
       token: 'fixture-only',
       request: async () => ({
         ok: true,
-        json: async () => (++reads === 1 ? { workflow_runs: [run] } : { total_count: 3, jobs }),
+        json: async () => (++reads === 1 ? { workflow_runs: [run] } : { total_count: jobs.length + 1, jobs }),
       }),
     }),
   );
@@ -123,17 +145,18 @@ test('waits for pending exact-head CI without accepting it prematurely', async (
     ok: true,
     json: async () =>
       url.includes('/jobs?')
-        ? { total_count: 2, jobs }
-        : {
+        ? payload(url)
+        : url.includes('/artifacts?') || url.includes('git/ref/') ? payload(url) : {
             workflow_runs: [
               ++reads === 1 ? { ...run, status: 'in_progress', conclusion: null } : run,
             ],
           },
   });
   const result = await admitExactCi({
-    sha,
+    sha, tree,
     token: 'fixture-only',
     request,
+    readArtifact: async () => proof,
     waitMs: 60_000,
     now: () => elapsed,
     sleep: async (ms) => {

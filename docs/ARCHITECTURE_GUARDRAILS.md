@@ -67,18 +67,12 @@ Do not reopen the completed extraction wave without a new, narrow, low-risk reas
 - Do not continue extracting code only to reduce line count.
 - Re-review these areas only if a new boundary violation or regression appears, or if a clearly pure helper seam emerges.
 
-## Quality Baseline
+## Verification
 
-These checks matter for architecture-sensitive changes. Run from `web/`.
-`npm run verify` is the canonical local baseline and matches the main CI quality gate.
-
-```bash
-npm run verify
-npm run db:types:check
-npm run test:e2e:smoke
-```
-
-For SQL changes, also verify the migration names referenced in docs and generated type parity.
+Use the [developer workflow](developer-workflow.md#normal-task-path) for check
+selection and commands. Architecture-sensitive changes retain relevant owning
+tests, migration/type integrity and hosted acceptance; this document owns
+architectural boundaries rather than a second release checklist.
 
 ## Where To Record Future Changes
 

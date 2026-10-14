@@ -3,6 +3,57 @@
 Root `AGENTS.md` is the authoritative Codex operating policy. This document
 describes the implemented workflow commands and their evidence boundaries.
 
+## Normal task path
+
+1. Verify current remote main and ownership. Use an isolated task worktree under
+   the primary checkout's sibling `.worktrees/recipe-genie/<task>`, on
+   `codex/<task>`, on the authorized cloud or local computer. Preserve unrelated
+   worktrees. Read specialist instructions only for the affected domain.
+2. Use the complete pinned Node/npm distribution from `web/.nvmrc` and
+   `web/package.json`. From `web/`, run `npm ci` and focused owning tests with
+   `npm run test -- --run <owning-files>`. Run applicable typecheck and
+   `npm run check:no-staged-artifacts` / `npm run check:e2e-secrets` before push.
+   Use the trusted focused launcher below only for its mapped scopes; an unmapped
+   path deliberately escalates to the optional complete local diagnostic.
+3. Publish an authorized draft after focused/publication checks. Normal CI runs
+   automatically. Do not wait for or duplicate the full hosted gate locally.
+   Clearly list checks that remain pending and follow them to completion.
+4. Before merge require successful exact-candidate `candidate-source`,
+   `quality-guards`, `migration-smoke-and-drift`, `production-build` and
+   `recovery-tooling`; complete independent review and affected hosted browser
+   acceptance. These are repository acceptance requirements, not a claim that
+   GitHub branch protection enforces them.
+5. Recheck main, the clean reviewed head/tree, unresolved reviews and current CI.
+   Merge only within existing authorization. Verify the merged tree equals the
+   accepted tree, follow exact post-merge CI and deployment, then use the release
+   launcher for read-only source/project verification. A different merged tree
+   invalidates acceptance and must be investigated before claiming release.
+
+The hosted build, nine-journey smoke discovery, scope-selected Windows recovery
+suite and existing CI replace the mandatory full local `rg-verify.ps1 pr` gate.
+That command remains an explicit diagnosis/compatibility option, not a second
+acceptance stamp. Prose-only build omission is tested and limited to complete
+known prose diffs; unknown inputs build. Normal work does not require a local
+database reset or development-mode Playwright. Database/persistence evidence
+comes from the owned hosted fixture when selected; specialist local recovery
+remains available for relevant authorized work. Do not retire a replacement's
+obligation until its hosted check passes for the candidate.
+
+### Candidate source and base
+
+CI checks out the PR head only after `candidate-source.mjs` verifies that its
+recorded base is an ancestor. It records actual checkout SHA, tree, base, run and
+attempt in `candidate-source-<run>-<attempt>`. Every job checks out that exact SHA.
+If the head has not integrated its recorded base, CI fails before qualification.
+Main must still equal the recorded base immediately before merge. If main moved,
+integrate it and refresh invalidated evidence, even if an older run was green.
+For post-merge CI the recorded head must be current main. Browser admission reads
+the successful exact-attempt provenance artifact and compares the actual tree
+and current main; missing, wrong-tree, stale-base or incomplete evidence blocks.
+Preserve the artifact/PR evidence and the accepted-to-merged tree correspondence.
+
+### Local capability doctor
+
 Run the read-only workflow doctor from `web/` before environment-sensitive
 verification or work involving Supabase, Vercel, GitHub operational state,
 PostgreSQL tooling, production verification, deployments, migrations, backups,
@@ -31,33 +82,6 @@ match those pins. GitHub and Vercel readiness are evaluated independently by
 pairing each provider's CLI with its own local credential evidence.
 `POSSIBLE` means the required local evidence is present, not that remote
 authentication, authorization, or health was probed.
-
-## Normal task path
-
-Verify the integration base and task ownership, establish the pinned runtime and
-owned dependencies, then choose affected checks from the actual diff. Run the
-existing affected tests, scope/whitespace checks and existing publication-safety
-checks (`check:no-staged-artifacts` and `check:e2e-secrets`) before the first push.
-Keep these artifact/secret checks ahead of publication even when the full gate is
-deferred. Use repository-local test commands with the pinned Node/npm distribution; do not
-invoke a focused tier for an unmapped app path expecting it to skip escalation.
-The tier commands below retain their existing coverage and runtime boundary.
-
-Publish a draft once those initial checks pass, with remaining verification and
-review clearly listed. Full local PR verification need not finish before draft
-publication: run it, required exact-head CI, independent review and affected
-browser qualification concurrently where resources permit. Capture requested
-approval views during that qualification. Unknown scope still requires the full
-local PR tier and applicable CI/acceptance before merge; it does not prohibit an
-early draft. Prose-only changes retain the focused-check exception below.
-
-Before merge, complete the applicable local tier, required exact-head CI, review,
-affected acceptance and any requested owner approval. Reuse only unchanged valid
-evidence under Proportional review. Draft publication, a preview and passing tests
-do not authorize merge, deployment or a production mutation. After an authorized
-merge, follow exact-head CI and deployment readiness, then use the release launcher
-as the normal first read-only consistency check. Additional database verification
-is selected only when the change and authorized target require it.
 
 ## Verification tiers
 
@@ -146,8 +170,8 @@ tests and lint checks. An application, CI, package, migration SQL, unknown path,
 or unresolved base automatically runs the PR tier instead. A focused result
 explicitly says that it is not full PR confidence.
 
-PR verification is the complete local pre-merge gate for behavioral, build, package,
-CI, migration, security, or unknown-scope changes. Prose-only changes use the
+PR verification is an optional complete local diagnostic for behavioral, build,
+package, CI, migration, security, or unknown-scope changes. Prose-only changes use the
 mapped focused tier plus command/link/whitespace checks and focused review under
 `AGENTS.md`; do not run full builds or browser/database harnesses solely for prose:
 
@@ -197,7 +221,8 @@ evaluated, so `deployment-record` is always optional and `CORROBORATIVE`;
 relabeling it `AUTHORITATIVE` is rejected with the supplied and allowed labels,
 requirement status, verdict effect, and rejection reason.
 
-`npm run verify` remains the comprehensive local code-quality gate used by CI.
+`npm run verify` remains the comprehensive code-quality command used by CI and
+available for explicit local diagnosis.
 `npm run check:migration-references` is its repository-backed migration
 documentation check. The check derives the active endpoint from tracked regular
 SQL files, reuses the canonical checksum loader, and verifies README and
@@ -344,10 +369,14 @@ cannot be proven unrelated remain conservative. CI context proof preserves setup
 environment, checkout/source binding and runtime; only exact selection predicates
 and the unrelated quality-job body are disregarded.
 
-The local PR gate omits only PowerShell recovery-tooling tests when a clean,
+The optional local PR diagnostic omits only PowerShell recovery-tooling tests when a clean,
 committed complete diff against origin/main leaves their inputs unchanged.
 Dirty/untracked local state, missing history or empty scope retain tooling.
-Verify/build and migration-reference integrity remain required. Direct manual npm
+Its verify/build and migration-reference integrity remain part of that explicit
+diagnostic. Hosted recovery-tooling is always present: selected scope runs only
+the existing Windows recovery suite with the historical commit/peer fixture;
+proven unrelated scope passes with an explicit no-op. Cleanup failure fails the
+job. Direct manual npm
 rehearsal commands remain explicit requests to run their fixtures. The optional
 Windows gate in the manually dispatched combined-UI workflow is separately selected.
 Release consistency checks do not execute historical rehearsals.
@@ -359,7 +388,7 @@ Cross-run caching/reuse is deliberately absent: future reuse must bind a success
 source run, tested inputs and execution/runtime identity, not just an observed tree.
 The runners' existing restoration/failure cleanup remains unchanged in this patch.
 
-Routine releases use normal CI (`quality-guards` and `migration-smoke-and-drift`),
+Routine releases use the five normal CI jobs listed above,
 focused tests for the affected code, and the existing release-status check.
 The full combined browser suite does not run automatically on every web PR.
 Select database-backed qualification when changes affect recipe/Shopping saves,
@@ -384,8 +413,8 @@ receipts matches the reviewed candidate. Manual dispatch becomes available after
 the workflow is present on the default branch; do not substitute a local harness
 or a different trigger. Browser results are provisional until the final `ci-admission` job succeeds.
 That job runs after successful browser testing and cleanup, requires the latest
-successful normal CI run and both successful quality/migration jobs at the exact
-SHA, and waits at most fifteen minutes for pending CI. Missing, failed, skipped,
+successful normal CI run, all five successful required jobs and source/base/tree
+provenance at the exact SHA, and waits at most fifteen minutes for pending CI. Missing, failed, skipped,
 truncated or mismatched evidence fails closed. A browser job or its receipts alone
 never establish accepted qualification; the complete workflow and CI admission
 must pass before merge.
@@ -396,8 +425,7 @@ The broad Windows trusted PR gate is independent and opt-in, so unrelated Window
 unit-test failures cannot prevent browser acceptance. Request it with
 `-f windows_gate=true` when changing runtime/launcher, Windows path or shell
 handling, checkout policies, or migration tooling. Keep its result distinct from
-browser acceptance; neither result replaces required exact-head normal CI or the
-local PR gate. A requested Windows failure remains a failure and needs correction
+browser acceptance; neither result replaces required exact-head normal CI. A requested Windows failure remains a failure and needs correction
 or an explicit owner waiver before accepting that platform qualification.
 
 A preliminary merge to main is unnecessary; dispatch the reviewed candidate branch.
@@ -409,8 +437,9 @@ smoke tests do not establish recipe and Planner persistence. Choose deeper
 qualification for the actual risk rather than treating its existence as a
 routine release requirement. Preserve failed receipts and obtain an explicit
 owner waiver when accepting a failure; never report it as passing acceptance.
-PR82's existing return-week URL assertion failure remains unresolved, with
-`fullAcceptance=false`; Aaron accepted it only for this test/tooling-only update.
+Historical qualification receipts, including past waived failures, are retained
+in [the dated qualification history](recipe-planner-hosted-qualification.md).
+They do not describe current-head acceptance.
 
 ## Proportional review
 
@@ -459,9 +488,8 @@ mergeability, review requests, and unresolved-thread counts must always be
 refreshed at the exact head. Focused verification is sufficient for a mapped
 bounded iteration or prose-only acceptance, including narrow documentation
 corrections. Behavioral, build, package, CI, migration, security and unknown-scope
-changes require the local PR tier before merge, not before opening a draft. The
-single mapped qualification-test correction may use focused verification, affected
-hosted acceptance and required exact-head CI instead of an unrelated local full gate.
+changes require the applicable hosted gates before merge, not a duplicate local PR
+tier. Affected hosted acceptance and exact-candidate CI remain required.
 Required exact-head CI checks still apply to every PR; bounded local exceptions
 do not waive them. Reviewers expand scope when a correction crosses those
 boundaries or invalidates reused evidence. Merge is

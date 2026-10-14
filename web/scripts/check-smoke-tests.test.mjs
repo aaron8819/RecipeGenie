@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { REQUIRED_SMOKE_JOURNEYS, validateSmokeJourneys } from './check-smoke-tests.mjs'
+import { REQUIRED_SMOKE_JOURNEYS, smokeDiscoveryInvocation, validateSmokeJourneys } from './check-smoke-tests.mjs'
 
 function listing(journeys = REQUIRED_SMOKE_JOURNEYS, project = 'smoke') {
   return ['Listing tests:', ...journeys.map(([file, title], index) =>
@@ -43,4 +43,25 @@ describe('required smoke journeys', () => {
       .replaceAll('\n', '\r\n')
     expect(validateSmokeJourneys(output)).toBe(9)
   })
+})
+
+
+it('discovery is list-only with a fixed loopback config and no inherited secrets or hooks', () => {
+  const invocation = smokeDiscoveryInvocation({
+    PATH: '/runtime', SystemRoot: 'C:\\Windows',
+    GH_TOKEN: 'forbidden', NODE_OPTIONS: '--require=unsafe', npm_execpath: '/unsafe/npm',
+    RECIPE_GENIE_E2E_TARGET: 'production', RECIPE_GENIE_E2E_PASSWORD: 'private-placeholder',
+    SUPABASE_SERVICE_ROLE_KEY: 'private',
+  })
+  expect(invocation.command).toBe(process.execPath)
+  expect(invocation.args).toContain('--list')
+  expect(invocation.args).toContain('--reporter=list')
+  expect(invocation.args).not.toContain('run')
+  expect(invocation.options.env.RECIPE_GENIE_E2E_TARGET).toBe('local')
+  expect(invocation.options.env.RECIPE_GENIE_E2E_PASSWORD).toBe('discovery-only-placeholder')
+  for (const key of ['GH_TOKEN', 'NODE_OPTIONS', 'npm_execpath', 'SUPABASE_SERVICE_ROLE_KEY']) {
+    expect(invocation.options.env).not.toHaveProperty(key)
+  }
+  expect(invocation.options.env.PATH).toBe('/runtime')
+  expect(invocation.options.env.SystemRoot).toBe('C:\\Windows')
 })

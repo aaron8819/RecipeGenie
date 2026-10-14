@@ -66,6 +66,8 @@ describe("actual-input selection", () => {
     "web/scripts/workflow/release-status.mjs",
     "web/scripts/workflow/verification.test.mjs",
     "web/scripts/db-preflight.mjs",
+    "web/scripts/check-smoke-tests.mjs",
+    "web/scripts/check-smoke-tests.test.mjs",
     ".github/workflows/combined-ui.yml",
   ])("omits unrelated DB work for %s", (file) => expect(plan(file)).toEqual(NONE));
   it.each([
@@ -217,7 +219,7 @@ describe("content-dependent runtime inputs", () => {
       ),
       source.replace("runs-on: ubuntu-latest\n    steps:", "runs-on: ubuntu-26.04\n    steps:"),
     ])
-      expect(plan(".github/workflows/ci.yml", read(after))).toEqual(RUNTIME);
+      expect(plan(".github/workflows/ci.yml", read(after))).toEqual(FULL);
   });
 });
 
