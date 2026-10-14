@@ -32,9 +32,36 @@ pairing each provider's CLI with its own local credential evidence.
 `POSSIBLE` means the required local evidence is present, not that remote
 authentication, authorization, or health was probed.
 
+## Normal task path
+
+Verify the integration base and task ownership, establish the pinned runtime and
+owned dependencies, then choose affected checks from the actual diff. Run the
+existing affected tests, scope/whitespace checks and existing publication-safety
+checks (`check:no-staged-artifacts` and `check:e2e-secrets`) before the first push.
+Keep these artifact/secret checks ahead of publication even when the full gate is
+deferred. Use repository-local test commands with the pinned Node/npm distribution; do not
+invoke a focused tier for an unmapped app path expecting it to skip escalation.
+The tier commands below retain their existing coverage and runtime boundary.
+
+Publish a draft once those initial checks pass, with remaining verification and
+review clearly listed. Full local PR verification need not finish before draft
+publication: run it, required exact-head CI, independent review and affected
+browser qualification concurrently where resources permit. Capture requested
+approval views during that qualification. Unknown scope still requires the full
+local PR tier and applicable CI/acceptance before merge; it does not prohibit an
+early draft. Prose-only changes retain the focused-check exception below.
+
+Before merge, complete the applicable local tier, required exact-head CI, review,
+affected acceptance and any requested owner approval. Reuse only unchanged valid
+evidence under Proportional review. Draft publication, a preview and passing tests
+do not authorize merge, deployment or a production mutation. After an authorized
+merge, follow exact-head CI and deployment readiness, then use the release launcher
+as the normal first read-only consistency check. Additional database verification
+is selected only when the change and authorized target require it.
+
 ## Verification tiers
 
-Automation must enter verification through the repository-root trusted
+Automation must enter the verification tiers through the repository-root trusted
 launcher, not through ambient npm:
 
 ```powershell
@@ -119,7 +146,7 @@ tests and lint checks. An application, CI, package, migration SQL, unknown path,
 or unresolved base automatically runs the PR tier instead. A focused result
 explicitly says that it is not full PR confidence.
 
-PR verification is the complete local pre-PR gate for behavioral, build, package,
+PR verification is the complete local pre-merge gate for behavioral, build, package,
 CI, migration, security, or unknown-scope changes. Prose-only changes use the
 mapped focused tier plus command/link/whitespace checks and focused review under
 `AGENTS.md`; do not run full builds or browser/database harnesses solely for prose:
@@ -208,6 +235,15 @@ npm run --silent rg:pr:evidence -- --json
 npm run rg:pr:evidence -- --local-only
 npm run rg:pr:evidence -- --repository aaron8819/RecipeGenie --pr 35 --head-sha <40-character-sha>
 ```
+
+This is a diagnostic reconstruction of PR state, not an additional blanket gate
+for opening a draft. Its full `PASS` contract includes deployment records and a
+clean mergeable PR; a draft or pending run can therefore produce useful incomplete
+evidence. Report individual results and outstanding work without treating an
+incomplete report as acceptance or weakening actual merge requirements. After
+merge, use the release launcher, whose required source/manifest evidence and
+optional corroborative deployment evidence have a different purpose. Neither
+report alone grants release authorization.
 
 The report includes repository identity; branch and worktree state; local,
 upstream, remote, PR, and explicit evidence heads; PR URL/base/head/state and
@@ -364,10 +400,7 @@ browser acceptance; neither result replaces required exact-head normal CI or the
 local PR gate. A requested Windows failure remains a failure and needs correction
 or an explicit owner waiver before accepting that platform qualification.
 
-The dispatcher already exists on the default branch. After publishing a reviewed
-change to a repository branch, dispatch with `--ref` pointing to that branch;
-preparation and browser testing overlap normal CI. A preliminary merge to main
-is unnecessary.
+A preliminary merge to main is unnecessary; dispatch the reviewed candidate branch.
 Do not reuse CI evidence from the parent head.
 
 This invocation still runs the full Chromium/WebKit, desktop/mobile suite; it
@@ -423,12 +456,12 @@ design rationale, unchanged test results, prior discussion, and review findings
 outside the corrected range may carry forward. Worktree cleanliness, changed
 files, head bindings, migration/documentation integrity, required checks,
 mergeability, review requests, and unresolved-thread counts must always be
-refreshed at the exact head. Focused verification is sufficient only for a
-mapped bounded iteration or prose-only publication, including narrow documentation
-corrections. PR verification is mandatory before publishing behavioral, build,
-package, CI, migration, security, or unknown-scope changes. The single mapped
-qualification-test correction may use focused verification, affected hosted
-acceptance and required exact-head CI instead of an unrelated local full gate.
+refreshed at the exact head. Focused verification is sufficient for a mapped
+bounded iteration or prose-only acceptance, including narrow documentation
+corrections. Behavioral, build, package, CI, migration, security and unknown-scope
+changes require the local PR tier before merge, not before opening a draft. The
+single mapped qualification-test correction may use focused verification, affected
+hosted acceptance and required exact-head CI instead of an unrelated local full gate.
 Required exact-head CI checks still apply to every PR; bounded local exceptions
 do not waive them. Reviewers expand scope when a correction crosses those
 boundaries or invalidates reused evidence. Merge is
