@@ -35,12 +35,15 @@ import { getRecipeStatsMap, type RecipeStats } from "@/lib/recipe-history-stats"
 import { buildRecipeDetailHref, openRecipeDetail } from "@/lib/recipe-detail-navigation"
 import {
   buildRecipeRouteHref,
+  RECIPE_SORT_OPTIONS,
   type RecipeRouteState,
   type RecipeSortOption,
 } from "@/lib/recipe-route-state"
 import type { Recipe } from "@/types/database"
 
 type SortOption = RecipeSortOption
+
+const RECIPE_SORT_STORAGE_KEY = "recipe-genie:recipe-sort:v1"
 
 const SHOPPING_ITEM_LABEL = {
   singular: "shopping item",
@@ -120,6 +123,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const collectionHeadingRef = useRef<HTMLHeadingElement>(null)
   const returnFocusRef = useRef(recipeToFocusOnReturn)
   const [search, setSearch] = useState(routeState.query)
+  const selectedSortRef = useRef<SortOption | null>(null)
   const lastSubmittedQueryRef = useRef(routeState.query)
   const pendingRouteStateRef = useRef<RecipeRouteState | null>(null)
   const category = routeState.category
@@ -202,6 +206,20 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
     return () => window.clearTimeout(timeout)
   }, [replaceRouteState, routeState.query, search])
 
+  useEffect(() => {
+    // Explicit browse URLs retain precedence over the device preference.
+    const explicitSort = new URLSearchParams(window.location.search).get("sort")
+    if (RECIPE_SORT_OPTIONS.some(option => option === explicitSort)) return
+    try {
+      const savedSort = selectedSortRef.current ?? window.localStorage.getItem(RECIPE_SORT_STORAGE_KEY)
+      const validSort = RECIPE_SORT_OPTIONS.find(option => option === savedSort)
+      if (validSort && validSort !== routeState.sortBy) {
+        replaceRouteState({ sortBy: validSort })
+      }
+    } catch {
+      // Browsing still works when storage is unavailable or blocked.
+    }
+  }, [replaceRouteState, routeState.sortBy])
   const setCategory = useCallback(
     (value: string | null) => replaceRouteState({ category: value }),
     [replaceRouteState]
@@ -215,7 +233,15 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
     [replaceRouteState]
   )
   const setSortBy = useCallback(
-    (value: SortOption) => replaceRouteState({ sortBy: value }),
+    (value: SortOption) => {
+      selectedSortRef.current = value
+      try {
+        window.localStorage.setItem(RECIPE_SORT_STORAGE_KEY, value)
+      } catch {
+        // Keep the current selection usable even when it cannot be saved.
+      }
+      replaceRouteState({ sortBy: value })
+    },
     [replaceRouteState]
   )
   const setViewMode = useCallback(

@@ -164,6 +164,7 @@ export function applyParsedRecipeToFormValues(
     ...values,
     name: parsedRecipe.name || values.name,
     category: parsedCategory || values.category,
+    tags: parsedRecipe.tags?.length ? [...parsedRecipe.tags] : values.tags,
     servings: parsedRecipe.servings || values.servings,
     yieldText:
       parsedRecipe.yieldMetadata?.authoredText ||

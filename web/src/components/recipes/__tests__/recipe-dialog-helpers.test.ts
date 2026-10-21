@@ -1100,3 +1100,58 @@ Ingredients
     expect(clampRecipeServings(101)).toBe(100)
   })
 })
+
+describe("explicit imported recipe metadata", () => {
+  const example = `# Thai Basil Fried Rice
+
+Servings: 4
+Category: Chicken
+Tags: Asian
+Prep Time: 20 minutes
+Cook Time: 20 minutes
+
+## Ingredients
+### Chicken
+- 1.5 lb boneless, skinless chicken thighs, cut into bite-sized pieces
+- 2 tsp cornstarch
+- 1 tsp avocado oil
+- 1 tsp soy sauce
+
+## Instructions
+1. Cook the chicken.`
+
+  it("carries the screenshot metadata through new and replacement review into submission", () => {
+    const parsed = parseRecipeImportText(example).parsedRecipe!
+    expect(parsed).toMatchObject({ category: "chicken", tags: ["Asian"] })
+    expect(parsed.unparsedContent).toEqual([])
+    for (const current of [
+      buildNewRecipeDialogFormValues(["Dinner", "Chicken"]),
+      { ...buildNewRecipeDialogFormValues(["Dinner"]), tags: ["old"] },
+    ]) {
+      const reviewed = applyParsedRecipeToFormValues(current, parsed, {
+        applyCategory: true, categories: ["Dinner", "Chicken"],
+      })
+      expect(reviewed).toMatchObject({ category: "Chicken", tags: ["Asian"] })
+      expect(buildRecipeSubmissionData(reviewed)).toMatchObject({
+        category: "Chicken", tags: ["Asian"],
+      })
+      // A correction made in review wins when the draft is submitted.
+      expect(buildRecipeSubmissionData({ ...reviewed, tags: ["corrected"] }).tags)
+        .toEqual(["corrected"])
+    }
+  })
+
+  it("retains user metadata when omitted or empty and matches configured custom categories", () => {
+    const current = { ...buildNewRecipeDialogFormValues(["Dinner"]), tags: ["Family"] }
+    const parsed = parseRecipeImportText("Soup\nIngredients:\n1 cup water\nInstructions:\n1. Boil.")
+      .parsedRecipe!
+    expect(applyParsedRecipeToFormValues(current, parsed, {
+      applyCategory: true, categories: ["Dinner"],
+    })).toMatchObject({ category: "Dinner", tags: ["Family"] })
+    expect(applyParsedRecipeToFormValues(current, {
+      ...parsed, category: "dinner favorites", tags: ["Custom tag"],
+    }, { applyCategory: true, categories: ["Dinner", "Dinner Favorites"] }))
+      .toMatchObject({ category: "Dinner Favorites", tags: ["Custom tag"] })
+    expect(applyParsedRecipeToFormValues(current, { ...parsed, tags: [] }).tags).toEqual(["Family"])
+  })
+})

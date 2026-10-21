@@ -46,7 +46,7 @@ const requiredChecks = [
   'owner-isolation', 'cards-selection-failure-retry', 'shopping-read-recovery',
   'shopping-response-loss-dedup', 'detail-saved-selection', 'planner-dashboard-focus',
   'planner-return-week-read-retry', 'planner-move-cook-remove-swap',
-  'history-exact-undo-retry', 'shopping-stale-source',
+  'history-exact-undo-retry', 'shopping-stale-source', 'recipe-sort-and-import-metadata',
 ];
 
 function requireResult(error: unknown, data: unknown, operation: string): void {
@@ -791,6 +791,74 @@ for (const viewport of [
         await shoppingDialog().getByRole('button', { name: 'Cancel', exact: true }).click();
       });
       checks.push('shopping-stale-source');
+      stage = 'recipe sort and imported metadata';
+      await page.goto('/recipes');
+      const sortControl = () => page.getByRole('combobox', { name: 'Sort recipes' });
+      await sortControl().click();
+      await page.getByRole('option', { name: 'Name (A-Z)', exact: true }).click();
+      await expect(page).toHaveURL(/\/recipes\?sort=name$/);
+      await page.goto('/planner');
+      await page.goto('/recipes');
+      await expect(sortControl()).toContainText('Name (A-Z)');
+      await expect(page).toHaveURL(/\/recipes\?sort=name$/);
+      await page.reload();
+      await expect(sortControl()).toContainText('Name (A-Z)');
+      await expect(page).toHaveURL(/\/recipes\?sort=name$/);
+      const reopened = await context.newPage();
+      await reopened.goto('/recipes');
+      await expect(reopened.getByRole('combobox', { name: 'Sort recipes' })).toContainText('Name (A-Z)');
+      await reopened.close();
+      await sortControl().click();
+      await page.getByRole('option', { name: 'Recently Made', exact: true }).click();
+      await expect(page).toHaveURL(/\/recipes$/);
+      await page.goto('/recipes');
+      await expect(sortControl()).toContainText('Recently Made');
+      await page.getByRole('button', { name: 'Add recipe', exact: true }).click();
+      const importDialog = page.getByRole('dialog').first();
+      const importedName = 'Qualification Thai Basil Fried Rice';
+      await importDialog.getByLabel('Recipe text', { exact: true }).fill(
+        `# ${importedName}\nServings: 4\nCategory: Chicken\nTags: Asian, Family\n` +
+        'Prep Time: 20 minutes\nCook Time: 20 minutes\n\n## Ingredients\n1 cup rice\n\n## Instructions\n1. Cook.'
+      );
+      await importDialog.getByRole('button', { name: 'Review recipe', exact: true }).click();
+      await expect(importDialog.getByTestId('replacement-review')).toContainText('chicken');
+      await importDialog.getByText('Photo, tags & other details', { exact: false }).click();
+      await expect(importDialog.getByTestId('replacement-review')).toContainText('Asian, Family');
+      await importDialog.getByRole('button', { name: 'Save Recipe', exact: true }).click();
+      await expect(importDialog).toBeHidden();
+      const readImported = async () => {
+        const result = await primary.client.from('recipes').select('*')
+          .eq('user_id', primary.id).eq('name', importedName).single();
+        requireResult(result.error, result.data, 'read imported metadata');
+        return result.data!;
+      };
+      const imported = await readImported();
+      expect(imported.category).toBe('chicken');
+      expect(imported.tags).toEqual(['Asian', 'Family']);
+      await page.goto(`/recipes/${imported.recipe_uuid}?from=recipes`);
+      await page.getByTestId('recipe-detail-page').getByRole('button', { name: /edit recipe/i }).click();
+      await importDialog.getByRole('tab', { name: 'Replace text', exact: true }).click();
+      await importDialog.getByLabel('Recipe text', { exact: true }).fill(
+        `# ${importedName}\nCategory: Beef\nTags: Quick\n\n## Ingredients\n1 cup rice\n\n## Instructions\n1. Stir.`
+      );
+      await importDialog.getByRole('button', { name: 'Review changes', exact: true }).click();
+      await expect(importDialog.getByTestId('replacement-review')).toContainText('Quick');
+      await importDialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await expect(importDialog).toBeHidden();
+      expect((await readImported()).category).toBe('beef');
+      expect((await readImported()).tags).toEqual(['Quick']);
+      await page.reload();
+      await page.getByTestId('recipe-detail-page').getByRole('button', { name: /edit recipe/i }).click();
+      await importDialog.getByRole('tab', { name: 'Replace text', exact: true }).click();
+      await importDialog.getByLabel('Recipe text', { exact: true }).fill(
+        `# ${importedName}\n\n## Ingredients\n1 cup rice\n\n## Instructions\n1. Serve.`
+      );
+      await importDialog.getByRole('button', { name: 'Review changes', exact: true }).click();
+      await importDialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+      await expect(importDialog).toBeHidden();
+      expect((await readImported()).category).toBe('beef');
+      expect((await readImported()).tags).toEqual(['Quick']);
+      checks.push('recipe-sort-and-import-metadata');
       expect(checks).toEqual(requiredChecks);
       expect(externalRequests).toBe(0);
       witnessStatus = await snapshot(witness) === witnessBefore ? 'unchanged' : 'changed';
@@ -839,7 +907,7 @@ for (const viewport of [
             ? { operation: primaryFailure.error.operation, code: primaryFailure.error.code }
             : { operation: 'unknown', code: 'unknown' },
           witnessStatus, cleanupComplete, owners: cleanupResults,
-          limitation: 'Injected browser faults; WebKit HTTP CSP accommodation; no sharing/import',
+          limitation: 'Injected browser faults; WebKit HTTP CSP accommodation; no sharing or URL import',
         }, null, 2));
         if (!cleanupComplete || owners.length !== 2) {
           throw new Error('Qualification cleanup/owner acquisition incomplete');

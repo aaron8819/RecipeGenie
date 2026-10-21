@@ -409,7 +409,7 @@ test.describe('local recipe import browser verification', () => {
     }
   })
 
-  test('replaces recipe content while preserving identity and metadata', async ({
+  test('replaces explicit recipe metadata while preserving identity and omitted tags', async ({
     page,
     setupAuth,
     navigateToRoute,
@@ -472,7 +472,7 @@ test.describe('local recipe import browser verification', () => {
       await editDialog.getByLabel('Recipe text', { exact: true }).fill(MARKDOWN_TACO_SALAD_RECIPE_TEXT)
       await editDialog.getByRole('button', { name: /^review changes$/i }).click()
       await expect(editDialog.getByTestId('replacement-review')).toContainText(IMPORTED_TITLE)
-      await expect(editDialog.getByText('Pasted category: beef. This recipe keeps category lamb.')).toBeVisible()
+      await expect(editDialog.getByText('Pasted category: beef. This recipe keeps category lamb.')).toHaveCount(0)
 
       await editDialog.getByRole('button', { name: /^back to edit$/i }).first().click()
       await editDialog.getByRole('tab', { name: /^details$/i }).click()
@@ -495,7 +495,7 @@ test.describe('local recipe import browser verification', () => {
       await expect(
         replacedDetail.getByRole('button', { name: 'Remove from favorites' })
       ).toBeVisible()
-      await expect(replacedDetail.locator('.detail-eyebrow')).toContainText('lamb')
+      await expect(replacedDetail.locator('.detail-eyebrow')).toContainText('beef')
       await expect(replacedDetail.locator('.detail-metadata')).toContainText('preserve-me')
       await expect(replacedDetail.locator('.detail-metadata')).toContainText('browser-fixture')
 
@@ -509,7 +509,7 @@ test.describe('local recipe import browser verification', () => {
       expect(row.id).toBe(fixture.id)
       expect(row.recipe_uuid).toBe(REPLACEMENT_RECIPE_UUID)
       expect(row.user_id).toBe(userId)
-      expect(row.category).toBe(fixture.category)
+      expect(row.category).toBe('beef')
       expect(row.tags).toEqual(fixture.tags)
       expect(row.favorite).toBe(fixture.favorite)
       expect(row.image_url).toBe(fixture.image_url)

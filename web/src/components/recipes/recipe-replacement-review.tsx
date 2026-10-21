@@ -297,6 +297,7 @@ export function RecipeReplacementReview({
             <summary className="min-h-11 cursor-pointer text-muted-foreground">
               Photo, tags & other details · Optional
             </summary>
+            {recipe.tags?.length ? <p>{recipe.tags.join(", ")}</p> : null}
             <button
               type="button"
               className="min-h-11 font-semibold underline"

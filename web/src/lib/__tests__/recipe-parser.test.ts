@@ -1065,3 +1065,26 @@ describe('alternative ingredient detection (P2)', () => {
   });
 });
 
+
+describe('recipe tag metadata', () => {
+  it.each(['Tags: Asian, Quick dinner, Asian, , Custom', '**Tags:** Asian, Quick dinner, Asian, , Custom', '**Tags**: Asian, Quick dinner, Asian, , Custom', 'Tag: Asian, Quick dinner, Asian, , Custom'])(
+    'recognizes %s without turning metadata into ingredients or leftovers', (metadata) => {
+      const result = parseRecipeText(`Rice\nCategory: Chicken\n${metadata}\n\nIngredients:\n1 cup rice\nInstructions:\n1. Cook.`);
+      expect(result.tags).toEqual(['Asian', 'Quick dinner', 'Custom']);
+      expect(result.category).toBe('chicken');
+      expect(flatIngredients(result).map(ingredient => ingredient.item)).toEqual(['rice']);
+      expect(result.unparsedContent).toEqual([]);
+    }
+  );
+
+  it('does not infer tags from recipe prose or notes', () => {
+    const result = parseRecipeText('Asian Rice\nIngredients:\n1 cup rice\nInstructions:\n1. Cook.\nNotes:\nTags: family favorite');
+    expect(result.tags).toBeUndefined();
+    expect(result.notes).toEqual(['Tags: family favorite']);
+  });
+
+  it('keeps conflicting metadata visible instead of silently losing it', () => {
+    const result = parseRecipeText('Rice\nTags: Asian\nTags: Quick\nIngredients:\n1 cup rice\nInstructions:\n1. Cook.');
+    expect(result.unparsedContent).toEqual(expect.arrayContaining(['Tags: Asian', 'Tags: Quick']));
+  });
+});

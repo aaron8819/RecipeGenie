@@ -567,6 +567,11 @@ export function RecipeImportSection({
                 </div>
               ) : null}
             </div>
+            {livePreview.tags?.length ? (
+              <div className="text-xs text-muted-foreground">
+                Tags {livePreview.tags.join(", ")}
+              </div>
+            ) : null}
             {livePreview.metadata ? (
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 {livePreview.metadata.prepTime ? (
@@ -681,6 +686,12 @@ export function RecipeImportSection({
             </div>
           ) : null}
 
+          {parsedPreview?.tags?.length ? (
+            <div>
+              <div className="mb-1 text-xs uppercase tracking-wider text-muted-foreground">Tags</div>
+              <div>{parsedPreview.tags.join(", ")}</div>
+            </div>
+          ) : null}
           {parsedPreview?.metadata ? (
             <div className="grid gap-3 sm:grid-cols-3">
               {parsedPreview.metadata.prepTime ? (
@@ -932,6 +943,11 @@ Instructions:
               {livePreview.category ? (
                 <div className="mt-1 text-sm text-muted-foreground">
                   Category {livePreview.category}
+                </div>
+              ) : null}
+              {livePreview.tags?.length ? (
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Tags {livePreview.tags.join(", ")}
                 </div>
               ) : null}
               {livePreview.metadata ? (

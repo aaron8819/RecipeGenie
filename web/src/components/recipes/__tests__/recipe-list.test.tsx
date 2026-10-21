@@ -166,15 +166,17 @@ vi.mock("@/components/ui/input", () => ({
 vi.mock("@/components/ui/select", () => ({
   Select: ({
     value,
-    children,
+    onValueChange,
   }: {
     value: string
     onValueChange: (value: string) => void
     children: React.ReactNode
   }) => (
-    <div data-value={value}>
-      {children}
-    </div>
+    <select aria-label="Sort recipes" value={value} onChange={event => onValueChange(event.target.value)}>
+      {["timesMade", "lastMade", "name", "newest"].map(option => (
+        <option key={option} value={option}>{option}</option>
+      ))}
+    </select>
   ),
   SelectTrigger: ({ children }: { children: React.ReactNode }) => <button type="button">{children}</button>,
   SelectValue: ({ placeholder }: { placeholder?: string }) => <span>{placeholder}</span>,
@@ -300,11 +302,107 @@ describe("RecipeList", () => {
     undoToastShow.mockReset()
     routerPush.mockReset()
     routerReplace.mockReset()
+    window.history.replaceState(null, "", "/recipes")
     window.localStorage.clear()
     window.sessionStorage.clear()
     vi.spyOn(window, "confirm").mockReturnValue(true)
   })
 
+  it.each(["timesMade", "lastMade", "name", "newest"])(
+    "remembers %s across fresh list mounts without persisting filters",
+    (sort) => {
+      const view = render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, query: "chicken" }} />)
+      fireEvent.change(screen.getByRole("combobox", { name: "Sort recipes" }), {
+        target: { value: sort },
+      })
+      expect(window.localStorage.getItem("recipe-genie:recipe-sort:v1")).toBe(sort)
+      expect(window.localStorage.length).toBe(1)
+      view.unmount()
+      routerReplace.mockClear()
+      const returned = render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+      if (sort !== "lastMade") {
+        expect(routerReplace).toHaveBeenCalledWith(`/recipes?sort=${sort}`, { scroll: false })
+        returned.rerender(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, sortBy: sort as RecipeRouteState["sortBy"] }} />)
+      } else {
+        expect(routerReplace).not.toHaveBeenCalled()
+      }
+      expect(screen.getByRole("combobox", { name: "Sort recipes" })).toHaveValue(sort)
+      expect(lastRecipeOptions?.search).toBeNull()
+    }
+  )
+
+  it("restores saved sorting when the mounted list returns to the plain route", () => {
+    window.localStorage.setItem("recipe-genie:recipe-sort:v1", "name")
+    window.history.replaceState(null, "", "/recipes?sort=name")
+    const view = render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, sortBy: "name" }} />)
+    routerReplace.mockClear()
+    window.history.replaceState(null, "", "/recipes")
+    view.rerender(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(routerReplace).toHaveBeenCalledWith("/recipes?sort=name", { scroll: false })
+  })
+  it.each([null, "invalid", '{"sort":"name"}', "NAME"])(
+    "preserves the default for absent or invalid storage (%s)",
+    (saved) => {
+      if (saved !== null) window.localStorage.setItem("recipe-genie:recipe-sort:v1", saved)
+      render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+      expect(screen.getByRole("combobox", { name: "Sort recipes" })).toHaveValue("lastMade")
+      expect(routerReplace).not.toHaveBeenCalled()
+    }
+  )
+
+  it("honors explicit URLs, including the default, without changing the saved choice", () => {
+    window.localStorage.setItem("recipe-genie:recipe-sort:v1", "name")
+    window.history.replaceState(null, "", "/recipes?sort=lastMade")
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(routerReplace).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem("recipe-genie:recipe-sort:v1")).toBe("name")
+  })
+
+  it("keeps the selected default when storage reads work but saving fails", () => {
+    window.localStorage.setItem("recipe-genie:recipe-sort:v1", "name")
+    window.history.replaceState(null, "", "/recipes?sort=name")
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full") })
+    const view = render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, sortBy: "name" }} />)
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort recipes" }), {
+      target: { value: "lastMade" },
+    })
+    routerReplace.mockClear()
+    window.history.replaceState(null, "", "/recipes")
+    view.rerender(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(routerReplace).not.toHaveBeenCalled()
+    expect(screen.getByRole("combobox", { name: "Sort recipes" })).toHaveValue("lastMade")
+  })
+  it("keeps sorting usable when storage reads and writes fail", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked") })
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full") })
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort recipes" }), {
+      target: { value: "newest" },
+    })
+    expect(routerReplace).toHaveBeenCalledWith("/recipes?sort=newest", { scroll: false })
+  })
+  it("restores the actual recipe ordering and replaces the saved choice when changed again", () => {
+    baseRecipes = [
+      recipeFixture({ id: "apple", name: "Apple", created_at: "2025-01-01T00:00:00Z" }),
+      recipeFixture({ id: "zebra", name: "Zebra", created_at: "2026-01-01T00:00:00Z" }),
+    ]
+    window.localStorage.setItem("recipe-genie:recipe-sort:v1", "newest")
+    const view = render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(routerReplace).toHaveBeenCalledWith("/recipes?sort=newest", { scroll: false })
+    view.rerender(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, sortBy: "newest" }} />)
+    expect(screen.getAllByRole("button", { name: /^View (Apple|Zebra)$/ }).map(button => button.textContent))
+      .toEqual(["View Zebra", "View Apple"])
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort recipes" }), {
+      target: { value: "lastMade" },
+    })
+    expect(window.localStorage.getItem("recipe-genie:recipe-sort:v1")).toBe("lastMade")
+    view.unmount()
+    routerReplace.mockClear()
+    render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(routerReplace).not.toHaveBeenCalled()
+    expect(screen.getAllByRole("button", { name: /^View (Apple|Zebra)$/ }).map(button => button.textContent))
+      .toEqual(["View Apple", "View Zebra"])
+  })
   it("aligns the search copy with the actual search scope", () => {
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 

@@ -605,11 +605,12 @@ export function RecipeDialog({
           imageUrl,
         },
         preview,
-        { applyCategory: !isEditing, categories },
+        { applyCategory: true, categories },
       );
 
       setName(formValues.name);
       setCategory(formValues.category);
+      setTags(formValues.tags);
       setServings(formValues.servings);
       setYieldText(formValues.yieldText ?? `${formValues.servings} servings`);
       setPrepTimeMinutes(formValues.prepTimeMinutes);
@@ -633,7 +634,6 @@ export function RecipeDialog({
       instructionGroups,
       notes,
       imageUrl,
-      isEditing,
       categories,
     ],
   );
@@ -777,10 +777,12 @@ export function RecipeDialog({
         )
           ? baseline.name
           : parsed.name,
-      });
+      }, { applyCategory: true, categories });
       setReplacementBaseline(baseline);
       setAppliedDraftSnapshot(next);
       setName(next.name);
+      setCategory(next.category);
+      setTags(next.tags);
       setServings(next.servings);
       setYieldText(next.yieldText ?? "");
       setPrepTimeMinutes(next.prepTimeMinutes);
@@ -790,15 +792,11 @@ export function RecipeDialog({
       setInstructionGroups(next.instructionGroups);
       setNotes(next.notes);
       setReplacementSource(rawSource);
-      const retainedTags = `tags: ${baseline.tags.join(", ")}`.toLowerCase();
-      const unparsed = (parsed.unparsedContent ?? []).filter(
-        (text) => text.toLowerCase() !== retainedTags,
-      );
-      setReplacementUnparsed(unparsed);
+      setReplacementUnparsed(parsed.unparsedContent ?? []);
       setReplacementWarnings([
         ...parsed.warnings,
         ...(parsed.category &&
-        parsed.category.toLowerCase() !== baseline.category.toLowerCase()
+        parsed.category.toLowerCase() !== next.category.toLowerCase()
           ? [
               `Pasted category: ${parsed.category}. This recipe keeps category ${baseline.category}.`,
             ]
