@@ -1,5 +1,11 @@
 # Local authenticated browser testing
 
+Ordinary Playwright here starts the development server and is for selected local
+fixture/debugging diagnostics. It is not the normal release gate. Use the
+[developer workflow](../../docs/developer-workflow.md#normal-task-path) for
+hosted production-build qualification and acceptance selection.
+
+
 Use this workflow for normal authenticated development and exhaustive browser
 inspection. It is local-only: Docker hosts Supabase, Recipe Genie runs on
 `127.0.0.1:3107`, and all fixture mutations stay on the machine.

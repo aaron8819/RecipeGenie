@@ -70,8 +70,8 @@ function privateRows(id: string): string {
   }
 }
 
-function monday(offset = 0): string {
-  const date = new Date();
+function monday(offset = 0, now = new Date()): string {
+  const date = new Date(now);
   date.setUTCHours(0, 0, 0, 0);
   date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7) + offset);
   return date.toISOString().slice(0, 10);
@@ -162,6 +162,10 @@ for (const viewport of [
   { width: 1440, height: 900 }, { width: 390, height: 844 },
 ]) {
   test(`combined acceptance ${viewport.width}x${viewport.height}`, async ({ browser }, info) => {
+    // Keep the seeded calendar and browser Today consistent across UTC midnight.
+    // Fixed Date preserves real retry timers; auth-expiry behavior is not qualified.
+    const fixtureNow = new Date();
+    const fixtureWeek = (offset = 0) => monday(offset, fixtureNow);
     const run = `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}-${randomUUID()}`;
     const owners: Owner[] = [];
     const contexts: BrowserContext[] = [];
@@ -223,9 +227,9 @@ for (const viewport of [
       stage = 'seed canonical recipes';
       const inserted = await primary.client.from('recipes').insert(rows);
       requireResult(inserted.error, true, 'seed canonical recipes');
-      const today = new Date().getUTCDay();
+      const today = fixtureNow.getUTCDay();
       stage = 'seed weekly plans';
-      for (const week of [monday(), monday(7)]) {
+      for (const week of [fixtureWeek(), fixtureWeek(7)]) {
         const seeded = await primary.client.from('weekly_plans').upsert({
           user_id: primary.id, week_date: week, scale: 2,
           recipe_uuids: [main.id, cooked.id, unassigned.id], made_recipe_uuids: [cooked.id],
@@ -262,6 +266,7 @@ for (const viewport of [
         });
       }
       const page = await context.newPage();
+      await page.clock.setFixedTime(fixtureNow);
       let externalRequests = 0;
       context.on('request', request => {
         const url = new URL(request.url());
@@ -277,7 +282,7 @@ for (const viewport of [
         if (compatible.status !== 'Supported') throw new Error('Unsupported fixture document');
         return compatible.state;
       };
-      const readPlan = async (week = monday()) => {
+      const readPlan = async (week = fixtureWeek()) => {
         const result = await primary.client.from('weekly_plans').select('*')
           .eq('user_id', primary.id).eq('week_date', week).single();
         requireResult(result.error, result.data, 'read plan');
@@ -298,7 +303,8 @@ for (const viewport of [
         if (action === 'Edit recipe') stage = 'Edit menu: open with keyboard';
         else if (action === 'Print recipe') stage = 'Print menu: open with keyboard';
         else stage = 'Shopping menu: open with keyboard';
-        await page.keyboard.press('Enter');
+        await trigger.press('Enter');
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true');
         if (action === 'Edit recipe') stage = 'Edit menu: select action';
         else if (action === 'Print recipe') stage = 'Print menu: select action';
         else stage = 'Shopping menu: select action';
@@ -308,8 +314,16 @@ for (const viewport of [
       const shoppingDialog = () => page.getByRole('dialog');
       const yieldControl = () => shoppingDialog().getByRole('spinbutton',
         { name: `Selected yield for ${main.name}`, exact: true });
-      const submit = () => shoppingDialog().getByRole('button',
-        { name: 'Add selected ingredients', exact: true });
+      const submit = async (selectedCount: number) => {
+        await expect(shoppingDialog().getByRole('checkbox', {
+          name: /ingredient \d+$/, checked: true,
+        })).toHaveCount(selectedCount);
+        const control = shoppingDialog().getByRole('button', {
+          name: `Add ${selectedCount} ingredients`, exact: true,
+        });
+        await expect(control).toBeEnabled();
+        await control.click();
+      };
       const assertSaved = async () => {
         stage = 'saved selector: yield';
         await expect(yieldControl()).toHaveValue('5');
@@ -377,7 +391,7 @@ for (const viewport of [
 
       await test.step('cards: invalid admission retains draft; retry writes real DB', async () => {
         await page.goto('/recipes');
-        await cardMenu(main, 'Add to Shopping List');
+        const trigger = await cardMenu(main, 'Add to Shopping List');
         await expect(yieldControl()).toHaveValue('4');
         await yieldControl().fill('5');
         await shoppingDialog().getByRole('button', { name: 'Deselect all', exact: true }).click();
@@ -390,13 +404,14 @@ for (const viewport of [
           status: 400,
           contentType: 'application/json', body: '{"status":"InvalidInput"}'
         }));
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog().getByRole('alert')).toBeVisible();
         await assertSaved();
         expect(await readShopping()).toEqual(before);
         await page.unroute('**/api/shopping');
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog()).toHaveCount(0);
+        await expect(trigger).toBeFocused();
         await expect.poll(async () => (await readShopping()).document
           .recipeEntries[main.id]?.selectedServings).toBe(5);
         const saved = (await readShopping()).document;
@@ -465,7 +480,7 @@ for (const viewport of [
       stage = 'browser acceptance';
 
       await test.step('lost real execute response reuses admission and applies once', async () => {
-        await cardMenu(main, 'Add to Shopping List');
+        const trigger = await cardMenu(main, 'Add to Shopping List');
         await yieldControl().fill('6');
         const before = await readShopping();
         let lost = false;
@@ -485,8 +500,9 @@ for (const viewport of [
           }
           return route.continue();
         });
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog()).toHaveCount(0);
+        await expect(trigger).toBeFocused();
         await page.unroute('**/api/shopping');
         expect(lost).toBe(true);
         expect(operations.size).toBe(1);
@@ -496,8 +512,9 @@ for (const viewport of [
         expect(after.document.recipeEntries[main.id].ingredients).toHaveLength(2);
         await cardMenu(main, 'Add to Shopping List');
         await yieldControl().fill('5');
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog()).toHaveCount(0);
+        await expect(trigger).toBeFocused();
       });
       checks.push('shopping-response-loss-dedup');
 
@@ -516,10 +533,16 @@ for (const viewport of [
         await expect(page.getByTestId('recipe-detail-page')).toBeVisible();
         stage = 'detail: recipe heading visible';
         await expect(page.getByRole('heading', { level: 1, name: main.name })).toBeVisible();
+        stage = 'detail: open yield adjustment';
+        await page.getByRole('button', { name: 'Adjust yield', exact: true }).click();
         for (let index = 0;index < 5;index++) {
           stage = 'detail: increase displayed yield';
           await page.getByRole('button', { name: 'Increase yield', exact: true }).click();
         }
+        stage = 'detail: close yield adjustment';
+        await page.keyboard.press('Escape');
+        await expect(page.getByRole('button', { name: 'Increase yield', exact: true }))
+          .toHaveCount(0);
         const trigger = page.getByRole('button', { name: 'Add to Shopping List', exact: true });
         stage = 'detail: open Shopping selector';
         await trigger.click();
@@ -560,7 +583,8 @@ for (const viewport of [
         stage = 'planner: full-week selector geometry';
         await geometry(page, shoppingDialog());
         stage = 'planner: submit full-week Shopping selection';
-        await submit().click();
+        // Main retains two selected ordinals; cooked and unassigned each include all four.
+        await submit(10);
         stage = 'planner: full-week selector closed';
         await expect(shoppingDialog()).toHaveCount(0);
         stage = 'planner: cooked contribution persisted';
@@ -590,6 +614,7 @@ for (const viewport of [
         await page.goto('/planner');
         stage = 'return week: select next week';
         await page.getByRole('button', { name: 'Next week', exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`/planner\\?week=${fixtureWeek(7)}$`));
         const selectedURL = page.url();
         stage = 'return week: open recipe detail';
         await page.locator('.planner-meal-title').filter({ hasText: main.name }).click();
@@ -604,7 +629,7 @@ for (const viewport of [
         stage = 'return week: returned meals visible';
         await expect(page.locator('.planner-meal-card')).toHaveCount(3);
         stage = 'return week: read saved plan';
-        const before = await readPlan(monday(7));
+        const before = await readPlan(fixtureWeek(7));
         stage = 'return week: inject failed plan read';
         await page.route('**/rest/v1/weekly_plans*', route => route.fulfill({
           status: 503,
@@ -613,8 +638,10 @@ for (const viewport of [
         stage = 'return week: reload failed read';
         await page.reload();
         stage = 'return week: read error visible';
+        // Four Query attempts each exhaust the SDK's 1s/2s/4s backoff;
+        // Query adds another 1s/2s/4s. Measured terminal error: 35.28s.
         await expect(page.getByText("Couldn't load this week's plan.", { exact: false }))
-          .toBeVisible();
+          .toBeVisible({ timeout: 45_000 });
         stage = 'return week: no Add meal on read failure';
         await expect(page.getByRole('button', { name: 'Add meal', exact: true })).toHaveCount(0);
         stage = 'return week: restore plan reads';
@@ -626,7 +653,13 @@ for (const viewport of [
         stage = 'return week: recovered URL';
         await expect(page).toHaveURL(selectedURL);
         stage = 'return week: recovered plan unchanged';
-        expect(await readPlan(monday(7))).toEqual(before);
+        expect(await readPlan(fixtureWeek(7))).toEqual(before);
+        stage = 'Today: return to current week without filtering days';
+        await page.getByRole('button', { name: 'Today', exact: true }).click();
+        await expect(page).toHaveURL(/\/planner$/);
+        await expect(page.locator('[data-day-date]')).toHaveCount(7);
+        await expect(page.locator(`[data-day-date="${fixtureNow.toISOString().slice(0, 10)}"]`))
+          .toBeFocused();
       });
       checks.push('planner-return-week-read-retry');
 
@@ -643,9 +676,10 @@ for (const viewport of [
         expect(await readPlan()).toEqual(duplicateBefore);
         await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
         const meal = () => page.locator('.planner-meal-card').filter({ hasText: main.name });
-        await meal().getByRole('button', { name: 'Move to another day', exact: true }).click();
-        await page.locator('[role="menuitem"]:not([data-disabled]):not([aria-disabled="true"])')
-          .first().click();
+        await meal().getByRole('button', { name: `More actions for ${main.name}`, exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Move meal', exact: true }).click();
+        const moveDay = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][(today + 1) % 7];
+        await page.getByRole('menuitem', { name: new RegExp(`^${moveDay}, `) }).click();
         await expect.poll(async () => {
           const assignments = (await readPlan()).day_assignment_recipe_uuids;
           if (!assignments || typeof assignments !== 'object' || Array.isArray(assignments)) {
@@ -657,7 +691,8 @@ for (const viewport of [
           .click();
         await page.getByRole('button', { name: 'Undo', exact: true }).click();
         await expect.poll(async () => (await readPlan()).made_recipe_uuids).toEqual([cooked.id]);
-        await meal().getByRole('button', { name: `Remove ${main.name} from plan`, exact: true })
+        await meal().getByRole('button', { name: `More actions for ${main.name}`, exact: true }).click();
+        await page.getByRole('menuitem', { name: `Remove ${main.name} from plan`, exact: true })
           .click();
         await page.getByRole('button', { name: 'Undo', exact: true }).click();
         await expect.poll(async () => (await readPlan()).recipe_uuids).toContain(main.id);
@@ -703,7 +738,8 @@ for (const viewport of [
           await page.getByRole('button', { name: 'Undo', exact: true }).click();
           await expect(page.getByRole('button', { name: 'Retry Undo', exact: true })).toBeVisible();
           expect((await readHistory()).some(row => row.id === added.id)).toBe(true);
-          const newer = await admin.from('recipe_history').insert({
+          stage = 'history: seed newer exact row as its authenticated owner';
+          const newer = await primary.client.from('recipe_history').insert({
             user_id: primary.id, recipe_uuid: main.id,
           }).select('id').single();
           requireResult(newer.error, newer.data, 'seed newer exact history row');
@@ -743,7 +779,7 @@ for (const viewport of [
           .eq('recipe_uuid', main.id)
           .eq('user_id', primary.id);
         requireResult(updated.error, true, 'change disposable recipe behind cached selector');
-        await submit().click();
+        await submit(2);
         await expect(shoppingDialog().getByRole('alert')).toBeVisible();
         await expect(yieldControl()).toHaveValue('5');
         expect(await readShopping()).toEqual(before);

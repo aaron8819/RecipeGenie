@@ -1,5 +1,9 @@
 # PR #73 production Dashboard visual sign-off
 
+Historical record, indexed 2026-10-14. Current operating commands are in
+[developer-workflow.md](../developer-workflow.md).
+
+
 The user provided production Dashboard visual sign-off on 2026-10-02 after
 PR #73's automatic production deployment.
 

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
 import { test as base, expect, type Page, type Locator } from '@playwright/test'
 import * as fs from 'fs'
@@ -32,7 +33,8 @@ export const SAMPLE_RECIPE = {
     { amount: '2', unit: 'cups', item: 'broccoli', modifier: 'chopped' },
     { amount: '3', unit: 'tbsp', item: 'soy sauce', modifier: '' },
   ],
-  instructions: 'Heat oil in a wok. Add chicken and cook until browned. Add vegetables and stir-fry for 5 minutes. Add soy sauce and serve.',
+  instructions:
+    'Heat oil in a wok. Add chicken and cook until browned. Add vegetables and stir-fry for 5 minutes. Add soy sauce and serve.',
   tags: ['quick', 'healthy'],
 }
 
@@ -76,7 +78,9 @@ function assertE2EEnv() {
   }
 
   if (missing.length > 0) {
-    throw new Error(`E2E smoke preflight failed. Missing required configuration: ${missing.join(', ')}`)
+    throw new Error(
+      `E2E smoke preflight failed. Missing required configuration: ${missing.join(', ')}`,
+    )
   }
 }
 
@@ -121,9 +125,10 @@ export const test = base.extend<RecipeGenieFixtures>({
     } catch (error) {
       await authContext.close().catch(() => undefined)
       removeRuntimeAuthFiles(statePath, metadataPath)
-      const safeReason = error instanceof Error && error.message.startsWith('Recipe Genie')
-        ? error.message
-        : 'Recipe Genie authentication failed at an unknown stage'
+      const safeReason =
+        error instanceof Error && error.message.startsWith('Recipe Genie')
+          ? error.message
+          : 'Recipe Genie authentication failed at an unknown stage'
       throw new Error(`Failed to establish isolated runtime authentication state: ${safeReason}`)
     }
 
@@ -177,16 +182,18 @@ export const test = base.extend<RecipeGenieFixtures>({
       const routeName = routeNames[route] || route
 
       if (isMobile) {
-        let navLink = page.locator('nav.fixed.bottom-0').getByRole('link', { name: new RegExp(routeName, 'i') })
+        let navLink = page
+          .locator('nav.fixed.bottom-0')
+          .getByRole('link', { name: new RegExp(routeName, 'i') })
 
         if (!(await navLink.isVisible().catch(() => false))) {
-          navLink = page.locator('nav').last().getByRole('link', { name: new RegExp(routeName, 'i') })
+          navLink = page
+            .locator('nav')
+            .last()
+            .getByRole('link', { name: new RegExp(routeName, 'i') })
         }
 
-        // The Next.js development portal can overlap the bottom-left Planner target.
-        // Dispatch through the link itself so responsive navigation tests exercise
-        // route navigation instead of the development-only overlay geometry.
-        await navLink.evaluate((link: HTMLAnchorElement) => link.click())
+        await navLink.click()
       } else {
         const navLink = page
           .getByRole('navigation')
@@ -207,9 +214,12 @@ export const test = base.extend<RecipeGenieFixtures>({
     const addRecipe = async (recipe: typeof SAMPLE_RECIPE) => {
       const dialog = page.locator('[role="dialog"]')
 
-      await page.getByRole('button', { name: /add recipe/i }).first().click()
+      await page
+        .getByRole('button', { name: /add recipe/i })
+        .first()
+        .click()
       await dialog.waitFor({ state: 'visible', timeout: 5000 })
-      await page.waitForTimeout(500)
+      await dialog.getByRole('tab', { name: 'Manual', exact: true }).click()
 
       const uniqueName = `${recipe.name} ${Date.now()}`
       const nameInput = dialog.locator('#name-add, #name-edit').first()
@@ -221,11 +231,15 @@ export const test = base.extend<RecipeGenieFixtures>({
       await categoryTrigger.click()
       await page.waitForTimeout(300)
 
-      let categoryOption = page.getByRole('option', { name: new RegExp(`^${recipe.category}$`, 'i') })
+      let categoryOption = page.getByRole('option', {
+        name: new RegExp(`^${recipe.category}$`, 'i'),
+      })
       let optionVisible = await categoryOption.isVisible().catch(() => false)
 
       if (!optionVisible) {
-        categoryOption = page.getByRole('option', { name: new RegExp(recipe.category, 'i') }).first()
+        categoryOption = page
+          .getByRole('option', { name: new RegExp(recipe.category, 'i') })
+          .first()
         optionVisible = await categoryOption.isVisible().catch(() => false)
       }
 
@@ -248,7 +262,10 @@ export const test = base.extend<RecipeGenieFixtures>({
         const ingredient = recipe.ingredients[i]
 
         if (i > 0) {
-          const addBtn = dialog.locator('button').filter({ hasText: /add row|add ingredient/i }).first()
+          const addBtn = dialog
+            .locator('button')
+            .filter({ hasText: /add row|add ingredient/i })
+            .first()
           if (await addBtn.isVisible().catch(() => false)) {
             await addBtn.click()
             await page.waitForTimeout(200)
@@ -277,49 +294,8 @@ export const test = base.extend<RecipeGenieFixtures>({
         await instructionsTextarea.fill(recipe.instructions)
       }
 
-      const saveButton = dialog.getByRole('button', { name: /save changes|add recipe/i }).first()
-      await saveButton.scrollIntoViewIfNeeded()
-
-      const isEnabled = await saveButton.isEnabled().catch(() => false)
-      if (!isEnabled) {
-        const nameValue = await nameInput.inputValue().catch(() => 'unknown')
-        const ingredientCount = await dialog.locator('input[placeholder="Ingredient"]').count()
-        console.log(`Save button disabled. Name: "${nameValue}", Ingredients: ${ingredientCount}`)
-
-        const title = await saveButton.getAttribute('title')
-        if (title) {
-          console.log(`Button disabled reason: ${title}`)
-        }
-      }
-
-      await expect(saveButton).toBeEnabled({ timeout: 5000 })
-      await saveButton.click()
-
-      for (let attempt = 0; attempt < 30; attempt++) {
-        await page.waitForTimeout(500)
-        const stillOpen = await dialog.isVisible().catch(() => false)
-        if (!stillOpen) {
-          return
-        }
-
-        const buttonText = await saveButton.textContent().catch(() => '')
-        if (buttonText?.includes('Saving') || buttonText?.includes('Uploading')) {
-          continue
-        }
-
-        if (await saveButton.isEnabled().catch(() => false)) {
-          if (attempt === 10) {
-            console.log('Dialog still open after save, trying again...')
-            await saveButton.click()
-          }
-        }
-      }
-
-      if (await dialog.isVisible().catch(() => false)) {
-        const buttonText = await saveButton.textContent().catch(() => 'unknown')
-        const errorText = await dialog.locator('.text-destructive, .text-red-500').textContent().catch(() => null)
-        throw new Error(`Recipe dialog did not close. Button: "${buttonText}", Error: ${errorText || 'none visible'}`)
-      }
+      await reviewCreatedRecipe(page)
+      await saveReviewedRecipe(page)
     }
 
     await use(addRecipe)
@@ -370,10 +346,13 @@ export { expect }
 /**
  * Helper to check for accessibility violations using axe-core
  */
-export async function checkAccessibility(page: Page, options?: {
-  exclude?: string[]
-  include?: string[]
-}) {
+export async function checkAccessibility(
+  page: Page,
+  options?: {
+    exclude?: string[]
+    include?: string[]
+  },
+) {
   const builder = new AxeBuilder({ page }).withRules(['color-contrast'])
 
   for (const selector of options?.include || []) {
@@ -390,10 +369,116 @@ export async function checkAccessibility(page: Page, options?: {
 /**
  * Helper to measure touch target sizes
  */
-export async function measureTouchTarget(locator: Locator): Promise<{ width: number; height: number }> {
+export async function measureTouchTarget(
+  locator: Locator,
+): Promise<{ width: number; height: number }> {
   const box = await locator.boundingBox()
   if (!box) {
     throw new Error('Element not visible')
   }
   return { width: box.width, height: box.height }
+}
+
+export async function reviewCreatedRecipe(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog')
+  const review = dialog.getByRole('button', { name: 'Review recipe', exact: true })
+  await expect(review).toBeEnabled()
+  await review.click()
+  await expect(
+    dialog.getByRole('heading', { name: 'Review your recipe', exact: true }),
+  ).toBeVisible()
+}
+
+export async function saveReviewedRecipe(page: Page): Promise<void> {
+  const dialog = page.getByRole('dialog')
+  const save = dialog.getByRole('button', { name: 'Save Recipe', exact: true })
+  await expect(save).toBeEnabled()
+  await save.click()
+  await expect(dialog).toHaveCount(0)
+}
+
+export async function submitShoppingReview(
+  page: Page,
+  restoreFixtureDefaults = false,
+): Promise<void> {
+  const review = page.getByRole('dialog')
+  await expect(review).toBeVisible()
+  const submit = review.getByRole('button', { name: /^Add \d+ ingredients?$/ })
+  await expect(submit).toBeEnabled()
+  const response = page.waitForResponse(
+    (candidate) =>
+      candidate.url().endsWith('/api/shopping') &&
+      candidate.request().method() === 'POST' &&
+      candidate.request().postDataJSON()?.phase === 'execute',
+  )
+  await submit.click()
+  const result = await response
+  expect(result.ok()).toBe(true)
+  const receipt = await result.json()
+  expect(receipt.status).toMatch(/^(Applied|Unchanged)$/)
+  expect(receipt.receipt).toMatchObject({ outcome: receipt.status, revision: expect.any(Number) })
+  await expect(review).toHaveCount(0)
+  if (restoreFixtureDefaults) {
+    // Explicit review inclusion intentionally shows unavailable ingredients. Seed the
+    // existing default-availability state separately to exercise restore controls.
+    const payload = result.request().postDataJSON() as {
+      command: { mutation: { entries: Array<{ ingredients: Array<{ aggregateKey: string }> }> } }
+    }
+    let revision = receipt.receipt.revision as number
+    expect(Number.isSafeInteger(revision)).toBe(true)
+    for (const entry of payload.command.mutation.entries) {
+      for (const ingredient of entry.ingredients) {
+        expect(ingredient.aggregateKey).toEqual(expect.any(String))
+        const operationId = randomUUID()
+        const command = {
+          protocol: 1,
+          observedRevision: revision,
+          mutation: {
+            type: 'setBucketOverride',
+            aggregateKey: ingredient.aggregateKey,
+          },
+        }
+        const options = { headers: { Origin: new URL(page.url()).origin } }
+        const admission = await page.request.post('/api/shopping', {
+          ...options,
+          data: { phase: 'admit', operationId, command },
+        })
+        expect(admission.ok()).toBe(true)
+        const ticket = await admission.json()
+        expect(ticket).toMatchObject({ status: 'Admitted', sequence: expect.any(String) })
+        const execution = await page.request.post('/api/shopping', {
+          ...options,
+          data: { phase: 'execute', operationId, command, sequence: ticket.sequence },
+        })
+        expect(execution.ok()).toBe(true)
+        const settled = await execution.json()
+        expect(settled.status).toMatch(/^(Applied|Unchanged)$/)
+        revision = settled.receipt.revision
+      }
+    }
+    await page.reload()
+  }
+}
+
+export async function expectShoppingSource(
+  page: Page,
+  item: string,
+  recipeName: string,
+  quantity?: RegExp,
+): Promise<void> {
+  const escapedItem = item
+    .split(/[\s-]+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('[\\s-]+')
+  await page
+    .getByRole('button', {
+      name: new RegExp(`^View sources for ${escapedItem}$`, 'i'),
+    })
+    .click()
+  const sources = page.getByRole('dialog')
+  const source = sources.getByRole('button', { name: recipeName, exact: true })
+  await expect(source).toBeVisible()
+  if (quantity) await expect(source.locator('..')).toContainText(quantity)
+  await page.keyboard.press('Escape')
+  await expect(sources).toHaveCount(0)
 }

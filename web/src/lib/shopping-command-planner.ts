@@ -1,6 +1,6 @@
 import { reconstructShoppingEntry } from './shopping-selection';
 import {
-  applyShoppingDocumentMutation, createEmptyShoppingDocument,
+  applyShoppingDocumentMutation, createEmptyShoppingDocument, includeReviewedShoppingIngredients,
   projectShoppingDocument, validateShoppingDocumentV3,
   type ShoppingDocumentStateV3, type ShoppingDocumentV3,
 } from './shopping-document';
@@ -125,10 +125,16 @@ export function planShoppingCommand(context: ShoppingCommandContext, command: Sh
       !Object.values(before.document.recipeEntries).some((e) => e.ingredients.some((i) => i.aggregateKey === mutation.aggregateKey))) return result('TargetGone');
     if (mutation.type === 'learnOrder' && (!rows.some((r) => r.rowRef === mutation.draggedRowRef && r.categoryKey === mutation.sourceCategoryKey && r.orderingKey === mutation.draggedOrderingKey) ||
       !rows.some((r) => r.rowRef === mutation.targetRowRef && r.categoryKey === mutation.targetCategoryKey && r.orderingKey === mutation.targetOrderingKey))) return result('Conflict');
-    const next = applyShoppingDocumentMutation(before, mutation);
+    let next = applyShoppingDocumentMutation(before, mutation);
+    if (command.sourceSelections && (mutation.type === 'upsertRecipe' ||
+        mutation.type === 'upsertRecipes' || mutation.type === 'rescaleRecipe')) {
+      next = { ...next, document: includeReviewedShoppingIngredients(next.document,
+        mutation.type === 'upsertRecipes' ? mutation.entries : [mutation.entry]) };
+    }
     const valid = validateShoppingDocumentV3(next.document);
     if (!valid.ok) return result('InvalidInput');
-    return result(next === before && !pantryItem ? 'Unchanged' : 'Applied', next.document, pantryItem);
+    return result(canonicalShoppingPayload(next.document) === canonicalShoppingPayload(before.document) &&
+      !pantryItem ? 'Unchanged' : 'Applied', next.document, pantryItem);
   } catch {
     return result('InvalidInput');
   }

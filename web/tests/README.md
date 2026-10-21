@@ -1,5 +1,11 @@
 # Recipe Genie E2E Tests
 
+Ordinary Playwright here starts the development server and is for selected local
+fixture/debugging diagnostics. It is not the normal release gate. Use the
+[developer workflow](../../docs/developer-workflow.md#normal-task-path) for
+hosted production-build qualification and acceptance selection.
+
+
 > **When to read:** You're writing, debugging, or modifying E2E tests, or setting up Playwright fixtures and auth.
 
 *Last updated: 2026-07-26*
@@ -41,6 +47,15 @@ test.describe('My unauthenticated tests', () => {
 })
 ```
 
+### Shopping fixture semantics
+
+Recipe additions use ingredient review and successful command receipts (Applied or
+Unchanged). Explicit inclusion makes selected purchases active, including Pantry
+and excluded ingredients. Restore-control fixtures may seed default availability
+once through the authenticated Shopping command API, then reload persisted state.
+Never reset visibility after the replacement being tested: assert its real outcome.
+Lifecycle coverage checks Restore, explicit re-add, preference retention, and reload persistence.
+
 ## Running Tests
 
 Shopping Slice 5: `node node_modules/@playwright/test/cli.js test
@@ -52,12 +67,13 @@ and checks manual edits, unchanged frozen sources/order, and no read writes at
 1440×900 and 390×844. The operability test additionally intercepts read failures
 and invalid responses; those responses are not persisted database fixtures.
 
-### Run the core CI project
+### Run the development-mode core project
 ```bash
 npm run test:e2e:core
 ```
 
-This is the canonical core CI command; it is not the full browser matrix.
+This legacy-named project is a development-mode diagnostic, not hosted CI or
+production-browser acceptance.
 
 ### Run smoke tests (critical flow, Chromium-only)
 ```bash
@@ -71,7 +87,10 @@ Smoke tests are selected by explicit `@smoke` tags in test titles.
 npm run test:e2e:smoke:list
 ```
 
-This command lists smoke tests and fails if fewer than 5 are selected.
+This command lists the three required smoke-owning files and verifies all nine
+named auth, navigation, reload, Shopping and recipe-mutation journeys. Missing or
+duplicate identities fail even if unrelated tests keep the total count high.
+It does not run browser assertions or load unrelated historical fixture suites.
 
 ### Run full cross-browser matrix
 ```bash
@@ -156,9 +175,9 @@ npm run test:e2e:debug
 
 ### Run specific test file
 ```bash
-npx playwright test authentication.spec.ts
-npx playwright test recipes.spec.ts
-npx playwright test responsive.spec.ts
+npx playwright test authentication.spec.ts --project=chromium
+npx playwright test recipes.spec.ts --project=chromium
+npx playwright test responsive.spec.ts --project=chromium
 ```
 
 ### Run tests for specific browser

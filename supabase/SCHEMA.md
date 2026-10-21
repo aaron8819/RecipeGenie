@@ -79,6 +79,16 @@ enforce those ownership boundaries.
 - `supabase/migrations/030_shopping_trip_visibility.sql`
 - `supabase/migrations/031_planner_history_swap_guard.sql`
 - `supabase/migrations/032_planner_mutation_lock_order.sql`
+- `supabase/migrations/033_fix_recipe_quantity_rational_comparison.sql`
+
+Migration 033 corrects authored quantity/rational equality using exact cross
+multiplication. It preserves authored text, rational payloads, grammar, bounds,
+qualifiers, and existing function privileges; no recipe data is rewritten.
+Exact and range quantities share the corrected comparison. Numeric compatibility
+amounts use strict binary64 equality with the rational projection, matching
+JavaScript division without a tolerance. Historical migration
+014 remains unchanged. Hosted application of 033 requires separate authorization
+under the database runbook; this repository change does not grant it.
 
 Migration 032 is a forward correction; 031 remains byte-for-byte unchanged.
 Swap, weekly cooking and recipe deletion acquire the same owner-scoped
@@ -955,7 +965,7 @@ The following sections preserve implementation and rollout reasoning for
 migrations 008 and 009. Statements about what "must deploy next," production
 being on an older migration, or a later stage being blocked describe the state
 when those migrations were reviewed. They are not current rollout
-instructions. The current authoritative chain ends at migration 032, and the
+instructions. The current authoritative chain ends at migration 033, and the
 current compatibility state is documented near the top of this file.
 
 ### Migration 008 planner-reference reconciliation invariant

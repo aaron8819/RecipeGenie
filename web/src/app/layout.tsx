@@ -29,24 +29,29 @@ const cormorantGaramond = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "Recipe Genie",
   description: "Meal planning and recipe management made easy",
-  manifest: "/manifest.json",
+  manifest: "/manifest.json?v=home-icon-v4",
   icons: {
     icon: [
       {
-        url: "/favicon-32x32.png",
+        url: "/favicon-16x16-v4.png",
+        sizes: "16x16",
+        type: "image/png",
+      },
+      {
+        url: "/favicon-32x32-v4.png",
         sizes: "32x32",
         type: "image/png",
       },
-      { url: "/favicon.ico", sizes: "any", type: "image/x-icon" },
+      { url: "/favicon-v4.ico", sizes: "any", type: "image/x-icon" },
     ],
     apple: [
       {
-        url: "/apple-touch-icon.png",
+        url: "/apple-touch-icon-v4.png",
         sizes: "180x180",
         type: "image/png",
       },
     ],
-    shortcut: "/favicon.ico",
+    shortcut: "/favicon-v4.ico",
   },
   appleWebApp: {
     capable: true,

@@ -3,6 +3,57 @@
 Root `AGENTS.md` is the authoritative Codex operating policy. This document
 describes the implemented workflow commands and their evidence boundaries.
 
+## Normal task path
+
+1. Verify current remote main and ownership. Use an isolated task worktree under
+   the primary checkout's sibling `.worktrees/recipe-genie/<task>`, on
+   `codex/<task>`, on the authorized cloud or local computer. Preserve unrelated
+   worktrees. Read specialist instructions only for the affected domain.
+2. Use the complete pinned Node/npm distribution from `web/.nvmrc` and
+   `web/package.json`. From `web/`, run `npm ci` and focused owning tests with
+   `npm run test -- --run <owning-files>`. Run applicable typecheck and
+   `npm run check:no-staged-artifacts` / `npm run check:e2e-secrets` before push.
+   Use the trusted focused launcher below only for its mapped scopes; an unmapped
+   path deliberately escalates to the optional complete local diagnostic.
+3. Publish an authorized draft after focused/publication checks. Normal CI runs
+   automatically. Do not wait for or duplicate the full hosted gate locally.
+   Clearly list checks that remain pending and follow them to completion.
+4. Before merge require successful exact-candidate `candidate-source`,
+   `quality-guards`, `migration-smoke-and-drift`, `production-build` and
+   `recovery-tooling`; complete independent review and affected hosted browser
+   acceptance. These are repository acceptance requirements, not a claim that
+   GitHub branch protection enforces them.
+5. Recheck main, the clean reviewed head/tree, unresolved reviews and current CI.
+   Merge only within existing authorization. Verify the merged tree equals the
+   accepted tree, follow exact post-merge CI and deployment, then use the release
+   launcher for read-only source/project verification. A different merged tree
+   invalidates acceptance and must be investigated before claiming release.
+
+The hosted build, nine-journey smoke discovery, scope-selected Windows recovery
+suite and existing CI replace the mandatory full local `rg-verify.ps1 pr` gate.
+That command remains an explicit diagnosis/compatibility option, not a second
+acceptance stamp. Prose-only build omission is tested and limited to complete
+known prose diffs; unknown inputs build. Normal work does not require a local
+database reset or development-mode Playwright. Database/persistence evidence
+comes from the owned hosted fixture when selected; specialist local recovery
+remains available for relevant authorized work. Do not retire a replacement's
+obligation until its hosted check passes for the candidate.
+
+### Candidate source and base
+
+CI checks out the PR head only after `candidate-source.mjs` verifies that its
+recorded base is an ancestor. It records actual checkout SHA, tree, base, run and
+attempt in `candidate-source-<run>-<attempt>`. Every job checks out that exact SHA.
+If the head has not integrated its recorded base, CI fails before qualification.
+Main must still equal the recorded base immediately before merge. If main moved,
+integrate it and refresh invalidated evidence, even if an older run was green.
+For post-merge CI the recorded head must be current main. Browser admission reads
+the successful exact-attempt provenance artifact and compares the actual tree
+and current main; missing, wrong-tree, stale-base or incomplete evidence blocks.
+Preserve the artifact/PR evidence and the accepted-to-merged tree correspondence.
+
+### Local capability doctor
+
 Run the read-only workflow doctor from `web/` before environment-sensitive
 verification or work involving Supabase, Vercel, GitHub operational state,
 PostgreSQL tooling, production verification, deployments, migrations, backups,
@@ -34,7 +85,7 @@ authentication, authorization, or health was probed.
 
 ## Verification tiers
 
-Automation must enter verification through the repository-root trusted
+Automation must enter the verification tiers through the repository-root trusted
 launcher, not through ambient npm:
 
 ```powershell
@@ -98,7 +149,7 @@ Release mode additionally permits only the named non-secret `RG_REPOSITORY`,
 Supabase, database, provider, and cloud credentials remain excluded. Prefer
 explicit release CLI options over environment inputs.
 
-Focused verification is an iteration aid for an explicit bounded scope:
+Focused verification covers mapped bounded iterations and prose-only publishing:
 
 ```powershell
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 focused --base origin/main
@@ -107,13 +158,22 @@ Focused verification is an iteration aid for an explicit bounded scope:
 ```
 
 The auditable mapping covers documentation, workflow scripts, database
-preflight scripts, fixtures, and migration metadata. It runs migration-reference
+preflight scripts, fixtures, migration metadata, and the single existing
+`web/qualification/combined-ui.spec.ts` test. A change confined to that test
+uses scoped lint, whole-project typecheck, and test-skip integrity checks;
+it still requires affected hosted acceptance and normal exact-head CI before
+merge. Adding application code, configuration, fixture tooling or an unknown
+test path escalates to the PR tier. This is a bounded iteration exception,
+not application confidence. It runs migration-reference
 integrity for every mapped scope, plus the relevant workflow or preflight unit
 tests and lint checks. An application, CI, package, migration SQL, unknown path,
 or unresolved base automatically runs the PR tier instead. A focused result
 explicitly says that it is not full PR confidence.
 
-PR verification is the complete local pre-PR gate:
+PR verification is an optional complete local diagnostic for behavioral, build,
+package, CI, migration, security, or unknown-scope changes. Prose-only changes use the
+mapped focused tier plus command/link/whitespace checks and focused review under
+`AGENTS.md`; do not run full builds or browser/database harnesses solely for prose:
 
 ```powershell
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 pr
@@ -161,7 +221,8 @@ evaluated, so `deployment-record` is always optional and `CORROBORATIVE`;
 relabeling it `AUTHORITATIVE` is rejected with the supplied and allowed labels,
 requirement status, verdict effect, and rejection reason.
 
-`npm run verify` remains the comprehensive local code-quality gate used by CI.
+`npm run verify` remains the comprehensive code-quality command used by CI and
+available for explicit local diagnosis.
 `npm run check:migration-references` is its repository-backed migration
 documentation check. The check derives the active endpoint from tracked regular
 SQL files, reuses the canonical checksum loader, and verifies README and
@@ -199,6 +260,15 @@ npm run --silent rg:pr:evidence -- --json
 npm run rg:pr:evidence -- --local-only
 npm run rg:pr:evidence -- --repository aaron8819/RecipeGenie --pr 35 --head-sha <40-character-sha>
 ```
+
+This is a diagnostic reconstruction of PR state, not an additional blanket gate
+for opening a draft. Its full `PASS` contract includes deployment records and a
+clean mergeable PR; a draft or pending run can therefore produce useful incomplete
+evidence. Report individual results and outstanding work without treating an
+incomplete report as acceptance or weakening actual merge requirements. After
+merge, use the release launcher, whose required source/manifest evidence and
+optional corroborative deployment evidence have a different purpose. Neither
+report alone grants release authorization.
 
 The report includes repository identity; branch and worktree state; local,
 upstream, remote, PR, and explicit evidence heads; PR URL/base/head/state and
@@ -264,14 +334,74 @@ headers cannot contaminate machine output.
 
 ## Browser qualification selection
 
-Routine releases use normal CI (`quality-guards` and `migration-smoke-and-drift`),
+Normal CI retains both required check identities. The database job always selects
+scope, reports its four independent flags, and succeeds without starting Supabase
+when no database inputs changed. Normal quality checks still run. Application
+persistence/auth/ownership changes need affected integration/browser coverage;
+historical SQL fixtures do not execute application TypeScript and cannot replace it.
+
+| Changed inputs | Current DB contracts | 014 parity | 016/017 canonical | Recovery tooling |
+| --- | --- | --- | --- | --- |
+| Docs, UI/app code, browser tests, known unrelated tooling | No | No | No | No |
+| Migration 001–014 | Yes | Yes | Yes | Supported recovery fixtures only |
+| Migration 015–017 | Yes | No | Yes | Supported recovery fixtures only |
+| Migration 018+ | Yes | No | No | Supported recovery fixtures only |
+| 014 runner/preflight | Yes | Yes | No | Preflight also selects recovery tooling |
+| Canonical runner | Yes | No | Yes | No |
+| Current SQL security tests/audits, seed, generated DB types | Yes | No | No | No |
+| Backup/restore scripts or recovery-only SQL | No | No | No | Yes |
+| DB config, Node/npm execution inputs, CLI dependency closure | Yes | Yes | Yes | Only if recovery inputs change |
+| Unknown or unreadable scope | Yes | Yes | Yes | Yes |
+
+The classifier maps the actual historical runner imports, embedded fixtures and
+SQL reads; regression guards require deliberate map maintenance when these inputs
+or the recovery registry change. Migration 014 resets through 013/014; canonical
+fixtures reset through 015 and apply 016/017. Their final latest-schema restores do
+not make newer migrations historical-fixture inputs: the current database reset,
+security contracts, reference audits and schema drift cover the latest chain.
+
+Package changes compare relevant commands plus automatic pre/post hooks, npm-ci
+lifecycle, execution settings, and the Supabase CLI's transitive/optional/platform
+closure. Unrelated dependencies without install scripts do not select database
+work. Changed lifecycle-bearing dependency entries do: npm ci executes them before
+the fixtures. Unresolved/link/unknown lock shapes fail full. Overrides/config that
+cannot be proven unrelated remain conservative. CI context proof preserves setup,
+environment, checkout/source binding and runtime; only exact selection predicates
+and the unrelated quality-job body are disregarded.
+
+The optional local PR diagnostic omits only PowerShell recovery-tooling tests when a clean,
+committed complete diff against origin/main leaves their inputs unchanged.
+Dirty/untracked local state, missing history or empty scope retain tooling.
+Its verify/build and migration-reference integrity remain part of that explicit
+diagnostic. Hosted recovery-tooling is always present: selected scope runs only
+the existing Windows recovery suite with the historical commit/peer fixture;
+proven unrelated scope passes with an explicit no-op. Cleanup failure fails the
+job. Direct manual npm
+rehearsal commands remain explicit requests to run their fixtures. The optional
+Windows gate in the manually dispatched combined-UI workflow is separately selected.
+Release consistency checks do not execute historical rehearsals.
+
+PR85–99 audit found docs-only and app-only false positives and repeated equivalent
+PR/merge trees. Historical steps cost 175–205 seconds/run in that sample; PR95–99
+repeated them for 1,976 aggregate seconds across ten runs (not wall-clock delay).
+Cross-run caching/reuse is deliberately absent: future reuse must bind a successful
+source run, tested inputs and execution/runtime identity, not just an observed tree.
+The runners' existing restoration/failure cleanup remains unchanged in this patch.
+
+Routine releases use the five normal CI jobs listed above,
 focused tests for the affected code, and the existing release-status check.
 The full combined browser suite does not run automatically on every web PR.
-Request it when changes affect recipe/Shopping saves, Planner mutations or return
-navigation, Undo, auth/ownership, dialogs, focus or responsive interactions.
-Existing component/hook tests remain the first checks for isolated logic changes.
+Select database-backed qualification when changes affect recipe/Shopping saves,
+Planner mutations, Undo or auth/ownership, or cross-feature return navigation.
+For isolated presentation, focus or responsive edits, start with affected
+component/hook checks and supported Chrome desktop/mobile interaction captures;
+expand to the combined suite only when those changed boundaries require its
+persistence or cross-feature coverage. Unknown scope stays conservative.
+No visual smoke or screenshot replaces relevant persisted readback, ownership,
+Shopping recovery or migration checks.
 
-Explicitly run the preserved suite on a reviewed repository branch or tag:
+After pushing the reviewed head, run the preserved browser suite on a reviewed
+repository branch or tag while normal CI runs independently:
 
 ```powershell
 gh workflow run combined-ui.yml --repo aaron8819/RecipeGenie --ref <reviewed-branch-or-tag>
@@ -281,8 +411,25 @@ The dispatch event's `github.sha` binds both checkouts, expected-source guards a
 artifact names to the same immutable commit. Confirm that SHA in the run and
 receipts matches the reviewed candidate. Manual dispatch becomes available after
 the workflow is present on the default branch; do not substitute a local harness
-or a different trigger. It retains the trusted gate, hosted disposable runners,
-loopback database, owner isolation, sanitized evidence and cleanup controls.
+or a different trigger. Browser results are provisional until the final `ci-admission` job succeeds.
+That job runs after successful browser testing and cleanup, requires the latest
+successful normal CI run, all five successful required jobs and source/base/tree
+provenance at the exact SHA, and waits at most fifteen minutes for pending CI. Missing, failed, skipped,
+truncated or mismatched evidence fails closed. A browser job or its receipts alone
+never establish accepted qualification; the complete workflow and CI admission
+must pass before merge.
+Hosted disposable runners, loopback database, owner isolation, sanitized evidence
+and cleanup controls remain unchanged.
+
+The broad Windows trusted PR gate is independent and opt-in, so unrelated Windows
+unit-test failures cannot prevent browser acceptance. Request it with
+`-f windows_gate=true` when changing runtime/launcher, Windows path or shell
+handling, checkout policies, or migration tooling. Keep its result distinct from
+browser acceptance; neither result replaces required exact-head normal CI. A requested Windows failure remains a failure and needs correction
+or an explicit owner waiver before accepting that platform qualification.
+
+A preliminary merge to main is unnecessary; dispatch the reviewed candidate branch.
+Do not reuse CI evidence from the parent head.
 
 This invocation still runs the full Chromium/WebKit, desktop/mobile suite; it
 adds no selective runner or parallel smoke framework. Existing shell/navigation
@@ -290,10 +437,35 @@ smoke tests do not establish recipe and Planner persistence. Choose deeper
 qualification for the actual risk rather than treating its existence as a
 routine release requirement. Preserve failed receipts and obtain an explicit
 owner waiver when accepting a failure; never report it as passing acceptance.
-PR82's existing return-week URL assertion failure remains unresolved, with
-`fullAcceptance=false`; Aaron accepted it only for this test/tooling-only update.
+Historical qualification receipts, including past waived failures, are retained
+in [the dated qualification history](recipe-planner-hosted-qualification.md).
+They do not describe current-head acceptance.
 
 ## Proportional review
+
+One owner keeps the verified integration base, task worktree, approved scope and
+release authorization through the task. Reconcile the current remote integration
+SHA before implementation; a clean but stale local branch is not the current base.
+Preserve unrelated owner changes. Reuse the owned setup when dependency/runtime
+inputs are unchanged; replace only task-owned resources when those inputs change.
+
+At the start, select the smallest existing checks that cover the changed behavior
+and required gates. Run independent checks concurrently, including hosted CI and
+browser qualification; their successful exact-head results still gate acceptance.
+Capture requested screenshots from the actual test app during the affected browser
+work, with synthetic fixtures and successfully decoded images. Those captures do
+not qualify database persistence unless the fixture uses the supported database
+journey. No separate screenshot-only environment or extra approval round is needed
+unless the owner requests it or the visual result materially changes.
+
+Keep progressing through setup, diagnosis, scoped corrections, review and every
+authorized release stage. Compare failures against the unchanged base and repair
+recoverable in-scope causes before broadening checks. Present a decision only for
+material scope, access or risk changes, unapproved protected operations, or a blocker
+that cannot safely be resolved in scope. A failed required check remains a failure;
+pending CI remains ongoing work. Never accept a historical failure without the
+existing explicit risk-decision rules.
+
 
 - Behavioral code change: implementation, independent review, corrections,
   focused re-review of corrected ranges when appropriate, then the final merge
@@ -303,20 +475,24 @@ PR82's existing return-week URL assertion failure remains unresolved, with
 - A narrow documentation-only correction requires automated scope and integrity
   validation plus focused re-review; it does not restart an unrelated full
   review.
-- Full re-review is required when the approved head, behavioral scope,
-  migration/schema impact, security posture, or deployment risk materially
-  changes.
+- Full re-review is required when behavioral scope, migration/schema impact,
+  security posture or deployment risk materially changes. A new head alone
+  requires fresh identity and changed-range review, not repetition of unchanged
+  behavioral review.
 
 Evidence may be reused only when its inputs and affected code are unchanged:
 design rationale, unchanged test results, prior discussion, and review findings
 outside the corrected range may carry forward. Worktree cleanliness, changed
 files, head bindings, migration/documentation integrity, required checks,
 mergeability, review requests, and unresolved-thread counts must always be
-refreshed at the exact head. Focused verification is sufficient only for a
-mapped bounded iteration or narrow documentation correction; PR verification
-is mandatory before publishing or after behavioral, build, package, CI,
-migration, security, or unknown-scope changes. Reviewers must expand scope when
-a correction crosses those boundaries or invalidates reused evidence. Merge is
+refreshed at the exact head. Focused verification is sufficient for a mapped
+bounded iteration or prose-only acceptance, including narrow documentation
+corrections. Behavioral, build, package, CI, migration, security and unknown-scope
+changes require the applicable hosted gates before merge, not a duplicate local PR
+tier. Affected hosted acceptance and exact-candidate CI remain required.
+Required exact-head CI checks still apply to every PR; bounded local exceptions
+do not waive them. Reviewers expand scope when a correction crosses those
+boundaries or invalidates reused evidence. Merge is
 blocked by a dirty or mismatched reviewed head, failed/pending/incomplete
 required checks, unresolved required review, migration/schema inconsistency,
 security regression, conflict, or missing exact-head evidence.
@@ -324,9 +500,11 @@ security regression, conflict, or missing exact-head evidence.
 ## Release status
 
 `rg:doctor` answers whether the local environment is capable.
-The existing `scripts/rg-verify.ps1 release` launcher is the default first check
-after a merge or deployment, or
-when verifying an expected production release:
+After merge/deployment, observe the exact merge-head CI and deployment readiness
+without rerunning unchanged qualification. Pending readiness is ongoing work;
+investigate a terminal failure. Once ready, the existing
+`scripts/rg-verify.ps1 release` launcher is the first read-only consistency check,
+or may be used when verifying an expected production release:
 
 ```powershell
 & 'C:\Program Files\PowerShell\7\pwsh.exe' -NoProfile -File .\scripts\rg-verify.ps1 release `

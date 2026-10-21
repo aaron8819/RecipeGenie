@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import React from "react"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import type { ParsedRecipe } from "@/lib/recipe-parser"
+import { parseRecipeText, type ParsedRecipe } from "@/lib/recipe-parser"
 import {
   RecipeDialogActions,
   RecipeIngredientsSection,
@@ -120,6 +122,66 @@ describe("RecipeImageField", () => {
 })
 
 describe("RecipeImportSection", () => {
+  it("keeps the coffee-cake fixture intact and shows authored fractions", () => {
+    const text = readFileSync(resolve(
+      process.cwd(), "src/components/recipes/__tests__/fixtures/coffee-cake.txt"
+    ), "utf8")
+    expect(text.replace(/\r\n/g, "\n")).toContain("Servings: 9\\\nPrep Time: 15 minutes\\\n")
+    const preview = parseRecipeText(text)
+    expect(preview.name).toBe("Cinnamon Streusel Coffee Cake")
+    expect(preview.servings).toBe(9)
+    expect(preview.metadata?.prepTimeMinutes).toBe(15)
+    expect(preview.metadata?.cookTimeMinutes).toBe(40)
+    expect(preview.ingredientSections.map(section => section.ingredients.length)).toEqual([10, 2, 5])
+    expect(preview.instructionSections.flatMap(group => group.steps)).toHaveLength(8)
+    expect(preview.notes).toHaveLength(4)
+    const original = structuredClone(preview)
+    render(
+      <RecipeImportSection
+        importStep="input" importUrl="" importText={text} parseError=""
+        livePreview={preview} parsedPreview={null} isImportingFromUrl={false}
+        onImportUrlChange={() => {}} onImportTextChange={() => {}}
+        onImportUrl={() => {}} onApplyLivePreview={() => {}}
+        onBackToInput={() => {}} onApplyPreview={() => {}}
+      />
+    )
+    expect(screen.getAllByText("1/3 cup")).toHaveLength(2)
+    expect(screen.getByText("1 1/2 cups")).toBeInTheDocument()
+    expect(preview).toEqual(original)
+  })
+
+  it.each([
+    ["1/3 cup brown sugar", "1/3 cup"],
+    ["1/4 cup milk", "1/4 cup"],
+    ["3/4 cup sugar", "3/4 cup"],
+    ["1 1/2 cups flour", "1 1/2 cups"],
+    ["2 large eggs", "2 count"],
+    ["1/2-1 cup milk", "1/2-1 cup"],
+    ["salt", "As needed"],
+  ])("formats live-preview quantity for %s without changing source", (line, expected) => {
+    const preview = parseRecipeText(`Cake\n\nIngredients\n${line}\n\nInstructions\n1. Mix.`)
+    const original = structuredClone(preview)
+    const { container } = render(
+      <RecipeImportSection
+        importStep="input"
+        importUrl=""
+        importText="Cake"
+        parseError=""
+        livePreview={preview}
+        parsedPreview={null}
+        isImportingFromUrl={false}
+        onImportUrlChange={() => {}}
+        onImportTextChange={() => {}}
+        onImportUrl={() => {}}
+        onApplyLivePreview={() => {}}
+        onBackToInput={() => {}}
+        onApplyPreview={() => {}}
+      />
+    )
+    expect(container.querySelector("span.font-mono")?.textContent).toBe(expected)
+    expect(preview).toEqual(original)
+  })
+
   it("renders input mode and wires URL/text callbacks", () => {
     const onImportUrlChange = vi.fn()
     const onImportTextChange = vi.fn()

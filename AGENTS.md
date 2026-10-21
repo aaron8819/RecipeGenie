@@ -12,23 +12,12 @@ owner waivers when appropriate; never silently turn failed checks into passes.
 
 ## Start with the task
 
-Read relevant guidance and inspect Git state before editing. Preserve unrelated
-owner changes. Read applicable skills and task-relevant `.Codex/napkin.md`
-lessons when available; local memory is not authoritative policy. A harmless
-read-only ordering mistake does not require restarting the task.
-
-Use only the specialist docs needed for the work:
-
-- [Architecture](docs/project_overview.md) and
-  [guardrails](docs/ARCHITECTURE_GUARDRAILS.md).
-- [Recipes](docs/recipes-component.md), [Planner](docs/planner-component.md),
-  [Shopping](docs/shopping-component.md), [Pantry](docs/pantry-component.md).
-- [Schema and migrations](supabase/SCHEMA.md),
-  [backup/restore runbooks](scripts/database/README.md).
-- [E2E workflow](web/tests/README.md) and
-  [target/credential contract](web/tests/E2E_CREDENTIALS.md).
-- [Documentation index](docs/DOCS_INDEX.md), [decisions](decisions.md),
-  [release history](changelog.md).
+Read this file, then the [normal task path](docs/developer-workflow.md#normal-task-path).
+Inspect current remote base, Git state and ownership before editing. One owner
+keeps the task through its authorized release stages. Preserve unrelated work.
+Read specialist domain/schema/operations docs and relevant skills only when the
+task needs them; the [documentation index](docs/DOCS_INDEX.md) locates those owners.
+Task-relevant `.Codex/napkin.md` lessons are background, not operating policy.
 
 ## Repository map and conventions
 
@@ -58,52 +47,55 @@ checks use Playwright.
 
 ## Verification and release
 
-Choose checks for the actual change and the task's environment constraints.
-For prose-only changes, validate commands, links and whitespace; do not launch
-full builds or browser/database harnesses merely for documentation edits.
-For code, use the existing focused checks and required CI rather than inventing
-new gates. Keep secrets, local auth state and raw private diagnostics out of
-commits and uploaded artifacts. Preserve ignored `.codex-artifacts/` receipts;
-never delete evidence, shared previews or processes as incidental cleanup.
+The [workflow guide](docs/developer-workflow.md) owns commands, check selection,
+source/base binding and evidence reuse. Use pinned dependencies, affected tests,
+and artifact/secret guards before an authorized early draft. Hosted CI replaces
+the duplicate mandatory local full PR gate; `rg-verify.ps1 pr` remains an explicit
+diagnostic. No routine local database reset or development-mode Playwright is a
+release prerequisite. Relevant hosted persistence/browser qualification remains
+required. Never call missing, failed or pending evidence a pass.
 
-Run `npm run rg:doctor` before environment-sensitive verification or operational
-work involving Supabase, Vercel, GitHub, PostgreSQL, migrations, backups or
-restores. It is optional for clearly local low-risk/prose changes and is local
-capability evidence, not remote health evidence.
+Follow current-head CI, independent review and all already-authorized stages.
+Fix recoverable in-scope failures, refresh invalidated evidence, and continue.
+Stop only for a material scope/access/risk decision or a protected action not
+already authorized. Recheck current main before merge; integrate a changed base
+and refresh evidence. Verify merged-tree correspondence, exact post-merge CI,
+and production identity with the read-only release launcher after deployment.
 
-After a merge/deployment, use `scripts/rg-verify.ps1 release` as the first
-read-only release consistency check. The workflow guide owns its syntax and
-identity binding. Use `npm run verify:production` only when fuller database-backed
-verification is required. Missing optional Vercel control-plane evidence is a
-warning when authoritative GitHub checks and `/api/version` agree.
+Keep secrets, local auth state and raw private diagnostics out of commits and
+artifacts. Preserve ignored task receipts; do not clean shared previews or
+processes incidentally. Historical waivers remain failures for those historical
+candidates, never current acceptance. Report implementation, checks, review,
+merge and release separately.
 
-Report implementation, testing, review, merge and release separately. Preserve
-failed checks and exact owner waivers: PR79's full browser qualification remains
-FAIL under Aaron's maintenance-only merge waiver, not resolved UI acceptance.
-See [PR79](https://github.com/aaron8819/RecipeGenie/pull/79) for the retained
-Chromium locator ambiguity and unresolved WebKit findings.
-
-Risk tiers: Tier1 is local code with no production/database writes; Tier2 is
-additive or forward-repairable production work; Tier3 is destructive, lossy,
-ownership-changing or recovery-dependent work. Never silently lower a tier
-selected by the owner. Risk classification does not grant authorization.
-
-Use `BLOCKED` for unsafe/contradictory targets, real migration divergence,
-failed required safety checks or unauthorized destructive actions. Use
-`ACTION REQUIRED` for pending/failed CI, missing authorization/access or release
-SHA mismatch. Use `WARNING` for optional missing assurance; do not present it as
-an unsafe-target blocker.
+Risk tiers: Tier1 is local code without production/database writes; Tier2 is
+additive/forward-repairable production work; Tier3 is destructive, lossy,
+ownership-changing or recovery-dependent work. Never lower an owner-selected
+tier. Classification grants no authorization. Use BLOCKED for unsafe targets or
+failed safety, ACTION REQUIRED for missing/failed acceptance or access, and
+WARNING only for optional assurance.
 
 ## Authorization boundaries
 
-Codex may run local checks and explicitly requested read-only remote checks.
-Stop before any commit, push, merge, deployment, redeployment, rollback, alias
+Codex may run task-relevant local checks, builds, and read-only remote checks.
+Task-authorized implementation includes appropriate verification, commits,
+task-branch pushes, draft PRs, CI follow-through, and independent review without
+repeat owner approval. Use proportionate checks for the change as described above.
+Stage only task-specific changes and preserve unrelated owner work. Checks that
+require a clean committed worktree may run immediately after the local commit;
+retain failures and repair authorized defects before acceptance or merge. Draft PRs
+may expose incomplete checks so CI and review can start; report that state explicitly.
+Continue under the same bounded approval; no stage already covered needs approval again.
+
+Unless already covered by explicit task authorization, stop before any merge,
+deployment, redeployment, rollback, alias
 reassignment, environment change, Supabase link change, migration application
 or repair, database repair, backup creation, restore execution, production data
 write, or other production change. One user message may authorize multiple
-stages when it explicitly names them. For example, a request to implement,
-commit, push, and open a draft PR authorizes those four stages without repeated
-approval; any unmentioned later stage remains unauthorized. Production writes,
+protected stages when it explicitly names them. A bounded approval naming merge
+and release authorizes those stages for that task; it is not blanket permission
+for future releases. Do not ask again for a stage already covered by that approval.
+Any unmentioned protected stage remains unauthorized. Production writes,
 migrations, restores, destructive actions, and other materially risky
 operations remain separately protected unless the user explicitly includes
 them.
@@ -116,11 +108,12 @@ backup, or restore commands or weaken their safety gates.
 - Perform implementation work in an isolated Git worktree unless the user
   explicitly directs otherwise.
 - Create Recipe Genie worktrees only under
-  `C:\Users\aabloch\claude\vibe-coding\.worktrees\recipe-genie\<short-task-name>`.
+  the primary checkout’s sibling `.worktrees/recipe-genie/<short-task-name>`
+  directory on either Linux or Windows.
 - Use branches named `codex/<short-task-name>`.
 - Do not create worktrees directly under
-  `C:\Users\aabloch\claude\vibe-coding`, inside the primary repository, or
-  inside another worktree.
+  the primary checkout’s parent, inside the primary repository, or inside
+  another worktree.
 - Before creating one, run `git worktree list` and confirm its path and branch
   are unused.
 - Use the current authorized integration or base branch; do not assume `main`

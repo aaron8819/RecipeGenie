@@ -307,6 +307,13 @@ function toRecipeLines(text: string): RecipeLine[] {
     .replace(/\uFEFF/g, "")
     .replace(/\r\n?/g, "\n")
     .replace(/\u00A0/g, " ")
+    // Clipboard Markdown can escape headings, bullets, and punctuation and
+    // use a trailing backslash for a hard line break. Decode one layer before
+    // section detection, while retaining backslashes before ordinary letters.
+    .replace(
+      /\\([!"#$%&'()*+,\-./:;<=>?@[\]\\^_`{|}~])|\\[ \t]*$/gm,
+      (_match, escaped: string | undefined) => escaped ?? ""
+    )
 
   return normalized.split("\n").map((raw) => ({
     raw,
@@ -586,7 +593,7 @@ function parsePreludeAttribute(line: string): {
   bold: boolean
 } | null {
   const bold = parseBoldAttributeLine(line)
-  const plain = line.match(/^(title|recipe|name|category|tags?|prep(?:aration)?\s*time|cook(?:ing)?\s*time|total\s*time)\s*:\s*(.+)$/i) ||
+  const plain = line.match(/^(title|recipe|name|category|tags?|prep(?:aration)?(?:\s*time)?|cook(?:ing)?(?:\s*time)?|total(?:\s*time)?)\s*:\s*(.+)$/i) ||
     line.match(/^(servings?|serves|yield|makes?)\s*:?\s*(.+)$/i)
   const label = (bold?.label ?? plain?.[1])?.toLowerCase().replace(/\s+/g, ' ').trim()
   const value = stripMarkdownInlineSyntax(bold?.value ?? plain?.[2] ?? '').trim()
@@ -596,9 +603,9 @@ function parsePreludeAttribute(line: string): {
     : label === 'category' ? 'category'
     : /^tags?$/.test(label) ? 'tags'
     : /^(servings?|serves|yield|makes?)$/.test(label) ? 'yield'
-    : /^prep(?:aration)?\s*time$/.test(label) ? 'prep'
-    : /^cook(?:ing)?\s*time$/.test(label) ? 'cook'
-    : /^total\s*time$/.test(label) ? 'total' : null
+    : /^prep(?:aration)?(?:\s*time)?$/.test(label) ? 'prep'
+    : /^cook(?:ing)?(?:\s*time)?$/.test(label) ? 'cook'
+    : /^total(?:\s*time)?$/.test(label) ? 'total' : null
   return key ? { key, value, bold: !!bold } : null
 }
 
@@ -967,7 +974,7 @@ function shouldWarnMissingIngredientAmount(
 
 function isUnsupportedTimingLine(line: string): boolean {
   return !parsePreludeAttribute(line) &&
-    /^[A-Za-z][A-Za-z ]*\s+time\s*:\s*\S/i.test(stripMarkdownInlineSyntax(line))
+    /^(?:[A-Za-z][A-Za-z ]*\s+time|marinat(?:e|ion|ing))\s*:\s*\S/i.test(stripMarkdownInlineSyntax(line))
 }
 
 // Bare labels require layout evidence: an isolated title followed by a bullet
@@ -1038,6 +1045,13 @@ function isBulletItem(line: string): boolean {
 }
 
 function isRecipeMetadataLine(line: string): boolean {
+  const attribute = parsePreludeAttribute(line)
+  // Short timing aliases are ambiguous with section titles and cooking prose.
+  // In sections, only a duration value establishes that they are metadata.
+  if (attribute && /^(?:prep(?:aration)?|cook(?:ing)?|total)\s*:/i.test(
+    stripMarkdownInlineSyntax(line)
+  )) return parseDurationToMinutes(attribute.value) !== undefined
+
   const boldAttribute = parseBoldAttributeLine(line)
   if (boldAttribute) {
     return isRecipeMetadataLabel(boldAttribute.label)

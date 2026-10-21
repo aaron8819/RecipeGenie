@@ -163,6 +163,71 @@ describe('parseIngredientLine', () => {
 });
 
 describe('parseRecipeText', () => {
+  it('imports escaped clipboard Markdown like ordinary Markdown', () => {
+    const markdown = `# Teriyaki Chicken and Broccoli Rice Bowls
+
+Category: Chicken
+Servings: 4
+Prep time: 15 minutes
+Cook time: 25 minutes
+
+## Ingredients
+### Chicken
+- 1½ lb boneless, skinless chicken thighs
+### Teriyaki Sauce & Marinade
+- ⅓ cup soy sauce
+### Broccoli
+- 4 cups broccoli florets
+
+## Instructions
+1. **Marinate chicken:** Reserve ⅔ for sauce. Refrigerate chicken.
+2. **Cook broccoli:** Sear over medium-high heat. Steam 2 minutes.
+
+## Notes
+- **Sauce consistency:** Add water 1 tbsp at a time if too thick.
+- **Meal prep:** Store extra sauce separately.`;
+    const escaped = markdown.split('\n').map(line =>
+      line.replace(/([#*\-.])/g, '\\$1') + '\\'
+    ).join('\r\n');
+
+    const parsed = parseRecipeText(escaped);
+    expect(parsed).toEqual(parseRecipeText(markdown));
+    expect(flatInstructions(parsed)).toEqual([
+      'Marinate chicken: Reserve ⅔ for sauce. Refrigerate chicken.',
+      'Cook broccoli: Sear over medium-high heat. Steam 2 minutes.',
+    ]);
+    expect(parsed.notes).toEqual([
+      'Sauce consistency: Add water 1 tbsp at a time if too thick.',
+      'Meal prep: Store extra sauce separately.',
+    ]);
+    expect(parsed.unparsedContent).toEqual([]);
+  });
+
+  it('preserves literal backslashes before letters and escaped backslashes', () => {
+    const parsed = parseRecipeText(String.raw`# Rice
+## Ingredients
+- 1 cup rice
+## Instructions
+1. Refer to C:\recipes\rice and the a\\b label.
+## Notes
+- Keep the \q label.`);
+    expect(flatInstructions(parsed)).toEqual([
+      String.raw`Refer to C:\recipes\rice and the a\b label.`,
+    ]);
+    expect(parsed.notes).toEqual([String.raw`Keep the \q label.`]);
+  });
+
+  it('decodes escaped backslashes before Markdown hard line breaks in one pass', () => {
+    const parsed = parseRecipeText([
+      '# Rice', '## Ingredients', '- 1 cup rice', '## Instructions',
+      '1. Keep the label' + '\\'.repeat(3),
+      '2. Keep the other label' + '\\'.repeat(2),
+    ].join('\n'));
+    expect(flatInstructions(parsed)).toEqual([
+      'Keep the label\\', 'Keep the other label\\',
+    ]);
+  });
+
   it('parses the conventional Taco Salad Markdown fixture without structural leakage', () => {
     const result = parseRecipeText(MARKDOWN_TACO_SALAD_RECIPE_TEXT);
 

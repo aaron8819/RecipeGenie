@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  assertLocalFixtureMigrations,
   LOCAL_APP_ORIGIN,
   LOCAL_SUPABASE_ORIGIN,
   PRODUCTION_PROJECT_REF,
@@ -147,3 +148,13 @@ describe('local E2E runtime guards', () => {
 function parsedToText(values) {
   return Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n')
 }
+
+describe('local fixture migration preflight', () => {
+  it('accepts the required migrations and additional unrelated migrations', () => {
+    expect(() => assertLocalFixtureMigrations(['024', '029', '030', '032'], ['024', '029', '030'])).not.toThrow()
+  })
+  it('rejects a stale backend before fixture setup with actionable evidence', () => {
+    expect(() => assertLocalFixtureMigrations(['020', '022'], ['024', '029', '030']))
+      .toThrow('missing migrations: 024, 029, 030')
+  })
+})

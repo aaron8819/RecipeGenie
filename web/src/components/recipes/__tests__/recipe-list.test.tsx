@@ -10,6 +10,10 @@ import {
 } from "@/test/recipe-fixtures"
 import { createEmptyShoppingDocument } from "@/lib/shopping-document"
 
+vi.mock("@/hooks/use-pantry", () => ({
+  usePantryItems: () => ({ data: [], isLoading: false, isError: false }),
+}))
+
 vi.mock("@/hooks/shopping/use-shopping-document", () => ({
   useShoppingDocumentState: () => ({ data: { document: createEmptyShoppingDocument() }, isLoading: false, isError: false }),
 }))
@@ -327,6 +331,15 @@ describe("RecipeList", () => {
     }
   )
 
+  it("restores saved sorting when the mounted list returns to the plain route", () => {
+    window.localStorage.setItem("recipe-genie:recipe-sort:v1", "name")
+    window.history.replaceState(null, "", "/recipes?sort=name")
+    const view = render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, sortBy: "name" }} />)
+    routerReplace.mockClear()
+    window.history.replaceState(null, "", "/recipes")
+    view.rerender(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(routerReplace).toHaveBeenCalledWith("/recipes?sort=name", { scroll: false })
+  })
   it.each([null, "invalid", '{"sort":"name"}', "NAME"])(
     "preserves the default for absent or invalid storage (%s)",
     (saved) => {
@@ -345,6 +358,20 @@ describe("RecipeList", () => {
     expect(window.localStorage.getItem("recipe-genie:recipe-sort:v1")).toBe("name")
   })
 
+  it("keeps the selected default when storage reads work but saving fails", () => {
+    window.localStorage.setItem("recipe-genie:recipe-sort:v1", "name")
+    window.history.replaceState(null, "", "/recipes?sort=name")
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full") })
+    const view = render(<RecipeList routeState={{ ...DEFAULT_ROUTE_STATE, sortBy: "name" }} />)
+    fireEvent.change(screen.getByRole("combobox", { name: "Sort recipes" }), {
+      target: { value: "lastMade" },
+    })
+    routerReplace.mockClear()
+    window.history.replaceState(null, "", "/recipes")
+    view.rerender(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
+    expect(routerReplace).not.toHaveBeenCalled()
+    expect(screen.getByRole("combobox", { name: "Sort recipes" })).toHaveValue("lastMade")
+  })
   it("keeps sorting usable when storage reads and writes fail", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked") })
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full") })
@@ -576,7 +603,7 @@ describe("RecipeList", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
     expect(addToShoppingListMutateAsync).not.toHaveBeenCalled()
     expect(screen.getByLabelText("Selected yield for Chicken Soup")).toHaveValue(4)
-    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ ingredients?$/ }))
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({
@@ -594,7 +621,7 @@ describe("RecipeList", () => {
     render(<RecipeList routeState={DEFAULT_ROUTE_STATE} />)
 
     fireEvent.click(screen.getByRole("button", { name: "Add Chicken Soup" }))
-    fireEvent.click(screen.getByRole("button", { name: "Add selected ingredients" }))
+    fireEvent.click(screen.getByRole("button", { name: /^Add \d+ ingredients?$/ }))
 
     await waitFor(() => {
       expect(undoToastShow).toHaveBeenCalledWith({

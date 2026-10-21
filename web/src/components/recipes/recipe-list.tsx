@@ -123,12 +123,12 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   const collectionHeadingRef = useRef<HTMLHeadingElement>(null)
   const returnFocusRef = useRef(recipeToFocusOnReturn)
   const [search, setSearch] = useState(routeState.query)
+  const selectedSortRef = useRef<SortOption | null>(null)
   const lastSubmittedQueryRef = useRef(routeState.query)
   const pendingRouteStateRef = useRef<RecipeRouteState | null>(null)
   const category = routeState.category
   const selectedTags = routeState.tags
   const favoritesOnly = routeState.favoritesOnly
-  const sortRestoredRef = useRef(false)
   const sortBy = routeState.sortBy
   const viewMode = routeState.viewMode ?? (isDesktop ? "grid" : "list")
   const [addToPlanRecipeId, setAddToPlanRecipeId] = useState<string | null>(null)
@@ -207,13 +207,11 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   }, [replaceRouteState, routeState.query, search])
 
   useEffect(() => {
-    if (sortRestoredRef.current) return
-    sortRestoredRef.current = true
     // Explicit browse URLs retain precedence over the device preference.
     const explicitSort = new URLSearchParams(window.location.search).get("sort")
     if (RECIPE_SORT_OPTIONS.some(option => option === explicitSort)) return
     try {
-      const savedSort = window.localStorage.getItem(RECIPE_SORT_STORAGE_KEY)
+      const savedSort = selectedSortRef.current ?? window.localStorage.getItem(RECIPE_SORT_STORAGE_KEY)
       const validSort = RECIPE_SORT_OPTIONS.find(option => option === savedSort)
       if (validSort && validSort !== routeState.sortBy) {
         replaceRouteState({ sortBy: validSort })
@@ -236,6 +234,7 @@ export function RecipeList({ routeState }: { routeState: RecipeRouteState }) {
   )
   const setSortBy = useCallback(
     (value: SortOption) => {
+      selectedSortRef.current = value
       try {
         window.localStorage.setItem(RECIPE_SORT_STORAGE_KEY, value)
       } catch {

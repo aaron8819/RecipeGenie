@@ -10,7 +10,10 @@ async function dismissNextDevTools(page: import('@playwright/test').Page) {
 test.describe.configure({ mode: 'serial' })
 
 test.describe('Responsive contracts @extended', () => {
-  test('keeps bottom navigation visible and actionable after mobile scrolling', async ({ page, setupAuth }) => {
+  test('keeps bottom navigation visible and actionable after mobile scrolling', async ({
+    page,
+    setupAuth,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
     await dismissNextDevTools(page)
@@ -30,21 +33,23 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('heading', { name: 'Shopping List' }).first()).toBeVisible()
   })
 
-  test('keeps the recipes mobile primary actions in viewport on small screens', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps the recipes mobile primary actions in viewport on small screens', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
     await navigateToRoute('recipes')
     await dismissNextDevTools(page)
 
     const searchInput = page.getByRole('textbox', { name: /search recipes by name or category/i })
-    const addRecipeFab = page.getByTestId('recipes-add-fab')
+    const addRecipeFab = page.getByTestId('recipes-add-button')
     const filterToggle = page.getByTestId('recipes-filter-toggle')
     const filterPanel = page.getByTestId('recipes-filter-panel')
-    const utilitySection = page.locator('section[aria-label="Recipe mobile utilities"]')
-    const gridButton = utilitySection.getByRole('button', { name: 'Grid view' })
-    const listButton = utilitySection.getByRole('button', { name: 'List view' })
-    const sharedButton = utilitySection.getByRole('button', { name: 'Shared' })
-    const settingsButton = utilitySection.getByRole('button', { name: 'Settings' })
+    const gridButton = page.getByRole('button', { name: 'Grid view', exact: true })
+    const listButton = page.getByRole('button', { name: 'List view', exact: true })
+    const collectionActions = page.getByRole('button', { name: 'Collection actions', exact: true })
     const bottomNav = page.getByRole('navigation', { name: /bottom navigation/i })
 
     await expect(searchInput).toBeVisible()
@@ -56,6 +61,9 @@ test.describe('Responsive contracts @extended', () => {
     await expect(filterPanel).toBeVisible()
     await expect(filterPanel.getByRole('button', { name: 'Favorites' })).toBeVisible()
 
+    await page.keyboard.press('Escape')
+    await expect(filterPanel).toHaveCount(0)
+
     const searchBox = await searchInput.boundingBox()
     const addRecipeBox = await addRecipeFab.boundingBox()
     const bottomNavBox = await bottomNav.boundingBox()
@@ -64,20 +72,42 @@ test.describe('Responsive contracts @extended', () => {
     expect(bottomNavBox).not.toBeNull()
     expect(searchBox!.x).toBeGreaterThanOrEqual(0)
     expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
-    expect(await searchInput.evaluate((input) => parseFloat(getComputedStyle(input).fontSize))).toBeGreaterThanOrEqual(16)
+    expect(
+      await searchInput.evaluate((input) => parseFloat(getComputedStyle(input).fontSize)),
+    ).toBeGreaterThanOrEqual(16)
     expect(addRecipeBox!.x + addRecipeBox!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
     expect(addRecipeBox!.y + addRecipeBox!.height).toBeLessThan(bottomNavBox!.y)
 
-    for (const control of [filterToggle, gridButton, listButton, sharedButton, settingsButton]) {
+    for (const control of [filterToggle, gridButton, listButton, collectionActions]) {
       const box = await control.boundingBox()
       expect(box).not.toBeNull()
       expect(box!.height).toBeGreaterThanOrEqual(44)
       expect(box!.x).toBeGreaterThanOrEqual(0)
       expect(box!.x + box!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
     }
+    await collectionActions.click()
+    const menu = page.getByRole('menu')
+    for (const name of ['Shared recipes', 'Recipe settings']) {
+      const item = menu.getByRole('menuitem', { name, exact: true })
+      await expect(item).toBeVisible()
+      // Wait for the menu's opening scale animation before measuring tap targets.
+      await expect.poll(async () => (await item.boundingBox())?.height).toBeGreaterThanOrEqual(44)
+      const box = await item.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.height).toBeGreaterThanOrEqual(44)
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(VIEWPORTS.mobileSmall.width)
+    }
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(collectionActions).toBeFocused()
   })
 
-  test('keeps shopping list primary controls reachable above the mobile shell chrome', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps shopping list primary controls reachable above the mobile shell chrome', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
     await navigateToRoute('shopping')
@@ -104,7 +134,11 @@ test.describe('Responsive contracts @extended', () => {
     expect(buttonBox!.y + buttonBox!.height).toBeLessThan(bottomNavBox!.y)
   })
 
-  test('keeps planner actions visible and touch targets usable at 320px', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps planner actions visible and touch targets usable at 320px', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
     await navigateToRoute('planner')
@@ -141,7 +175,11 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('menuitem', { name: 'Load template', exact: true })).toBeVisible()
   })
 
-  test('keeps shared header and pantry section controls mobile-sized', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps shared header and pantry section controls mobile-sized', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobileSmall)
     await setupAuth()
     await navigateToRoute('pantry')
@@ -173,7 +211,11 @@ test.describe('Responsive contracts @extended', () => {
     await expect(page.getByRole('heading', { name: /Pantry Items/i })).toBeHidden()
   })
 
-  test('keeps Pantry and Excluded panels adjacent on desktop', async ({ page, setupAuth, navigateToRoute }) => {
+  test('keeps Pantry and Excluded panels adjacent on desktop', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.desktop)
     await setupAuth()
     await navigateToRoute('pantry')
@@ -191,7 +233,11 @@ test.describe('Responsive contracts @extended', () => {
     expect(pantryBox!.x).toBeLessThan(excludedBox!.x)
   })
 
-  test('uses a compact mobile shopping summary without horizontal overflow', async ({ page, setupAuth, navigateToRoute }) => {
+  test('uses a compact mobile shopping summary without horizontal overflow', async ({
+    page,
+    setupAuth,
+    navigateToRoute,
+  }) => {
     await page.setViewportSize(VIEWPORTS.mobile)
     await setupAuth()
     await navigateToRoute('shopping')

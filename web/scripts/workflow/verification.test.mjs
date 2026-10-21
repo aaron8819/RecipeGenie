@@ -110,6 +110,25 @@ describe("focused verification planning", () => {
     ])
   })
 
+  it("maps only the existing qualification test to bounded checks", () => {
+    const plan = planFocusedVerification(["web/qualification/combined-ui.spec.ts"])
+    expect(plan.escalated).toBe(false)
+    expect(plan.checks.map((item) => item.name)).toEqual([
+      "migration-reference-integrity", "qualification-lint", "qualification-typecheck",
+      "qualification-test-integrity",
+    ])
+  })
+
+  it.each([
+    "web/src/components/planner/meal-planner.tsx",
+    "web/qualification/new.spec.ts",
+    "web/playwright.combined-ui.config.ts",
+    "web/scripts/prepare-combined-ui.mjs",
+  ])("does not treat %s as a qualification-only correction", (path) => {
+    expect(planFocusedVerification(["web/qualification/combined-ui.spec.ts", path])
+      .escalated).toBe(true)
+  })
+
   it("escalates an unknown changed-file scope to the PR tier", () => {
     const plan = planFocusedVerification(["web/src/app/page.tsx"])
     expect(plan.escalated).toBe(true)
@@ -1118,4 +1137,33 @@ describe("verification CLI schema", () => {
     expect(child.stderr.trim()).toMatch(/^Unexpected pr-verification argument:/u)
     expect(child.stderr).not.toContain("Error:")
   })
+})
+
+describe("PR migration tooling selection", () => {
+  it("omits only database tooling for a proven inert candidate", () => {
+    const calls = []
+    const report = runPrVerification({
+      windowsRuntime: TEST_WINDOWS_RUNTIME,
+      migrationToolingRequired: false,
+      commandRunner(command, args) { calls.push({ command, args }); return passingRunner() },
+    })
+    expect(report.status).toBe("PASS")
+    expect(calls).toHaveLength(3)
+    expect(calls[1].args.slice(-2)).toEqual(["run", "verify"])
+    expect(calls[2].args.slice(-2)).toEqual(["run", "build"])
+    expect(report.checks.find((item) => item.name === "migration-tooling-tests").status)
+      .toBe("SKIPPED")
+  })
+})
+
+it("does not resolve PowerShell when database tooling is omitted on Linux", () => {
+  const report = runPrVerification({
+    platform: "linux",
+    childEnvironment: {},
+    migrationToolingRequired: false,
+    commandRunner: passingRunner,
+  })
+  expect(report.status).toBe("PASS")
+  expect(report.checks.find((item) => item.name === "migration-tooling-tests").status)
+    .toBe("SKIPPED")
 })

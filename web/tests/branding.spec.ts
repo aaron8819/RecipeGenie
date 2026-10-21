@@ -28,47 +28,65 @@ test.describe('Recipe Genie branding', () => {
 
     await expect(page.locator('link[rel="manifest"]')).toHaveAttribute(
       'href',
-      '/manifest.json'
+      '/manifest.json?v=home-icon-v4'
     )
     await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
       'href',
-      '/apple-touch-icon.png'
+      '/apple-touch-icon-v4.png'
     )
 
     const iconHrefs = await page
       .locator('link[rel="icon"]')
       .evaluateAll((links) => links.map((link) => link.getAttribute('href')))
     expect(iconHrefs).toEqual(
-      expect.arrayContaining(['/favicon-32x32.png', '/favicon.ico'])
+      expect.arrayContaining([
+        '/favicon-16x16-v4.png',
+        '/favicon-32x32-v4.png',
+        '/favicon-v4.ico',
+      ])
     )
 
-    const manifestResponse = await page.request.get('/manifest.json')
+    const manifestResponse = await page.request.get('/manifest.json?v=home-icon-v4')
     expect(manifestResponse.ok()).toBe(true)
     await expect(manifestResponse.json()).resolves.toMatchObject({
       id: '/',
-      start_url: '/shopping',
+      start_url: '/dashboard',
       background_color: '#F7F3EA',
       theme_color: '#2F4B34',
       icons: [
         {
-          src: '/pwa-icon-192.png',
+          src: '/pwa-icon-192-v4.png',
           sizes: '192x192',
-          purpose: 'any maskable',
+          purpose: 'any',
         },
         {
-          src: '/pwa-icon-512.png',
+          src: '/pwa-icon-512-v4.png',
           sizes: '512x512',
-          purpose: 'any maskable',
+          purpose: 'any',
+        },
+        {
+          src: '/pwa-icon-maskable-192-v4.png',
+          sizes: '192x192',
+          purpose: 'maskable',
+        },
+        {
+          src: '/pwa-icon-maskable-512-v4.png',
+          sizes: '512x512',
+          purpose: 'maskable',
         },
       ],
     })
 
     for (const asset of [
-      '/favicon-32x32.png',
+      '/favicon-16x16-v4.png',
       '/favicon.ico',
-      '/apple-touch-icon.png',
-      '/pwa-icon-192.png',
-      '/pwa-icon-512.png',
+      '/favicon-32x32-v4.png',
+      '/favicon-v4.ico',
+      '/apple-touch-icon-v4.png',
+      '/pwa-icon-192-v4.png',
+      '/pwa-icon-512-v4.png',
+      '/pwa-icon-maskable-192-v4.png',
+      '/pwa-icon-maskable-512-v4.png',
     ]) {
       expect((await page.request.get(asset)).ok()).toBe(true)
     }
