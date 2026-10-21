@@ -159,7 +159,14 @@ vi.mock("@/components/ui/alert-dialog", () => ({
 }))
 
 vi.mock("@/components/ui/tabs", () => ({
-  Tabs: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  Tabs: ({ children, onValueChange }: {
+    children: React.ReactNode
+    onValueChange?: (value: string) => void
+  }) => <div onClick={event => {
+    const trigger = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>("button[data-value]") : null
+    if (trigger?.dataset.value) onValueChange?.(trigger.dataset.value)
+  }}>{children}</div>,
   TabsList: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   TabsTrigger: ({
     children,
@@ -278,7 +285,15 @@ vi.mock("../recipe-dialog-components", () => ({
       />
     </label>
   ),
-  RecipeImportSection: () => <div>Import section</div>,
+  RecipeImportSection: ({ importText, onImportTextChange, onApplyLivePreview }: {
+    importText: string
+    onImportTextChange: (value: string) => void
+    onApplyLivePreview: () => void
+  }) => <div>
+    <textarea aria-label="Recipe text" value={importText}
+      onChange={event => onImportTextChange(event.target.value)} />
+    <button type="button" onClick={onApplyLivePreview}>Apply parsed import</button>
+  </div>,
   RecipeNotesSection: ({
     notes,
     onNotesChange,
@@ -420,6 +435,31 @@ describe("RecipeDialog image orchestration", () => {
     consoleErrorSpy.mockRestore()
   })
 
+  it.each([false, true])("applies explicit category/tags through review and save (editing=%s)", async (editing) => {
+    const recipe = recipeFixture({ category: "Dinner", tags: ["old"] })
+    render(<RecipeDialog open={true} onOpenChange={vi.fn()}
+      recipe={editing ? recipe : undefined} categories={["Dinner", "Chicken"]} />)
+    fireEvent.click(screen.getByRole("button", { name: editing ? "Replace text" : "Import" }))
+    fireEvent.change(screen.getByLabelText("Recipe text"), { target: {
+      value: "# Thai Basil Fried Rice\nServings: 4\nCategory: Chicken\nTags: Asian\n\n## Ingredients\n1 cup rice\n\n## Instructions\n1. Cook.",
+    } })
+    fireEvent.click(screen.getByRole("button", { name: editing ? "Review changes" : "Apply parsed import" }))
+    if (editing) {
+      expect(screen.getByTestId("replacement-review")).toHaveTextContent("Asian")
+      expect(screen.getByTestId("replacement-review")).toHaveTextContent("Chicken")
+      expect(screen.queryByText("Some text could not be included")).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole("button", { name: /Save changes/i }))
+      await waitFor(() => expect(updateRecipeMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ updates: expect.objectContaining({ category: "Chicken", tags: ["Asian"] }) })
+      ))
+    } else {
+      expect(screen.getByLabelText("Recipe Category")).toHaveValue("Chicken")
+      fireEvent.click(screen.getByRole("button", { name: "Add Recipe" }))
+      await waitFor(() => expect(createRecipeMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ category: "Chicken", tags: ["Asian"] })
+      ))
+    }
+  })
   it("uploads a selected image through the storage hook before creating a new recipe", async () => {
     const onOpenChange = vi.fn()
     const onRecipeCreated = vi.fn()

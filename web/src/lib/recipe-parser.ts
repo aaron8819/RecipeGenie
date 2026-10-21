@@ -67,6 +67,7 @@ export interface ParsedInstructionGroup {
 export interface ParsedRecipe {
   name: string
   category?: string
+  tags?: string[]
   ingredientSections: IngredientSection[]
   instructionSections: InstructionSection[]
   servings?: number
@@ -277,6 +278,7 @@ export function parseRecipeText(text: string): ParsedRecipe {
   return {
     name: name || "Untitled Recipe",
     category,
+    tags: preludeMetadata.tags,
     ingredientSections,
     instructionSections,
     servings,
@@ -458,6 +460,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
   titleLine?: string
   remainingLines: RecipeLine[]
   category?: string
+  tags?: string[]
   servings?: number
   servingsText?: string
   prepTime?: string
@@ -471,6 +474,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
   const metadata: {
     titleLine?: string
     category?: string
+    tags?: string[]
     servings?: number
     servingsText?: string
     prepTime?: string
@@ -516,6 +520,11 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
       case 'category':
         metadata.category = normalizeRecipeCategory(attribute.value)
         break
+      case 'tags':
+        metadata.tags = [...new Set(
+          attribute.value.split(',').map(tag => tag.trim()).filter(Boolean)
+        )]
+        break
       case 'yield':
         metadata.servings = extractServingsFromText(attribute.value)
         metadata.servingsText = attribute.bold || isServingRange(attribute.value) || !/^\d+$/.test(attribute.value)
@@ -541,6 +550,7 @@ function extractPreludeMetadata(lines: RecipeLine[]): {
     titleLine: metadata.titleLine,
     remainingLines,
     category: metadata.category,
+    tags: metadata.tags,
     servings: metadata.servings,
     servingsText: metadata.servingsText,
     prepTime: metadata.prepTime,
@@ -568,7 +578,7 @@ function parseBoldAttributeLine(
   return label && value ? { label, value } : null
 }
 
-type PreludeAttributeKey = 'title' | 'category' | 'yield' | 'prep' | 'cook' | 'total'
+type PreludeAttributeKey = 'title' | 'category' | 'tags' | 'yield' | 'prep' | 'cook' | 'total'
 
 function parsePreludeAttribute(line: string): {
   key: PreludeAttributeKey
@@ -576,7 +586,7 @@ function parsePreludeAttribute(line: string): {
   bold: boolean
 } | null {
   const bold = parseBoldAttributeLine(line)
-  const plain = line.match(/^(title|recipe|name|category|prep(?:aration)?\s*time|cook(?:ing)?\s*time|total\s*time)\s*:\s*(.+)$/i) ||
+  const plain = line.match(/^(title|recipe|name|category|tags?|prep(?:aration)?\s*time|cook(?:ing)?\s*time|total\s*time)\s*:\s*(.+)$/i) ||
     line.match(/^(servings?|serves|yield|makes?)\s*:?\s*(.+)$/i)
   const label = (bold?.label ?? plain?.[1])?.toLowerCase().replace(/\s+/g, ' ').trim()
   const value = stripMarkdownInlineSyntax(bold?.value ?? plain?.[2] ?? '').trim()
@@ -584,6 +594,7 @@ function parsePreludeAttribute(line: string): {
 
   const key: PreludeAttributeKey | null = /^(title|recipe|name)$/.test(label) ? 'title'
     : label === 'category' ? 'category'
+    : /^tags?$/.test(label) ? 'tags'
     : /^(servings?|serves|yield|makes?)$/.test(label) ? 'yield'
     : /^prep(?:aration)?\s*time$/.test(label) ? 'prep'
     : /^cook(?:ing)?\s*time$/.test(label) ? 'cook'

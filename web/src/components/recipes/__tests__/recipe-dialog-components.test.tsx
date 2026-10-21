@@ -157,6 +157,15 @@ describe("RecipeImportSection", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Bad import")
   })
 
+  it.each([false, true])("shows explicit tags beside category in import summaries (mobile=%s)", (mobile) => {
+    render(<RecipeImportSection importStep="input" importUrl="" importText=""
+      parseError={null} livePreview={parsedRecipe({ category: "chicken", tags: ["Asian", "Quick dinner"] })}
+      parsedPreview={null} isImportingFromUrl={false} compactMobile={mobile}
+      onImportUrlChange={() => {}} onImportTextChange={() => {}} onImportUrl={() => {}}
+      onApplyLivePreview={() => {}} onBackToInput={() => {}} onApplyPreview={() => {}} />)
+    expect(screen.getByText("Category chicken")).toBeInTheDocument()
+    expect(screen.getByText("Tags Asian, Quick dinner")).toBeInTheDocument()
+  })
   it("disables live-preview apply when blocking warnings exist", () => {
     render(
       <RecipeImportSection

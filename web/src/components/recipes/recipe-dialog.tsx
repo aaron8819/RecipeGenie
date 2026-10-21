@@ -554,11 +554,12 @@ export function RecipeDialog({
         imageUrl,
       },
       preview,
-      { applyCategory: !isEditing, categories }
+      { applyCategory: true, categories }
     )
 
     setName(formValues.name)
     setCategory(formValues.category)
+    setTags(formValues.tags)
     setServings(formValues.servings)
     setYieldText(formValues.yieldText ?? `${formValues.servings} servings`)
     setPrepTimeMinutes(formValues.prepTimeMinutes)
@@ -581,7 +582,6 @@ export function RecipeDialog({
     instructionGroups,
     notes,
     imageUrl,
-    isEditing,
     categories,
   ])
 
@@ -675,19 +675,18 @@ export function RecipeDialog({
       const next = applyParsedRecipeToFormValues(baseline, {
         ...parsed,
         name: parsed.warnings.some(warning => warning.startsWith('No recipe name')) ? baseline.name : parsed.name,
-      })
+      }, { applyCategory: true, categories })
       setReplacementBaseline(baseline)
       setAppliedDraftSnapshot(next)
-      setName(next.name); setServings(next.servings); setYieldText(next.yieldText ?? '')
+      setName(next.name); setCategory(next.category); setTags(next.tags)
+      setServings(next.servings); setYieldText(next.yieldText ?? '')
       setPrepTimeMinutes(next.prepTimeMinutes); setCookTimeMinutes(next.cookTimeMinutes); setTotalTimeMinutes(next.totalTimeMinutes)
       setIngredientSections(next.ingredientSections); setInstructionGroups(next.instructionGroups); setNotes(next.notes)
       setReplacementSource(rawSource)
-      const retainedTags = `tags: ${baseline.tags.join(', ')}`.toLowerCase()
-      const unparsed = (parsed.unparsedContent ?? []).filter(text => text.toLowerCase() !== retainedTags)
-      setReplacementUnparsed(unparsed)
+      setReplacementUnparsed(parsed.unparsedContent ?? [])
       setReplacementWarnings([
         ...parsed.warnings,
-        ...(parsed.category && parsed.category.toLowerCase() !== baseline.category.toLowerCase()
+        ...(parsed.category && parsed.category.toLowerCase() !== next.category.toLowerCase()
           ? [`Pasted category: ${parsed.category}. This recipe keeps category ${baseline.category}.`]
           : []),
       ])
