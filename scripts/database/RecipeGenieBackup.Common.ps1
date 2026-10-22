@@ -223,6 +223,9 @@ function Get-RecipeGenieMigrationBackupDefinition {
                 ExpectedAppliedMigrationVersions = @('001','002','003','004','005','006','007','008','009','010','011','012','013','014','015','016')
                 ExpectedProjectReference = 'eyaoahwzixqetjgfghsh'
                 RequireRestoreVerification = $true
+                AllowExternalEvidenceCommit = $true
+                ExpectedEvidenceCommitSha = 'afcd8dc331b0d928cb2ef8ea96667c8f52096744'
+                RestoreProcedureUpgradeBaseCommitSha = 'afcd8dc331b0d928cb2ef8ea96667c8f52096744'
                 PreflightPath = 'scripts/database/preflight/017_remove_legacy_recipe_structure.sql'
                 RestoreAssertionPath = 'scripts/database/restore/017_remove_legacy_recipe_structure.sql'
                 RestorePreparationPath = 'scripts/database/restore/017_prepare_clean_restore.sql'

@@ -27,7 +27,7 @@ try {
     $allowExternalEvidence = $definition.PSObject.Properties['AllowExternalEvidenceCommit'] -and $definition.AllowExternalEvidenceCommit -eq $true
     $hasBoundRestoreEvidence = $null -ne $definition.PSObject.Properties['RestoreAssertionPath']
     if ($allowExternalEvidence) {
-        if ($EvidenceCommitSha -cne [string]$definition.ExpectedEvidenceCommitSha) { throw 'Migration 016 requires the exact approved evidence commit SHA.' }
+        if ($EvidenceCommitSha -cne [string]$definition.ExpectedEvidenceCommitSha) { throw 'This migration requires the exact approved evidence commit SHA.' }
         $evidenceCommit = $EvidenceCommitSha
     } else {
         if ($EvidenceCommitSha) { throw 'A separate evidence commit is not permitted for this migration.' }
@@ -36,7 +36,24 @@ try {
     $normalizedMigrationPath = $definition.MigrationPath
     & $testScript -BackupDirectory $BackupDirectory -ExpectedProjectReference $ExpectedProjectReference -MaximumAgeMinutes $MaximumAgeMinutes -ExpectedMigrationPath $normalizedMigrationPath -ExpectedGitCommitSha $evidenceCommit
     $manifest = Get-Content -LiteralPath (Join-Path $BackupDirectory 'manifest.json') -Raw | ConvertFrom-Json
-    if ($allowExternalEvidence -and $manifest.toolingCommitSha -ne $toolingCommit) { throw 'Backup recovery-tooling commit does not match the current commit.' }
+    $procedureUpgrade = $definition.PendingMigrationVersion -eq '017' -and
+        $manifest.restoreVerified -eq $true -and
+        $null -ne $manifest.restoreVerification -and
+        $null -ne $manifest.restoreVerification.PSObject.Properties['recoveryToolingCommitSha']
+    if ($allowExternalEvidence -and -not $procedureUpgrade -and $manifest.toolingCommitSha -ne $toolingCommit) {
+        throw 'Backup recovery-tooling commit does not match the current commit.'
+    }
+    if ($procedureUpgrade) {
+        $upgradeBase = if ($definition.PSObject.Properties['RestoreProcedureUpgradeBaseCommitSha']) {
+            [string]$definition.RestoreProcedureUpgradeBaseCommitSha
+        } else { '' }
+        if ($manifest.toolingCommitSha -cne $upgradeBase -or
+            $manifest.restoreVerification.recoveryToolingCommitSha -cne $toolingCommit) {
+            throw 'Migration 017 recovery procedure upgrade is not bound to the current commit.'
+        }
+        $ancestorResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'merge-base', '--is-ancestor', $upgradeBase, $toolingCommit)
+        if ($ancestorResult.ExitCode -ne 0) { throw 'Migration 017 recovery tooling is not descended from the backup tooling commit.' }
+    }
     if ($allowExternalEvidence) {
         $statusResult = Invoke-GitCapture $gitExecutablePath @('-C', $repositoryRoot, 'status', '--porcelain')
         if ($statusResult.ExitCode -ne 0 -or -not [string]::IsNullOrWhiteSpace($statusResult.Output)) { throw 'Recovery-tooling worktree must be clean.' }
@@ -61,7 +78,12 @@ try {
     if ($hasBoundRestoreEvidence) {
         $restoreAssertionPath = [string]$definition.RestoreAssertionPath
         $restoreAssertionHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $toolingCommit -RepositoryRelativePath $restoreAssertionPath -GitExecutablePath $gitExecutablePath
-        if ($manifest.restoreAssertion.path -ne $restoreAssertionPath -or $manifest.restoreAssertion.commitSha -ne $toolingCommit -or $manifest.restoreAssertion.sha256 -ne $restoreAssertionHash) {
+        $recordedAssertionPath = if ($procedureUpgrade) { $manifest.restoreVerification.assertionPath } else { $manifest.restoreAssertion.path }
+        $recordedAssertionCommit = if ($procedureUpgrade) { $manifest.restoreVerification.assertionCommitSha } else { $manifest.restoreAssertion.commitSha }
+        $recordedAssertionHash = if ($procedureUpgrade) { $manifest.restoreVerification.assertionSha256 } else { $manifest.restoreAssertion.sha256 }
+        if ($recordedAssertionPath -ne $restoreAssertionPath -or
+            $recordedAssertionCommit -ne $toolingCommit -or
+            $recordedAssertionHash -ne $restoreAssertionHash) {
             throw 'Backup restore assertion does not match the recovery-tooling commit.'
         }
         foreach ($stage in @(
@@ -70,7 +92,9 @@ try {
         )) {
             $stageHash = Get-GitBlobSha256 -RepositoryRoot $repositoryRoot -CommitSha $toolingCommit -RepositoryRelativePath $stage.Path -GitExecutablePath $gitExecutablePath
             $entry = $manifest.restoreProcedure.($stage.Name)
-            if ($entry.path -ne $stage.Path -or $entry.commitSha -ne $toolingCommit -or $entry.sha256 -ne $stageHash) {
+            $recordedStageHash = if ($procedureUpgrade) { $manifest.restoreVerification.("$($stage.Name)Sha256") } else { $entry.sha256 }
+            $recordedStageCommit = if ($procedureUpgrade) { $manifest.restoreVerification.recoveryToolingCommitSha } else { $entry.commitSha }
+            if ($entry.path -ne $stage.Path -or $recordedStageCommit -ne $toolingCommit -or $recordedStageHash -ne $stageHash) {
                 throw "Backup restore $($stage.Name) does not match the recovery-tooling commit."
             }
         }
